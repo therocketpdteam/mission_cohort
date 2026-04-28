@@ -1,0 +1,39 @@
+{
+  "source": "registration_form",
+  "eventType": "registration.submitted",
+  "organization": {
+    "id": "sample-district",
+    "name": "Sample District",
+    "type": "DISTRICT",
+    "city": "Austin",
+    "state": "TX"
+  },
+  "registration": {
+    "cohortId": "REPLACE_WITH_COHORT_ID",
+    "primaryContactName": "Avery Brooks",
+    "primaryContactEmail": "avery@example.com",
+    "paymentMethod": "INVOICE",
+    "paymentStatus": "PENDING",
+    "invoiceNumber": "INV-1001",
+    "totalAmount": 250,
+    "participantCount": 2
+  },
+  "participants": [
+    {
+      "firstName": "Jordan",
+      "lastName": "Kim",
+      "email": "jordan@example.com"
+    },
+    {
+      "firstName": "Taylor",
+      "lastName": "Nguyen",
+      "email": "taylor@example.com"
+    }
+  ],
+  "payment": {
+    "amount": 250,
+    "method": "INVOICE",
+    "status": "PENDING",
+    "invoiceNumber": "INV-1001"
+  }
+}

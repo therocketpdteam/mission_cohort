@@ -14,7 +14,8 @@
     "prisma:deploy": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
     "db:seed": "tsx prisma/seed.ts",
-    "smoke": "tsx scripts/smoke.ts"
+    "smoke": "tsx scripts/smoke.ts",
+    "qa:smoke": "tsx scripts/final-smoke.ts"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

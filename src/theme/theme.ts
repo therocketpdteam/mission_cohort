@@ -76,6 +76,10 @@ export const theme = createTheme({
       }
     },
     MuiDataGrid: {
+      defaultProps: {
+        density: "compact",
+        disableRowSelectionOnClick: true
+      },
       styleOverrides: {
         root: {
           borderColor: "#DDE4EC",

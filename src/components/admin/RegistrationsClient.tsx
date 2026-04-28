@@ -9,6 +9,7 @@ import { useEffect, useMemo, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
 import {
   AdminRow,
+  EmptyState,
   FieldConfig,
   MutationDialog,
   PageHeader,
@@ -41,6 +42,7 @@ function registrationFields(cohorts: AdminRow[], organizations: AdminRow[]): Fie
 
 export function RegistrationsClient() {
   const [rows, setRows] = useState<AdminRow[]>([]);
+  const [loading, setLoading] = useState(true);
   const [cohorts, setCohorts] = useState<AdminRow[]>([]);
   const [organizations, setOrganizations] = useState<AdminRow[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -58,10 +60,14 @@ export function RegistrationsClient() {
     setRows(registrationRows);
     setCohorts(cohortRows);
     setOrganizations(organizationRows);
+    setLoading(false);
   }
 
   useEffect(() => {
-    load().catch((error) => notifyError(error.message));
+    load().catch((error) => {
+      notifyError(error.message);
+      setLoading(false);
+    });
   }, [notifyError]);
 
   const filteredRows = useMemo(
@@ -129,6 +135,7 @@ export function RegistrationsClient() {
       await load();
     } catch (error) {
       notifyError((error as Error).message);
+      throw error;
     }
   }
 
@@ -150,8 +157,9 @@ export function RegistrationsClient() {
       </SectionCard>
       <SectionCard title="Registration Management">
         <TableShell>
-          <DataGrid rows={filteredRows} columns={columns} pageSizeOptions={[10, 25, 50]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} disableRowSelectionOnClick />
+          <DataGrid rows={filteredRows} columns={columns} loading={loading} pageSizeOptions={[10, 25, 50]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} disableRowSelectionOnClick />
         </TableShell>
+        {!loading && filteredRows.length === 0 && <EmptyState title="No registrations found" description="Create a registration or adjust the filters." />}
       </SectionCard>
       <MutationDialog
         title={editing ? "Edit Registration" : "Add Registration"}

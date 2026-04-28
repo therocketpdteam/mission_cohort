@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
 import {
   AdminRow,
+  EmptyState,
   FieldConfig,
   MutationDialog,
   PageHeader,
@@ -31,6 +32,7 @@ const presenterFields: FieldConfig[] = [
 
 export function PresentersClient() {
   const [rows, setRows] = useState<AdminRow[]>([]);
+  const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<AdminRow | null>(null);
   const [search, setSearch] = useState("");
@@ -38,10 +40,14 @@ export function PresentersClient() {
 
   async function load() {
     setRows(await adminApi<AdminRow[]>("/api/presenters"));
+    setLoading(false);
   }
 
   useEffect(() => {
-    load().catch((error) => notifyError(error.message));
+    load().catch((error) => {
+      notifyError(error.message);
+      setLoading(false);
+    });
   }, [notifyError]);
 
   const filteredRows = useMemo(
@@ -97,6 +103,7 @@ export function PresentersClient() {
       await load();
     } catch (error) {
       notifyError((error as Error).message);
+      throw error;
     }
   }
 
@@ -112,8 +119,9 @@ export function PresentersClient() {
       </SectionCard>
       <SectionCard title="Presenter Directory">
         <TableShell>
-          <DataGrid rows={filteredRows} columns={columns} pageSizeOptions={[10, 25, 50]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} disableRowSelectionOnClick />
+          <DataGrid rows={filteredRows} columns={columns} loading={loading} pageSizeOptions={[10, 25, 50]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} disableRowSelectionOnClick />
         </TableShell>
+        {!loading && filteredRows.length === 0 && <EmptyState title="No presenters found" description="Create a presenter to attach to cohorts." />}
       </SectionCard>
       <MutationDialog
         title={editing ? "Edit Presenter" : "Create Presenter"}

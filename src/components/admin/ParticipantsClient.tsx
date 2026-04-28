@@ -9,6 +9,7 @@ import { useEffect, useMemo, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
 import {
   AdminRow,
+  EmptyState,
   FieldConfig,
   MutationDialog,
   PageHeader,
@@ -49,6 +50,7 @@ function participantFields(registrations: AdminRow[]): FieldConfig[] {
 
 export function ParticipantsClient() {
   const [rows, setRows] = useState<AdminRow[]>([]);
+  const [loading, setLoading] = useState(true);
   const [registrations, setRegistrations] = useState<AdminRow[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<AdminRow | null>(null);
@@ -66,10 +68,14 @@ export function ParticipantsClient() {
     ]);
     setRows(participantRows);
     setRegistrations(registrationRows);
+    setLoading(false);
   }
 
   useEffect(() => {
-    load().catch((error) => notifyError(error.message));
+    load().catch((error) => {
+      notifyError(error.message);
+      setLoading(false);
+    });
   }, [notifyError]);
 
   const filteredRows = useMemo(
@@ -170,6 +176,7 @@ export function ParticipantsClient() {
       await load();
     } catch (error) {
       notifyError((error as Error).message);
+      throw error;
     }
   }
 
@@ -203,8 +210,9 @@ export function ParticipantsClient() {
       </SectionCard>
       <SectionCard title="Participant Roster">
         <TableShell>
-          <DataGrid rows={filteredRows} columns={columns} pageSizeOptions={[10, 25, 50]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} disableRowSelectionOnClick />
+          <DataGrid rows={filteredRows} columns={columns} loading={loading} pageSizeOptions={[10, 25, 50]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} disableRowSelectionOnClick />
         </TableShell>
+        {!loading && filteredRows.length === 0 && <EmptyState title="No participants found" description="Add participants or adjust roster filters." />}
       </SectionCard>
       <MutationDialog
         title={editing ? "Edit Participant" : "Add Participant"}

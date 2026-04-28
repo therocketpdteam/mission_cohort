@@ -9,6 +9,7 @@ import { adminApi } from "@/lib/adminApi";
 import { mergeFields, renderMergeFields, sampleMergeContext } from "@/modules/email/mergeFields";
 import {
   AdminRow,
+  EmptyState,
   FieldConfig,
   MutationDialog,
   PageHeader,
@@ -41,6 +42,7 @@ const templateFields: FieldConfig[] = [
 
 export function CommunicationsClient() {
   const [templates, setTemplates] = useState<AdminRow[]>([]);
+  const [loading, setLoading] = useState(true);
   const [cohorts, setCohorts] = useState<AdminRow[]>([]);
   const [communications, setCommunications] = useState<AdminRow[]>([]);
   const [selectedCohortId, setSelectedCohortId] = useState("");
@@ -61,10 +63,14 @@ export function CommunicationsClient() {
     if (cohortId) {
       setCommunications(await adminApi<AdminRow[]>(`/api/communications?cohortId=${cohortId}`));
     }
+    setLoading(false);
   }
 
   useEffect(() => {
-    load().catch((error) => notifyError(error.message));
+    load().catch((error) => {
+      notifyError(error.message);
+      setLoading(false);
+    });
   }, [notifyError]);
 
   const preview = useMemo(() => {
@@ -113,6 +119,7 @@ export function CommunicationsClient() {
       await load();
     } catch (error) {
       notifyError((error as Error).message);
+      throw error;
     }
   }
 
@@ -132,8 +139,9 @@ export function CommunicationsClient() {
         <Grid size={{ xs: 12, lg: 8 }}>
           <SectionCard title="Communication Templates">
             <TableShell>
-              <DataGrid rows={templates} columns={columns} pageSizeOptions={[10, 25]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} disableRowSelectionOnClick />
+              <DataGrid rows={templates} columns={columns} loading={loading} pageSizeOptions={[10, 25]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} disableRowSelectionOnClick />
             </TableShell>
+            {!loading && templates.length === 0 && <EmptyState title="No templates found" description="Create communication templates for registration confirmations, reminders, and follow-up." />}
           </SectionCard>
         </Grid>
         <Grid size={{ xs: 12, lg: 4 }}>
@@ -179,6 +187,7 @@ export function CommunicationsClient() {
                 </ListItem>
               ))}
             </List>
+            {communications.length === 0 && <EmptyState title="No scheduled messages" description="Scheduled and sent cohort messages will appear here." />}
           </SectionCard>
         </Grid>
       </Grid>

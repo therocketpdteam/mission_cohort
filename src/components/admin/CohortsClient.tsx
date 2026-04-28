@@ -11,6 +11,7 @@ import { useEffect, useMemo, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
 import {
   AdminRow,
+  EmptyState,
   FieldConfig,
   MutationDialog,
   PageHeader,
@@ -48,6 +49,7 @@ const cohortFields = (presenters: AdminRow[]): FieldConfig[] => [
 
 export function CohortsClient() {
   const [rows, setRows] = useState<AdminRow[]>([]);
+  const [loading, setLoading] = useState(true);
   const [payments, setPayments] = useState<AdminRow[]>([]);
   const [presenters, setPresenters] = useState<AdminRow[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -66,10 +68,14 @@ export function CohortsClient() {
     setRows(cohorts);
     setPresenters(presenterRows);
     setPayments(paymentRows);
+    setLoading(false);
   }
 
   useEffect(() => {
-    load().catch((error) => notifyError(error.message));
+    load().catch((error) => {
+      notifyError(error.message);
+      setLoading(false);
+    });
   }, [notifyError]);
 
   const filteredRows = useMemo(
@@ -158,6 +164,7 @@ export function CohortsClient() {
       await load();
     } catch (error) {
       notifyError((error as Error).message);
+      throw error;
     }
   }
 
@@ -192,8 +199,9 @@ export function CohortsClient() {
       </SectionCard>
       <SectionCard title="Cohort Operations">
         <TableShell>
-          <DataGrid rows={filteredRows} columns={columns} pageSizeOptions={[10, 25, 50]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} disableRowSelectionOnClick />
+          <DataGrid rows={filteredRows} columns={columns} loading={loading} pageSizeOptions={[10, 25, 50]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} disableRowSelectionOnClick />
         </TableShell>
+        {!loading && filteredRows.length === 0 && <EmptyState title="No cohorts found" description="Create a cohort or adjust the filters." />}
       </SectionCard>
       <MutationDialog
         title={editing ? "Edit Cohort" : "Create Cohort"}

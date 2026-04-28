@@ -24,6 +24,13 @@ function numberValue(value: unknown, fallback = 0) {
   return Number.isFinite(number) ? number : fallback;
 }
 
+function badWebhookPayload(message: string) {
+  return Object.assign(new Error(message), {
+    code: "BAD_REQUEST",
+    status: 400
+  });
+}
+
 export function validateWebhookSecret(request: Request) {
   if (!env.WEBHOOK_SECRET) {
     return true;
@@ -50,6 +57,23 @@ export async function processRegistrationWebhook(payload: Record<string, any>) {
     const paymentInput = payload.payment ?? {};
     const fallbackOrgId = `webhook-org-${stringValue(organizationInput.name, "unknown").toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
     const organizationId = stringValue(organizationInput.id, fallbackOrgId);
+    const cohortId = stringValue(registrationInput.cohortId);
+    const primaryContactName = stringValue(registrationInput.primaryContactName);
+    const primaryContactEmail = stringValue(registrationInput.primaryContactEmail);
+
+    if (!cohortId) {
+      throw badWebhookPayload("registration.cohortId is required");
+    }
+
+    if (!primaryContactName || !primaryContactEmail) {
+      throw badWebhookPayload("registration.primaryContactName and registration.primaryContactEmail are required");
+    }
+
+    for (const participant of participantsInput) {
+      if (!stringValue(participant.email)) {
+        throw badWebhookPayload("Each participant requires an email");
+      }
+    }
 
     const organization = await prisma.organization.upsert({
       where: { id: organizationId },
@@ -74,11 +98,11 @@ export async function processRegistrationWebhook(payload: Record<string, any>) {
 
     const registration = await prisma.registration.create({
       data: {
-        cohortId: stringValue(registrationInput.cohortId),
+        cohortId,
         organizationId: organization.id,
         formId: stringValue(registrationInput.formId) || undefined,
-        primaryContactName: stringValue(registrationInput.primaryContactName),
-        primaryContactEmail: stringValue(registrationInput.primaryContactEmail),
+        primaryContactName,
+        primaryContactEmail,
         primaryContactPhone: stringValue(registrationInput.primaryContactPhone) || undefined,
         primaryContactTitle: stringValue(registrationInput.primaryContactTitle) || undefined,
         billingContactName: stringValue(registrationInput.billingContactName) || undefined,

@@ -10,6 +10,7 @@ import { useEffect, useMemo, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
 import {
   AdminRow,
+  EmptyState,
   FieldConfig,
   MutationDialog,
   PageHeader,
@@ -32,6 +33,7 @@ const orgFields: FieldConfig[] = [
 
 export function OrganizationsClient() {
   const [rows, setRows] = useState<AdminRow[]>([]);
+  const [loading, setLoading] = useState(true);
   const [payments, setPayments] = useState<AdminRow[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<AdminRow | null>(null);
@@ -45,10 +47,14 @@ export function OrganizationsClient() {
     ]);
     setRows(organizationRows);
     setPayments(paymentRows);
+    setLoading(false);
   }
 
   useEffect(() => {
-    load().catch((error) => notifyError(error.message));
+    load().catch((error) => {
+      notifyError(error.message);
+      setLoading(false);
+    });
   }, [notifyError]);
 
   const filteredRows = useMemo(
@@ -99,6 +105,7 @@ export function OrganizationsClient() {
       await load();
     } catch (error) {
       notifyError((error as Error).message);
+      throw error;
     }
   }
 
@@ -114,8 +121,9 @@ export function OrganizationsClient() {
       </SectionCard>
       <SectionCard title="Organization Directory">
         <TableShell>
-          <DataGrid rows={filteredRows} columns={columns} pageSizeOptions={[10, 25, 50]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} disableRowSelectionOnClick />
+          <DataGrid rows={filteredRows} columns={columns} loading={loading} pageSizeOptions={[10, 25, 50]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} disableRowSelectionOnClick />
         </TableShell>
+        {!loading && filteredRows.length === 0 && <EmptyState title="No organizations found" description="Add an organization or adjust the search." />}
       </SectionCard>
       <MutationDialog
         title={editing ? "Edit Organization" : "Add Organization"}

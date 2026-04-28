@@ -8,6 +8,7 @@ import {
   Button,
   Card,
   CardContent,
+  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
@@ -18,6 +19,7 @@ import {
   IconButton,
   InputLabel,
   MenuItem,
+  Paper,
   Select,
   Switch,
   Snackbar,
@@ -78,6 +80,46 @@ export function SectionCard({ title, children, action }: { title: string; childr
         {children}
       </CardContent>
     </Card>
+  );
+}
+
+export function LoadingState({ label = "Loading" }: { label?: string }) {
+  return (
+    <Stack alignItems="center" justifyContent="center" spacing={1.5} sx={{ minHeight: 180, color: "text.secondary" }}>
+      <CircularProgress size={28} />
+      <Typography variant="body2">{label}</Typography>
+    </Stack>
+  );
+}
+
+export function EmptyState({
+  title = "No records yet",
+  description = "Create a record or adjust filters to see results here.",
+  action
+}: {
+  title?: string;
+  description?: string;
+  action?: ReactNode;
+}) {
+  return (
+    <Paper
+      variant="outlined"
+      sx={{
+        minHeight: 180,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        p: 3,
+        bgcolor: "background.default",
+        borderStyle: "dashed"
+      }}
+    >
+      <Stack spacing={1.5} alignItems="center" textAlign="center">
+        <Typography variant="h4">{title}</Typography>
+        <Typography color="text.secondary">{description}</Typography>
+        {action}
+      </Stack>
+    </Paper>
   );
 }
 
@@ -154,6 +196,7 @@ export function MutationDialog({
 }) {
   const [values, setValues] = useState<AdminRow>(initialValues ?? {});
   const [saving, setSaving] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   useEffect(() => {
     if (open) {
@@ -166,10 +209,20 @@ export function MutationDialog({
   }
 
   async function submit() {
+    const missing = fields.find((field) => field.required && !values[field.name]);
+
+    if (missing) {
+      setSubmitError(`${missing.label} is required`);
+      return;
+    }
+
     setSaving(true);
+    setSubmitError(null);
     try {
       await onSubmit(values);
       onClose();
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : "Unable to save changes");
     } finally {
       setSaving(false);
     }
@@ -186,6 +239,11 @@ export function MutationDialog({
         </Stack>
       </DialogTitle>
       <DialogContent>
+        {submitError && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {submitError}
+          </Alert>
+        )}
         <Grid container spacing={2} sx={{ mt: 0.5 }}>
           {fields.map((field) => (
             <Grid size={{ xs: 12, md: field.type === "textarea" ? 12 : 6 }} key={field.name}>
@@ -247,7 +305,7 @@ export function MutationDialog({
 
 export function TableShell({ children }: { children: ReactNode }) {
   return (
-    <Box sx={{ width: "100%", minHeight: 420, "& .MuiDataGrid-root": { minHeight: 420 } }}>
+    <Box sx={{ width: "100%", minHeight: 420, "& .MuiDataGrid-root": { minHeight: 420 }, "& .MuiDataGrid-cell": { alignItems: "center" } }}>
       {children}
     </Box>
   );

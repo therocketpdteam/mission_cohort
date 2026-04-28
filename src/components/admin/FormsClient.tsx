@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
 import {
   AdminRow,
+  EmptyState,
   FieldConfig,
   MutationDialog,
   PageHeader,
@@ -39,6 +40,7 @@ function formFields(cohorts: AdminRow[]): FieldConfig[] {
 export function FormsClient() {
   const [cohorts, setCohorts] = useState<AdminRow[]>([]);
   const [forms, setForms] = useState<AdminRow[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selectedCohortId, setSelectedCohortId] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<AdminRow | null>(null);
@@ -52,15 +54,21 @@ export function FormsClient() {
     if (firstId) {
       setForms(await adminApi<AdminRow[]>(`/api/registration-forms?cohortId=${firstId}`));
     }
+    setLoading(false);
   }
 
   async function loadForms(cohortId: string) {
     setSelectedCohortId(cohortId);
+    setLoading(true);
     setForms(cohortId ? await adminApi<AdminRow[]>(`/api/registration-forms?cohortId=${cohortId}`) : []);
+    setLoading(false);
   }
 
   useEffect(() => {
-    loadCohorts().catch((error) => notifyError(error.message));
+    loadCohorts().catch((error) => {
+      notifyError(error.message);
+      setLoading(false);
+    });
   }, [notifyError]);
 
   const publicBase = typeof window === "undefined" ? "" : window.location.origin;
@@ -120,6 +128,7 @@ export function FormsClient() {
       await loadForms(values.cohortId ?? selectedCohortId);
     } catch (error) {
       notifyError((error as Error).message);
+      throw error;
     }
   }
 
@@ -146,8 +155,9 @@ export function FormsClient() {
       </SectionCard>
       <SectionCard title={`Forms${selectedCohort ? ` for ${selectedCohort.title}` : ""}`}>
         <TableShell>
-          <DataGrid rows={forms} columns={columns} pageSizeOptions={[10, 25]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} disableRowSelectionOnClick />
+          <DataGrid rows={forms} columns={columns} loading={loading} pageSizeOptions={[10, 25]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} disableRowSelectionOnClick />
         </TableShell>
+        {!loading && forms.length === 0 && <EmptyState title="No forms found" description="Create a registration form for the selected cohort." />}
       </SectionCard>
       <MutationDialog
         title={editing ? "Edit Registration Form" : "Create Registration Form"}

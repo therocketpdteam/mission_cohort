@@ -16,15 +16,15 @@ import Link from "next/link";
 import type { Route } from "next";
 import { useEffect, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
-import { AdminRow, PageHeader, PageStack, SectionCard, StatusChip, useNotifier } from "./common";
+import { AdminRow, EmptyState, LoadingState, PageHeader, PageStack, SectionCard, StatusChip, useNotifier } from "./common";
 
-const metricLabels = [
-  ["activeCohorts", "Active Cohorts"],
-  ["upcomingSessions", "Upcoming Sessions"],
-  ["openRegistrations", "Open Registrations"],
-  ["totalParticipants", "Total Participants"],
-  ["pendingPayments", "Pending Payments"],
-  ["scheduledCommunications", "Scheduled Communications"]
+const metricLabels: ReadonlyArray<[string, string, Route]> = [
+  ["activeCohorts", "Active Cohorts", "/cohorts"],
+  ["upcomingSessions", "Upcoming Sessions", "/cohorts"],
+  ["openRegistrations", "Open Registrations", "/registrations"],
+  ["totalParticipants", "Total Participants", "/participants"],
+  ["pendingPayments", "Pending Payments", "/payments"],
+  ["scheduledCommunications", "Scheduled Communications", "/communications"]
 ];
 
 const quickActions: ReadonlyArray<[string, Route]> = [
@@ -37,12 +37,14 @@ const quickActions: ReadonlyArray<[string, Route]> = [
 
 export function DashboardClient() {
   const [data, setData] = useState<AdminRow | null>(null);
+  const [loading, setLoading] = useState(true);
   const { notifyError, snackbar } = useNotifier();
 
   useEffect(() => {
     adminApi<AdminRow>("/api/admin-dashboard")
       .then(setData)
-      .catch((error) => notifyError(error.message));
+      .catch((error) => notifyError(error.message))
+      .finally(() => setLoading(false));
   }, [notifyError]);
 
   return (
@@ -53,21 +55,31 @@ export function DashboardClient() {
       />
 
       <Grid container spacing={2}>
-        {metricLabels.map(([key, label]) => (
+        {metricLabels.map(([key, label, href]) => (
           <Grid size={{ xs: 12, sm: 6, lg: 2 }} key={key}>
-            <Card>
-              <CardContent>
-                <Typography variant="body2" color="text.secondary">
-                  {label}
-                </Typography>
-                <Typography variant="h1" sx={{ mt: 1 }}>
-                  {data?.metrics?.[key] ?? "-"}
-                </Typography>
-              </CardContent>
-            </Card>
+            <Link href={href}>
+              <Card
+                sx={{
+                  display: "block",
+                  transition: "border-color 120ms ease, transform 120ms ease",
+                  "&:hover": { borderColor: "primary.main", transform: "translateY(-1px)" }
+                }}
+              >
+                <CardContent>
+                  <Typography variant="body2" color="text.secondary">
+                    {label}
+                  </Typography>
+                  <Typography variant="h1" sx={{ mt: 1 }}>
+                    {data?.metrics?.[key] ?? "-"}
+                  </Typography>
+                </CardContent>
+              </Card>
+            </Link>
           </Grid>
         ))}
       </Grid>
+
+      {loading && <LoadingState label="Loading dashboard" />}
 
       <SectionCard title="Quick Actions">
         <Stack direction="row" flexWrap="wrap" gap={1}>
@@ -81,7 +93,7 @@ export function DashboardClient() {
 
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, lg: 6 }}>
-          <SectionCard title="Upcoming Sessions">
+          <SectionCard title="Upcoming Sessions" action={<Button component={Link} href="/cohorts" variant="outlined">View cohorts</Button>}>
             <List dense>
               {(data?.upcomingSessions ?? []).map((session: AdminRow) => (
                 <ListItem key={session.id} divider>
@@ -92,10 +104,13 @@ export function DashboardClient() {
                 </ListItem>
               ))}
             </List>
+            {!loading && (data?.upcomingSessions ?? []).length === 0 && (
+              <EmptyState title="No upcoming sessions" description="Upcoming cohort sessions will appear here." />
+            )}
           </SectionCard>
         </Grid>
         <Grid size={{ xs: 12, lg: 6 }}>
-          <SectionCard title="Recent Registrations">
+          <SectionCard title="Recent Registrations" action={<Button component={Link} href="/registrations" variant="outlined">View registrations</Button>}>
             <List dense>
               {(data?.recentRegistrations ?? []).map((registration: AdminRow) => (
                 <ListItem key={registration.id} divider>
@@ -107,10 +122,13 @@ export function DashboardClient() {
                 </ListItem>
               ))}
             </List>
+            {!loading && (data?.recentRegistrations ?? []).length === 0 && (
+              <EmptyState title="No recent registrations" description="New registrations will appear here as they arrive." />
+            )}
           </SectionCard>
         </Grid>
         <Grid size={{ xs: 12, lg: 6 }}>
-          <SectionCard title="Cohorts Needing Attention">
+          <SectionCard title="Cohorts Needing Attention" action={<Button component={Link} href="/cohorts" variant="outlined">View cohorts</Button>}>
             <List dense>
               {(data?.cohortsNeedingAttention ?? []).map((cohort: AdminRow) => (
                 <ListItem key={cohort.id} divider>
@@ -122,10 +140,13 @@ export function DashboardClient() {
                 </ListItem>
               ))}
             </List>
+            {!loading && (data?.cohortsNeedingAttention ?? []).length === 0 && (
+              <EmptyState title="No cohorts need attention" description="Draft and registration-stage cohorts will appear here." />
+            )}
           </SectionCard>
         </Grid>
         <Grid size={{ xs: 12, lg: 6 }}>
-          <SectionCard title="Payment Status Snapshot">
+          <SectionCard title="Payment Status Snapshot" action={<Button component={Link} href="/payments" variant="outlined">View payments</Button>}>
             <List dense>
               {(data?.paymentStatusSnapshot ?? []).map((payment: AdminRow) => (
                 <ListItem key={payment.status} divider>
@@ -137,7 +158,7 @@ export function DashboardClient() {
           </SectionCard>
         </Grid>
         <Grid size={{ xs: 12 }}>
-          <SectionCard title="Recent Activity">
+          <SectionCard title="Recent Activity" action={<Button component={Link} href="/settings" variant="outlined">View settings</Button>}>
             <List dense>
               {(data?.recentActivity ?? []).map((activity: AdminRow) => (
                 <ListItem key={activity.id} divider>

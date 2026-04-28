@@ -22,6 +22,7 @@ import { useEffect, useMemo, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
 import {
   AdminRow,
+  EmptyState,
   FieldConfig,
   MutationDialog,
   PageHeader,
@@ -45,6 +46,7 @@ const sessionFields: FieldConfig[] = [
 
 export function CohortDetailClient({ id }: { id: string }) {
   const [tab, setTab] = useState(0);
+  const [loading, setLoading] = useState(true);
   const [cohort, setCohort] = useState<AdminRow | null>(null);
   const [sessions, setSessions] = useState<AdminRow[]>([]);
   const [registrations, setRegistrations] = useState<AdminRow[]>([]);
@@ -75,10 +77,14 @@ export function CohortDetailClient({ id }: { id: string }) {
     setCommunications(communicationRows);
     setPayments(paymentRows.filter((payment) => payment.cohortId === id));
     setActivity(activityRows);
+    setLoading(false);
   }
 
   useEffect(() => {
-    load().catch((error) => notifyError(error.message));
+    load().catch((error) => {
+      notifyError(error.message);
+      setLoading(false);
+    });
   }, [id, notifyError]);
 
   const totals = useMemo(() => {
@@ -155,6 +161,7 @@ export function CohortDetailClient({ id }: { id: string }) {
       await load();
     } catch (error) {
       notifyError((error as Error).message);
+      throw error;
     }
   }
 
@@ -196,24 +203,27 @@ export function CohortDetailClient({ id }: { id: string }) {
       {tab === 1 && (
         <SectionCard title="Sessions" action={<Button startIcon={<AddIcon />} onClick={() => setSessionDialogOpen(true)}>Add Session</Button>}>
           <TableShell>
-            <DataGrid rows={sessions} columns={sessionColumns} pageSizeOptions={[10, 25]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} disableRowSelectionOnClick />
+            <DataGrid rows={sessions} columns={sessionColumns} loading={loading} pageSizeOptions={[10, 25]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} disableRowSelectionOnClick />
           </TableShell>
+          {!loading && sessions.length === 0 && <EmptyState title="No sessions yet" description="Add sessions to build the cohort schedule." />}
         </SectionCard>
       )}
 
       {tab === 2 && (
         <SectionCard title="Registrations" action={<Button href="/registrations" startIcon={<AddIcon />}>Add/Edit Registration</Button>}>
           <TableShell>
-            <DataGrid rows={registrations} columns={registrationColumns} pageSizeOptions={[10, 25]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} disableRowSelectionOnClick />
+            <DataGrid rows={registrations} columns={registrationColumns} loading={loading} pageSizeOptions={[10, 25]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} disableRowSelectionOnClick />
           </TableShell>
+          {!loading && registrations.length === 0 && <EmptyState title="No registrations yet" description="Registrations for this cohort will appear here." />}
         </SectionCard>
       )}
 
       {tab === 3 && (
         <SectionCard title="Participants" action={<Button href="/participants" startIcon={<AddIcon />}>Add/Edit Participant</Button>}>
           <TableShell>
-            <DataGrid rows={participants} columns={participantColumns} pageSizeOptions={[10, 25]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} disableRowSelectionOnClick />
+            <DataGrid rows={participants} columns={participantColumns} loading={loading} pageSizeOptions={[10, 25]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} disableRowSelectionOnClick />
           </TableShell>
+          {!loading && participants.length === 0 && <EmptyState title="No participants yet" description="Participants attached to this cohort will appear here." />}
         </SectionCard>
       )}
 
@@ -227,6 +237,7 @@ export function CohortDetailClient({ id }: { id: string }) {
               </ListItem>
             ))}
           </List>
+          {!loading && communications.length === 0 && <EmptyState title="No communications yet" description="Scheduled and sent communications for this cohort will appear here." />}
         </SectionCard>
       )}
 
@@ -246,6 +257,7 @@ export function CohortDetailClient({ id }: { id: string }) {
               </ListItem>
             ))}
           </List>
+          {!loading && payments.length === 0 && <EmptyState title="No payments yet" description="Payment records tied to this cohort will appear here." />}
         </SectionCard>
       )}
 
@@ -258,6 +270,7 @@ export function CohortDetailClient({ id }: { id: string }) {
               </ListItem>
             ))}
           </List>
+          {!loading && activity.length === 0 && <EmptyState title="No activity yet" description="Audit events for this cohort will appear here." />}
         </SectionCard>
       )}
 

@@ -5,21 +5,26 @@ import { Box, Button, MenuItem, Stack, TextField } from "@mui/material";
 import { DataGrid, GridColDef } from "@mui/x-data-grid";
 import { useEffect, useMemo, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
-import { AdminRow, PageHeader, PageStack, SectionCard, StatusChip, TableShell, useNotifier } from "./common";
+import { AdminRow, EmptyState, PageHeader, PageStack, SectionCard, StatusChip, TableShell, useNotifier } from "./common";
 
 const paymentStatuses = ["PENDING", "INVOICED", "PARTIALLY_PAID", "PAID", "REFUNDED", "CANCELLED"];
 
 export function PaymentsClient() {
   const [rows, setRows] = useState<AdminRow[]>([]);
+  const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState("");
   const { notifySuccess, notifyError, snackbar } = useNotifier();
 
   async function load() {
     setRows(await adminApi<AdminRow[]>("/api/payments"));
+    setLoading(false);
   }
 
   useEffect(() => {
-    load().catch((error) => notifyError(error.message));
+    load().catch((error) => {
+      notifyError(error.message);
+      setLoading(false);
+    });
   }, [notifyError]);
 
   const filteredRows = useMemo(() => rows.filter((row) => (status ? row.status === status : true)), [rows, status]);
@@ -71,8 +76,9 @@ export function PaymentsClient() {
       </SectionCard>
       <SectionCard title="Payment Records">
         <TableShell>
-          <DataGrid rows={filteredRows} columns={columns} pageSizeOptions={[10, 25, 50]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} disableRowSelectionOnClick />
+          <DataGrid rows={filteredRows} columns={columns} loading={loading} pageSizeOptions={[10, 25, 50]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} disableRowSelectionOnClick />
         </TableShell>
+        {!loading && filteredRows.length === 0 && <EmptyState title="No payment records found" description="Payment records are created from registrations or webhook submissions." />}
       </SectionCard>
       <Box>{snackbar}</Box>
     </PageStack>
