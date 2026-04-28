@@ -1,11 +1,11 @@
-import { OrganizationType, PaymentMethod, PaymentStatus, RegistrationStatus, WebhookProcessingStatus } from "@prisma/client";
+import { OrganizationType, PaymentMethod, PaymentStatus, Prisma, RegistrationStatus, WebhookProcessingStatus } from "@prisma/client";
 import { env } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
 
 export async function recordWebhookEvent(input: {
   source: string;
   eventType: string;
-  payload: Record<string, unknown>;
+  payload: Prisma.InputJsonValue;
 }) {
   return prisma.webhookEvent.create({
     data: {
@@ -40,7 +40,7 @@ export async function processRegistrationWebhook(payload: Record<string, any>) {
   const event = await recordWebhookEvent({
     source: stringValue(payload.source, "registration_form"),
     eventType: stringValue(payload.eventType, "registration.submitted"),
-    payload
+    payload: payload as Prisma.InputJsonValue
   });
 
   try {

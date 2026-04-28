@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import {
@@ -8,7 +9,12 @@ import { logAuditEventAsync } from "./auditService";
 
 export async function createRegistrationForm(input: z.input<typeof registrationFormCreateSchema>) {
   const data = registrationFormCreateSchema.parse(input);
-  const form = await prisma.registrationForm.create({ data });
+  const form = await prisma.registrationForm.create({
+    data: {
+      ...data,
+      formConfigJson: data.formConfigJson as Prisma.InputJsonValue
+    }
+  });
   logAuditEventAsync({
     entityType: "RegistrationForm",
     entityId: form.id,
@@ -21,7 +27,13 @@ export async function createRegistrationForm(input: z.input<typeof registrationF
 
 export async function updateRegistrationForm(id: string, input: z.input<typeof registrationFormUpdateSchema>) {
   const data = registrationFormUpdateSchema.parse(input);
-  return prisma.registrationForm.update({ where: { id }, data });
+  return prisma.registrationForm.update({
+    where: { id },
+    data: {
+      ...data,
+      formConfigJson: data.formConfigJson as Prisma.InputJsonValue | undefined
+    }
+  });
 }
 
 export async function getRegistrationFormBySlug(slug: string) {

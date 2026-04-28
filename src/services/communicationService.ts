@@ -39,7 +39,7 @@ export async function scheduleCommunicationPlaceholder(input: z.input<typeof com
     entityId: communication.id,
     action: "SCHEDULED",
     description: "Communication scheduled",
-    metadata: { cohortId: communication.cohortId, scheduledFor: communication.scheduledFor?.toISOString() }
+    metadata: { cohortId: communication.cohortId, scheduledFor: communication.scheduledFor?.toISOString() ?? null }
   });
   return communication;
 }
@@ -93,7 +93,7 @@ export async function createPlannedSessionReminders(sessionId: string, createdBy
       entityId: record.id,
       action: "SCHEDULED",
       description: "Session reminder scheduled",
-      metadata: { sessionId, scheduledFor: record.scheduledFor?.toISOString() }
+      metadata: { sessionId, scheduledFor: record.scheduledFor?.toISOString() ?? null }
     });
   }
 
