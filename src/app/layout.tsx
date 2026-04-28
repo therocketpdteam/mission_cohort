@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Route } from "next";
 import type { ReactNode } from "react";
 import Link from "next/link";
 import "./globals.css";
@@ -8,17 +8,17 @@ export const metadata: Metadata = {
   description: "Internal cohort operations admin platform"
 };
 
-const navItems = [
-  ["Dashboard", "/dashboard"],
-  ["Cohorts", "/cohorts"],
-  ["Registrations", "/registrations"],
-  ["Participants", "/participants"],
-  ["Organizations", "/organizations"],
-  ["Presenters", "/presenters"],
-  ["Communications", "/communications"],
-  ["Payments", "/payments"],
-  ["Forms", "/forms"],
-  ["Settings", "/settings"]
+const navItems: ReadonlyArray<{ label: string; href: Route }> = [
+  { label: "Dashboard", href: "/dashboard" },
+  { label: "Cohorts", href: "/cohorts" },
+  { label: "Registrations", href: "/registrations" },
+  { label: "Participants", href: "/participants" },
+  { label: "Organizations", href: "/organizations" },
+  { label: "Presenters", href: "/presenters" },
+  { label: "Communications", href: "/communications" },
+  { label: "Payments", href: "/payments" },
+  { label: "Forms", href: "/forms" },
+  { label: "Settings", href: "/settings" }
 ];
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
@@ -29,7 +29,7 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
           <aside className="sidebar">
             <h1>Mission Control</h1>
             <nav aria-label="Admin navigation">
-              {navItems.map(([label, href]) => (
+              {navItems.map(({ label, href }) => (
                 <Link href={href} key={href}>
                   {label}
                 </Link>
