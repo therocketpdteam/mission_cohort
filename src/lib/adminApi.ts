@@ -23,10 +23,34 @@ export async function adminApi<T>(path: string, options: RequestOptions = {}) {
     body: options.body ? JSON.stringify(options.body) : undefined
   });
 
-  const payload = (await response.json()) as ApiEnvelope<T>;
+  const text = await response.text();
+
+  if (!text) {
+    if (response.ok) {
+      return undefined as T;
+    }
+
+    throw new Error(`Request failed (${response.status}) for ${path}`);
+  }
+
+  let payload: ApiEnvelope<T>;
+
+  try {
+    payload = JSON.parse(text) as ApiEnvelope<T>;
+  } catch {
+    const message = response.ok
+      ? `Expected JSON response from ${path}`
+      : `Request failed (${response.status}) for ${path}`;
+
+    throw new Error(message);
+  }
+
+  if (!payload || typeof payload !== "object" || !("success" in payload)) {
+    throw new Error(`Unexpected API response from ${path}`);
+  }
 
   if (!payload.success) {
-    throw new Error(payload.error.message);
+    throw new Error(payload.error?.message ?? `Request failed (${response.status}) for ${path}`);
   }
 
   return payload.data;
