@@ -1,0 +1,502 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  OPERATIONS
+  SALES
+  PRESENTER
+  VIEWER
+}
+
+enum OrganizationType {
+  DISTRICT
+  SCHOOL
+  COMPANY
+  PARTNER
+  OTHER
+}
+
+enum CohortStatus {
+  DRAFT
+  PUBLISHED
+  REGISTRATION_OPEN
+  REGISTRATION_CLOSED
+  ACTIVE
+  COMPLETED
+  CANCELLED
+  ARCHIVED
+}
+
+enum CohortType {
+  LIVE_VIRTUAL
+  HYBRID
+  IN_PERSON
+}
+
+enum CalendarInviteStatus {
+  NOT_CREATED
+  CREATED
+  UPDATED
+  FAILED
+}
+
+enum RegistrationStatus {
+  NEW
+  CONFIRMED
+  WAITLISTED
+  CANCELLED
+  COMPLETED
+}
+
+enum PaymentMethod {
+  CREDIT_CARD
+  PURCHASE_ORDER
+  INVOICE
+  COMPED
+  UNKNOWN
+}
+
+enum PaymentStatus {
+  PENDING
+  INVOICED
+  PARTIALLY_PAID
+  PAID
+  REFUNDED
+  CANCELLED
+}
+
+enum ParticipantStatus {
+  REGISTERED
+  CANCELLED
+  COMPLETED
+  NO_SHOW
+}
+
+enum AttendanceStatus {
+  UNKNOWN
+  ATTENDED
+  PARTIAL
+  ABSENT
+}
+
+enum ResourceType {
+  SLIDES
+  PDF
+  VIDEO
+  LINK
+  WORKBOOK
+  OTHER
+}
+
+enum ResourceVisibility {
+  ADMIN_ONLY
+  PARTICIPANTS
+  PUBLIC_LINK
+}
+
+enum TemplateType {
+  REGISTRATION_CONFIRMATION
+  WEEK_BEFORE_REMINDER
+  DAY_BEFORE_REMINDER
+  HOUR_BEFORE_REMINDER
+  FOLLOW_UP
+  PAYMENT_REMINDER
+  CUSTOM
+}
+
+enum CommunicationStatus {
+  DRAFT
+  SCHEDULED
+  SENDING
+  SENT
+  FAILED
+  CANCELLED
+}
+
+enum RecipientScope {
+  ALL_PARTICIPANTS
+  PRIMARY_CONTACTS
+  BILLING_CONTACTS
+  CUSTOM
+}
+
+enum EmailEventType {
+  SENT
+  DELIVERED
+  OPENED
+  CLICKED
+  BOUNCED
+  FAILED
+  UNSUBSCRIBED
+}
+
+enum WebhookProcessingStatus {
+  RECEIVED
+  PROCESSING
+  PROCESSED
+  FAILED
+  IGNORED
+}
+
+model User {
+  id                    String                @id @default(cuid())
+  email                 String                @unique
+  firstName             String
+  lastName              String
+  role                  Role                  @default(VIEWER)
+  active                Boolean               @default(true)
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+  createdCommunications CohortCommunication[]
+  auditLogs             AuditLog[]
+
+  @@index([role])
+  @@index([active])
+}
+
+model Organization {
+  id             String          @id @default(cuid())
+  name           String
+  type           OrganizationType
+  website        String?
+  addressLine1   String?
+  addressLine2   String?
+  city           String?
+  state          String?
+  zip            String?
+  phone          String?
+  notes          String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  registrations  Registration[]
+  participants   Participant[]
+  paymentRecords PaymentRecord[]
+
+  @@index([type])
+  @@index([name])
+}
+
+model Presenter {
+  id           String   @id @default(cuid())
+  firstName    String
+  lastName     String
+  email        String   @unique
+  bio          String?
+  organization String?
+  phone        String?
+  notes        String?
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  cohorts      Cohort[]
+
+  @@index([active])
+}
+
+model Cohort {
+  id                        String                 @id @default(cuid())
+  title                     String
+  slug                      String                 @unique
+  description               String?
+  presenterId               String
+  status                    CohortStatus           @default(DRAFT)
+  startDate                 DateTime
+  endDate                   DateTime
+  registrationOpenDate      DateTime?
+  registrationCloseDate     DateTime?
+  defaultTimezone           String                 @default("America/New_York")
+  maxParticipants           Int?
+  minParticipants           Int?
+  pricePerParticipant       Decimal                @default(0) @db.Decimal(10, 2)
+  cohortType                CohortType             @default(LIVE_VIRTUAL)
+  thumbnailUrl              String?
+  publicRegistrationEnabled Boolean                @default(false)
+  createdAt                 DateTime               @default(now())
+  updatedAt                 DateTime               @updatedAt
+  presenter                 Presenter              @relation(fields: [presenterId], references: [id])
+  sessions                  CohortSession[]
+  registrationForms         RegistrationForm[]
+  registrations             Registration[]
+  participants              Participant[]
+  resources                 CohortResource[]
+  communications            CohortCommunication[]
+  calendarEvents            CalendarEvent[]
+  paymentRecords            PaymentRecord[]
+
+  @@index([presenterId])
+  @@index([status])
+  @@index([startDate])
+}
+
+model CohortSession {
+  id                   String                @id @default(cuid())
+  cohortId             String
+  title                String
+  description          String?
+  sessionNumber        Int
+  startTime            DateTime
+  endTime              DateTime
+  timezone             String
+  meetingUrl           String?
+  location             String?
+  calendarInviteStatus CalendarInviteStatus  @default(NOT_CREATED)
+  recordingUrl         String?
+  slidesUrl            String?
+  resourcesUrl         String?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  cohort               Cohort                @relation(fields: [cohortId], references: [id], onDelete: Cascade)
+  resources            CohortResource[]
+  communications       CohortCommunication[]
+  calendarEvents       CalendarEvent[]
+
+  @@index([cohortId])
+  @@index([startTime])
+  @@unique([cohortId, sessionNumber])
+}
+
+model RegistrationForm {
+  id             String         @id @default(cuid())
+  cohortId       String
+  title          String
+  slug           String         @unique
+  active         Boolean        @default(true)
+  formConfigJson Json
+  successMessage String?
+  webhookEnabled Boolean        @default(false)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  cohort         Cohort         @relation(fields: [cohortId], references: [id], onDelete: Cascade)
+  registrations  Registration[]
+
+  @@index([cohortId])
+  @@index([active])
+}
+
+model Registration {
+  id                    String             @id @default(cuid())
+  cohortId              String
+  organizationId        String
+  formId                String?
+  primaryContactName    String
+  primaryContactEmail   String
+  primaryContactPhone   String?
+  primaryContactTitle   String?
+  billingContactName    String?
+  billingContactEmail   String?
+  billingAddress        String?
+  paymentMethod         PaymentMethod      @default(UNKNOWN)
+  paymentStatus         PaymentStatus      @default(PENDING)
+  invoiceNumber         String?
+  purchaseOrderNumber   String?
+  totalAmount           Decimal            @default(0) @db.Decimal(10, 2)
+  participantCount      Int                @default(0)
+  status                RegistrationStatus @default(NEW)
+  source                String?
+  notes                 String?
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+  cohort                Cohort             @relation(fields: [cohortId], references: [id])
+  organization          Organization       @relation(fields: [organizationId], references: [id])
+  form                  RegistrationForm?  @relation(fields: [formId], references: [id])
+  participants          Participant[]
+  paymentRecords        PaymentRecord[]
+
+  @@index([cohortId])
+  @@index([organizationId])
+  @@index([formId])
+  @@index([status])
+  @@index([paymentStatus])
+}
+
+model Participant {
+  id                String            @id @default(cuid())
+  registrationId    String
+  cohortId          String
+  organizationId    String
+  firstName         String
+  lastName          String
+  email             String
+  title             String?
+  phone             String?
+  status            ParticipantStatus @default(REGISTERED)
+  attendanceStatus  AttendanceStatus  @default(UNKNOWN)
+  certificateIssued Boolean           @default(false)
+  certificateUrl    String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  registration      Registration      @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  cohort            Cohort            @relation(fields: [cohortId], references: [id])
+  organization      Organization      @relation(fields: [organizationId], references: [id])
+
+  @@index([registrationId])
+  @@index([cohortId])
+  @@index([organizationId])
+  @@index([email])
+}
+
+model CohortResource {
+  id          String             @id @default(cuid())
+  cohortId    String
+  sessionId   String?
+  title       String
+  description String?
+  type        ResourceType
+  url         String?
+  fileKey     String?
+  visibility  ResourceVisibility @default(ADMIN_ONLY)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  cohort      Cohort             @relation(fields: [cohortId], references: [id], onDelete: Cascade)
+  session     CohortSession?     @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+
+  @@index([cohortId])
+  @@index([sessionId])
+}
+
+model CommunicationTemplate {
+  id             String                @id @default(cuid())
+  name           String
+  subject        String
+  bodyHtml       String
+  bodyText       String?
+  type           TemplateType
+  active         Boolean               @default(true)
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+  communications CohortCommunication[]
+
+  @@index([type])
+  @@index([active])
+}
+
+model CohortCommunication {
+  id             String              @id @default(cuid())
+  cohortId       String
+  sessionId      String?
+  templateId     String?
+  subject        String
+  bodyHtml       String
+  bodyText       String?
+  scheduledFor   DateTime?
+  sentAt         DateTime?
+  status         CommunicationStatus @default(DRAFT)
+  recipientScope RecipientScope
+  createdById    String
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  cohort         Cohort              @relation(fields: [cohortId], references: [id], onDelete: Cascade)
+  session        CohortSession?      @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  template       CommunicationTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  createdBy      User                @relation(fields: [createdById], references: [id])
+  emailEvents    EmailEvent[]
+
+  @@index([cohortId])
+  @@index([sessionId])
+  @@index([templateId])
+  @@index([createdById])
+  @@index([status])
+  @@index([scheduledFor])
+}
+
+model EmailEvent {
+  id                String                @id @default(cuid())
+  communicationId   String?
+  recipientEmail    String
+  provider          String
+  providerMessageId String?
+  eventType         EmailEventType
+  eventPayload      Json?
+  createdAt         DateTime              @default(now())
+  communication     CohortCommunication?  @relation(fields: [communicationId], references: [id], onDelete: SetNull)
+
+  @@index([communicationId])
+  @@index([recipientEmail])
+  @@index([eventType])
+}
+
+model CalendarEvent {
+  id              String               @id @default(cuid())
+  cohortId        String
+  sessionId       String
+  provider        String
+  providerEventId String?
+  title           String
+  startTime       DateTime
+  endTime         DateTime
+  timezone        String
+  inviteUrl       String?
+  status          CalendarInviteStatus @default(NOT_CREATED)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  cohort          Cohort               @relation(fields: [cohortId], references: [id], onDelete: Cascade)
+  session         CohortSession        @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([cohortId])
+  @@index([sessionId])
+  @@index([providerEventId])
+}
+
+model WebhookEvent {
+  id           String                  @id @default(cuid())
+  source       String
+  eventType    String
+  payload      Json
+  processedAt  DateTime?
+  status       WebhookProcessingStatus @default(RECEIVED)
+  errorMessage String?
+  createdAt    DateTime                @default(now())
+
+  @@index([source])
+  @@index([eventType])
+  @@index([status])
+}
+
+model PaymentRecord {
+  id             String        @id @default(cuid())
+  registrationId String
+  cohortId       String
+  organizationId String
+  amount         Decimal       @db.Decimal(10, 2)
+  status         PaymentStatus @default(PENDING)
+  method         PaymentMethod @default(UNKNOWN)
+  invoiceNumber  String?
+  paymentDate    DateTime?
+  notes          String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  registration   Registration  @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  cohort         Cohort        @relation(fields: [cohortId], references: [id])
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+
+  @@index([registrationId])
+  @@index([cohortId])
+  @@index([organizationId])
+  @@index([status])
+  @@index([invoiceNumber])
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  actorUserId String?
+  entityType  String
+  entityId    String
+  action      String
+  description String?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  actorUser   User?    @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([actorUserId])
+  @@index([entityType, entityId])
+  @@index([action])
+  @@index([createdAt])
+}
