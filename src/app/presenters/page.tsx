@@ -1,10 +1,5 @@
-import { PlaceholderPanel } from "@/components/shared/PlaceholderPanel";
+import { PresentersClient } from "@/components/admin/PresentersClient";
 
 export default function PresentersPage() {
-  return (
-    <PlaceholderPanel
-      title="Presenters"
-      description="Presenter and thought leader admin placeholder."
-    />
-  );
+  return <PresentersClient />;
 }

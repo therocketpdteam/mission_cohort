@@ -1,10 +1,5 @@
-import { PlaceholderPanel } from "@/components/shared/PlaceholderPanel";
+import { FormsClient } from "@/components/admin/FormsClient";
 
 export default function FormsPage() {
-  return (
-    <PlaceholderPanel
-      title="Registration Forms"
-      description="Cohort registration form configuration placeholder."
-    />
-  );
+  return <FormsClient />;
 }

@@ -9,9 +9,10 @@ export async function GET() {
   });
 }
 
-export async function POST() {
+export async function POST(request: Request) {
   try {
-    return ok(await createCalendarInvitePlaceholder(), { status: 202 });
+    const body = await request.json().catch(() => ({}));
+    return ok(await createCalendarInvitePlaceholder(body.sessionId, body.mode ?? "ics"), { status: 202 });
   } catch (error) {
     return handleApiError(error);
   }

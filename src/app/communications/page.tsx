@@ -1,10 +1,5 @@
-import { PlaceholderPanel } from "@/components/shared/PlaceholderPanel";
+import { CommunicationsClient } from "@/components/admin/CommunicationsClient";
 
 export default function CommunicationsPage() {
-  return (
-    <PlaceholderPanel
-      title="Communications"
-      description="Email templates, drafts, and scheduled communication workflow placeholder."
-    />
-  );
+  return <CommunicationsClient />;
 }

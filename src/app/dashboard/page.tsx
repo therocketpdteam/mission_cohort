@@ -1,10 +1,5 @@
-import { PlaceholderPanel } from "@/components/shared/PlaceholderPanel";
+import { DashboardClient } from "@/components/admin/DashboardClient";
 
 export default function DashboardPage() {
-  return (
-    <PlaceholderPanel
-      title="Dashboard"
-      description="Operational overview placeholder for cohort registrations, payments, communications, and calendar work."
-    />
-  );
+  return <DashboardClient />;
 }

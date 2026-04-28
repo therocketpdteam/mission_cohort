@@ -1,10 +1,5 @@
-import { PlaceholderPanel } from "@/components/shared/PlaceholderPanel";
+import { ParticipantsClient } from "@/components/admin/ParticipantsClient";
 
 export default function ParticipantsPage() {
-  return (
-    <PlaceholderPanel
-      title="Participants"
-      description="Participant management placeholder for internal cohort operations."
-    />
-  );
+  return <ParticipantsClient />;
 }

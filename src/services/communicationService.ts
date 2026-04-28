@@ -1,4 +1,4 @@
-import { CommunicationStatus } from "@prisma/client";
+import { CommunicationStatus, RecipientScope } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import {
@@ -8,6 +8,7 @@ import {
   communicationTemplateUpdateSchema
 } from "@/validators/communication";
 import { logAuditEventAsync } from "./auditService";
+import { generateSessionReminderSchedule } from "@/modules/email";
 
 export async function createTemplate(input: z.input<typeof communicationTemplateCreateSchema>) {
   const data = communicationTemplateCreateSchema.parse(input);
@@ -55,4 +56,46 @@ export async function listTemplates() {
   return prisma.communicationTemplate.findMany({
     orderBy: { name: "asc" }
   });
+}
+
+export async function createPlannedSessionReminders(sessionId: string, createdById: string) {
+  const session = await prisma.cohortSession.findUnique({
+    where: { id: sessionId },
+    include: { cohort: true }
+  });
+
+  if (!session) {
+    throw Object.assign(new Error("Session not found"), { code: "NOT_FOUND", status: 404 });
+  }
+
+  const schedule = generateSessionReminderSchedule(session);
+  const records = await Promise.all(
+    schedule.map((item) =>
+      prisma.cohortCommunication.create({
+        data: {
+          cohortId: session.cohortId,
+          sessionId: session.id,
+          subject: `${session.title} reminder`,
+          bodyHtml: `<p>Reminder for {{session.title}} in ${session.cohort.title}.</p>`,
+          bodyText: `Reminder for {{session.title}} in ${session.cohort.title}.`,
+          scheduledFor: item.scheduledFor,
+          status: CommunicationStatus.SCHEDULED,
+          recipientScope: RecipientScope.ALL_PARTICIPANTS,
+          createdById
+        }
+      })
+    )
+  );
+
+  for (const record of records) {
+    logAuditEventAsync({
+      entityType: "CohortCommunication",
+      entityId: record.id,
+      action: "SCHEDULED",
+      description: "Session reminder scheduled",
+      metadata: { sessionId, scheduledFor: record.scheduledFor?.toISOString() }
+    });
+  }
+
+  return records;
 }

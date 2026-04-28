@@ -1,16 +1,16 @@
-import { handleApiError, ok } from "@/lib/api";
-import { recordWebhookEvent } from "@/services/webhookService";
+import { fail, handleApiError, ok } from "@/lib/api";
+import { processRegistrationWebhook, validateWebhookSecret } from "@/services/webhookService";
 
 export async function POST(request: Request) {
   try {
-    const payload = await request.json();
-    const event = await recordWebhookEvent({
-      source: "registration_form",
-      eventType: String(payload.eventType ?? "registration.submitted"),
-      payload
-    });
+    if (!validateWebhookSecret(request)) {
+      return fail("Invalid webhook secret", "FORBIDDEN", 403);
+    }
 
-    return ok(event, { status: 202 });
+    const payload = await request.json();
+    const result = await processRegistrationWebhook(payload);
+
+    return ok(result, { status: 202 });
   } catch (error) {
     return handleApiError(error);
   }

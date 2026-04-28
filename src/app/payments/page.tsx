@@ -1,10 +1,5 @@
-import { PlaceholderPanel } from "@/components/shared/PlaceholderPanel";
+import { PaymentsClient } from "@/components/admin/PaymentsClient";
 
 export default function PaymentsPage() {
-  return (
-    <PlaceholderPanel
-      title="Payments"
-      description="Invoice, purchase order, and payment status tracking placeholder."
-    />
-  );
+  return <PaymentsClient />;
 }

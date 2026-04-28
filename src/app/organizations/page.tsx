@@ -1,10 +1,5 @@
-import { PlaceholderPanel } from "@/components/shared/PlaceholderPanel";
+import { OrganizationsClient } from "@/components/admin/OrganizationsClient";
 
 export default function OrganizationsPage() {
-  return (
-    <PlaceholderPanel
-      title="Organizations"
-      description="District, school, company, and partner organization admin placeholder."
-    />
-  );
+  return <OrganizationsClient />;
 }

@@ -1,6 +1,7 @@
 import { fail, handleApiError, ok } from "@/lib/api";
 import {
   createCommunicationDraft,
+  createPlannedSessionReminders,
   listCommunicationsByCohort,
   scheduleCommunicationPlaceholder
 } from "@/services/communicationService";
@@ -33,6 +34,10 @@ export async function PATCH(request: Request) {
 
     if (body.action === "schedule") {
       return ok(await scheduleCommunicationPlaceholder(body));
+    }
+
+    if (body.action === "scheduleSessionReminders") {
+      return ok(await createPlannedSessionReminders(body.sessionId, body.createdById));
     }
 
     return fail("Unsupported communication action", "BAD_REQUEST", 400);

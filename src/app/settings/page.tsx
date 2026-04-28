@@ -1,10 +1,5 @@
-import { PlaceholderPanel } from "@/components/shared/PlaceholderPanel";
+import { SettingsClient } from "@/components/admin/SettingsClient";
 
 export default function SettingsPage() {
-  return (
-    <PlaceholderPanel
-      title="Settings"
-      description="Internal admin settings and integration configuration placeholder."
-    />
-  );
+  return <SettingsClient />;
 }

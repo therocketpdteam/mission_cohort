@@ -1,12 +1,6 @@
-import { PlaceholderPanel } from "@/components/shared/PlaceholderPanel";
+import { CohortDetailClient } from "@/components/admin/CohortDetailClient";
 
 export default async function CohortDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-
-  return (
-    <PlaceholderPanel
-      title="Cohort Detail"
-      description={`Admin detail placeholder for cohort ${id}.`}
-    />
-  );
+  return <CohortDetailClient id={id} />;
 }

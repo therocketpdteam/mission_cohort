@@ -8,6 +8,7 @@ This repository is admin-only. It intentionally does not include LaunchPad, a le
 
 - Next.js App Router
 - TypeScript
+- Material UI
 - Prisma
 - Supabase Postgres
 - Supabase Auth-ready architecture
@@ -166,14 +167,16 @@ Errors use:
 - Health check endpoint
 - Demo seed data
 - Smoke script for database and core service sanity checks
+- MUI admin shell with sidebar, header, breadcrumbs, user menu, tables, modals, alerts, and operational dashboard
+- Cohort detail workspace with sessions, registrations, participants, communications, payments, resources, and activity tabs
+- SendGrid boundary, merge-field renderer, reminder schedule helper, ICS generator, Google Calendar placeholder, and registration webhook processor
 
-## Intentional Prompt 2 Stubs
+## Intentional Prompt 3 Stubs
 
-- MUI admin UI
 - Supabase Auth session integration
-- SendGrid email delivery
-- Google Calendar invite sync
-- Webhook signature verification and processing jobs
+- Production SendGrid send jobs and delivery event handling
+- Google Calendar OAuth connection flow
+- Webhook replay tooling and advanced field mapping
 - Rich tables, filters, forms, and admin workflow screens
 - Background job scheduling for communications
 

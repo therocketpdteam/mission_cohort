@@ -1,10 +1,5 @@
-import { PlaceholderPanel } from "@/components/shared/PlaceholderPanel";
+import { CohortsClient } from "@/components/admin/CohortsClient";
 
 export default function CohortsPage() {
-  return (
-    <PlaceholderPanel
-      title="Cohorts"
-      description="Admin cohort list placeholder ready for Prompt 2 table and workflow UI."
-    />
-  );
+  return <CohortsClient />;
 }

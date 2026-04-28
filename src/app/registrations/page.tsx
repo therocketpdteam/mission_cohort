@@ -1,10 +1,5 @@
-import { PlaceholderPanel } from "@/components/shared/PlaceholderPanel";
+import { RegistrationsClient } from "@/components/admin/RegistrationsClient";
 
 export default function RegistrationsPage() {
-  return (
-    <PlaceholderPanel
-      title="Registrations"
-      description="Registration tracking placeholder for admin and operations workflows."
-    />
-  );
+  return <RegistrationsClient />;
 }
