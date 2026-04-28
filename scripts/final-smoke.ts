@@ -129,7 +129,8 @@ async function main() {
   console.log("session reminders: ok");
 
   const calendar = await createCalendarInvitePlaceholder(session.id, "ics");
-  if (!("ics" in calendar) || !calendar.ics.includes("QA Session") || !calendar.ics.includes("https://example.com/qa-session")) {
+  const ics = "ics" in calendar && typeof calendar.ics === "string" ? calendar.ics : "";
+  if (!ics.includes("QA Session") || !ics.includes("https://example.com/qa-session")) {
     throw new Error("ICS generation failed");
   }
   console.log("ICS generation: ok");

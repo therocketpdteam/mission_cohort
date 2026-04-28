@@ -15,7 +15,8 @@
     "prisma:studio": "prisma studio",
     "db:seed": "tsx prisma/seed.ts",
     "smoke": "tsx scripts/smoke.ts",
-    "qa:smoke": "tsx scripts/final-smoke.ts"
+    "qa:smoke": "tsx scripts/final-smoke.ts",
+    "qa:prepush": "bash scripts/pre-push-qa.sh"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

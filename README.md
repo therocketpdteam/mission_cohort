@@ -207,6 +207,7 @@ pnpm qa:smoke
 Run static checks:
 
 ```bash
+pnpm qa:prepush
 pnpm typecheck
 pnpm build
 ```
