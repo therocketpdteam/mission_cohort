@@ -3,7 +3,8 @@ import {
   createCommunicationDraft,
   createPlannedSessionReminders,
   listCommunicationsByCohort,
-  scheduleCommunicationPlaceholder
+  scheduleCommunicationPlaceholder,
+  sendCommunicationPlaceholder
 } from "@/services/communicationService";
 
 export async function GET(request: Request) {
@@ -38,6 +39,14 @@ export async function PATCH(request: Request) {
 
     if (body.action === "scheduleSessionReminders") {
       return ok(await createPlannedSessionReminders(body.sessionId, body.createdById));
+    }
+
+    if (body.action === "send" || body.action === "resend") {
+      if (!body.id) {
+        return fail("id is required", "BAD_REQUEST", 400);
+      }
+
+      return ok(await sendCommunicationPlaceholder(body.id));
     }
 
     return fail("Unsupported communication action", "BAD_REQUEST", 400);

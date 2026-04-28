@@ -1,5 +1,6 @@
 import { AttendanceStatus, ParticipantStatus } from "@prisma/client";
 import { z } from "zod";
+import { optionalUrl } from "@/lib/validators";
 
 export const participantCreateSchema = z.object({
   registrationId: z.string().min(1),
@@ -13,7 +14,7 @@ export const participantCreateSchema = z.object({
   status: z.nativeEnum(ParticipantStatus).default(ParticipantStatus.REGISTERED),
   attendanceStatus: z.nativeEnum(AttendanceStatus).default(AttendanceStatus.UNKNOWN),
   certificateIssued: z.boolean().default(false),
-  certificateUrl: z.string().url().optional()
+  certificateUrl: optionalUrl
 });
 
 export const participantUpdateSchema = participantCreateSchema.partial();

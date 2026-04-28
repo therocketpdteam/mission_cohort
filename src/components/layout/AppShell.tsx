@@ -3,16 +3,12 @@
 import {
   AccountCircle,
   ArticleOutlined,
-  BusinessOutlined,
   CalendarMonthOutlined,
   DashboardOutlined,
   EmailOutlined,
   GroupsOutlined,
   LogoutOutlined,
   Menu as MenuIcon,
-  PaidOutlined,
-  PeopleAltOutlined,
-  SchoolOutlined,
   SettingsOutlined
 } from "@mui/icons-material";
 import {
@@ -52,11 +48,7 @@ const navItems: ReadonlyArray<{
   { label: "Cohorts", href: "/cohorts", icon: <CalendarMonthOutlined /> },
   { label: "Registrations", href: "/registrations", icon: <ArticleOutlined /> },
   { label: "Participants", href: "/participants", icon: <GroupsOutlined /> },
-  { label: "Organizations", href: "/organizations", icon: <BusinessOutlined /> },
-  { label: "Presenters", href: "/presenters", icon: <SchoolOutlined /> },
-  { label: "Registration Forms", href: "/forms", icon: <PeopleAltOutlined /> },
   { label: "Communications", href: "/communications", icon: <EmailOutlined /> },
-  { label: "Payments", href: "/payments", icon: <PaidOutlined /> },
   { label: "Settings", href: "/settings", icon: <SettingsOutlined /> }
 ];
 

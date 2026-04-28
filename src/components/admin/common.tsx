@@ -13,14 +13,11 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  FormControl,
   FormControlLabel,
   Grid,
   IconButton,
-  InputLabel,
   MenuItem,
   Paper,
-  Select,
   Switch,
   Snackbar,
   Stack,
@@ -248,20 +245,20 @@ export function MutationDialog({
           {fields.map((field) => (
             <Grid size={{ xs: 12, md: field.type === "textarea" ? 12 : 6 }} key={field.name}>
               {field.type === "select" ? (
-                <FormControl fullWidth>
-                  <InputLabel>{field.label}</InputLabel>
-                  <Select
-                    label={field.label}
-                    value={values[field.name] ?? ""}
-                    onChange={(event) => setValue(field.name, event.target.value)}
-                  >
-                    {(field.options ?? []).map((option) => (
-                      <MenuItem value={option.value} key={option.value}>
-                        {option.label}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
+                <TextField
+                  select
+                  fullWidth
+                  label={field.label}
+                  required={field.required}
+                  value={values[field.name] ?? ""}
+                  onChange={(event) => setValue(field.name, event.target.value)}
+                >
+                  {(field.options ?? []).map((option) => (
+                    <MenuItem value={option.value} key={option.value}>
+                      {option.label}
+                    </MenuItem>
+                  ))}
+                </TextField>
               ) : field.type === "checkbox" ? (
                 <FormControlLabel
                   control={
@@ -280,6 +277,7 @@ export function MutationDialog({
                   multiline={field.type === "textarea"}
                   minRows={field.type === "textarea" ? 4 : undefined}
                   type={field.type ?? "text"}
+                  InputLabelProps={["date", "datetime-local"].includes(field.type ?? "") ? { shrink: true } : undefined}
                   value={values[field.name] ?? ""}
                   onChange={(event) => {
                     const raw = event.target.value;

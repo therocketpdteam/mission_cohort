@@ -59,13 +59,13 @@ export async function listParticipantsByCohort(cohortId: string) {
   return prisma.participant.findMany({
     where: { cohortId },
     orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
-    include: { organization: true, registration: true }
+    include: { organization: true, registration: { include: { paymentRecords: true } } }
   });
 }
 
 export async function listParticipants() {
   return prisma.participant.findMany({
     orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
-    include: { cohort: true, organization: true }
+    include: { cohort: true, organization: true, registration: { include: { paymentRecords: true } } }
   });
 }

@@ -2,6 +2,7 @@
 
 import AddIcon from "@mui/icons-material/Add";
 import {
+  Box,
   Button,
   Card,
   CardContent,
@@ -23,7 +24,7 @@ const metricLabels: ReadonlyArray<[string, string, Route]> = [
   ["upcomingSessions", "Upcoming Sessions", "/cohorts"],
   ["openRegistrations", "Open Registrations", "/registrations"],
   ["totalParticipants", "Total Participants", "/participants"],
-  ["pendingPayments", "Pending Payments", "/payments"],
+  ["pendingPayments", "Pending Payments", "/registrations"],
   ["scheduledCommunications", "Scheduled Communications", "/communications"],
   ["openOperationsTasks", "Open Operations Tasks", "/cohorts"]
 ];
@@ -31,8 +32,6 @@ const metricLabels: ReadonlyArray<[string, string, Route]> = [
 const quickActions: ReadonlyArray<[string, Route]> = [
   ["Create Cohort", "/cohorts"],
   ["Add Registration", "/registrations"],
-  ["Create Registration Form", "/forms"],
-  ["Add Organization", "/organizations"],
   ["Create Email Template", "/communications"]
 ];
 
@@ -55,18 +54,26 @@ export function DashboardClient() {
         description="Operational snapshot for cohorts, registrations, sessions, payments, and communications."
       />
 
-      <Grid container spacing={2}>
+      <Box
+        sx={{
+          display: "grid",
+          gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))", lg: "repeat(7, minmax(0, 1fr))" },
+          gap: 2,
+          alignItems: "stretch"
+        }}
+      >
         {metricLabels.map(([key, label, href]) => (
-          <Grid size={{ xs: 12, sm: 6, lg: key === "openOperationsTasks" ? 3 : 2 }} key={key}>
+          <Box key={key} sx={{ minWidth: 0 }}>
             <Link href={href}>
               <Card
                 sx={{
-                  display: "block",
+                  display: "flex",
+                  height: "100%",
                   transition: "border-color 120ms ease, transform 120ms ease",
                   "&:hover": { borderColor: "primary.main", transform: "translateY(-1px)" }
                 }}
               >
-                <CardContent>
+                <CardContent sx={{ width: "100%", display: "flex", flexDirection: "column", justifyContent: "space-between", minHeight: 132 }}>
                   <Typography variant="body2" color="text.secondary">
                     {label}
                   </Typography>
@@ -76,9 +83,9 @@ export function DashboardClient() {
                 </CardContent>
               </Card>
             </Link>
-          </Grid>
+          </Box>
         ))}
-      </Grid>
+      </Box>
 
       {loading && <LoadingState label="Loading dashboard" />}
 
@@ -165,7 +172,7 @@ export function DashboardClient() {
           </SectionCard>
         </Grid>
         <Grid size={{ xs: 12, lg: 6 }}>
-          <SectionCard title="Payment Status Snapshot" action={<Button component={Link} href="/payments" variant="outlined">View payments</Button>}>
+          <SectionCard title="Payment Status Snapshot" action={<Button component={Link} href="/registrations" variant="outlined">View registrations</Button>}>
             <List dense>
               {(data?.paymentStatusSnapshot ?? []).map((payment: AdminRow) => (
                 <ListItem key={payment.status} divider>

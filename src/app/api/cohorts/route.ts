@@ -1,5 +1,5 @@
 import { handleApiError, ok } from "@/lib/api";
-import { createCohort, listCohorts } from "@/services/cohortService";
+import { createCohort, createCohortWithSessions, listCohorts } from "@/services/cohortService";
 
 export async function GET() {
   try {
@@ -11,7 +11,9 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    return ok(await createCohort(await request.json()), { status: 201 });
+    const body = await request.json();
+    const cohort = Array.isArray(body.sessions) ? await createCohortWithSessions(body) : await createCohort(body);
+    return ok(cohort, { status: 201 });
   } catch (error) {
     return handleApiError(error);
   }

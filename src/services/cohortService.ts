@@ -1,8 +1,25 @@
-import { CohortStatus } from "@prisma/client";
+import { CohortStatus, CohortType } from "@prisma/client";
 import { z } from "zod";
+import { dateInput, ensureEndAfterStart, positiveIntInput } from "@/lib/validators";
 import { prisma } from "@/lib/prisma";
 import { cohortCreateSchema, cohortUpdateSchema } from "@/validators/cohort";
 import { logAuditEventAsync } from "./auditService";
+import { createDefaultSessionOperationsTasks } from "./operationsTaskService";
+
+const nestedSessionCreateSchema = z.object({
+  title: z.string().min(1),
+  description: z.string().optional(),
+  sessionNumber: positiveIntInput,
+  startTime: dateInput,
+  endTime: dateInput,
+  timezone: z.string().min(1),
+  meetingUrl: z.string().url().optional(),
+  location: z.string().optional()
+}).superRefine(ensureEndAfterStart);
+
+const cohortWithSessionsCreateSchema = cohortCreateSchema.and(z.object({
+  sessions: z.array(nestedSessionCreateSchema).min(1)
+}));
 
 export async function createCohort(input: z.input<typeof cohortCreateSchema>) {
   const data = cohortCreateSchema.parse(input);
@@ -14,6 +31,60 @@ export async function createCohort(input: z.input<typeof cohortCreateSchema>) {
     description: "Cohort created",
     metadata: { title: cohort.title, slug: cohort.slug }
   });
+  return cohort;
+}
+
+export async function createCohortWithSessions(input: z.input<typeof cohortWithSessionsCreateSchema>) {
+  const { sessions, ...cohortInput } = cohortWithSessionsCreateSchema.parse(input);
+  const sortedSessions = [...sessions].sort((a, b) => a.sessionNumber - b.sessionNumber);
+  const firstSession = sortedSessions[0]!;
+  const lastSession = sortedSessions[sortedSessions.length - 1]!;
+
+  const cohort = await prisma.$transaction(async (tx) => {
+    const createdCohort = await tx.cohort.create({
+      data: {
+        ...cohortInput,
+        cohortType: CohortType.LIVE_VIRTUAL,
+        pricePerParticipant: 0,
+        startDate: firstSession.startTime,
+        endDate: lastSession.endTime,
+        defaultTimezone: firstSession.timezone
+      }
+    });
+
+    await tx.cohortSession.createMany({
+      data: sortedSessions.map((session) => ({
+        ...session,
+        cohortId: createdCohort.id
+      }))
+    });
+
+    return tx.cohort.findUniqueOrThrow({
+      where: { id: createdCohort.id },
+      include: {
+        presenter: true,
+        sessions: { orderBy: { sessionNumber: "asc" } },
+        _count: { select: { registrations: true, participants: true, sessions: true } }
+      }
+    });
+  });
+
+  logAuditEventAsync({
+    entityType: "Cohort",
+    entityId: cohort.id,
+    action: "CREATED",
+    description: "Cohort created with sessions",
+    metadata: { title: cohort.title, slug: cohort.slug, sessions: cohort.sessions.length }
+  });
+
+  for (const session of cohort.sessions) {
+    void createDefaultSessionOperationsTasks({
+      cohortId: cohort.id,
+      sessionId: session.id,
+      sessionTitle: session.title
+    });
+  }
+
   return cohort;
 }
 

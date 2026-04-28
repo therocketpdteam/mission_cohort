@@ -1,7 +1,9 @@
 "use client";
 
 import EditOutlined from "@mui/icons-material/EditOutlined";
+import PowerSettingsNewOutlined from "@mui/icons-material/PowerSettingsNewOutlined";
 import SendOutlined from "@mui/icons-material/SendOutlined";
+import VisibilityOutlined from "@mui/icons-material/VisibilityOutlined";
 import { Box, Button, Chip, Grid, List, ListItem, ListItemText, MenuItem, Stack, TextField, Typography } from "@mui/material";
 import { DataGrid, GridColDef } from "@mui/x-data-grid";
 import { useEffect, useMemo, useState } from "react";
@@ -34,7 +36,7 @@ const templateTypes = [
 const templateFields: FieldConfig[] = [
   { name: "name", label: "Template name", required: true },
   { name: "subject", label: "Subject", required: true },
-  { name: "type", label: "Type", type: "select", options: templateTypes.map((value) => ({ label: value, value })) },
+  { name: "type", label: "Type", type: "select", options: templateTypes.map((value) => ({ label: value.replace(/_/g, " "), value })) },
   { name: "active", label: "Active", type: "checkbox" },
   { name: "bodyHtml", label: "Body HTML", type: "textarea", required: true },
   { name: "bodyText", label: "Body text", type: "textarea" }
@@ -51,18 +53,16 @@ export function CommunicationsClient() {
   const [previewTemplate, setPreviewTemplate] = useState<AdminRow | null>(null);
   const { notifySuccess, notifyError, snackbar } = useNotifier();
 
-  async function load() {
+  async function load(nextCohortId?: string) {
     const [templateRows, cohortRows] = await Promise.all([
       adminApi<AdminRow[]>("/api/communications/templates"),
       adminApi<AdminRow[]>("/api/cohorts")
     ]);
     setTemplates(templateRows);
     setCohorts(cohortRows);
-    const cohortId = selectedCohortId || cohortRows[0]?.id || "";
+    const cohortId = nextCohortId ?? selectedCohortId ?? cohortRows[0]?.id ?? "";
     setSelectedCohortId(cohortId);
-    if (cohortId) {
-      setCommunications(await adminApi<AdminRow[]>(`/api/communications?cohortId=${cohortId}`));
-    }
+    setCommunications(cohortId ? await adminApi<AdminRow[]>(`/api/communications?cohortId=${cohortId}`) : []);
     setLoading(false);
   }
 
@@ -85,28 +85,7 @@ export function CommunicationsClient() {
     };
   }, [previewTemplate]);
 
-  const columns: GridColDef[] = [
-    { field: "name", headerName: "Name", flex: 1, minWidth: 220 },
-    { field: "subject", headerName: "Subject", flex: 1.2, minWidth: 240 },
-    { field: "type", headerName: "Type", width: 220 },
-    { field: "active", headerName: "Active", width: 120, renderCell: (params) => <StatusChip value={params.value} /> },
-    {
-      field: "actions",
-      headerName: "Actions",
-      width: 260,
-      sortable: false,
-      renderCell: (params) => (
-        <Stack direction="row" spacing={1}>
-          <Button variant="outlined" startIcon={<EditOutlined />} onClick={() => { setEditing(params.row); setDialogOpen(true); }}>
-            Edit
-          </Button>
-          <Button variant="outlined" startIcon={<SendOutlined />} onClick={() => setPreviewTemplate(params.row)}>
-            Preview
-          </Button>
-        </Stack>
-      )
-    }
-  ];
+  const activeTemplates = templates.filter((template) => template.active).length;
 
   async function save(values: AdminRow) {
     try {
@@ -123,28 +102,95 @@ export function CommunicationsClient() {
     }
   }
 
-  async function loadCommunications(cohortId: string) {
-    setSelectedCohortId(cohortId);
-    setCommunications(cohortId ? await adminApi<AdminRow[]>(`/api/communications?cohortId=${cohortId}`) : []);
+  async function toggleTemplate(template: AdminRow) {
+    try {
+      await adminApi("/api/communications/templates", { method: "PATCH", body: { id: template.id, active: !template.active } });
+      notifySuccess(template.active ? "Template deactivated" : "Template activated");
+      await load();
+    } catch (error) {
+      notifyError((error as Error).message);
+    }
   }
+
+  async function sendCommunication(communication: AdminRow, action: "send" | "resend") {
+    try {
+      await adminApi("/api/communications", { method: "PATCH", body: { id: communication.id, action } });
+      notifySuccess(action === "resend" ? "Communication resent" : "Communication sent");
+      await load(selectedCohortId);
+    } catch (error) {
+      notifyError((error as Error).message);
+    }
+  }
+
+  const templateColumns: GridColDef[] = [
+    { field: "name", headerName: "Template", flex: 1, minWidth: 220 },
+    { field: "type", headerName: "Type", width: 220, valueFormatter: (value) => String(value ?? "").replace(/_/g, " ") },
+    { field: "subject", headerName: "Subject", flex: 1.2, minWidth: 240 },
+    { field: "active", headerName: "Active", width: 120, renderCell: (params) => <StatusChip value={params.value} /> },
+    {
+      field: "actions",
+      headerName: "Actions",
+      width: 340,
+      sortable: false,
+      renderCell: (params) => (
+        <Stack direction="row" spacing={1}>
+          <Button variant="outlined" startIcon={<EditOutlined />} onClick={() => { setEditing(params.row); setDialogOpen(true); }}>
+            Edit
+          </Button>
+          <Button variant="outlined" startIcon={<VisibilityOutlined />} onClick={() => setPreviewTemplate(params.row)}>
+            Preview
+          </Button>
+          <Button variant="outlined" startIcon={<PowerSettingsNewOutlined />} onClick={() => toggleTemplate(params.row)}>
+            {params.row.active ? "Deactivate" : "Activate"}
+          </Button>
+        </Stack>
+      )
+    }
+  ];
+
+  const outboxColumns: GridColDef[] = [
+    { field: "subject", headerName: "Subject", flex: 1, minWidth: 220 },
+    { field: "template", headerName: "Template", width: 190, valueGetter: (_value, row) => row.template?.name ?? "Custom" },
+    { field: "session", headerName: "Session", width: 180, valueGetter: (_value, row) => row.session?.title ?? "" },
+    { field: "recipientScope", headerName: "Recipients", width: 180, valueFormatter: (value) => String(value ?? "").replace(/_/g, " ") },
+    { field: "status", headerName: "Status", width: 130, renderCell: (params) => <StatusChip value={params.value} /> },
+    { field: "scheduledFor", headerName: "Scheduled", width: 170, valueFormatter: (value) => value ? new Date(value).toLocaleString() : "" },
+    { field: "sentAt", headerName: "Sent", width: 170, valueFormatter: (value) => value ? new Date(value).toLocaleString() : "" },
+    {
+      field: "actions",
+      headerName: "Actions",
+      width: 190,
+      sortable: false,
+      renderCell: (params) => (
+        <Button
+          variant="outlined"
+          startIcon={<SendOutlined />}
+          onClick={() => sendCommunication(params.row, params.row.sentAt ? "resend" : "send")}
+        >
+          {params.row.sentAt ? "Resend" : "Send"}
+        </Button>
+      )
+    }
+  ];
 
   return (
     <PageStack>
       <PageHeader
         title="Communications"
-        description="Manage templates, merge fields, previews, and scheduled cohort communication records."
+        description="Manage active email templates, previews, scheduled messages, and send/resend operations."
         action={<ToolbarButton onClick={() => setDialogOpen(true)}>Create Email Template</ToolbarButton>}
       />
       <Grid container spacing={2}>
-        <Grid size={{ xs: 12, lg: 8 }}>
-          <SectionCard title="Communication Templates">
-            <TableShell>
-              <DataGrid rows={templates} columns={columns} loading={loading} pageSizeOptions={[10, 25]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} disableRowSelectionOnClick />
-            </TableShell>
-            {!loading && templates.length === 0 && <EmptyState title="No templates found" description="Create communication templates for registration confirmations, reminders, and follow-up." />}
+        <Grid size={{ xs: 12, md: 4 }}>
+          <SectionCard title="Template Health">
+            <Stack direction="row" spacing={1} flexWrap="wrap">
+              <Chip label={`${activeTemplates} active`} color="success" />
+              <Chip label={`${templates.length - activeTemplates} inactive`} />
+              <Chip label={`${communications.length} selected cohort messages`} color="primary" />
+            </Stack>
           </SectionCard>
         </Grid>
-        <Grid size={{ xs: 12, lg: 4 }}>
+        <Grid size={{ xs: 12, md: 8 }}>
           <SectionCard title="Merge Fields">
             <Stack direction="row" flexWrap="wrap" gap={1}>
               {mergeFields.map((field) => (
@@ -153,7 +199,15 @@ export function CommunicationsClient() {
             </Stack>
           </SectionCard>
         </Grid>
-        <Grid size={{ xs: 12, lg: 6 }}>
+        <Grid size={{ xs: 12 }}>
+          <SectionCard title="Email Templates">
+            <TableShell>
+              <DataGrid rows={templates} columns={templateColumns} loading={loading} pageSizeOptions={[10, 25]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} disableRowSelectionOnClick />
+            </TableShell>
+            {!loading && templates.length === 0 && <EmptyState title="No templates found" description="Create templates for registration confirmations, reminders, and follow-up." />}
+          </SectionCard>
+        </Grid>
+        <Grid size={{ xs: 12, lg: 5 }}>
           <SectionCard title="Preview">
             {preview ? (
               <Stack spacing={1.5}>
@@ -170,24 +224,19 @@ export function CommunicationsClient() {
             )}
           </SectionCard>
         </Grid>
-        <Grid size={{ xs: 12, lg: 6 }}>
-          <SectionCard title="Scheduled/Sent Messages">
-            <TextField select label="Cohort" value={selectedCohortId} onChange={(event) => loadCommunications(event.target.value)} sx={{ minWidth: 320, mb: 2 }}>
+        <Grid size={{ xs: 12, lg: 7 }}>
+          <SectionCard title="Outbox / Scheduled Messages">
+            <TextField select label="Cohort" value={selectedCohortId} onChange={(event) => load(event.target.value)} sx={{ minWidth: 320, mb: 2 }}>
               {cohorts.map((cohort) => (
                 <MenuItem value={cohort.id} key={cohort.id}>
                   {cohort.title}
                 </MenuItem>
               ))}
             </TextField>
-            <List dense>
-              {communications.map((communication) => (
-                <ListItem key={communication.id} divider>
-                  <ListItemText primary={communication.subject} secondary={communication.scheduledFor ? new Date(communication.scheduledFor).toLocaleString() : "Not scheduled"} />
-                  <StatusChip value={communication.status} />
-                </ListItem>
-              ))}
-            </List>
-            {communications.length === 0 && <EmptyState title="No scheduled messages" description="Scheduled and sent cohort messages will appear here." />}
+            <TableShell>
+              <DataGrid rows={communications} columns={outboxColumns} loading={loading} pageSizeOptions={[10, 25]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} disableRowSelectionOnClick />
+            </TableShell>
+            {communications.length === 0 && <EmptyState title="No scheduled messages" description="Scheduled, sent, and draft cohort messages will appear here." />}
           </SectionCard>
         </Grid>
       </Grid>

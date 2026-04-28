@@ -302,7 +302,9 @@ Errors use:
 - Communication template preview renders known merge fields and warns on unknown fields.
 - Reminder schedule creates 7-day, 24-hour, and 1-hour `CohortCommunication` records.
 - ICS generation includes session title, description, start/end, timezone, meeting URL, and location.
-- Organization detail shows organization info, registrations, participants, payment records, and activity placeholder.
+- Participants remains a global roster/reporting page across all cohorts and registrations.
+- Organizations, presenters, payments, and registration forms are supporting data managed through cohort/registration workflows instead of standalone admin pages.
+- Communications shows active/inactive templates, preview, and outbox/send placeholders.
 - Settings shows database/env/integration configuration status.
 
 ## Security Notes
@@ -339,12 +341,7 @@ Errors use:
 - `/cohorts/[id]`
 - `/registrations`
 - `/participants`
-- `/organizations`
-- `/organizations/[id]`
-- `/presenters`
 - `/communications`
-- `/payments`
-- `/forms`
 - `/settings`
 
 There are no learner-facing routes.

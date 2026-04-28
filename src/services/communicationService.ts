@@ -1,5 +1,6 @@
 import { CommunicationStatus, RecipientScope } from "@prisma/client";
 import { z } from "zod";
+import { env } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
 import {
   communicationDraftCreateSchema,
@@ -49,6 +50,23 @@ export async function listCommunicationsByCohort(cohortId: string) {
     where: { cohortId },
     orderBy: { createdAt: "desc" },
     include: { template: true, session: true, createdBy: true }
+  });
+}
+
+export async function sendCommunicationPlaceholder(id: string) {
+  if (!env.SENDGRID_API_KEY || !env.SENDGRID_FROM_EMAIL) {
+    throw Object.assign(new Error("SendGrid is not configured. Add SENDGRID_API_KEY and SENDGRID_FROM_EMAIL before sending email."), {
+      code: "BAD_REQUEST",
+      status: 400
+    });
+  }
+
+  return prisma.cohortCommunication.update({
+    where: { id },
+    data: {
+      status: CommunicationStatus.SENT,
+      sentAt: new Date()
+    }
   });
 }
 
