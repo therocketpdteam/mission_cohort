@@ -44,6 +44,32 @@ const sessionFields: FieldConfig[] = [
   { name: "location", label: "Location" }
 ];
 
+const taskFields: FieldConfig[] = [
+  { name: "title", label: "Task title", required: true },
+  { name: "description", label: "Description", type: "textarea" },
+  {
+    name: "category",
+    label: "Category",
+    type: "select",
+    options: [
+      "PARTICIPANT_LIST",
+      "PAYMENT_FOLLOW_UP",
+      "CALENDAR_INVITE",
+      "REMINDER_EMAILS",
+      "SESSION_RESOURCES",
+      "RECORDING_LINK",
+      "POST_SESSION_FOLLOW_UP",
+      "SUPPORTING_DOCUMENTS",
+      "QUICKBOOKS_REVIEW",
+      "OTHER"
+    ].map((value) => ({ label: value.replace(/_/g, " "), value })),
+    required: true
+  },
+  { name: "priority", label: "Priority", type: "select", options: ["LOW", "MEDIUM", "HIGH", "URGENT"].map((value) => ({ label: value, value })) },
+  { name: "dueDate", label: "Due date", type: "datetime-local" },
+  { name: "ownerName", label: "Owner" }
+];
+
 export function CohortDetailClient({ id }: { id: string }) {
   const [tab, setTab] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -53,13 +79,15 @@ export function CohortDetailClient({ id }: { id: string }) {
   const [participants, setParticipants] = useState<AdminRow[]>([]);
   const [communications, setCommunications] = useState<AdminRow[]>([]);
   const [payments, setPayments] = useState<AdminRow[]>([]);
+  const [tasks, setTasks] = useState<AdminRow[]>([]);
   const [activity, setActivity] = useState<AdminRow[]>([]);
   const [sessionDialogOpen, setSessionDialogOpen] = useState(false);
   const [editingSession, setEditingSession] = useState<AdminRow | null>(null);
+  const [taskDialogOpen, setTaskDialogOpen] = useState(false);
   const { notifySuccess, notifyError, snackbar } = useNotifier();
 
   async function load() {
-    const [cohortData, sessionRows, registrationRows, participantRows, communicationRows, paymentRows, activityRows] =
+    const [cohortData, sessionRows, registrationRows, participantRows, communicationRows, paymentRows, taskRows, activityRows] =
       await Promise.all([
         adminApi<AdminRow>(`/api/cohorts/${id}`),
         adminApi<AdminRow[]>(`/api/cohorts/${id}/sessions`),
@@ -67,6 +95,7 @@ export function CohortDetailClient({ id }: { id: string }) {
         adminApi<AdminRow[]>(`/api/cohorts/${id}/participants`),
         adminApi<AdminRow[]>(`/api/communications?cohortId=${id}`).catch(() => []),
         adminApi<AdminRow[]>("/api/payments").catch(() => []),
+        adminApi<AdminRow[]>(`/api/cohorts/${id}/tasks`).catch(() => []),
         adminApi<AdminRow[]>(`/api/audit?entityType=Cohort&entityId=${id}`).catch(() => [])
       ]);
 
@@ -76,6 +105,7 @@ export function CohortDetailClient({ id }: { id: string }) {
     setParticipants(participantRows);
     setCommunications(communicationRows);
     setPayments(paymentRows.filter((payment) => payment.cohortId === id));
+    setTasks(taskRows);
     setActivity(activityRows);
     setLoading(false);
   }
@@ -137,9 +167,12 @@ export function CohortDetailClient({ id }: { id: string }) {
     { field: "primaryContactName", headerName: "Contact", flex: 1, minWidth: 180 },
     { field: "organization", headerName: "Organization", flex: 1, minWidth: 200, valueGetter: (_value, row) => row.organization?.name ?? "" },
     { field: "participantCount", headerName: "Participants", width: 120 },
+    { field: "participantListStatus", headerName: "Roster", width: 150, renderCell: (params) => <StatusChip value={params.value} /> },
     { field: "paymentStatus", headerName: "Payment", width: 150, renderCell: (params) => <StatusChip value={params.value} /> },
+    { field: "supportingDocumentStatus", headerName: "Docs", width: 140, renderCell: (params) => <StatusChip value={params.value} /> },
     { field: "invoiceNumber", headerName: "Invoice", width: 140 },
-    { field: "purchaseOrderNumber", headerName: "PO", width: 130 }
+    { field: "purchaseOrderNumber", headerName: "PO", width: 130 },
+    { field: "quickBooksInvoiceRef", headerName: "QB invoice", width: 150 }
   ];
 
   const participantColumns: GridColDef[] = [
@@ -147,6 +180,38 @@ export function CohortDetailClient({ id }: { id: string }) {
     { field: "email", headerName: "Email", flex: 1, minWidth: 220 },
     { field: "organization", headerName: "Organization", flex: 1, minWidth: 200, valueGetter: (_value, row) => row.organization?.name ?? "" },
     { field: "attendanceStatus", headerName: "Attendance", width: 150, renderCell: (params) => <StatusChip value={params.value} /> }
+  ];
+
+  const taskColumns: GridColDef[] = [
+    { field: "title", headerName: "Task", flex: 1, minWidth: 220 },
+    { field: "category", headerName: "Category", width: 190, valueFormatter: (value) => String(value ?? "").replace(/_/g, " ") },
+    { field: "priority", headerName: "Priority", width: 120, renderCell: (params) => <StatusChip value={params.value} /> },
+    { field: "status", headerName: "Status", width: 140, renderCell: (params) => <StatusChip value={params.value} /> },
+    { field: "dueDate", headerName: "Due", width: 170, valueFormatter: (value) => value ? new Date(value).toLocaleDateString() : "" },
+    { field: "ownerName", headerName: "Owner", width: 160 },
+    {
+      field: "actions",
+      headerName: "Actions",
+      width: 140,
+      sortable: false,
+      renderCell: (params) => (
+        <Button
+          variant="outlined"
+          color="success"
+          onClick={async () => {
+            try {
+              await adminApi("/api/operations/tasks", { method: "PATCH", body: { id: params.row.id, action: "complete" } });
+              notifySuccess("Task completed");
+              await load();
+            } catch (error) {
+              notifyError((error as Error).message);
+            }
+          }}
+        >
+          Complete
+        </Button>
+      )
+    }
   ];
 
   async function saveSession(values: AdminRow) {
@@ -165,6 +230,17 @@ export function CohortDetailClient({ id }: { id: string }) {
     }
   }
 
+  async function saveTask(values: AdminRow) {
+    try {
+      await adminApi(`/api/cohorts/${id}/tasks`, { method: "POST", body: values });
+      notifySuccess("Operations task created");
+      await load();
+    } catch (error) {
+      notifyError((error as Error).message);
+      throw error;
+    }
+  }
+
   return (
     <PageStack>
       <PageHeader
@@ -172,7 +248,7 @@ export function CohortDetailClient({ id }: { id: string }) {
         description="Cohort operations workspace for sessions, registrations, participants, communications, payments, and activity."
       />
       <Tabs value={tab} onChange={(_event, value) => setTab(value)} variant="scrollable" scrollButtons="auto">
-        {["Overview", "Sessions", "Registrations", "Participants", "Communications", "Resources", "Payments", "Activity"].map((label) => (
+        {["Overview", "Operations", "Sessions", "Registrations", "Participants", "Communications", "Resources", "Payments", "Activity"].map((label) => (
           <Tab label={label} key={label} />
         ))}
       </Tabs>
@@ -201,6 +277,15 @@ export function CohortDetailClient({ id }: { id: string }) {
       )}
 
       {tab === 1 && (
+        <SectionCard title="Operations Checklist" action={<Button startIcon={<AddIcon />} onClick={() => setTaskDialogOpen(true)}>Add Task</Button>}>
+          <TableShell>
+            <DataGrid rows={tasks} columns={taskColumns} loading={loading} pageSizeOptions={[10, 25]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} disableRowSelectionOnClick />
+          </TableShell>
+          {!loading && tasks.length === 0 && <EmptyState title="No operations tasks" description="Checklist items for participant lists, reminders, resources, recordings, and follow-up will appear here." />}
+        </SectionCard>
+      )}
+
+      {tab === 2 && (
         <SectionCard title="Sessions" action={<Button startIcon={<AddIcon />} onClick={() => setSessionDialogOpen(true)}>Add Session</Button>}>
           <TableShell>
             <DataGrid rows={sessions} columns={sessionColumns} loading={loading} pageSizeOptions={[10, 25]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} disableRowSelectionOnClick />
@@ -209,7 +294,7 @@ export function CohortDetailClient({ id }: { id: string }) {
         </SectionCard>
       )}
 
-      {tab === 2 && (
+      {tab === 3 && (
         <SectionCard title="Registrations" action={<Button href="/registrations" startIcon={<AddIcon />}>Add/Edit Registration</Button>}>
           <TableShell>
             <DataGrid rows={registrations} columns={registrationColumns} loading={loading} pageSizeOptions={[10, 25]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} disableRowSelectionOnClick />
@@ -218,7 +303,7 @@ export function CohortDetailClient({ id }: { id: string }) {
         </SectionCard>
       )}
 
-      {tab === 3 && (
+      {tab === 4 && (
         <SectionCard title="Participants" action={<Button href="/participants" startIcon={<AddIcon />}>Add/Edit Participant</Button>}>
           <TableShell>
             <DataGrid rows={participants} columns={participantColumns} loading={loading} pageSizeOptions={[10, 25]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} disableRowSelectionOnClick />
@@ -227,7 +312,7 @@ export function CohortDetailClient({ id }: { id: string }) {
         </SectionCard>
       )}
 
-      {tab === 4 && (
+      {tab === 5 && (
         <SectionCard title="Communications">
           <List dense>
             {communications.map((communication) => (
@@ -241,13 +326,13 @@ export function CohortDetailClient({ id }: { id: string }) {
         </SectionCard>
       )}
 
-      {tab === 5 && (
+      {tab === 6 && (
         <SectionCard title="Resources">
           <Typography color="text.secondary">Resource upload and visibility management are reserved for Prompt 3.</Typography>
         </SectionCard>
       )}
 
-      {tab === 6 && (
+      {tab === 7 && (
         <SectionCard title="Payments">
           <List dense>
             {payments.map((payment) => (
@@ -261,7 +346,7 @@ export function CohortDetailClient({ id }: { id: string }) {
         </SectionCard>
       )}
 
-      {tab === 7 && (
+      {tab === 8 && (
         <SectionCard title="Activity">
           <List dense>
             {activity.map((event) => (
@@ -281,6 +366,14 @@ export function CohortDetailClient({ id }: { id: string }) {
         initialValues={editingSession ?? { timezone: cohort?.defaultTimezone ?? "America/New_York", sessionNumber: sessions.length + 1 }}
         onClose={() => { setSessionDialogOpen(false); setEditingSession(null); }}
         onSubmit={saveSession}
+      />
+      <MutationDialog
+        title="Add Operations Task"
+        open={taskDialogOpen}
+        fields={taskFields}
+        initialValues={{ category: "OTHER", priority: "MEDIUM" }}
+        onClose={() => setTaskDialogOpen(false)}
+        onSubmit={saveTask}
       />
       <Box>{snackbar}</Box>
     </PageStack>

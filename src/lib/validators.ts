@@ -8,6 +8,7 @@ export const slugSchema = z
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Use a lowercase URL-safe slug");
 
 export const dateInput = z.coerce.date();
+export const optionalDateInput = z.preprocess((value) => (value === "" ? undefined : value), z.coerce.date().optional());
 export const moneyInput = z.coerce.number().min(0);
 export const positiveIntInput = z.coerce.number().int().positive();
 export const nonNegativeIntInput = z.coerce.number().int().min(0);
@@ -15,6 +16,12 @@ export const nonNegativeIntInput = z.coerce.number().int().min(0);
 export const optionalEmail = z
   .string()
   .email()
+  .optional()
+  .or(z.literal("").transform(() => undefined));
+
+export const optionalUrl = z
+  .string()
+  .url()
   .optional()
   .or(z.literal("").transform(() => undefined));
 

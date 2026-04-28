@@ -3,11 +3,15 @@ import {
   CohortType,
   CommunicationStatus,
   OrganizationType,
+  OperationsTaskCategory,
+  OperationsTaskPriority,
+  ParticipantListStatus,
   PaymentMethod,
   PaymentStatus,
   RecipientScope,
   RegistrationStatus,
   Role,
+  SupportingDocumentStatus,
   TemplateType
 } from "@prisma/client";
 import { prisma } from "../src/lib/prisma";
@@ -208,6 +212,12 @@ async function main() {
       paymentMethod: PaymentMethod.INVOICE,
       paymentStatus: PaymentStatus.INVOICED,
       invoiceNumber: "DEMO-INV-1001",
+      participantListStatus: ParticipantListStatus.COMPLETE,
+      supportingDocumentStatus: SupportingDocumentStatus.READY,
+      w9Url: "https://example.com/demo-w9.pdf",
+      invoiceUrl: "https://example.com/demo-invoice.pdf",
+      quickBooksCustomerRef: "DEMO-QB-CUST-1001",
+      quickBooksInvoiceRef: "DEMO-QB-INV-1001",
       totalAmount: 1190,
       participantCount: 2,
       status: RegistrationStatus.CONFIRMED,
@@ -254,8 +264,33 @@ async function main() {
       status: PaymentStatus.INVOICED,
       method: PaymentMethod.INVOICE,
       invoiceNumber: "DEMO-INV-1001",
+      quickBooksPaymentRef: "DEMO-QB-PAY-1001",
       notes: "Demo invoice payment record"
     }
+  });
+
+  await prisma.operationsTask.createMany({
+    data: [
+      {
+        id: "demo-task-calendar-session-1",
+        cohortId: cohortA.id,
+        sessionId: sessionA1.id,
+        title: "DEMO Confirm calendar invites",
+        description: "Demo checklist item replacing external project-board tracking.",
+        category: OperationsTaskCategory.CALENDAR_INVITE,
+        priority: OperationsTaskPriority.HIGH
+      },
+      {
+        id: "demo-task-payment-follow-up",
+        cohortId: cohortA.id,
+        registrationId: registration.id,
+        title: "DEMO Review invoice status",
+        description: "Demo payment follow-up task for internal operations tracking.",
+        category: OperationsTaskCategory.PAYMENT_FOLLOW_UP,
+        priority: OperationsTaskPriority.MEDIUM
+      }
+    ],
+    skipDuplicates: true
   });
 
   await prisma.communicationTemplate.createMany({

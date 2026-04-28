@@ -10,6 +10,7 @@ export const paymentCreateSchema = z.object({
   status: z.nativeEnum(PaymentStatus).default(PaymentStatus.PENDING),
   method: z.nativeEnum(PaymentMethod).default(PaymentMethod.UNKNOWN),
   invoiceNumber: z.string().optional(),
+  quickBooksPaymentRef: z.string().optional(),
   paymentDate: dateInput.optional(),
   notes: z.string().optional()
 });

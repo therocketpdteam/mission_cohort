@@ -146,6 +146,47 @@ enum WebhookProcessingStatus {
   IGNORED
 }
 
+enum ParticipantListStatus {
+  NOT_REQUESTED
+  NEEDED
+  PARTIAL
+  COMPLETE
+}
+
+enum SupportingDocumentStatus {
+  NOT_READY
+  READY
+  SENT
+  FAILED
+}
+
+enum OperationsTaskStatus {
+  OPEN
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum OperationsTaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum OperationsTaskCategory {
+  PARTICIPANT_LIST
+  PAYMENT_FOLLOW_UP
+  CALENDAR_INVITE
+  REMINDER_EMAILS
+  SESSION_RESOURCES
+  RECORDING_LINK
+  POST_SESSION_FOLLOW_UP
+  SUPPORTING_DOCUMENTS
+  QUICKBOOKS_REVIEW
+  OTHER
+}
+
 model User {
   id                    String                @id @default(cuid())
   email                 String                @unique
@@ -230,6 +271,7 @@ model Cohort {
   communications            CohortCommunication[]
   calendarEvents            CalendarEvent[]
   paymentRecords            PaymentRecord[]
+  operationsTasks           OperationsTask[]
 
   @@index([presenterId])
   @@index([status])
@@ -257,6 +299,7 @@ model CohortSession {
   resources            CohortResource[]
   communications       CohortCommunication[]
   calendarEvents       CalendarEvent[]
+  operationsTasks      OperationsTask[]
 
   @@index([cohortId])
   @@index([startTime])
@@ -297,6 +340,13 @@ model Registration {
   paymentStatus         PaymentStatus      @default(PENDING)
   invoiceNumber         String?
   purchaseOrderNumber   String?
+  participantListStatus ParticipantListStatus    @default(NEEDED)
+  supportingDocumentStatus SupportingDocumentStatus @default(NOT_READY)
+  w9Url                 String?
+  invoiceUrl            String?
+  confirmationDocsSentAt DateTime?
+  quickBooksCustomerRef String?
+  quickBooksInvoiceRef  String?
   totalAmount           Decimal            @default(0) @db.Decimal(10, 2)
   participantCount      Int                @default(0)
   status                RegistrationStatus @default(NEW)
@@ -309,12 +359,15 @@ model Registration {
   form                  RegistrationForm?  @relation(fields: [formId], references: [id])
   participants          Participant[]
   paymentRecords        PaymentRecord[]
+  operationsTasks       OperationsTask[]
 
   @@index([cohortId])
   @@index([organizationId])
   @@index([formId])
   @@index([status])
   @@index([paymentStatus])
+  @@index([participantListStatus])
+  @@index([supportingDocumentStatus])
 }
 
 model Participant {
@@ -469,6 +522,7 @@ model PaymentRecord {
   status         PaymentStatus @default(PENDING)
   method         PaymentMethod @default(UNKNOWN)
   invoiceNumber  String?
+  quickBooksPaymentRef String?
   paymentDate    DateTime?
   notes          String?
   createdAt      DateTime      @default(now())
@@ -482,6 +536,33 @@ model PaymentRecord {
   @@index([organizationId])
   @@index([status])
   @@index([invoiceNumber])
+}
+
+model OperationsTask {
+  id             String                 @id @default(cuid())
+  cohortId       String?
+  registrationId String?
+  sessionId      String?
+  title          String
+  description    String?
+  category       OperationsTaskCategory
+  status         OperationsTaskStatus   @default(OPEN)
+  priority       OperationsTaskPriority @default(MEDIUM)
+  dueDate        DateTime?
+  ownerName      String?
+  completedAt    DateTime?
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+  cohort         Cohort?                @relation(fields: [cohortId], references: [id], onDelete: Cascade)
+  registration   Registration?          @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  session        CohortSession?         @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([cohortId])
+  @@index([registrationId])
+  @@index([sessionId])
+  @@index([status])
+  @@index([category])
+  @@index([dueDate])
 }
 
 model AuditLog {

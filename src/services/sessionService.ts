@@ -2,6 +2,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { sessionCreateSchema, sessionUpdateSchema } from "@/validators/session";
 import { logAuditEventAsync } from "./auditService";
+import { createDefaultSessionOperationsTasks } from "./operationsTaskService";
 
 export async function createSession(input: z.input<typeof sessionCreateSchema>) {
   const data = sessionCreateSchema.parse(input);
@@ -12,6 +13,11 @@ export async function createSession(input: z.input<typeof sessionCreateSchema>) 
     action: "CREATED",
     description: "Session created",
     metadata: { cohortId: session.cohortId, sessionNumber: session.sessionNumber }
+  });
+  void createDefaultSessionOperationsTasks({
+    cohortId: session.cohortId,
+    sessionId: session.id,
+    sessionTitle: session.title
   });
   return session;
 }

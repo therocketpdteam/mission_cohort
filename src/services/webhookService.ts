@@ -1,6 +1,17 @@
-import { OrganizationType, PaymentMethod, PaymentStatus, Prisma, RegistrationStatus, WebhookProcessingStatus } from "@prisma/client";
+import {
+  OrganizationType,
+  ParticipantListStatus,
+  PaymentMethod,
+  PaymentStatus,
+  Prisma,
+  RegistrationStatus,
+  SupportingDocumentStatus,
+  WebhookProcessingStatus
+} from "@prisma/client";
 import { env } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
+import { normalizeJotformRegistrationPayload } from "@/modules/jotform";
+import { createDefaultRegistrationOperationsTasks } from "@/services/operationsTaskService";
 
 export async function recordWebhookEvent(input: {
   source: string;
@@ -44,22 +55,32 @@ export function validateWebhookSecret(request: Request) {
 }
 
 export async function processRegistrationWebhook(payload: Record<string, any>) {
+  const normalized =
+    stringValue(payload.source).toLowerCase() === "jotform" || payload.answers
+      ? normalizeJotformRegistrationPayload(payload)
+      : payload;
   const event = await recordWebhookEvent({
-    source: stringValue(payload.source, "registration_form"),
+    source: stringValue(normalized.source ?? payload.source, "registration_form"),
     eventType: stringValue(payload.eventType, "registration.submitted"),
     payload: payload as Prisma.InputJsonValue
   });
 
   try {
-    const organizationInput = payload.organization ?? {};
-    const registrationInput = payload.registration ?? payload;
-    const participantsInput = Array.isArray(payload.participants) ? payload.participants : [];
-    const paymentInput = payload.payment ?? {};
-    const fallbackOrgId = `webhook-org-${stringValue(organizationInput.name, "unknown").toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+    const organizationInput = normalized.organization ?? {};
+    const registrationInput = normalized.registration ?? normalized;
+    const participantsInput = Array.isArray(normalized.participants)
+      ? normalized.participants.filter((participant: Record<string, unknown>) => stringValue(participant.email))
+      : [];
+    const paymentInput = normalized.payment ?? {};
+    const fallbackOrgId = `webhook-org-${stringValue(organizationInput.name, event.id).toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
     const organizationId = stringValue(organizationInput.id, fallbackOrgId);
     const cohortId = stringValue(registrationInput.cohortId);
     const primaryContactName = stringValue(registrationInput.primaryContactName);
     const primaryContactEmail = stringValue(registrationInput.primaryContactEmail);
+    const participantCount = participantsInput.length || numberValue(registrationInput.participantCount);
+    const w9Url = stringValue(registrationInput.w9Url);
+    const invoiceUrl = stringValue(registrationInput.invoiceUrl);
+    const confirmationDocsSentAt = stringValue(registrationInput.confirmationDocsSentAt);
 
     if (!cohortId) {
       throw badWebhookPayload("registration.cohortId is required");
@@ -112,10 +133,29 @@ export async function processRegistrationWebhook(payload: Record<string, any>) {
         paymentStatus: (registrationInput.paymentStatus as PaymentStatus) ?? PaymentStatus.PENDING,
         invoiceNumber: stringValue(registrationInput.invoiceNumber) || undefined,
         purchaseOrderNumber: stringValue(registrationInput.purchaseOrderNumber) || undefined,
+        participantListStatus:
+          participantCount === 0
+            ? ParticipantListStatus.NOT_REQUESTED
+            : participantsInput.length >= participantCount
+              ? ParticipantListStatus.COMPLETE
+              : participantsInput.length > 0
+                ? ParticipantListStatus.PARTIAL
+                : ParticipantListStatus.NEEDED,
+        supportingDocumentStatus:
+          w9Url || invoiceUrl || confirmationDocsSentAt
+            ? confirmationDocsSentAt
+              ? SupportingDocumentStatus.SENT
+              : SupportingDocumentStatus.READY
+            : SupportingDocumentStatus.NOT_READY,
+        w9Url: w9Url || undefined,
+        invoiceUrl: invoiceUrl || undefined,
+        confirmationDocsSentAt: confirmationDocsSentAt ? new Date(confirmationDocsSentAt) : undefined,
+        quickBooksCustomerRef: stringValue(registrationInput.quickBooksCustomerRef) || undefined,
+        quickBooksInvoiceRef: stringValue(registrationInput.quickBooksInvoiceRef) || undefined,
         totalAmount: numberValue(registrationInput.totalAmount),
-        participantCount: participantsInput.length || numberValue(registrationInput.participantCount),
+        participantCount,
         status: (registrationInput.status as RegistrationStatus) ?? RegistrationStatus.NEW,
-        source: "webhook",
+        source: stringValue(normalized.source, "webhook"),
         notes: stringValue(registrationInput.notes) || undefined
       }
     });
@@ -148,6 +188,7 @@ export async function processRegistrationWebhook(payload: Record<string, any>) {
               status: (paymentInput.status as PaymentStatus) ?? registration.paymentStatus,
               method: (paymentInput.method as PaymentMethod) ?? registration.paymentMethod,
               invoiceNumber: stringValue(paymentInput.invoiceNumber ?? registration.invoiceNumber) || undefined,
+              quickBooksPaymentRef: stringValue(paymentInput.quickBooksPaymentRef) || undefined,
               paymentDate: paymentInput.paymentDate ? new Date(String(paymentInput.paymentDate)) : undefined,
               notes: stringValue(paymentInput.notes) || undefined
             }
@@ -162,7 +203,16 @@ export async function processRegistrationWebhook(payload: Record<string, any>) {
       }
     });
 
-    return { eventId: event.id, organization, registration, participants, payment };
+    const operationsTasks = await createDefaultRegistrationOperationsTasks({
+      cohortId: registration.cohortId,
+      registrationId: registration.id,
+      participantCount: registration.participantCount,
+      actualParticipantCount: participants.length,
+      paymentStatus: registration.paymentStatus,
+      hasSupportingDocs: Boolean(registration.w9Url || registration.invoiceUrl || registration.confirmationDocsSentAt)
+    });
+
+    return { eventId: event.id, organization, registration, participants, payment, operationsTasks };
   } catch (error) {
     await prisma.webhookEvent.update({
       where: { id: event.id },

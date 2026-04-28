@@ -11,6 +11,7 @@ import { createCohort } from "../src/services/cohortService";
 import { createPlannedSessionReminders } from "../src/services/communicationService";
 import { renderTemplate, validateMergeFields } from "../src/services/emailService";
 import { createOrganization } from "../src/services/organizationService";
+import { completeOperationsTask, listTasksForCohort } from "../src/services/operationsTaskService";
 import { addParticipant } from "../src/services/participantService";
 import { createPaymentRecord, updatePaymentStatus } from "../src/services/paymentService";
 import { createPresenter } from "../src/services/presenterService";
@@ -176,6 +177,38 @@ async function main() {
     throw new Error("Webhook processing failed");
   }
   console.log("registration webhook processing: ok");
+
+  const countOnlyWebhookResult = await processRegistrationWebhook({
+    source: "jotform",
+    eventType: "registration.submitted",
+    organization: {
+      id: `qa-jotform-count-org-${stamp}`,
+      name: `QA Jotform Count Org ${stamp}`,
+      type: "DISTRICT"
+    },
+    registration: {
+      cohortId: cohort.id,
+      primaryContactName: "QA Count Contact",
+      primaryContactEmail: `qa.count.${stamp}@example.com`,
+      participantCount: 3,
+      totalAmount: 375,
+      paymentMethod: "INVOICE",
+      paymentStatus: "PENDING"
+    }
+  });
+
+  if (countOnlyWebhookResult.participants.length !== 0 || countOnlyWebhookResult.operationsTasks.length === 0) {
+    throw new Error("Jotform participant-count-only workflow failed");
+  }
+  console.log("Jotform count-only registration: ok");
+
+  const cohortTasks = await listTasksForCohort(cohort.id);
+  const countOnlyTask = cohortTasks.find((task) => task.registrationId === countOnlyWebhookResult.registration.id);
+  if (!countOnlyTask) {
+    throw new Error("Operations task listing failed");
+  }
+  await completeOperationsTask(countOnlyTask.id);
+  console.log("operations task list/complete: ok");
 
   const auditCount = await prisma.auditLog.count({
     where: { entityId: cohort.id }

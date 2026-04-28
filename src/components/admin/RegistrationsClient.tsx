@@ -35,6 +35,12 @@ function registrationFields(cohorts: AdminRow[], organizations: AdminRow[]): Fie
     { name: "paymentStatus", label: "Payment status", type: "select", options: paymentStatuses.map((value) => ({ label: value, value })) },
     { name: "invoiceNumber", label: "Invoice number" },
     { name: "purchaseOrderNumber", label: "PO number" },
+    { name: "participantListStatus", label: "Participant list status", type: "select", options: ["NOT_REQUESTED", "NEEDED", "PARTIAL", "COMPLETE"].map((value) => ({ label: value, value })) },
+    { name: "supportingDocumentStatus", label: "Supporting docs status", type: "select", options: ["NOT_READY", "READY", "SENT", "FAILED"].map((value) => ({ label: value, value })) },
+    { name: "w9Url", label: "W-9 URL" },
+    { name: "invoiceUrl", label: "Invoice URL" },
+    { name: "quickBooksCustomerRef", label: "QuickBooks customer ref" },
+    { name: "quickBooksInvoiceRef", label: "QuickBooks invoice ref" },
     { name: "totalAmount", label: "Total amount", type: "number" },
     { name: "notes", label: "Notes", type: "textarea" }
   ];
@@ -49,6 +55,7 @@ export function RegistrationsClient() {
   const [editing, setEditing] = useState<AdminRow | null>(null);
   const [search, setSearch] = useState("");
   const [paymentStatus, setPaymentStatus] = useState("");
+  const [source, setSource] = useState("");
   const { notifySuccess, notifyError, snackbar } = useNotifier();
 
   async function load() {
@@ -78,9 +85,15 @@ export function RegistrationsClient() {
           .toLowerCase()
           .includes(search.toLowerCase());
         const matchPayment = paymentStatus ? row.paymentStatus === paymentStatus : true;
-        return matchSearch && matchPayment;
+        const matchSource = source ? row.source === source : true;
+        return matchSearch && matchPayment && matchSource;
       }),
-    [rows, search, paymentStatus]
+    [rows, search, paymentStatus, source]
+  );
+
+  const sourceOptions = useMemo(
+    () => Array.from(new Set(rows.map((row) => row.source).filter(Boolean))) as string[],
+    [rows]
   );
 
   async function mutate(body: AdminRow, success: string) {
@@ -98,10 +111,14 @@ export function RegistrationsClient() {
     { field: "organization", headerName: "Organization", flex: 1, minWidth: 200, valueGetter: (_value, row) => row.organization?.name ?? "" },
     { field: "primaryContactName", headerName: "Primary contact", flex: 1, minWidth: 180 },
     { field: "participantCount", headerName: "Participants", width: 120 },
+    { field: "participantListStatus", headerName: "Roster", width: 150, renderCell: (params) => <StatusChip value={params.value} /> },
     { field: "paymentMethod", headerName: "Method", width: 140 },
     { field: "paymentStatus", headerName: "Payment", width: 150, renderCell: (params) => <StatusChip value={params.value} /> },
+    { field: "supportingDocumentStatus", headerName: "Docs", width: 140, renderCell: (params) => <StatusChip value={params.value} /> },
+    { field: "source", headerName: "Source", width: 130 },
     { field: "invoiceNumber", headerName: "Invoice", width: 140 },
     { field: "purchaseOrderNumber", headerName: "PO", width: 130 },
+    { field: "quickBooksInvoiceRef", headerName: "QB invoice", width: 150 },
     { field: "totalAmount", headerName: "Amount", width: 120, valueFormatter: (value) => `$${Number(value ?? 0).toLocaleString()}` },
     {
       field: "actions",
@@ -153,6 +170,10 @@ export function RegistrationsClient() {
             <MenuItem value="">All payment statuses</MenuItem>
             {paymentStatuses.map((value) => <MenuItem value={value} key={value}>{value}</MenuItem>)}
           </TextField>
+          <TextField select label="Source" value={source} onChange={(event) => setSource(event.target.value)} sx={{ minWidth: 180 }}>
+            <MenuItem value="">All sources</MenuItem>
+            {sourceOptions.map((value) => <MenuItem value={value} key={value}>{value}</MenuItem>)}
+          </TextField>
         </Stack>
       </SectionCard>
       <SectionCard title="Registration Management">
@@ -165,7 +186,7 @@ export function RegistrationsClient() {
         title={editing ? "Edit Registration" : "Add Registration"}
         open={dialogOpen}
         fields={registrationFields(cohorts, organizations)}
-        initialValues={editing ?? { paymentMethod: "UNKNOWN", paymentStatus: "PENDING", participantCount: 0, totalAmount: 0 }}
+        initialValues={editing ?? { paymentMethod: "UNKNOWN", paymentStatus: "PENDING", participantListStatus: "NEEDED", supportingDocumentStatus: "NOT_READY", participantCount: 0, totalAmount: 0 }}
         onClose={() => { setDialogOpen(false); setEditing(null); }}
         onSubmit={save}
       />

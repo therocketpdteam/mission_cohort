@@ -1,6 +1,6 @@
-import { PaymentMethod, PaymentStatus, RegistrationStatus } from "@prisma/client";
+import { ParticipantListStatus, PaymentMethod, PaymentStatus, RegistrationStatus, SupportingDocumentStatus } from "@prisma/client";
 import { z } from "zod";
-import { moneyInput, nonNegativeIntInput, optionalEmail } from "@/lib/validators";
+import { moneyInput, nonNegativeIntInput, optionalDateInput, optionalEmail, optionalUrl } from "@/lib/validators";
 
 export const registrationCreateSchema = z.object({
   cohortId: z.string().min(1, "Registration requires a cohort"),
@@ -17,6 +17,13 @@ export const registrationCreateSchema = z.object({
   paymentStatus: z.nativeEnum(PaymentStatus).default(PaymentStatus.PENDING),
   invoiceNumber: z.string().optional(),
   purchaseOrderNumber: z.string().optional(),
+  participantListStatus: z.nativeEnum(ParticipantListStatus).default(ParticipantListStatus.NEEDED),
+  supportingDocumentStatus: z.nativeEnum(SupportingDocumentStatus).default(SupportingDocumentStatus.NOT_READY),
+  w9Url: optionalUrl,
+  invoiceUrl: optionalUrl,
+  confirmationDocsSentAt: optionalDateInput,
+  quickBooksCustomerRef: z.string().optional(),
+  quickBooksInvoiceRef: z.string().optional(),
   totalAmount: moneyInput.default(0),
   participantCount: nonNegativeIntInput.default(0),
   status: z.nativeEnum(RegistrationStatus).default(RegistrationStatus.NEW),

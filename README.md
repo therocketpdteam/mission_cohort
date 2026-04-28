@@ -4,6 +4,14 @@ Mission Control is an internal cohort operations admin platform. It manages coho
 
 This repository is admin-only. It intentionally does not include LaunchPad, a learner/student dashboard, an on-demand course catalog, community features, podcast libraries, or guide libraries.
 
+## Operating Model
+
+Mission Control replaces the former internal operations workflow that depended on separate project boards and spreadsheets for cohort delivery coordination. Cohorts, registrations, participants, payment follow-up, communication readiness, session readiness, resource tracking, and post-session follow-up should be managed in Mission Control as the operational source of truth.
+
+Jotform can still feed registration submissions into Mission Control through the registration webhook bridge. QuickBooks may remain an accounting reference point for invoice/customer identifiers, but full QuickBooks sync is intentionally not implemented in this slice. Asana and Google Sheets are not integration targets; the app replaces those tools for cohort operations.
+
+When a registration arrives, Mission Control stores the organization, registration, optional participants, payment record, source, QuickBooks references, supporting document links, and operational follow-up tasks together. Participant details may be added later when only a participant count is available.
+
 ## Tech Stack
 
 - Next.js App Router
@@ -98,11 +106,13 @@ POST /api/webhooks/registrations
 
 If `WEBHOOK_SECRET` is configured, pass it in either `x-webhook-secret` or `Authorization: Bearer ...`.
 
+Payloads may use the normalized Mission Control shape below or a Jotform-style submission shape. Jotform payloads are normalized server-side before records are created.
+
 Sample payload:
 
 ```json
 {
-  "source": "registration_form",
+  "source": "jotform",
   "eventType": "registration.submitted",
   "organization": {
     "id": "sample-district",
@@ -118,6 +128,10 @@ Sample payload:
     "paymentMethod": "INVOICE",
     "paymentStatus": "PENDING",
     "invoiceNumber": "INV-1001",
+    "quickBooksCustomerRef": "QB-CUST-123",
+    "quickBooksInvoiceRef": "QB-INV-456",
+    "w9Url": "https://example.com/w9.pdf",
+    "invoiceUrl": "https://example.com/invoice.pdf",
     "totalAmount": 250,
     "participantCount": 2
   },
@@ -137,10 +151,13 @@ Sample payload:
     "amount": 250,
     "method": "INVOICE",
     "status": "PENDING",
-    "invoiceNumber": "INV-1001"
+    "invoiceNumber": "INV-1001",
+    "quickBooksPaymentRef": "QB-PAY-789"
   }
 }
 ```
+
+If participant details are omitted but `participantCount` is present, Mission Control creates the registration without placeholder participants and opens an operations task to collect the roster.
 
 Sample curl:
 
@@ -202,6 +219,7 @@ Run sanity checks:
 ```bash
 pnpm smoke
 pnpm qa:smoke
+pnpm qa:prepush
 ```
 
 Run static checks:
@@ -221,6 +239,8 @@ Integration boundaries are isolated:
 - `src/modules/calendar`
 - `src/modules/email`
 - `src/modules/webhooks`
+- `src/modules/jotform`
+- `src/modules/operations`
 - `src/services/calendarService.ts`
 - `src/services/emailService.ts`
 - `src/services/webhookService.ts`
@@ -260,22 +280,25 @@ Errors use:
 - MUI admin shell with sidebar, header, breadcrumbs, user menu, tables, modals, alerts, and operational dashboard
 - Cohort detail workspace with sessions, registrations, participants, communications, payments, resources, and activity tabs
 - SendGrid boundary, merge-field renderer, reminder schedule helper, ICS generator, Google Calendar placeholder, and registration webhook processor
+- Internal operations tasks that replace project-board/spreadsheet tracking for participant lists, payment follow-up, supporting documents, calendar invites, resources, recordings, and post-session work
+- Jotform registration bridge with optional participant-list handling and default operations task creation
 
 ## Intentional Prompt 3 Stubs
 
 - Supabase Auth session integration
 - Production SendGrid send jobs and delivery event handling
 - Google Calendar OAuth connection flow
-- Webhook replay tooling and advanced field mapping
+- Webhook replay tooling and advanced Jotform field mapping
 - Background job scheduling for communications
 
 ## Internal QA Checklist
 
-- Dashboard loads metrics, upcoming sessions, recent registrations, scheduled communications, pending payments, and cohorts needing attention.
+- Dashboard loads metrics, upcoming sessions, recent registrations, open operations tasks, scheduled communications, pending payments, and cohorts needing attention.
 - Cohorts list supports search, status filter, presenter filter, view, edit, and archive.
-- Cohort detail tabs load without crashes: Overview, Sessions, Registrations, Participants, Communications, Resources, Payments, Activity.
+- Cohort detail tabs load without crashes: Overview, Operations, Sessions, Registrations, Participants, Communications, Resources, Payments, Activity.
 - Manual registration creation, edit, confirm, cancel, participant add, and payment status updates return API envelopes and show UI alerts.
-- Registration webhook creates/fetches organization, registration, participants, payment record, and webhook event.
+- Registration webhook creates/fetches organization, registration, optional participants, payment record, webhook event, and default operations tasks.
+- Registrations can track participant-list status, supporting-document status, W-9 URL, invoice URL, and QuickBooks customer/invoice references.
 - Communication template preview renders known merge fields and warns on unknown fields.
 - Reminder schedule creates 7-day, 24-hour, and 1-hour `CohortCommunication` records.
 - ICS generation includes session title, description, start/end, timezone, meeting URL, and location.
@@ -298,6 +321,7 @@ Errors use:
 - SendGrid template rendering is implemented, but production email sending should be connected to a background worker before scheduled sends are enabled.
 - Resource upload/storage management is still a placeholder.
 - Advanced reporting, CSV export, bulk edits, and webhook replay are roadmap items.
+- QuickBooks is reference-only for now; no accounting API sync is implemented.
 
 ## Roadmap
 

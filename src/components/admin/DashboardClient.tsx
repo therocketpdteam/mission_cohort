@@ -24,7 +24,8 @@ const metricLabels: ReadonlyArray<[string, string, Route]> = [
   ["openRegistrations", "Open Registrations", "/registrations"],
   ["totalParticipants", "Total Participants", "/participants"],
   ["pendingPayments", "Pending Payments", "/payments"],
-  ["scheduledCommunications", "Scheduled Communications", "/communications"]
+  ["scheduledCommunications", "Scheduled Communications", "/communications"],
+  ["openOperationsTasks", "Open Operations Tasks", "/cohorts"]
 ];
 
 const quickActions: ReadonlyArray<[string, Route]> = [
@@ -56,7 +57,7 @@ export function DashboardClient() {
 
       <Grid container spacing={2}>
         {metricLabels.map(([key, label, href]) => (
-          <Grid size={{ xs: 12, sm: 6, lg: 2 }} key={key}>
+          <Grid size={{ xs: 12, sm: 6, lg: key === "openOperationsTasks" ? 3 : 2 }} key={key}>
             <Link href={href}>
               <Card
                 sx={{
@@ -92,6 +93,24 @@ export function DashboardClient() {
       </SectionCard>
 
       <Grid container spacing={2}>
+        <Grid size={{ xs: 12, lg: 6 }}>
+          <SectionCard title="Open Operations Tasks" action={<Button component={Link} href="/cohorts" variant="outlined">View cohorts</Button>}>
+            <List dense>
+              {(data?.openOperationsTasks ?? []).map((task: AdminRow) => (
+                <ListItem key={task.id} divider>
+                  <ListItemText
+                    primary={task.title}
+                    secondary={`${task.cohort?.title ?? "Operations"} • ${String(task.category ?? "").replace(/_/g, " ")}`}
+                  />
+                  <StatusChip value={task.status} />
+                </ListItem>
+              ))}
+            </List>
+            {!loading && (data?.openOperationsTasks ?? []).length === 0 && (
+              <EmptyState title="No open operations tasks" description="Internal cohort checklist items will appear here." />
+            )}
+          </SectionCard>
+        </Grid>
         <Grid size={{ xs: 12, lg: 6 }}>
           <SectionCard title="Upcoming Sessions" action={<Button component={Link} href="/cohorts" variant="outlined">View cohorts</Button>}>
             <List dense>

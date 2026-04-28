@@ -10,6 +10,12 @@ if rg -n "LaunchPad|student dashboard|learner course catalog|/student|/learners|
   exit 1
 fi
 
+echo "== Replaced-tool integration scan =="
+if rg -n "Asana|Google Sheets|GoogleSheets|asana|google sheets|sheets" src prisma scripts --glob '!scripts/pre-push-qa.sh'; then
+  echo "Unexpected Asana or Google Sheets integration reference found outside documentation."
+  exit 1
+fi
+
 echo "== TypeScript/build checks =="
 if command -v pnpm >/dev/null 2>&1; then
   pnpm typecheck

@@ -1,4 +1,4 @@
-import { CohortStatus, CommunicationStatus, PaymentStatus, RegistrationStatus } from "@prisma/client";
+import { CohortStatus, CommunicationStatus, OperationsTaskStatus, PaymentStatus, RegistrationStatus } from "@prisma/client";
 import { ok } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 
@@ -12,9 +12,11 @@ export async function GET() {
     totalParticipants,
     pendingPayments,
     scheduledCommunications,
+    openOperationsTasks,
     sessions,
     registrations,
     cohorts,
+    tasks,
     paymentSnapshot,
     activity
   ] = await Promise.all([
@@ -24,6 +26,7 @@ export async function GET() {
     prisma.participant.count(),
     prisma.paymentRecord.count({ where: { status: { in: [PaymentStatus.PENDING, PaymentStatus.INVOICED, PaymentStatus.PARTIALLY_PAID] } } }),
     prisma.cohortCommunication.count({ where: { status: CommunicationStatus.SCHEDULED } }),
+    prisma.operationsTask.count({ where: { status: { in: [OperationsTaskStatus.OPEN, OperationsTaskStatus.IN_PROGRESS] } } }),
     prisma.cohortSession.findMany({
       where: { startTime: { gte: now } },
       orderBy: { startTime: "asc" },
@@ -36,10 +39,21 @@ export async function GET() {
       include: { cohort: true, organization: true }
     }),
     prisma.cohort.findMany({
-      where: { status: { in: [CohortStatus.DRAFT, CohortStatus.REGISTRATION_OPEN, CohortStatus.REGISTRATION_CLOSED] } },
+      where: {
+        OR: [
+          { status: { in: [CohortStatus.DRAFT, CohortStatus.REGISTRATION_OPEN, CohortStatus.REGISTRATION_CLOSED] } },
+          { operationsTasks: { some: { status: { in: [OperationsTaskStatus.OPEN, OperationsTaskStatus.IN_PROGRESS] } } } }
+        ]
+      },
       orderBy: { updatedAt: "desc" },
       take: 6,
       include: { presenter: true, _count: { select: { registrations: true, participants: true } } }
+    }),
+    prisma.operationsTask.findMany({
+      where: { status: { in: [OperationsTaskStatus.OPEN, OperationsTaskStatus.IN_PROGRESS] } },
+      orderBy: [{ priority: "desc" }, { dueDate: "asc" }, { createdAt: "desc" }],
+      take: 8,
+      include: { cohort: true, registration: true, session: true }
     }),
     prisma.paymentRecord.groupBy({
       by: ["status"],
@@ -59,11 +73,13 @@ export async function GET() {
       openRegistrations,
       totalParticipants,
       pendingPayments,
-      scheduledCommunications
+      scheduledCommunications,
+      openOperationsTasks
     },
     upcomingSessions: sessions,
     recentRegistrations: registrations,
     cohortsNeedingAttention: cohorts,
+    openOperationsTasks: tasks,
     paymentStatusSnapshot: paymentSnapshot,
     recentActivity: activity
   });

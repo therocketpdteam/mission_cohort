@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { registrationCreateSchema, registrationUpdateSchema } from "@/validators/registration";
 import { logAuditEventAsync } from "./auditService";
+import { createDefaultRegistrationOperationsTasks } from "./operationsTaskService";
 
 export async function createRegistration(input: z.input<typeof registrationCreateSchema>) {
   const data = registrationCreateSchema.parse(input);
@@ -13,6 +14,14 @@ export async function createRegistration(input: z.input<typeof registrationCreat
     action: "CREATED",
     description: "Registration created",
     metadata: { cohortId: registration.cohortId, organizationId: registration.organizationId }
+  });
+  void createDefaultRegistrationOperationsTasks({
+    cohortId: registration.cohortId,
+    registrationId: registration.id,
+    participantCount: registration.participantCount,
+    actualParticipantCount: 0,
+    paymentStatus: registration.paymentStatus,
+    hasSupportingDocs: Boolean(registration.w9Url || registration.invoiceUrl || registration.confirmationDocsSentAt)
   });
   return registration;
 }

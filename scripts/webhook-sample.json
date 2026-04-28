@@ -1,5 +1,5 @@
 {
-  "source": "registration_form",
+  "source": "jotform",
   "eventType": "registration.submitted",
   "organization": {
     "id": "sample-district",
@@ -15,6 +15,10 @@
     "paymentMethod": "INVOICE",
     "paymentStatus": "PENDING",
     "invoiceNumber": "INV-1001",
+    "quickBooksCustomerRef": "QB-CUST-123",
+    "quickBooksInvoiceRef": "QB-INV-456",
+    "w9Url": "https://example.com/w9.pdf",
+    "invoiceUrl": "https://example.com/invoice.pdf",
     "totalAmount": 250,
     "participantCount": 2
   },
@@ -34,6 +38,7 @@
     "amount": 250,
     "method": "INVOICE",
     "status": "PENDING",
-    "invoiceNumber": "INV-1001"
+    "invoiceNumber": "INV-1001",
+    "quickBooksPaymentRef": "QB-PAY-789"
   }
 }
