@@ -3,9 +3,11 @@ import {
   OrganizationType,
   PaymentMethod,
   PaymentStatus,
-  Role
+  Role,
+  WebhookProcessingStatus
 } from "@prisma/client";
 import { prisma } from "../src/lib/prisma";
+import { parseParticipantCsvText } from "../src/modules/jotform";
 import { createCalendarInvitePlaceholder } from "../src/services/calendarService";
 import { createCohort } from "../src/services/cohortService";
 import { createPlannedSessionReminders } from "../src/services/communicationService";
@@ -136,6 +138,16 @@ async function main() {
   }
   console.log("ICS generation: ok");
 
+  const parsedParticipants = parseParticipantCsvText("Jane Doe, jane@example.com\n\nJordan Smith, jordan@example.com");
+  if (parsedParticipants.errors.length > 0 || parsedParticipants.participants.length !== 2) {
+    throw new Error("Jotform participant parser failed");
+  }
+  const invalidParticipants = parseParticipantCsvText("Broken Line");
+  if (invalidParticipants.errors.length === 0) {
+    throw new Error("Jotform participant parser invalid-line warning failed");
+  }
+  console.log("Jotform participant parser: ok");
+
   const webhookResult = await processRegistrationWebhook({
     source: "qa_smoke",
     eventType: "registration.submitted",
@@ -201,6 +213,105 @@ async function main() {
     throw new Error("Jotform participant-count-only workflow failed");
   }
   console.log("Jotform count-only registration: ok");
+
+  await prisma.jotformFormMapping.create({
+    data: {
+      formId: `qa-form-${stamp}`,
+      label: "QA 3-session form",
+      sessionCount: 3,
+      defaultCohortId: cohort.id,
+      active: true
+    }
+  });
+
+  const mappedJotformResult = await processRegistrationWebhook({
+    formID: `qa-form-${stamp}`,
+    submissionID: `qa-submission-${stamp}`,
+    organizationName: `QA Mapped Org ${stamp}`,
+    primaryContactName: "QA Mapped Contact",
+    primaryContactEmail: `qa.mapped.${stamp}@example.com`,
+    participantCount: 2,
+    participantCsv: "Alpha One, alpha.one@example.com\nBeta Two, beta.two@example.com",
+    totalAmount: 250,
+    paymentMethod: "INVOICE",
+    paymentStatus: "PENDING"
+  });
+
+  if (!mappedJotformResult.created || mappedJotformResult.participantsCreated !== 2 || mappedJotformResult.cohortId !== cohort.id) {
+    throw new Error("Jotform mapped webhook workflow failed");
+  }
+
+  const updatedMappedJotformResult = await processRegistrationWebhook({
+    formID: `qa-form-${stamp}`,
+    submissionID: `qa-submission-${stamp}`,
+    organizationName: `QA Mapped Org ${stamp}`,
+    primaryContactName: "QA Mapped Contact Updated",
+    primaryContactEmail: `qa.mapped.${stamp}@example.com`,
+    participantCount: 1,
+    participantCsv: "Gamma Three, gamma.three@example.com",
+    totalAmount: 125,
+    paymentMethod: "INVOICE",
+    paymentStatus: "PENDING"
+  });
+
+  if (!updatedMappedJotformResult.updated || updatedMappedJotformResult.registration.id !== mappedJotformResult.registration.id || updatedMappedJotformResult.participantsCreated !== 1) {
+    throw new Error("Jotform repeat-submission update failed");
+  }
+  console.log("Jotform mapped create/update webhook: ok");
+
+  await prisma.jotformFormMapping.create({
+    data: {
+      formId: `qa-shared-form-${stamp}`,
+      label: "QA shared 5-session form",
+      sessionCount: 5,
+      requireCohortSlug: true,
+      active: true
+    }
+  });
+
+  const slugRoutedJotformResult = await processRegistrationWebhook({
+    formID: `qa-shared-form-${stamp}`,
+    submissionID: `qa-shared-submission-${stamp}`,
+    cohortSlug: cohort.slug,
+    organizationName: `QA Shared Org ${stamp}`,
+    primaryContactName: "QA Shared Contact",
+    primaryContactEmail: `qa.shared.${stamp}@example.com`,
+    participantCount: 1,
+    participantCsv: "Shared Person, shared.person@example.com",
+    totalAmount: 125,
+    paymentMethod: "Invoice",
+    paymentStatus: "Pending"
+  });
+
+  if (!slugRoutedJotformResult.created || slugRoutedJotformResult.cohortId !== cohort.id) {
+    throw new Error("Jotform cohortSlug routing failed");
+  }
+
+  let missingSlugFailed = false;
+  try {
+    await processRegistrationWebhook({
+      formID: `qa-shared-form-${stamp}`,
+      submissionID: `qa-shared-missing-slug-${stamp}`,
+      organizationName: `QA Shared Missing Org ${stamp}`,
+      primaryContactName: "QA Missing Slug",
+      primaryContactEmail: `qa.missing.slug.${stamp}@example.com`
+    });
+  } catch {
+    missingSlugFailed = true;
+  }
+
+  const failedSlugEvent = await prisma.webhookEvent.findFirst({
+    where: {
+      status: WebhookProcessingStatus.FAILED,
+      errorMessage: { contains: `qa-shared-form-${stamp}` }
+    },
+    orderBy: { createdAt: "desc" }
+  });
+
+  if (!missingSlugFailed || !failedSlugEvent) {
+    throw new Error("Jotform missing cohortSlug failure logging failed");
+  }
+  console.log("Jotform cohortSlug routing/failure logging: ok");
 
   const cohortTasks = await listTasksForCohort(cohort.id);
   const countOnlyTask = cohortTasks.find((task) => task.registrationId === countOnlyWebhookResult.registration.id);

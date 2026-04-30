@@ -8,3 +8,4 @@ export * from "./presenter";
 export * from "./communication";
 export * from "./payment";
 export * from "./operationsTask";
+export * from "./jotform";

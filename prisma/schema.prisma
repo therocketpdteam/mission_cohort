@@ -272,6 +272,7 @@ model Cohort {
   calendarEvents            CalendarEvent[]
   paymentRecords            PaymentRecord[]
   operationsTasks           OperationsTask[]
+  jotformFormMappings       JotformFormMapping[]
 
   @@index([presenterId])
   @@index([status])
@@ -351,6 +352,8 @@ model Registration {
   participantCount      Int                @default(0)
   status                RegistrationStatus @default(NEW)
   source                String?
+  externalSource        String?
+  externalSubmissionId  String?
   notes                 String?
   createdAt             DateTime           @default(now())
   updatedAt             DateTime           @updatedAt
@@ -368,6 +371,23 @@ model Registration {
   @@index([paymentStatus])
   @@index([participantListStatus])
   @@index([supportingDocumentStatus])
+  @@unique([externalSource, externalSubmissionId])
+}
+
+model JotformFormMapping {
+  id                String   @id @default(cuid())
+  formId            String   @unique
+  label             String
+  sessionCount      Int
+  defaultCohortId   String?
+  requireCohortSlug Boolean  @default(false)
+  active            Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  defaultCohort     Cohort?  @relation(fields: [defaultCohortId], references: [id], onDelete: SetNull)
+
+  @@index([active])
+  @@index([defaultCohortId])
 }
 
 model Participant {

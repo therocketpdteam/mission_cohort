@@ -1,0 +1,18 @@
+{
+  "formID": "REPLACE_WITH_JOTFORM_FORM_ID",
+  "submissionID": "REPLACE_WITH_JOTFORM_SUBMISSION_ID",
+  "cohortSlug": "replace-with-cohort-slug",
+  "organizationName": "Demo District",
+  "organizationType": "District",
+  "primaryContactName": "Avery Brooks",
+  "primaryContactEmail": "avery@example.com",
+  "primaryContactPhone": "555-0100",
+  "participantCount": 2,
+  "participantCsv": "Jane Doe, jane@example.com\nJordan Smith, jordan@example.com",
+  "paymentMethod": "Invoice",
+  "paymentStatus": "Pending",
+  "invoiceNumber": "INV-DEMO-1001",
+  "totalAmount": 250,
+  "w9Url": "https://example.com/w9.pdf",
+  "invoiceUrl": "https://example.com/invoice.pdf"
+}

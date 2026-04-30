@@ -28,6 +28,8 @@ export const registrationCreateSchema = z.object({
   participantCount: nonNegativeIntInput.default(0),
   status: z.nativeEnum(RegistrationStatus).default(RegistrationStatus.NEW),
   source: z.string().optional(),
+  externalSource: z.string().optional(),
+  externalSubmissionId: z.string().optional(),
   notes: z.string().optional()
 });
 

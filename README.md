@@ -104,9 +104,40 @@ Registration webhooks are accepted at:
 POST /api/webhooks/registrations
 ```
 
-If `WEBHOOK_SECRET` is configured, pass it in either `x-webhook-secret` or `Authorization: Bearer ...`.
+If `WEBHOOK_SECRET` is configured, pass it in `x-webhook-secret`, `Authorization: Bearer ...`, or the `?secret=` query parameter. The query parameter option is available for Jotform webhook setup.
 
-Payloads may use the normalized Mission Control shape below or a Jotform-style submission shape. Jotform payloads are normalized server-side before records are created.
+Payloads may use the normalized Mission Control shape below or a Jotform-style submission shape. Jotform payloads are normalized server-side before records are created. Every inbound payload is stored in `WebhookEvent`; failed processing attempts keep an actionable error message.
+
+### Jotform Routing
+
+Jotform mappings are configured in `/settings` under "Jotform Form Mappings".
+
+Use the mappings this way:
+
+- 3-session form: set its Jotform form ID and default cohort.
+- 8-session form: set its Jotform form ID and default cohort.
+- 5-session shared form: set its Jotform form ID, enable "Require cohortSlug", and leave default cohort blank.
+
+Routing order:
+
+1. `cohortSlug` from the Jotform Get URL or payload wins.
+2. If no `cohortSlug` is present, an active form mapping default cohort is used.
+3. If a shared form requires `cohortSlug` and none is present, the webhook fails clearly and the failed event is visible in the database.
+
+For the shared 5-session form, append the cohort slug when copying the Jotform Get URL:
+
+```bash
+https://form.jotform.com/FORM_ID?cohortSlug=example-cohort-slug
+```
+
+Participant paste format:
+
+```text
+Jane Doe, jane@example.com
+Jordan Smith, jordan@example.com
+```
+
+Blank lines are ignored. Lines without a valid email are rejected with the line number. If only `participantCount` is provided, Mission Control creates no placeholder participants and opens operations tasks for roster follow-up.
 
 Sample payload:
 
@@ -157,7 +188,25 @@ Sample payload:
 }
 ```
 
-If participant details are omitted but `participantCount` is present, Mission Control creates the registration without placeholder participants and opens an operations task to collect the roster.
+Jotform-style payload example:
+
+```json
+{
+  "formID": "REPLACE_WITH_JOTFORM_FORM_ID",
+  "submissionID": "1234567890",
+  "cohortSlug": "example-cohort-slug",
+  "organizationName": "Sample District",
+  "primaryContactName": "Avery Brooks",
+  "primaryContactEmail": "avery@example.com",
+  "participantCount": 2,
+  "participantCsv": "Jane Doe, jane@example.com\nJordan Smith, jordan@example.com",
+  "paymentMethod": "Invoice",
+  "paymentStatus": "Pending",
+  "totalAmount": 250
+}
+```
+
+Repeat submissions with the same Jotform `submissionID` update the existing registration/payment data and replace that registration's participant roster with the latest parsed participant list.
 
 Sample curl:
 
@@ -166,6 +215,14 @@ curl -X POST "$APP_BASE_URL/api/webhooks/registrations" \
   -H "Content-Type: application/json" \
   -H "x-webhook-secret: $WEBHOOK_SECRET" \
   -d @scripts/webhook-sample.json
+```
+
+Jotform-compatible curl using query-string secret:
+
+```bash
+curl -X POST "$APP_BASE_URL/api/webhooks/registrations?secret=$WEBHOOK_SECRET" \
+  -H "Content-Type: application/json" \
+  -d @scripts/jotform-webhook-sample.json
 ```
 
 ## Database
@@ -186,6 +243,12 @@ For deployed environments:
 
 ```bash
 pnpm prisma:deploy
+```
+
+If you are managing the Supabase schema directly from the current Prisma schema instead of committed migration files, push the schema changes:
+
+```bash
+pnpm prisma:push
 ```
 
 Seed demo admin data:
@@ -281,7 +344,7 @@ Errors use:
 - Cohort detail workspace with sessions, registrations, participants, communications, payments, resources, and activity tabs
 - SendGrid boundary, merge-field renderer, reminder schedule helper, ICS generator, Google Calendar placeholder, and registration webhook processor
 - Internal operations tasks that replace project-board/spreadsheet tracking for participant lists, payment follow-up, supporting documents, calendar invites, resources, recordings, and post-session work
-- Jotform registration bridge with optional participant-list handling and default operations task creation
+- Jotform registration bridge with form mappings, shared-form `cohortSlug` routing, participant paste parsing, idempotent submission updates, optional participant-list handling, and default operations task creation
 
 ## Intentional Prompt 3 Stubs
 
