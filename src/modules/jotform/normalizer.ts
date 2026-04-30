@@ -2,14 +2,21 @@ import { OrganizationType, PaymentMethod, PaymentStatus, RegistrationStatus } fr
 import type { JotformFormMapping } from "@prisma/client";
 
 type UnknownRecord = Record<string, unknown>;
+type ParsedParticipant = {
+  firstName: string;
+  lastName: string;
+  email: string;
+  title?: string;
+  phone?: string;
+};
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-function normalizeKey(value: string) {
+function normalizeKey(value: string): string {
   return value.replace(/[^a-z0-9]+/gi, "").toLowerCase();
 }
 
-function readString(value: unknown) {
+function readString(value: unknown): string {
   if (typeof value === "string") {
     return value.trim();
   }
@@ -30,18 +37,18 @@ function readString(value: unknown) {
   return "";
 }
 
-function readNumber(value: unknown) {
+function readNumber(value: unknown): number {
   const number = Number(readString(value) || value);
   return Number.isFinite(number) ? number : 0;
 }
 
-function readEnumValue<T extends Record<string, string>>(enumValues: T, value: unknown, fallback: T[keyof T]) {
+function readEnumValue<T extends Record<string, string>>(enumValues: T, value: unknown, fallback: T[keyof T]): T[keyof T] {
   const normalized = normalizeKey(readString(value));
   const match = Object.values(enumValues).find((item) => normalizeKey(item) === normalized);
   return (match ?? fallback) as T[keyof T];
 }
 
-function firstValue(payload: UnknownRecord, keys: string[]) {
+function firstValue(payload: UnknownRecord, keys: string[]): unknown {
   for (const key of keys) {
     const direct = payload[key];
 
@@ -61,7 +68,7 @@ function firstValue(payload: UnknownRecord, keys: string[]) {
   return undefined;
 }
 
-function parseJsonObject(value: unknown) {
+function parseJsonObject(value: unknown): UnknownRecord {
   if (typeof value !== "string" || !value.trim()) {
     return {};
   }
@@ -74,7 +81,7 @@ function parseJsonObject(value: unknown) {
   }
 }
 
-function normalizeAnswers(payload: UnknownRecord) {
+function normalizeAnswers(payload: UnknownRecord): UnknownRecord {
   const answers = payload.answers;
 
   if (!answers || typeof answers !== "object" || Array.isArray(answers)) {
@@ -97,7 +104,7 @@ function normalizeAnswers(payload: UnknownRecord) {
   }, {});
 }
 
-function normalizeFlatPayload(payload: UnknownRecord) {
+function normalizeFlatPayload(payload: UnknownRecord): UnknownRecord {
   const rawRequest = parseJsonObject(payload.rawRequest);
   return {
     ...rawRequest,
@@ -107,7 +114,7 @@ function normalizeFlatPayload(payload: UnknownRecord) {
   };
 }
 
-function normalizeParticipants(input: unknown) {
+function normalizeParticipants(input: unknown): ParsedParticipant[] {
   if (!Array.isArray(input)) {
     return [];
   }
@@ -127,7 +134,7 @@ function normalizeParticipants(input: unknown) {
   });
 }
 
-export function parseParticipantCsvText(text: unknown) {
+export function parseParticipantCsvText(text: unknown): { participants: ParsedParticipant[]; errors: string[] } {
   const lines = readString(text)
     .split(/\r?\n/)
     .map((line) => line.trim())
@@ -155,7 +162,7 @@ export function parseParticipantCsvText(text: unknown) {
   return { participants, errors };
 }
 
-export async function parseJotformWebhookRequest(request: Request) {
+export async function parseJotformWebhookRequest(request: Request): Promise<UnknownRecord> {
   const contentType = request.headers.get("content-type") ?? "";
   const url = new URL(request.url);
   const queryPayload = Object.fromEntries(url.searchParams.entries());
@@ -186,7 +193,7 @@ export function resolveJotformCohort(
     routing: { cohortId?: string; cohortSlug?: string; formId?: string };
   },
   mappings: JotformFormMapping[]
-) {
+): { cohortId: string; cohortSlug: string; mapping?: JotformFormMapping } {
   const mapping = mappings.find((item) => item.active && item.formId === payload.routing.formId);
 
   if (payload.routing.cohortId) {
