@@ -1,6 +1,16 @@
 import { randomBytes } from "node:crypto";
-import { PaymentStatus, ReportShareStatus } from "@prisma/client";
+import { ParticipantListStatus, PaymentStatus, ReportShareStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+
+const pendingPaymentStatuses = new Set<PaymentStatus>([
+  PaymentStatus.PENDING,
+  PaymentStatus.INVOICED,
+  PaymentStatus.PARTIALLY_PAID
+]);
+const openRosterStatuses = new Set<ParticipantListStatus>([
+  ParticipantListStatus.NEEDED,
+  ParticipantListStatus.PARTIAL
+]);
 
 export async function getCohortReport(cohortId?: string) {
   const where = cohortId ? { id: cohortId } : undefined;
@@ -45,7 +55,7 @@ export async function getCohortReport(cohortId?: string) {
         total: registrations.length,
         confirmed: registrations.filter((registration) => registration.status === "CONFIRMED").length,
         cancelled: registrations.filter((registration) => registration.status === "CANCELLED").length,
-        openRosterItems: registrations.filter((registration) => ["NEEDED", "PARTIAL"].includes(registration.participantListStatus)).length
+        openRosterItems: registrations.filter((registration) => openRosterStatuses.has(registration.participantListStatus)).length
       },
       participantSummary: {
         total: cohort.participants.length,
@@ -54,7 +64,7 @@ export async function getCohortReport(cohortId?: string) {
       paymentSummary: {
         totalAmount: registrations.reduce((sum, registration) => sum + Number(registration.totalAmount ?? 0), 0),
         pendingAmount: payments
-          .filter((payment) => [PaymentStatus.PENDING, PaymentStatus.INVOICED, PaymentStatus.PARTIALLY_PAID].includes(payment.status))
+          .filter((payment) => pendingPaymentStatuses.has(payment.status))
           .reduce((sum, payment) => sum + Number(payment.amount ?? 0), 0),
         byStatus: paymentStatusSummary
       },
