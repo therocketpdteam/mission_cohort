@@ -54,7 +54,11 @@ export async function listCommunicationsByCohort(cohortId: string) {
   });
 }
 
-async function resolveCommunicationRecipients(communication: Awaited<ReturnType<typeof listCommunicationsByCohort>>[number]) {
+function emailValues(values: Array<string | null | undefined>) {
+  return values.filter((value): value is string => Boolean(value?.trim()));
+}
+
+async function resolveCommunicationRecipients(communication: Awaited<ReturnType<typeof listCommunicationsByCohort>>[number]): Promise<string[]> {
   const cohort = await prisma.cohort.findUnique({
     where: { id: communication.cohortId },
     include: {
@@ -68,20 +72,20 @@ async function resolveCommunicationRecipients(communication: Awaited<ReturnType<
   }
 
   if (communication.recipientScope === RecipientScope.PRIMARY_CONTACTS) {
-    return cohort.registrations.map((registration) => registration.primaryContactEmail).filter(Boolean);
+    return emailValues(cohort.registrations.map((registration) => registration.primaryContactEmail));
   }
 
   if (communication.recipientScope === RecipientScope.BILLING_CONTACTS) {
-    return cohort.registrations.map((registration) => registration.billingContactEmail).filter(Boolean);
+    return emailValues(cohort.registrations.map((registration) => registration.billingContactEmail));
   }
 
   if (communication.recipientScope === RecipientScope.CUSTOM) {
     return Array.isArray(communication.recipientEmails)
-      ? communication.recipientEmails.map((email) => String(email)).filter(Boolean)
+      ? emailValues(communication.recipientEmails.map((email) => typeof email === "string" ? email : ""))
       : [];
   }
 
-  return cohort.participants.map((participant) => participant.email).filter(Boolean);
+  return emailValues(cohort.participants.map((participant) => participant.email));
 }
 
 export async function sendCommunication(id: string) {
