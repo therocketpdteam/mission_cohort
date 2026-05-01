@@ -1,4 +1,4 @@
-import { PaymentMethod, PaymentStatus } from "@prisma/client";
+import { PaymentMethod, PaymentStatus, QuickBooksInvoiceStatus, SyncStatus } from "@prisma/client";
 import { z } from "zod";
 import { dateInput, moneyInput } from "@/lib/validators";
 
@@ -11,6 +11,12 @@ export const paymentCreateSchema = z.object({
   method: z.nativeEnum(PaymentMethod).default(PaymentMethod.UNKNOWN),
   invoiceNumber: z.string().optional(),
   quickBooksPaymentRef: z.string().optional(),
+  quickBooksInvoiceRef: z.string().optional(),
+  quickBooksRealmId: z.string().optional(),
+  quickBooksInvoiceStatus: z.nativeEnum(QuickBooksInvoiceStatus).optional(),
+  quickBooksSyncStatus: z.nativeEnum(SyncStatus).optional(),
+  quickBooksSyncError: z.string().optional(),
+  quickBooksLastSyncedAt: dateInput.optional(),
   paymentDate: dateInput.optional(),
   notes: z.string().optional()
 });

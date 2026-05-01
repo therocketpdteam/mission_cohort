@@ -70,6 +70,28 @@ const taskFields: FieldConfig[] = [
   { name: "ownerName", label: "Owner" }
 ];
 
+const resourceFields: FieldConfig[] = [
+  { name: "title", label: "Title", required: true },
+  { name: "description", label: "Description", type: "textarea" },
+  {
+    name: "type",
+    label: "Type",
+    type: "select",
+    options: ["VIDEO", "SLIDES", "PDF", "LINK", "WORKBOOK", "OTHER"].map((value) => ({ label: value, value })),
+    required: true
+  },
+  { name: "url", label: "URL" },
+  { name: "muxAssetId", label: "Mux asset ID" },
+  { name: "muxPlaybackId", label: "Mux playback ID" },
+  {
+    name: "visibility",
+    label: "Visibility",
+    type: "select",
+    options: ["ADMIN_ONLY", "PARTICIPANTS", "PUBLIC_LINK"].map((value) => ({ label: value.replace(/_/g, " "), value })),
+    required: true
+  }
+];
+
 export function CohortDetailClient({ id }: { id: string }) {
   const [tab, setTab] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -80,14 +102,16 @@ export function CohortDetailClient({ id }: { id: string }) {
   const [communications, setCommunications] = useState<AdminRow[]>([]);
   const [payments, setPayments] = useState<AdminRow[]>([]);
   const [tasks, setTasks] = useState<AdminRow[]>([]);
+  const [resources, setResources] = useState<AdminRow[]>([]);
   const [activity, setActivity] = useState<AdminRow[]>([]);
   const [sessionDialogOpen, setSessionDialogOpen] = useState(false);
   const [editingSession, setEditingSession] = useState<AdminRow | null>(null);
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
+  const [resourceDialogOpen, setResourceDialogOpen] = useState(false);
   const { notifySuccess, notifyError, snackbar } = useNotifier();
 
   async function load() {
-    const [cohortData, sessionRows, registrationRows, participantRows, communicationRows, paymentRows, taskRows, activityRows] =
+    const [cohortData, sessionRows, registrationRows, participantRows, communicationRows, paymentRows, taskRows, resourceRows, activityRows] =
       await Promise.all([
         adminApi<AdminRow>(`/api/cohorts/${id}`),
         adminApi<AdminRow[]>(`/api/cohorts/${id}/sessions`),
@@ -96,6 +120,7 @@ export function CohortDetailClient({ id }: { id: string }) {
         adminApi<AdminRow[]>(`/api/communications?cohortId=${id}`).catch(() => []),
         adminApi<AdminRow[]>("/api/payments").catch(() => []),
         adminApi<AdminRow[]>(`/api/cohorts/${id}/tasks`).catch(() => []),
+        adminApi<AdminRow[]>(`/api/resources?cohortId=${id}`).catch(() => []),
         adminApi<AdminRow[]>(`/api/audit?entityType=Cohort&entityId=${id}`).catch(() => [])
       ]);
 
@@ -106,6 +131,7 @@ export function CohortDetailClient({ id }: { id: string }) {
     setCommunications(communicationRows);
     setPayments(paymentRows.filter((payment) => payment.cohortId === id));
     setTasks(taskRows);
+    setResources(resourceRows);
     setActivity(activityRows);
     setLoading(false);
   }
@@ -137,7 +163,7 @@ export function CohortDetailClient({ id }: { id: string }) {
     {
       field: "actions",
       headerName: "Actions",
-      width: 220,
+      width: 320,
       sortable: false,
       renderCell: (params) => (
         <Stack direction="row" spacing={1}>
@@ -157,6 +183,21 @@ export function CohortDetailClient({ id }: { id: string }) {
             }}
           >
             ICS
+          </Button>
+          <Button
+            variant="outlined"
+            startIcon={<CalendarMonthOutlined />}
+            onClick={async () => {
+              try {
+                await adminApi("/api/calendar", { method: "POST", body: { sessionId: params.row.id, mode: "google" } });
+                notifySuccess("Google Calendar invite synced");
+                await load();
+              } catch (error) {
+                notifyError((error as Error).message);
+              }
+            }}
+          >
+            Google
           </Button>
         </Stack>
       )
@@ -213,6 +254,14 @@ export function CohortDetailClient({ id }: { id: string }) {
       )
     }
   ];
+  const resourceColumns: GridColDef[] = [
+    { field: "title", headerName: "Resource", flex: 1, minWidth: 220 },
+    { field: "type", headerName: "Type", width: 120, renderCell: (params) => <StatusChip value={params.value} /> },
+    { field: "session", headerName: "Session", width: 180, valueGetter: (_value, row) => row.session?.title ?? "Cohort" },
+    { field: "visibility", headerName: "Visibility", width: 150, renderCell: (params) => <StatusChip value={params.value} /> },
+    { field: "muxPlaybackId", headerName: "Mux playback", width: 170 },
+    { field: "url", headerName: "URL", flex: 1, minWidth: 220 }
+  ];
 
   async function saveSession(values: AdminRow) {
     try {
@@ -234,6 +283,24 @@ export function CohortDetailClient({ id }: { id: string }) {
     try {
       await adminApi(`/api/cohorts/${id}/tasks`, { method: "POST", body: values });
       notifySuccess("Operations task created");
+      await load();
+    } catch (error) {
+      notifyError((error as Error).message);
+      throw error;
+    }
+  }
+
+  async function saveResource(values: AdminRow) {
+    try {
+      await adminApi("/api/resources", {
+        method: "POST",
+        body: {
+          ...values,
+          cohortId: id,
+          provider: values.muxPlaybackId ? "mux" : undefined
+        }
+      });
+      notifySuccess("Resource added");
       await load();
     } catch (error) {
       notifyError((error as Error).message);
@@ -327,8 +394,16 @@ export function CohortDetailClient({ id }: { id: string }) {
       )}
 
       {tab === 6 && (
-        <SectionCard title="Resources">
-          <Typography color="text.secondary">Resource upload and visibility management are reserved for Prompt 3.</Typography>
+        <SectionCard title="Resources" action={<Button startIcon={<AddIcon />} onClick={() => setResourceDialogOpen(true)}>Add Resource</Button>}>
+          <TableShell>
+            <DataGrid rows={resources} columns={resourceColumns} loading={loading} pageSizeOptions={[10, 25]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} disableRowSelectionOnClick />
+          </TableShell>
+          {!loading && resources.length === 0 && <EmptyState title="No resources yet" description="Attach Mux recordings, slides, documents, and session links here." />}
+          {resources.filter((resource) => resource.muxPlaybackId).map((resource) => (
+            <Box key={resource.id} sx={{ mt: 2, border: 1, borderColor: "divider", borderRadius: 1, overflow: "hidden" }}>
+              <Box component="video" title={resource.title} controls src={`https://stream.mux.com/${resource.muxPlaybackId}.m3u8`} sx={{ width: "100%", aspectRatio: "16 / 9", bgcolor: "#0B1020" }} />
+            </Box>
+          ))}
         </SectionCard>
       )}
 
@@ -374,6 +449,14 @@ export function CohortDetailClient({ id }: { id: string }) {
         initialValues={{ category: "OTHER", priority: "MEDIUM" }}
         onClose={() => setTaskDialogOpen(false)}
         onSubmit={saveTask}
+      />
+      <MutationDialog
+        title="Add Resource"
+        open={resourceDialogOpen}
+        fields={resourceFields}
+        initialValues={{ type: "LINK", visibility: "ADMIN_ONLY" }}
+        onClose={() => setResourceDialogOpen(false)}
+        onSubmit={saveResource}
       />
       <Box>{snackbar}</Box>
     </PageStack>

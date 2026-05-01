@@ -7,6 +7,7 @@ import {
   DashboardOutlined,
   EmailOutlined,
   GroupsOutlined,
+  InsightsOutlined,
   LogoutOutlined,
   Menu as MenuIcon,
   SettingsOutlined
@@ -49,6 +50,7 @@ const navItems: ReadonlyArray<{
   { label: "Registrations", href: "/registrations", icon: <ArticleOutlined /> },
   { label: "Participants", href: "/participants", icon: <GroupsOutlined /> },
   { label: "Communications", href: "/communications", icon: <EmailOutlined /> },
+  { label: "Reports", href: "/reports", icon: <InsightsOutlined /> },
   { label: "Settings", href: "/settings", icon: <SettingsOutlined /> }
 ];
 
@@ -71,8 +73,12 @@ export function AppShell({ children }: { children: ReactNode }) {
   const title = titleFromPath(pathname);
   const crumbs = useMemo(() => breadcrumbsFor(pathname), [pathname]);
 
+  if (pathname.startsWith("/reports/share/")) {
+    return <Box sx={{ minHeight: "100vh", bgcolor: "background.default" }}>{children}</Box>;
+  }
+
   const drawer = (
-    <Stack sx={{ height: "100%", bgcolor: "#101820", color: "#F6F7F9" }}>
+    <Stack sx={{ height: "100%", bgcolor: "#082E3A", color: "#F6F7F9" }}>
       <Box sx={{ px: 2.5, py: 2.5 }}>
         <Typography variant="h3" sx={{ color: "white" }}>
           RocketPD
@@ -98,7 +104,8 @@ export function AppShell({ children }: { children: ReactNode }) {
                 mb: 0.5,
                 color: active ? "#FFFFFF" : "#DDE7F0",
                 "&.Mui-selected": {
-                  bgcolor: "rgba(46,130,155,0.38)",
+                  bgcolor: "rgba(244,178,61,0.18)",
+                  borderLeft: "3px solid #F4B23D",
                   color: "#FFFFFF"
                 },
                 "&:hover": {

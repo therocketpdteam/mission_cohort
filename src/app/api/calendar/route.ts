@@ -1,11 +1,23 @@
 import { handleApiError, ok } from "@/lib/api";
 import { getEnvPresence } from "@/lib/env";
 import { createCalendarInvitePlaceholder } from "@/services/calendarService";
+import { getIntegrationConnection } from "@/services/integrationService";
+import { IntegrationProvider } from "@prisma/client";
 
 export async function GET() {
+  const connection = await getIntegrationConnection(IntegrationProvider.GOOGLE_CALENDAR);
   return ok({
     configured: getEnvPresence().googleCalendarConfigured,
-    status: "pending_integration"
+    connection: connection ? {
+      id: connection.id,
+      provider: connection.provider,
+      label: connection.label,
+      status: connection.status,
+      accountName: connection.accountName,
+      tokenExpiresAt: connection.tokenExpiresAt,
+      lastSyncedAt: connection.lastSyncedAt,
+      errorMessage: connection.errorMessage
+    } : null
   });
 }
 

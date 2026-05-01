@@ -8,7 +8,7 @@ This repository is admin-only. It intentionally does not include LaunchPad, a le
 
 Mission Control replaces the former internal operations workflow that depended on separate project boards and spreadsheets for cohort delivery coordination. Cohorts, registrations, participants, payment follow-up, communication readiness, session readiness, resource tracking, and post-session follow-up should be managed in Mission Control as the operational source of truth.
 
-Jotform can still feed registration submissions into Mission Control through the registration webhook bridge. QuickBooks may remain an accounting reference point for invoice/customer identifiers, but full QuickBooks sync is intentionally not implemented in this slice. Asana and Google Sheets are not integration targets; the app replaces those tools for cohort operations.
+Jotform can still feed registration submissions into Mission Control through the registration webhook bridge. QuickBooks is integrated for financial reporting sync and linked invoice voiding, while Mission Control still does not create invoices. Asana and Google Sheets are not integration targets; the app replaces those tools for cohort operations.
 
 When a registration arrives, Mission Control stores the organization, registration, optional participants, payment record, source, QuickBooks references, supporting document links, and operational follow-up tasks together. Participant details may be added later when only a participant count is available.
 
@@ -62,9 +62,22 @@ Optional integration placeholders:
 ```bash
 SENDGRID_API_KEY
 SENDGRID_FROM_EMAIL
+SENDGRID_WEBHOOK_PUBLIC_KEY
 GOOGLE_CALENDAR_CLIENT_ID
 GOOGLE_CALENDAR_CLIENT_SECRET
 GOOGLE_CALENDAR_REDIRECT_URI
+GOOGLE_CALENDAR_ID
+QUICKBOOKS_CLIENT_ID
+QUICKBOOKS_CLIENT_SECRET
+QUICKBOOKS_REDIRECT_URI
+QUICKBOOKS_WEBHOOK_VERIFIER_TOKEN
+QUICKBOOKS_ENVIRONMENT
+CRM_WEBHOOK_URL
+CRM_WEBHOOK_SECRET
+MUX_TOKEN_ID
+MUX_TOKEN_SECRET
+MUX_WEBHOOK_SECRET
+INTEGRATION_ENCRYPTION_KEY
 WEBHOOK_SECRET
 APP_BASE_URL
 ```
@@ -80,21 +93,54 @@ Set these values to enable outbound email:
 ```bash
 SENDGRID_API_KEY
 SENDGRID_FROM_EMAIL
+SENDGRID_WEBHOOK_PUBLIC_KEY
 ```
 
-Without these values, email service calls return a useful configuration error instead of crashing the app. Template rendering and merge-field preview still work without SendGrid.
+Without these values, email service calls return a useful configuration error instead of crashing the app. Template rendering and merge-field preview still work without SendGrid. SendGrid Event Webhooks are accepted at `POST /api/webhooks/sendgrid`.
 
 ### Calendar
 
-ICS generation is available as the fallback calendar mode. Google Calendar is architected behind a provider boundary and requires:
+ICS generation is available as the fallback calendar mode. Google Calendar uses a shared RocketPD operations calendar and requires:
 
 ```bash
 GOOGLE_CALENDAR_CLIENT_ID
 GOOGLE_CALENDAR_CLIENT_SECRET
 GOOGLE_CALENDAR_REDIRECT_URI
+GOOGLE_CALENDAR_ID
 ```
 
 Without Google env vars, calendar workflows should use the ICS fallback.
+
+### QuickBooks
+
+QuickBooks is used for financial reporting sync, not Mission Control invoice creation. Configure:
+
+```bash
+QUICKBOOKS_CLIENT_ID
+QUICKBOOKS_CLIENT_SECRET
+QUICKBOOKS_REDIRECT_URI
+QUICKBOOKS_WEBHOOK_VERIFIER_TOKEN
+QUICKBOOKS_ENVIRONMENT
+```
+
+QuickBooks webhooks are accepted at `POST /api/webhooks/quickbooks`. Paid or voided invoices sync into Mission Control. If a registration is cancelled and has a linked QuickBooks invoice reference, Mission Control attempts to void the invoice, never delete it.
+
+### CRM + Mux
+
+CRM outbound sync uses:
+
+```bash
+CRM_WEBHOOK_URL
+CRM_WEBHOOK_SECRET
+```
+
+Mux video resource metadata uses:
+
+```bash
+MUX_TOKEN_ID
+MUX_TOKEN_SECRET
+MUX_WEBHOOK_SECRET
+```
 
 ### Webhooks
 
@@ -342,17 +388,22 @@ Errors use:
 - Smoke script for database and core service sanity checks
 - MUI admin shell with sidebar, header, breadcrumbs, user menu, tables, modals, alerts, and operational dashboard
 - Cohort detail workspace with sessions, registrations, participants, communications, payments, resources, and activity tabs
-- SendGrid boundary, merge-field renderer, reminder schedule helper, ICS generator, Google Calendar placeholder, and registration webhook processor
+- SendGrid sending boundary, merge-field renderer, reminder schedule helper, ICS generator, Google Calendar provider, and registration webhook processor
+- Google Calendar OAuth connection, shared-calendar event create/update, and ICS fallback
+- QuickBooks OAuth/webhook boundaries for paid/voided invoice sync and app-triggered invoice voiding
+- CRM outbound sync outbox with retry processing
+- Mux-backed resource metadata for recordings plus slides/docs links
+- No-PII reporting and secure thought leader share links
 - Internal operations tasks that replace project-board/spreadsheet tracking for participant lists, payment follow-up, supporting documents, calendar invites, resources, recordings, and post-session work
 - Jotform registration bridge with form mappings, shared-form `cohortSlug` routing, participant paste parsing, idempotent submission updates, optional participant-list handling, and default operations task creation
 
-## Intentional Prompt 3 Stubs
+## Intentional Remaining Stubs
 
 - Supabase Auth session integration
-- Production SendGrid send jobs and delivery event handling
-- Google Calendar OAuth connection flow
-- Webhook replay tooling and advanced Jotform field mapping
-- Background job scheduling for communications
+- Production background scheduler configuration in Vercel cron
+- Advanced QuickBooks reconciliation UI
+- Direct Mux upload UI
+- Report PDF generation
 
 ## Internal QA Checklist
 
@@ -367,13 +418,15 @@ Errors use:
 - ICS generation includes session title, description, start/end, timezone, meeting URL, and location.
 - Participants remains a global roster/reporting page across all cohorts and registrations.
 - Organizations, presenters, payments, and registration forms are supporting data managed through cohort/registration workflows instead of standalone admin pages.
-- Communications shows active/inactive templates, preview, and outbox/send placeholders.
+- Communications shows active/inactive templates, preview, outbox, scheduled sends, and resend actions.
 - Settings shows database/env/integration configuration status.
+- Settings includes integration status, OAuth connect links, Jotform dry-run normalization, and webhook replay.
+- Reports can generate no-PII secure share links for thought leaders.
 
 ## Security Notes
 
 - `.env` files are ignored by git.
-- `SUPABASE_SERVICE_ROLE_KEY`, `SENDGRID_API_KEY`, and `WEBHOOK_SECRET` are server-only values and must not be exposed in browser code.
+- `SUPABASE_SERVICE_ROLE_KEY`, `SENDGRID_API_KEY`, `QUICKBOOKS_CLIENT_SECRET`, `CRM_WEBHOOK_SECRET`, `MUX_TOKEN_SECRET`, `INTEGRATION_ENCRYPTION_KEY`, and webhook verifier secrets are server-only values and must not be exposed in browser code.
 - Public browser code only references `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
 - Webhook secret validation is enforced when `WEBHOOK_SECRET` is configured.
 - Supabase RLS policies should be reviewed before production use. Prisma server routes currently act as trusted server-side admin operations.
@@ -382,9 +435,9 @@ Errors use:
 ## Known Limitations
 
 - Supabase login/session enforcement is not active yet.
-- Google Calendar OAuth is stubbed; ICS fallback is the working calendar path.
-- SendGrid template rendering is implemented, but production email sending should be connected to a background worker before scheduled sends are enabled.
-- Resource upload/storage management is still a placeholder.
+- Google Calendar OAuth is implemented as a provider boundary; token refresh hardening is still needed.
+- SendGrid sends are implemented; Vercel cron or another scheduler should call job endpoints for production scheduled delivery.
+- Resource upload/storage management is link/Mux metadata based for now.
 - Advanced reporting, CSV export, bulk edits, and webhook replay are roadmap items.
 - QuickBooks is reference-only for now; no accounting API sync is implemented.
 
@@ -405,6 +458,7 @@ Errors use:
 - `/registrations`
 - `/participants`
 - `/communications`
+- `/reports`
 - `/settings`
 
 There are no learner-facing routes.

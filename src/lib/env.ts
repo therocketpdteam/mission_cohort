@@ -15,6 +15,19 @@ const envSchema = z.object({
   GOOGLE_CALENDAR_CLIENT_ID: optionalString,
   GOOGLE_CALENDAR_CLIENT_SECRET: optionalString,
   GOOGLE_CALENDAR_REDIRECT_URI: optionalString,
+  GOOGLE_CALENDAR_ID: optionalString,
+  QUICKBOOKS_CLIENT_ID: optionalString,
+  QUICKBOOKS_CLIENT_SECRET: optionalString,
+  QUICKBOOKS_REDIRECT_URI: optionalString,
+  QUICKBOOKS_WEBHOOK_VERIFIER_TOKEN: optionalString,
+  QUICKBOOKS_ENVIRONMENT: optionalString,
+  SENDGRID_WEBHOOK_PUBLIC_KEY: optionalString,
+  CRM_WEBHOOK_URL: optionalString,
+  CRM_WEBHOOK_SECRET: optionalString,
+  MUX_TOKEN_ID: optionalString,
+  MUX_TOKEN_SECRET: optionalString,
+  MUX_WEBHOOK_SECRET: optionalString,
+  INTEGRATION_ENCRYPTION_KEY: optionalString,
   WEBHOOK_SECRET: optionalString,
   APP_BASE_URL: optionalString
 });
@@ -33,8 +46,18 @@ export function getEnvPresence() {
     googleCalendarConfigured: Boolean(
       env.GOOGLE_CALENDAR_CLIENT_ID &&
         env.GOOGLE_CALENDAR_CLIENT_SECRET &&
-        env.GOOGLE_CALENDAR_REDIRECT_URI
+        env.GOOGLE_CALENDAR_REDIRECT_URI &&
+        env.GOOGLE_CALENDAR_ID
     ),
+    quickBooksConfigured: Boolean(
+      env.QUICKBOOKS_CLIENT_ID &&
+        env.QUICKBOOKS_CLIENT_SECRET &&
+        env.QUICKBOOKS_REDIRECT_URI &&
+        env.QUICKBOOKS_WEBHOOK_VERIFIER_TOKEN
+    ),
+    sendgridWebhookConfigured: Boolean(env.SENDGRID_WEBHOOK_PUBLIC_KEY),
+    crmConfigured: Boolean(env.CRM_WEBHOOK_URL && env.CRM_WEBHOOK_SECRET),
+    muxConfigured: Boolean(env.MUX_TOKEN_ID && env.MUX_TOKEN_SECRET),
     webhookSecretConfigured: Boolean(env.WEBHOOK_SECRET),
     appBaseUrlConfigured: Boolean(env.APP_BASE_URL)
   };

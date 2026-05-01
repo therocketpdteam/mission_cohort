@@ -1,6 +1,24 @@
-import { CalendarInviteStatus } from "@prisma/client";
+import { CalendarInviteStatus, IntegrationConnectionStatus, IntegrationProvider } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { createGoogleCalendarEventPlaceholder, generateSessionIcs } from "@/modules/calendar";
+import { exchangeGoogleCalendarCode, generateSessionIcs, getGoogleCalendarConnectUrl, upsertGoogleCalendarEvent } from "@/modules/calendar";
+import { getDecryptedIntegrationConnection, upsertIntegrationConnection } from "@/services/integrationService";
+
+export function getGoogleCalendarOAuthUrl() {
+  return getGoogleCalendarConnectUrl();
+}
+
+export async function completeGoogleCalendarOAuth(code: string) {
+  const token = await exchangeGoogleCalendarCode(code);
+  return upsertIntegrationConnection({
+    provider: IntegrationProvider.GOOGLE_CALENDAR,
+    status: IntegrationConnectionStatus.CONNECTED,
+    accountName: "RocketPD Operations Calendar",
+    accessToken: token.access_token,
+    refreshToken: token.refresh_token,
+    tokenExpiresAt: token.expires_in ? new Date(Date.now() + token.expires_in * 1000) : undefined,
+    metadata: { scope: token.scope ?? null, tokenType: token.token_type ?? null }
+  });
+}
 
 export async function createCalendarInvitePlaceholder(sessionId?: string, mode: "google" | "ics" = "ics") {
   if (!sessionId) {
@@ -17,44 +35,73 @@ export async function createCalendarInvitePlaceholder(sessionId?: string, mode: 
   }
 
   if (mode === "google") {
-    const result = await createGoogleCalendarEventPlaceholder({
+    const connection = await getDecryptedIntegrationConnection(IntegrationProvider.GOOGLE_CALENDAR);
+    const existing = await prisma.calendarEvent.findFirst({
+      where: { sessionId: session.id, provider: "google" },
+      orderBy: { createdAt: "desc" }
+    });
+    const result = await upsertGoogleCalendarEvent({
       title: session.title,
       description: session.description ?? undefined,
       startTime: session.startTime,
       endTime: session.endTime,
       timezone: session.timezone,
       meetingUrl: session.meetingUrl,
-      location: session.location
+      location: session.location,
+      accessToken: connection?.accessToken,
+      providerEventId: existing?.providerEventId
     });
 
-    await prisma.calendarEvent.create({
-      data: {
-        cohortId: session.cohortId,
-        sessionId: session.id,
-        provider: "google",
-        title: session.title,
-        startTime: session.startTime,
-        endTime: session.endTime,
-        timezone: session.timezone,
-        status: CalendarInviteStatus.NOT_CREATED
-      }
+    const calendarEvent = existing
+      ? await prisma.calendarEvent.update({
+          where: { id: existing.id },
+          data: {
+            providerEventId: result.id,
+            title: session.title,
+            startTime: session.startTime,
+            endTime: session.endTime,
+            timezone: session.timezone,
+            inviteUrl: session.meetingUrl,
+            htmlLink: result.htmlLink,
+            status: CalendarInviteStatus.UPDATED
+          }
+        })
+      : await prisma.calendarEvent.create({
+          data: {
+            cohortId: session.cohortId,
+            sessionId: session.id,
+            provider: "google",
+            providerEventId: result.id,
+            title: session.title,
+            startTime: session.startTime,
+            endTime: session.endTime,
+            timezone: session.timezone,
+            inviteUrl: session.meetingUrl,
+            htmlLink: result.htmlLink,
+            status: CalendarInviteStatus.CREATED
+          }
+        });
+
+    await prisma.cohortSession.update({
+      where: { id: session.id },
+      data: { calendarInviteStatus: CalendarInviteStatus.CREATED }
     });
 
-    return result;
+    return { provider: "google", status: "created", event: calendarEvent };
   }
 
   const ics = generateSessionIcs(session);
   await prisma.calendarEvent.create({
     data: {
-      cohortId: session.cohortId,
-      sessionId: session.id,
-      provider: "ics",
-      title: session.title,
-      startTime: session.startTime,
-      endTime: session.endTime,
-      timezone: session.timezone,
-      inviteUrl: session.meetingUrl,
-      status: CalendarInviteStatus.CREATED
+        cohortId: session.cohortId,
+        sessionId: session.id,
+        provider: "ics",
+        title: session.title,
+        startTime: session.startTime,
+        endTime: session.endTime,
+        timezone: session.timezone,
+        inviteUrl: session.meetingUrl,
+        status: CalendarInviteStatus.CREATED
     }
   });
 

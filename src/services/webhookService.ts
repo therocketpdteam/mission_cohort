@@ -13,6 +13,7 @@ import { prisma } from "@/lib/prisma";
 import { normalizeJotformRegistrationPayload } from "@/modules/jotform";
 import { listActiveJotformFormMappings } from "@/services/jotformMappingService";
 import { createDefaultRegistrationOperationsTasks } from "@/services/operationsTaskService";
+import { queueParticipantCrmSync, queueRegistrationCrmSync } from "@/services/crmSyncService";
 
 export async function recordWebhookEvent(input: {
   source: string;
@@ -240,6 +241,8 @@ export async function processRegistrationWebhook(payload: Record<string, any>) {
                 method: (paymentInput.method as PaymentMethod) ?? registration.paymentMethod,
                 invoiceNumber: stringValue(paymentInput.invoiceNumber ?? registration.invoiceNumber) || undefined,
                 quickBooksPaymentRef: stringValue(paymentInput.quickBooksPaymentRef) || undefined,
+                quickBooksInvoiceRef: stringValue(registration.quickBooksInvoiceRef) || undefined,
+                quickBooksRealmId: stringValue(registration.quickBooksRealmId) || undefined,
                 paymentDate: paymentInput.paymentDate ? new Date(String(paymentInput.paymentDate)) : undefined,
                 notes: stringValue(paymentInput.notes) || undefined
               }
@@ -254,6 +257,8 @@ export async function processRegistrationWebhook(payload: Record<string, any>) {
                 method: (paymentInput.method as PaymentMethod) ?? registration.paymentMethod,
                 invoiceNumber: stringValue(paymentInput.invoiceNumber ?? registration.invoiceNumber) || undefined,
                 quickBooksPaymentRef: stringValue(paymentInput.quickBooksPaymentRef) || undefined,
+                quickBooksInvoiceRef: stringValue(registration.quickBooksInvoiceRef) || undefined,
+                quickBooksRealmId: stringValue(registration.quickBooksRealmId) || undefined,
                 paymentDate: paymentInput.paymentDate ? new Date(String(paymentInput.paymentDate)) : undefined,
                 notes: stringValue(paymentInput.notes) || undefined
               }
@@ -278,6 +283,10 @@ export async function processRegistrationWebhook(payload: Record<string, any>) {
           paymentStatus: registration.paymentStatus,
           hasSupportingDocs: Boolean(registration.w9Url || registration.invoiceUrl || registration.confirmationDocsSentAt)
         });
+    void queueRegistrationCrmSync(registration.id, existingRegistration ? "registration.updated" : "registration.created");
+    for (const participant of participants) {
+      void queueParticipantCrmSync(participant.id, existingRegistration ? "participant.updated" : "participant.created");
+    }
 
     return {
       eventId: event.id,

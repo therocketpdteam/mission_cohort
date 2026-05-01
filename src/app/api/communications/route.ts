@@ -3,6 +3,7 @@ import {
   createCommunicationDraft,
   createPlannedSessionReminders,
   listCommunicationsByCohort,
+  processScheduledCommunications,
   scheduleCommunicationPlaceholder,
   sendCommunicationPlaceholder
 } from "@/services/communicationService";
@@ -47,6 +48,10 @@ export async function PATCH(request: Request) {
       }
 
       return ok(await sendCommunicationPlaceholder(body.id));
+    }
+
+    if (body.action === "processScheduled") {
+      return ok(await processScheduledCommunications(body.limit));
     }
 
     return fail("Unsupported communication action", "BAD_REQUEST", 400);

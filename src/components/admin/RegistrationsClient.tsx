@@ -223,6 +223,9 @@ function RegistrationEditor({
           <Grid size={{ xs: 12, md: 6 }}>
             <TextField fullWidth label="QuickBooks invoice ref" value={values.quickBooksInvoiceRef ?? ""} onChange={(event) => setValue("quickBooksInvoiceRef", event.target.value)} />
           </Grid>
+          <Grid size={{ xs: 12, md: 6 }}>
+            <TextField fullWidth label="QuickBooks realm ID" value={values.quickBooksRealmId ?? ""} onChange={(event) => setValue("quickBooksRealmId", event.target.value)} />
+          </Grid>
           <Grid size={{ xs: 12 }}>
             <TextField fullWidth multiline minRows={3} label="Notes" value={values.notes ?? ""} onChange={(event) => setValue("notes", event.target.value)} />
           </Grid>
@@ -289,6 +292,39 @@ function RegistrationDetailDialog({
     }
   }
 
+  async function syncQuickBooks() {
+    if (!registration?.quickBooksInvoiceRef) {
+      setError("QuickBooks invoice reference is required");
+      return;
+    }
+
+    try {
+      await adminApi("/api/jobs/sync-quickbooks", {
+        method: "POST",
+        body: { invoiceId: registration.quickBooksInvoiceRef, realmId: registration.quickBooksRealmId }
+      });
+      await onChanged();
+    } catch (syncError) {
+      setError((syncError as Error).message);
+    }
+  }
+
+  async function voidQuickBooksInvoice() {
+    if (!registration) {
+      return;
+    }
+
+    try {
+      await adminApi("/api/integrations/quickbooks/void-invoice", {
+        method: "POST",
+        body: { registrationId: registration.id }
+      });
+      await onChanged();
+    } catch (voidError) {
+      setError((voidError as Error).message);
+    }
+  }
+
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="lg">
       <DialogTitle>Registration Detail</DialogTitle>
@@ -309,6 +345,9 @@ function RegistrationDetailDialog({
                 ["Invoice", registration.invoiceNumber ?? "-"],
                 ["PO", registration.purchaseOrderNumber ?? "-"],
                 ["Docs", registration.supportingDocumentStatus],
+                ["QB Invoice", registration.quickBooksInvoiceRef ?? "-"],
+                ["QB Status", registration.quickBooksInvoiceStatus ?? "UNKNOWN"],
+                ["QB Sync", registration.quickBooksSyncStatus ?? "NOT SYNCED"],
                 ["Source", registration.source ?? "-"]
               ].map(([label, value]) => (
                 <Grid size={{ xs: 12, sm: 6, lg: 3 }} key={label}>
@@ -317,6 +356,11 @@ function RegistrationDetailDialog({
                 </Grid>
               ))}
             </Grid>
+            <Stack direction="row" spacing={1}>
+              <Button variant="outlined" onClick={syncQuickBooks}>Sync QuickBooks</Button>
+              <Button variant="outlined" color="warning" onClick={voidQuickBooksInvoice}>Void QB Invoice</Button>
+              {registration.quickBooksSyncError && <Typography color="error.main">{registration.quickBooksSyncError}</Typography>}
+            </Stack>
             <Divider />
             <Stack spacing={1}>
               <Typography variant="h3">Team Participants</Typography>
@@ -459,6 +503,7 @@ export function RegistrationsClient() {
     { field: "purchaseOrderNumber", headerName: "PO", width: 120 },
     { field: "totalAmount", headerName: "Amount", width: 120, valueFormatter: (value) => money(value) },
     { field: "supportingDocumentStatus", headerName: "Docs", width: 130, renderCell: (params) => <StatusChip value={params.value} /> },
+    { field: "quickBooksSyncStatus", headerName: "QB Sync", width: 130, renderCell: (params) => <StatusChip value={params.value ?? "NOT_SYNCED"} /> },
     { field: "source", headerName: "Source", width: 120 },
     {
       field: "actions",

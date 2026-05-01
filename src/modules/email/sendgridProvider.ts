@@ -41,5 +41,9 @@ export async function sendWithSendGrid(input: SendEmailInput) {
     });
   }
 
-  return { provider: "sendgrid", accepted: recipients };
+  return {
+    provider: "sendgrid",
+    accepted: recipients,
+    providerMessageId: response.headers.get("x-message-id") ?? undefined
+  };
 }

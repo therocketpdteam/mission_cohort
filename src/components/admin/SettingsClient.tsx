@@ -3,7 +3,9 @@
 import AddIcon from "@mui/icons-material/Add";
 import EditOutlined from "@mui/icons-material/EditOutlined";
 import PowerSettingsNewOutlined from "@mui/icons-material/PowerSettingsNewOutlined";
-import { Box, Button, Grid, Stack, Typography } from "@mui/material";
+import ReplayOutlined from "@mui/icons-material/ReplayOutlined";
+import ScienceOutlined from "@mui/icons-material/ScienceOutlined";
+import { Box, Button, Chip, Grid, Stack, TextField, Typography } from "@mui/material";
 import { DataGrid, GridColDef } from "@mui/x-data-grid";
 import { useEffect, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
@@ -42,19 +44,27 @@ export function SettingsClient() {
   const [health, setHealth] = useState<AdminRow | null>(null);
   const [mappings, setMappings] = useState<AdminRow[]>([]);
   const [cohorts, setCohorts] = useState<AdminRow[]>([]);
+  const [integrationStatus, setIntegrationStatus] = useState<AdminRow | null>(null);
+  const [webhookEvents, setWebhookEvents] = useState<AdminRow[]>([]);
+  const [testPayload, setTestPayload] = useState("{\n  \"formID\": \"\",\n  \"submissionID\": \"test-submission\",\n  \"cohortSlug\": \"\",\n  \"organizationName\": \"Demo District\",\n  \"primaryContactName\": \"Demo Contact\",\n  \"primaryContactEmail\": \"demo@example.com\",\n  \"participantCsv\": \"Jane Doe, jane@example.com\"\n}");
+  const [testResult, setTestResult] = useState<AdminRow | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<AdminRow | null>(null);
   const { notifySuccess, notifyError, snackbar } = useNotifier();
 
   async function load() {
-    const [healthData, mappingRows, cohortRows] = await Promise.all([
+    const [healthData, mappingRows, cohortRows, integrationRows, eventRows] = await Promise.all([
       adminApi<AdminRow>("/api/health"),
       adminApi<AdminRow[]>("/api/jotform/mappings").catch(() => []),
-      adminApi<AdminRow[]>("/api/cohorts").catch(() => [])
+      adminApi<AdminRow[]>("/api/cohorts").catch(() => []),
+      adminApi<AdminRow>("/api/integrations/status").catch(() => null),
+      adminApi<AdminRow[]>("/api/webhooks/events").catch(() => [])
     ]);
     setHealth(healthData);
     setMappings(mappingRows);
     setCohorts(cohortRows);
+    setIntegrationStatus(integrationRows);
+    setWebhookEvents(eventRows);
   }
 
   useEffect(() => {
@@ -91,6 +101,29 @@ export function SettingsClient() {
     }
   }
 
+  async function testJotformPayload() {
+    try {
+      const result = await adminApi<AdminRow>("/api/jotform/test", {
+        method: "POST",
+        body: JSON.parse(testPayload)
+      });
+      setTestResult(result);
+      notifySuccess("Jotform payload normalized");
+    } catch (error) {
+      notifyError((error as Error).message);
+    }
+  }
+
+  async function replayWebhook(row: AdminRow) {
+    try {
+      await adminApi("/api/webhooks/replay", { method: "POST", body: { id: row.id } });
+      notifySuccess("Webhook replay queued");
+      await load();
+    } catch (error) {
+      notifyError((error as Error).message);
+    }
+  }
+
   const mappingColumns: GridColDef[] = [
     { field: "label", headerName: "Label", flex: 1, minWidth: 180 },
     { field: "formId", headerName: "Form ID", width: 160 },
@@ -115,6 +148,32 @@ export function SettingsClient() {
       )
     }
   ];
+  const eventColumns: GridColDef[] = [
+    { field: "source", headerName: "Source", width: 130 },
+    { field: "eventType", headerName: "Event", width: 190 },
+    { field: "status", headerName: "Status", width: 130, renderCell: (params) => <StatusChip value={params.value} /> },
+    { field: "errorMessage", headerName: "Error", flex: 1, minWidth: 260 },
+    { field: "createdAt", headerName: "Created", width: 170, valueFormatter: (value) => value ? new Date(value).toLocaleString() : "" },
+    {
+      field: "actions",
+      headerName: "Actions",
+      width: 130,
+      sortable: false,
+      renderCell: (params) => (
+        <Button variant="outlined" startIcon={<ReplayOutlined />} onClick={() => replayWebhook(params.row)}>
+          Replay
+        </Button>
+      )
+    }
+  ];
+  const providers = [
+    ["Google Calendar", env.googleCalendarConfigured, "/api/integrations/google/connect"],
+    ["QuickBooks", env.quickBooksConfigured, "/api/integrations/quickbooks/connect"],
+    ["SendGrid", env.sendgridConfigured, ""],
+    ["CRM", env.crmConfigured, ""],
+    ["Mux", env.muxConfigured, ""],
+    ["Jotform", env.webhookSecretConfigured, ""]
+  ];
 
   return (
     <PageStack>
@@ -137,6 +196,26 @@ export function SettingsClient() {
           </SectionCard>
         </Grid>
         <Grid size={{ xs: 12, md: 7 }}>
+          <SectionCard title="Integration Hub">
+            <Grid container spacing={1.5}>
+              {providers.map(([label, configured, href]) => (
+                <Grid size={{ xs: 12, sm: 6, lg: 4 }} key={String(label)}>
+                  <Stack spacing={1} sx={{ border: 1, borderColor: "divider", borderRadius: 1, p: 1.5, minHeight: 112 }}>
+                    <Stack direction="row" justifyContent="space-between" alignItems="center">
+                      <Typography fontWeight={800}>{label}</Typography>
+                      <StatusChip value={Boolean(configured)} />
+                    </Stack>
+                    <Typography variant="caption" color="text.secondary">
+                      {(integrationStatus?.connections ?? []).find((connection: AdminRow) => String(connection.provider).includes(String(label).toUpperCase().replace(/\s+/g, "_")))?.status ?? "Env/config status"}
+                    </Typography>
+                    {href && <Button variant="outlined" href={String(href)}>Connect</Button>}
+                  </Stack>
+                </Grid>
+              ))}
+            </Grid>
+          </SectionCard>
+        </Grid>
+        <Grid size={{ xs: 12 }}>
           <SectionCard title="Jotform Webhook Setup">
             <Typography color="text.secondary">
               Configure the three Jotform registration forms here. Use cohortSlug in the shared 5-session form URL so Mission Control can route submissions to the right cohort.
@@ -144,12 +223,39 @@ export function SettingsClient() {
             <Typography sx={{ mt: 2 }} variant="body2">
               Webhook endpoint: <Box component="code">/api/webhooks/registrations</Box>
             </Typography>
+            <Stack direction="row" spacing={1} sx={{ mt: 2 }} flexWrap="wrap">
+              <Chip label="JSON" />
+              <Chip label="form-data" />
+              <Chip label="rawRequest" />
+              <Chip label="cohortSlug" />
+              <Chip label="participant CSV parser" />
+              <Chip label="idempotent submissionID" />
+            </Stack>
           </SectionCard>
         </Grid>
         <Grid size={{ xs: 12 }}>
           <SectionCard title="Jotform Form Mappings" action={<Button startIcon={<AddIcon />} onClick={() => setDialogOpen(true)}>Add Mapping</Button>}>
             <TableShell>
               <DataGrid rows={mappings} columns={mappingColumns} pageSizeOptions={[10, 25]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} disableRowSelectionOnClick />
+            </TableShell>
+          </SectionCard>
+        </Grid>
+        <Grid size={{ xs: 12, lg: 5 }}>
+          <SectionCard title="Jotform Dry Run" action={<Button startIcon={<ScienceOutlined />} onClick={testJotformPayload}>Normalize</Button>}>
+            <Stack spacing={2}>
+              <TextField fullWidth multiline minRows={10} value={testPayload} onChange={(event) => setTestPayload(event.target.value)} />
+              {testResult && (
+                <Box component="pre" sx={{ p: 2, bgcolor: "background.default", borderRadius: 1, overflow: "auto", maxHeight: 320 }}>
+                  {JSON.stringify(testResult, null, 2)}
+                </Box>
+              )}
+            </Stack>
+          </SectionCard>
+        </Grid>
+        <Grid size={{ xs: 12, lg: 7 }}>
+          <SectionCard title="Webhook Events">
+            <TableShell>
+              <DataGrid rows={webhookEvents} columns={eventColumns} pageSizeOptions={[10, 25]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} disableRowSelectionOnClick />
             </TableShell>
           </SectionCard>
         </Grid>

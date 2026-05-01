@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { registrationCreateSchema, registrationUpdateSchema } from "@/validators/registration";
 import { logAuditEventAsync } from "./auditService";
 import { createDefaultRegistrationOperationsTasks } from "./operationsTaskService";
+import { queueRegistrationCrmSync } from "./crmSyncService";
+import { voidRegistrationQuickBooksInvoice } from "./quickBooksService";
 
 export async function createRegistration(input: z.input<typeof registrationCreateSchema>) {
   const data = registrationCreateSchema.parse(input);
@@ -23,12 +25,15 @@ export async function createRegistration(input: z.input<typeof registrationCreat
     paymentStatus: registration.paymentStatus,
     hasSupportingDocs: Boolean(registration.w9Url || registration.invoiceUrl || registration.confirmationDocsSentAt)
   });
+  void queueRegistrationCrmSync(registration.id, "registration.created");
   return registration;
 }
 
 export async function updateRegistration(id: string, input: z.input<typeof registrationUpdateSchema>) {
   const data = registrationUpdateSchema.parse(input);
-  return prisma.registration.update({ where: { id }, data });
+  const registration = await prisma.registration.update({ where: { id }, data });
+  void queueRegistrationCrmSync(registration.id, "registration.updated");
+  return registration;
 }
 
 export async function confirmRegistration(id: string) {
@@ -39,11 +44,19 @@ export async function confirmRegistration(id: string) {
     action: "CONFIRMED",
     description: "Registration confirmed"
   });
+  void queueRegistrationCrmSync(registration.id, "registration.confirmed");
   return registration;
 }
 
 export async function cancelRegistration(id: string) {
-  return updateRegistration(id, { status: RegistrationStatus.CANCELLED });
+  const registration = await updateRegistration(id, { status: RegistrationStatus.CANCELLED });
+
+  if (registration.quickBooksInvoiceRef) {
+    void voidRegistrationQuickBooksInvoice(registration.id).catch(() => undefined);
+  }
+
+  void queueRegistrationCrmSync(registration.id, "registration.cancelled");
+  return registration;
 }
 
 export async function listRegistrations(cohortId?: string) {

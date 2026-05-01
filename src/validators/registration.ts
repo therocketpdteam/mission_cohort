@@ -1,4 +1,4 @@
-import { ParticipantListStatus, PaymentMethod, PaymentStatus, RegistrationStatus, SupportingDocumentStatus } from "@prisma/client";
+import { ParticipantListStatus, PaymentMethod, PaymentStatus, QuickBooksInvoiceStatus, RegistrationStatus, SupportingDocumentStatus, SyncStatus } from "@prisma/client";
 import { z } from "zod";
 import { moneyInput, nonNegativeIntInput, optionalDateInput, optionalEmail, optionalUrl } from "@/lib/validators";
 
@@ -24,6 +24,11 @@ export const registrationCreateSchema = z.object({
   confirmationDocsSentAt: optionalDateInput,
   quickBooksCustomerRef: z.string().optional(),
   quickBooksInvoiceRef: z.string().optional(),
+  quickBooksRealmId: z.string().optional(),
+  quickBooksInvoiceStatus: z.nativeEnum(QuickBooksInvoiceStatus).optional(),
+  quickBooksSyncStatus: z.nativeEnum(SyncStatus).optional(),
+  quickBooksSyncError: z.string().optional(),
+  quickBooksLastSyncedAt: optionalDateInput,
   totalAmount: moneyInput.default(0),
   participantCount: nonNegativeIntInput.default(0),
   status: z.nativeEnum(RegistrationStatus).default(RegistrationStatus.NEW),

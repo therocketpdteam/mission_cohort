@@ -23,6 +23,7 @@ export const communicationDraftCreateSchema = z.object({
   scheduledFor: dateInput.optional(),
   status: z.nativeEnum(CommunicationStatus).default(CommunicationStatus.DRAFT),
   recipientScope: z.nativeEnum(RecipientScope),
+  recipientEmails: z.array(z.string().email()).optional(),
   createdById: z.string().min(1)
 });
 

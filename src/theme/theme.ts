@@ -5,16 +5,25 @@ export const theme = createTheme({
   palette: {
     mode: "light",
     primary: {
-      main: "#0B5C75",
-      light: "#2E829B",
-      dark: "#073F51"
+      main: "#075B73",
+      light: "#2E8AA5",
+      dark: "#073847"
     },
     secondary: {
-      main: "#F2A900",
-      dark: "#B87F00"
+      main: "#F4B23D",
+      dark: "#B87910"
+    },
+    success: {
+      main: "#25855A"
+    },
+    warning: {
+      main: "#C97A16"
+    },
+    error: {
+      main: "#B42318"
     },
     background: {
-      default: "#F4F7FA",
+      default: "#F3F6F8",
       paper: "#FFFFFF"
     },
     text: {
@@ -52,8 +61,8 @@ export const theme = createTheme({
       },
       styleOverrides: {
         root: {
-          borderColor: "#DDE4EC",
-          boxShadow: "none"
+          borderColor: "#DDE7ED",
+          boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)"
         }
       }
     },
@@ -82,11 +91,11 @@ export const theme = createTheme({
       },
       styleOverrides: {
         root: {
-          borderColor: "#DDE4EC",
+          borderColor: "#DDE7ED",
           backgroundColor: "#FFFFFF"
         },
         columnHeaders: {
-          backgroundColor: "#F8FAFC"
+          backgroundColor: "#F7FAFC"
         },
         cell: {
           outline: "none"

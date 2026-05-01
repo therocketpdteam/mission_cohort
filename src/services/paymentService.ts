@@ -3,10 +3,13 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { paymentCreateSchema, paymentStatusUpdateSchema, paymentUpdateSchema } from "@/validators/payment";
 import { logAuditEventAsync } from "./auditService";
+import { queueRegistrationCrmSync } from "./crmSyncService";
 
 export async function createPaymentRecord(input: z.input<typeof paymentCreateSchema>) {
   const data = paymentCreateSchema.parse(input);
-  return prisma.paymentRecord.create({ data });
+  const payment = await prisma.paymentRecord.create({ data });
+  void queueRegistrationCrmSync(payment.registrationId, "payment.created");
+  return payment;
 }
 
 export async function updatePaymentStatus(id: string, input: z.input<typeof paymentStatusUpdateSchema>) {
@@ -19,6 +22,7 @@ export async function updatePaymentStatus(id: string, input: z.input<typeof paym
     description: "Payment status changed",
     metadata: { status: payment.status, registrationId: payment.registrationId }
   });
+  void queueRegistrationCrmSync(payment.registrationId, "payment.status_changed");
   return payment;
 }
 
