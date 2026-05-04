@@ -9,7 +9,7 @@
     "postinstall": "prisma generate",
     "start": "next start",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "next typegen && tsc --noEmit",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
@@ -18,7 +18,8 @@
     "db:seed": "tsx prisma/seed.ts",
     "smoke": "tsx scripts/smoke.ts",
     "qa:smoke": "tsx scripts/final-smoke.ts",
-    "qa:prepush": "bash scripts/pre-push-qa.sh"
+    "qa:prepush": "bash scripts/pre-push-qa.sh",
+    "readiness": "node scripts/readiness-check.mjs"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

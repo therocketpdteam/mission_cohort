@@ -79,10 +79,54 @@ MUX_TOKEN_SECRET
 MUX_WEBHOOK_SECRET
 INTEGRATION_ENCRYPTION_KEY
 WEBHOOK_SECRET
+CRON_SECRET
 APP_BASE_URL
 ```
 
 Missing optional integration variables do not crash the app. Integration calls fail gracefully until the matching integration is configured.
+
+## Production Readiness
+
+The app is code-ready only after the deployment, database schema, env vars, and first live workflow are verified together.
+
+Minimum Vercel env values:
+
+```bash
+DATABASE_URL
+NEXT_PUBLIC_SUPABASE_URL
+NEXT_PUBLIC_SUPABASE_ANON_KEY
+SUPABASE_SERVICE_ROLE_KEY
+APP_BASE_URL=https://mission-cohort-six.vercel.app
+WEBHOOK_SECRET
+CRON_SECRET
+```
+
+Recommended go-live order:
+
+1. Confirm Vercel builds the latest `main` commit.
+2. Apply the Prisma schema to Supabase:
+
+```bash
+pnpm prisma:generate
+pnpm prisma:push
+```
+
+3. Open `/api/health` and confirm `database: true`.
+4. Create Jotform mappings in `/settings`.
+5. Send one real Jotform test submission and verify registration, optional participants, payment record, operations tasks, and webhook event logging.
+6. Configure SendGrid, then Google Calendar, then QuickBooks, then CRM, then Mux.
+
+Readiness helper:
+
+```bash
+APP_BASE_URL=https://mission-cohort-six.vercel.app pnpm readiness
+```
+
+Pre-push QA now requires Prisma client generation, TypeScript, and production build to pass locally:
+
+```bash
+pnpm qa:prepush
+```
 
 ## Integrations
 
@@ -151,6 +195,8 @@ POST /api/webhooks/registrations
 ```
 
 If `WEBHOOK_SECRET` is configured, pass it in `x-webhook-secret`, `Authorization: Bearer ...`, or the `?secret=` query parameter. The query parameter option is available for Jotform webhook setup.
+
+Scheduled job endpoints accept POST requests. If `CRON_SECRET` is configured, pass it in `x-cron-secret`, `Authorization: Bearer ...`, or `?secret=`.
 
 Payloads may use the normalized Mission Control shape below or a Jotform-style submission shape. Jotform payloads are normalized server-side before records are created. Every inbound payload is stored in `WebhookEvent`; failed processing attempts keep an actionable error message.
 
@@ -329,6 +375,7 @@ Run sanity checks:
 pnpm smoke
 pnpm qa:smoke
 pnpm qa:prepush
+pnpm readiness
 ```
 
 Run static checks:
@@ -400,7 +447,7 @@ Errors use:
 ## Intentional Remaining Stubs
 
 - Supabase Auth session integration
-- Production background scheduler configuration in Vercel cron
+- Production background scheduler configuration in Vercel cron or another scheduler
 - Advanced QuickBooks reconciliation UI
 - Direct Mux upload UI
 - Report PDF generation
@@ -426,9 +473,10 @@ Errors use:
 ## Security Notes
 
 - `.env` files are ignored by git.
-- `SUPABASE_SERVICE_ROLE_KEY`, `SENDGRID_API_KEY`, `QUICKBOOKS_CLIENT_SECRET`, `CRM_WEBHOOK_SECRET`, `MUX_TOKEN_SECRET`, `INTEGRATION_ENCRYPTION_KEY`, and webhook verifier secrets are server-only values and must not be exposed in browser code.
+- `SUPABASE_SERVICE_ROLE_KEY`, `SENDGRID_API_KEY`, `QUICKBOOKS_CLIENT_SECRET`, `CRM_WEBHOOK_SECRET`, `MUX_TOKEN_SECRET`, `INTEGRATION_ENCRYPTION_KEY`, `WEBHOOK_SECRET`, `CRON_SECRET`, and webhook verifier secrets are server-only values and must not be exposed in browser code.
 - Public browser code only references `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
 - Webhook secret validation is enforced when `WEBHOOK_SECRET` is configured.
+- Scheduled job secret validation is enforced when `CRON_SECRET` is configured.
 - Supabase RLS policies should be reviewed before production use. Prisma server routes currently act as trusted server-side admin operations.
 - Auth helpers exist in `src/lib/auth.ts`; full route enforcement is reserved for the Supabase Auth pass.
 
@@ -439,7 +487,7 @@ Errors use:
 - SendGrid sends are implemented; Vercel cron or another scheduler should call job endpoints for production scheduled delivery.
 - Resource upload/storage management is link/Mux metadata based for now.
 - Advanced reporting, CSV export, bulk edits, and webhook replay are roadmap items.
-- QuickBooks is reference-only for now; no accounting API sync is implemented.
+- QuickBooks can fetch linked invoices, process paid/voided webhook events, and void linked invoices. It does not create invoices, perform full reconciliation, or replace QuickBooks reporting.
 
 ## Roadmap
 

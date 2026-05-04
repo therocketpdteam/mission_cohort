@@ -29,6 +29,7 @@ const envSchema = z.object({
   MUX_WEBHOOK_SECRET: optionalString,
   INTEGRATION_ENCRYPTION_KEY: optionalString,
   WEBHOOK_SECRET: optionalString,
+  CRON_SECRET: optionalString,
   APP_BASE_URL: optionalString
 });
 
@@ -59,6 +60,7 @@ export function getEnvPresence() {
     crmConfigured: Boolean(env.CRM_WEBHOOK_URL && env.CRM_WEBHOOK_SECRET),
     muxConfigured: Boolean(env.MUX_TOKEN_ID && env.MUX_TOKEN_SECRET),
     webhookSecretConfigured: Boolean(env.WEBHOOK_SECRET),
+    cronSecretConfigured: Boolean(env.CRON_SECRET),
     appBaseUrlConfigured: Boolean(env.APP_BASE_URL)
   };
 }
