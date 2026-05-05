@@ -109,7 +109,14 @@ export async function createDefaultRegistrationOperationsTasks(input: {
     });
   }
 
-  return Promise.all(tasks.map((task) => createOperationsTask(task)));
+  const results = await Promise.allSettled(tasks.map((task) => createOperationsTask(task)));
+  const failures = results.filter((result) => result.status === "rejected");
+
+  for (const failure of failures) {
+    console.error("Default registration operations task failed", failure.reason);
+  }
+
+  return results.flatMap((result) => result.status === "fulfilled" ? [result.value] : []);
 }
 
 export async function createDefaultSessionOperationsTasks(input: {
@@ -144,5 +151,12 @@ export async function createDefaultSessionOperationsTasks(input: {
     }
   ];
 
-  return Promise.all(tasks.map((task) => createOperationsTask(task)));
+  const results = await Promise.allSettled(tasks.map((task) => createOperationsTask(task)));
+  const failures = results.filter((result) => result.status === "rejected");
+
+  for (const failure of failures) {
+    console.error("Default session operations task failed", failure.reason);
+  }
+
+  return results.flatMap((result) => result.status === "fulfilled" ? [result.value] : []);
 }
