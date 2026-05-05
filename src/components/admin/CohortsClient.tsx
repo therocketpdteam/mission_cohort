@@ -90,11 +90,13 @@ function CreateCohortWizard({
   open,
   presenters,
   onClose,
+  onPresenterCreated,
   onCreated
 }: {
   open: boolean;
   presenters: AdminRow[];
   onClose: () => void;
+  onPresenterCreated: (presenter: AdminRow) => void;
   onCreated: () => Promise<void>;
 }) {
   const [activeStep, setActiveStep] = useState(0);
@@ -104,10 +106,14 @@ function CreateCohortWizard({
   const [status, setStatus] = useState("DRAFT");
   const [presenter, setPresenter] = useState<AdminRow | null>(null);
   const [presenterSearch, setPresenterSearch] = useState("");
+  const [showCreatePresenter, setShowCreatePresenter] = useState(false);
+  const [newPresenterFirstName, setNewPresenterFirstName] = useState("");
+  const [newPresenterLastName, setNewPresenterLastName] = useState("");
   const [newPresenterEmail, setNewPresenterEmail] = useState("");
   const [sessionCount, setSessionCount] = useState(1);
   const [sessions, setSessions] = useState<AdminRow[]>([defaultSession(0)]);
   const [saving, setSaving] = useState(false);
+  const [creatingPresenter, setCreatingPresenter] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -125,6 +131,9 @@ function CreateCohortWizard({
       setStatus("DRAFT");
       setPresenter(null);
       setPresenterSearch("");
+      setShowCreatePresenter(false);
+      setNewPresenterFirstName("");
+      setNewPresenterLastName("");
       setNewPresenterEmail("");
       setSessionCount(1);
       setSessions([defaultSession(0)]);
@@ -141,20 +150,41 @@ function CreateCohortWizard({
   }
 
   async function createPresenterInline() {
-    const [firstName = "", ...lastNameParts] = presenterSearch.trim().split(/\s+/);
-    const lastName = lastNameParts.join(" ") || "Presenter";
+    const firstName = newPresenterFirstName.trim();
+    const lastName = newPresenterLastName.trim();
+    const email = newPresenterEmail.trim();
 
-    if (!firstName || !newPresenterEmail) {
-      setError("Presenter name and email are required");
+    if (!firstName || !lastName || !email) {
+      setError("Presenter first name, last name, and email are required");
       return;
     }
 
-    const created = await adminApi<AdminRow>("/api/presenters", {
-      method: "POST",
-      body: { firstName, lastName, email: newPresenterEmail, active: true }
-    });
-    setPresenter(created);
-    setPresenterSearch(`${created.firstName} ${created.lastName}`);
+    setCreatingPresenter(true);
+    setError(null);
+    try {
+      const created = await adminApi<AdminRow>("/api/presenters", {
+        method: "POST",
+        body: { firstName, lastName, email, active: true }
+      });
+      onPresenterCreated(created);
+      setPresenter(created);
+      setPresenterSearch(`${created.firstName} ${created.lastName}`);
+      setShowCreatePresenter(false);
+      setNewPresenterFirstName("");
+      setNewPresenterLastName("");
+      setNewPresenterEmail("");
+    } catch (createError) {
+      setError((createError as Error).message);
+    } finally {
+      setCreatingPresenter(false);
+    }
+  }
+
+  function openCreatePresenter() {
+    const [firstName = "", ...lastNameParts] = presenterSearch.trim().split(/\s+/);
+    setNewPresenterFirstName((current) => current || firstName);
+    setNewPresenterLastName((current) => current || lastNameParts.join(" "));
+    setShowCreatePresenter(true);
   }
 
   function validateStep(step: number) {
@@ -265,18 +295,52 @@ function CreateCohortWizard({
                 options={presenters}
                 value={presenter}
                 inputValue={presenterSearch}
-                onInputChange={(_event, value) => setPresenterSearch(value)}
-                onChange={(_event, value) => setPresenter(value)}
+                onInputChange={(_event, value, reason) => {
+                  if (reason === "input" || reason === "clear") {
+                    setPresenterSearch(value);
+                  }
+                }}
+                onChange={(_event, value) => {
+                  setPresenter(value);
+                  if (value) {
+                    setShowCreatePresenter(false);
+                    setPresenterSearch(`${value.firstName ?? ""} ${value.lastName ?? ""}`.trim());
+                  }
+                }}
                 getOptionLabel={(option) => `${option.firstName ?? ""} ${option.lastName ?? ""}`.trim()}
                 renderInput={(params) => <TextField {...params} label="Presenter" required />}
               />
             </Grid>
-            {!presenter && presenterSearch.trim() && (
+            {!presenter && (
               <Grid size={{ xs: 12 }}>
-                <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
-                  <TextField label="New presenter email" value={newPresenterEmail} onChange={(event) => setNewPresenterEmail(event.target.value)} sx={{ minWidth: 280 }} />
-                  <Button startIcon={<AddIcon />} onClick={createPresenterInline}>Add Presenter</Button>
-                </Stack>
+                {!showCreatePresenter ? (
+                  <Button startIcon={<AddIcon />} onClick={openCreatePresenter} variant="outlined">
+                    Create new presenter
+                  </Button>
+                ) : (
+                  <Stack spacing={2}>
+                    <Typography variant="subtitle2">Create presenter for future cohorts</Typography>
+                    <Grid container spacing={2}>
+                      <Grid size={{ xs: 12, md: 4 }}>
+                        <TextField fullWidth label="First name" value={newPresenterFirstName} onChange={(event) => setNewPresenterFirstName(event.target.value)} required />
+                      </Grid>
+                      <Grid size={{ xs: 12, md: 4 }}>
+                        <TextField fullWidth label="Last name" value={newPresenterLastName} onChange={(event) => setNewPresenterLastName(event.target.value)} required />
+                      </Grid>
+                      <Grid size={{ xs: 12, md: 4 }}>
+                        <TextField fullWidth type="email" label="Email" value={newPresenterEmail} onChange={(event) => setNewPresenterEmail(event.target.value)} required />
+                      </Grid>
+                    </Grid>
+                    <Stack direction="row" spacing={1}>
+                      <Button startIcon={<AddIcon />} onClick={createPresenterInline} disabled={creatingPresenter}>
+                        {creatingPresenter ? "Saving presenter" : "Save Presenter"}
+                      </Button>
+                      <Button variant="outlined" onClick={() => setShowCreatePresenter(false)} disabled={creatingPresenter}>
+                        Cancel
+                      </Button>
+                    </Stack>
+                  </Stack>
+                )}
               </Grid>
             )}
           </Grid>
@@ -504,6 +568,10 @@ export function CohortsClient() {
         open={wizardOpen}
         presenters={presenters}
         onClose={() => setWizardOpen(false)}
+        onPresenterCreated={(created) => {
+          setPresenters((current) => current.some((presenter) => presenter.id === created.id) ? current : [...current, created]);
+          notifySuccess("Presenter saved");
+        }}
         onCreated={async () => {
           notifySuccess("Cohort and sessions created");
           await load();

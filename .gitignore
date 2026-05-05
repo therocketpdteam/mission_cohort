@@ -6,3 +6,4 @@ coverage
 dist
 *.tsbuildinfo
 prisma/dev.db
+.vercel
