@@ -38,8 +38,35 @@ function readString(value: unknown): string {
 }
 
 function readNumber(value: unknown): number {
-  const number = Number(readString(value) || value);
+  const string = readString(value);
+  const normalized = string.replace(/[^0-9.-]+/g, "");
+  const number = Number(normalized || value);
   return Number.isFinite(number) ? number : 0;
+}
+
+function readParticipantCount(value: unknown): number {
+  const string = readString(value);
+  const specialQuantity = string.match(/special\s+quantity:\s*(\d+)/i);
+
+  if (specialQuantity?.[1]) {
+    return Number(specialQuantity[1]);
+  }
+
+  return readNumber(value);
+}
+
+function readPaymentMethod(value: unknown): PaymentMethod {
+  const normalized = normalizeKey(readString(value));
+
+  if (["creditcard", "card", "stripe"].includes(normalized)) {
+    return PaymentMethod.CREDIT_CARD;
+  }
+
+  if (["invoicepo", "invoicepurchaseorder", "purchaseorder", "po"].includes(normalized)) {
+    return PaymentMethod.INVOICE;
+  }
+
+  return readEnumValue(PaymentMethod, value, PaymentMethod.UNKNOWN);
 }
 
 function readEnumValue<T extends Record<string, string>>(enumValues: T, value: unknown, fallback: T[keyof T]): T[keyof T] {
@@ -143,11 +170,15 @@ export function parseParticipantCsvText(text: unknown): { participants: ParsedPa
   const errors: string[] = [];
 
   for (const [index, line] of lines.entries()) {
-    const [namePart = "", emailPart = ""] = line.split(",").map((part) => part.trim());
+    const emailMatch = line.match(/[^\s<>,;]+@[^\s<>,;]+\.[^\s<>,;]+/);
+    const hasComma = line.includes(",");
+    const [commaNamePart = "", commaEmailPart = ""] = line.split(",").map((part) => part.trim());
+    const namePart = hasComma ? commaNamePart : line.replace(emailMatch?.[0] ?? "", "").trim();
+    const emailPart = hasComma ? commaEmailPart : emailMatch?.[0] ?? "";
     const email = emailPart.toLowerCase();
 
     if (!namePart || !emailPattern.test(email)) {
-      errors.push(`Line ${index + 1} must be "Full Name, email@example.com"`);
+      errors.push(`Line ${index + 1} must include "Full Name, email@example.com" or "Full Name email@example.com"`);
       continue;
     }
 
@@ -229,13 +260,14 @@ export function normalizeJotformRegistrationPayload(payload: UnknownRecord, mapp
     "participantCsv",
     "participantsCsv",
     "participantText",
-    "participantNamesEmails",
-    "participantNamesAndEmails",
-    "teamParticipants",
-    "TeamParticipants",
-    "namesAndEmails",
-    "NamesEmails"
-  ]) ?? Object.values(flat).find((value) => readString(value).includes(",") && /[^\s@]+@[^\s@]+\.[^\s@]+/.test(readString(value)));
+      "participantNamesEmails",
+      "participantNamesAndEmails",
+      "teamParticipants",
+      "TeamParticipants",
+      "namesAndEmails",
+      "NamesEmails",
+      "Please enter the names and email addresses of all participants, one per line, in the following format: Full Name, Email"
+    ]) ?? Object.values(flat).find((value) => readString(value).includes(",") && /[^\s@]+@[^\s@]+\.[^\s@]+/.test(readString(value)));
   const parsedParticipantText = parseParticipantCsvText(participantText);
   const participants = [
     ...normalizeParticipants(rawParticipants),
@@ -265,11 +297,11 @@ export function normalizeJotformRegistrationPayload(payload: UnknownRecord, mapp
     },
     organization: {
       id: readString(firstValue(organization, ["organizationId", "orgId"])),
-      name: readString(firstValue(organization, ["organizationName", "districtOrganizationName", "districtOrOrganizationName", "organization", "districtName", "DistrictName", "name"])),
+      name: readString(firstValue(organization, ["Name of Organization", "organizationName", "districtOrganizationName", "districtOrOrganizationName", "organization", "districtName", "DistrictName", "name"])),
       type: readEnumValue(OrganizationType, firstValue(organization, ["organizationType", "type"]), OrganizationType.DISTRICT),
       city: readString(firstValue(organization, ["city", "City"])),
       state: readString(firstValue(organization, ["state", "State"])),
-      phone: readString(firstValue(organization, ["phone", "Phone"])),
+      phone: readString(firstValue(organization, ["phone", "Phone", "Phone Number"])),
       notes: readString(firstValue(organization, ["organizationNotes", "notes"]))
     },
     registration: {
@@ -278,30 +310,44 @@ export function normalizeJotformRegistrationPayload(payload: UnknownRecord, mapp
       formId: readString(firstValue(registration, ["formId", "form_id"])),
       primaryContactName: readString(firstValue(registration, ["primaryContactName", "contactName", "registrantName", "name"])),
       primaryContactEmail: readString(firstValue(registration, ["primaryContactEmail", "contactEmail", "registrantEmail", "email"])),
-      primaryContactPhone: readString(firstValue(registration, ["primaryContactPhone", "contactPhone", "registrantPhone", "phone"])),
+      primaryContactPhone: readString(firstValue(registration, ["primaryContactPhone", "contactPhone", "registrantPhone", "phone", "Phone Number"])),
       primaryContactTitle: readString(firstValue(registration, ["primaryContactTitle", "contactTitle", "title"])),
       billingContactName: readString(firstValue(registration, ["billingContactName", "billingName"])),
       billingContactEmail: readString(firstValue(registration, ["billingContactEmail", "billingEmail"])),
       billingAddress: readString(firstValue(registration, ["billingAddress", "address"])),
-      paymentMethod: readEnumValue(PaymentMethod, firstValue(payment, ["paymentMethod", "method"]), PaymentMethod.UNKNOWN),
-      paymentStatus: readEnumValue(PaymentStatus, firstValue(payment, ["paymentStatus", "status"]), PaymentStatus.PENDING),
+      paymentMethod: readPaymentMethod(firstValue(payment, ["paymentMethod", "method", "Preferred method of payment?"])),
+      paymentStatus: readEnumValue(
+        PaymentStatus,
+        firstValue(payment, ["paymentStatus", "status"]),
+        readPaymentMethod(firstValue(payment, ["paymentMethod", "method", "Preferred method of payment?"])) === PaymentMethod.CREDIT_CARD ? PaymentStatus.PAID : PaymentStatus.PENDING
+      ),
       invoiceNumber: readString(firstValue(payment, ["invoiceNumber", "invoice"])),
       purchaseOrderNumber: readString(firstValue(payment, ["purchaseOrderNumber", "poNumber", "purchaseOrder"])),
       quickBooksCustomerRef: readString(firstValue(payment, ["quickBooksCustomerRef", "quickbooksCustomerId"])),
       quickBooksInvoiceRef: readString(firstValue(payment, ["quickBooksInvoiceRef", "quickbooksInvoiceId"])),
-      totalAmount: readNumber(firstValue(payment, ["totalAmount", "amount", "total"])),
-      participantCount: readNumber(firstValue(registration, ["participantCount", "numberOfParticipants", "participantsCount"])),
+      totalAmount: readNumber(firstValue(payment, ["totalAmount", "amount", "total", "CC - Total", "Total Cost"])),
+      participantCount: readParticipantCount(firstValue(registration, [
+        "participantCount",
+        "numberOfParticipants",
+        "participantsCount",
+        "How many participants will be joining?",
+        "Please select how many participants will be joining?"
+      ])),
       status: readEnumValue(RegistrationStatus, firstValue(registration, ["registrationStatus"]), RegistrationStatus.NEW),
-      notes: readString(firstValue(registration, ["notes", "additionalNotes"])),
+      notes: readString(firstValue(registration, ["notes", "additionalNotes", "How did you hear about us?"])),
       w9Url: readString(firstValue(supportingDocuments, ["w9Url", "w9", "w9Link"])),
       invoiceUrl: readString(firstValue(supportingDocuments, ["invoiceUrl", "invoiceLink"])),
       confirmationDocsSentAt: readString(firstValue(supportingDocuments, ["confirmationDocsSentAt"]))
     },
     participants,
     payment: {
-      amount: readNumber(firstValue(payment, ["paymentAmount", "amount", "totalAmount", "total"])),
-      method: readEnumValue(PaymentMethod, firstValue(payment, ["paymentMethod", "method"]), PaymentMethod.UNKNOWN),
-      status: readEnumValue(PaymentStatus, firstValue(payment, ["paymentStatus", "status"]), PaymentStatus.PENDING),
+      amount: readNumber(firstValue(payment, ["paymentAmount", "amount", "totalAmount", "total", "CC - Total", "Total Cost"])),
+      method: readPaymentMethod(firstValue(payment, ["paymentMethod", "method", "Preferred method of payment?"])),
+      status: readEnumValue(
+        PaymentStatus,
+        firstValue(payment, ["paymentStatus", "status"]),
+        readPaymentMethod(firstValue(payment, ["paymentMethod", "method", "Preferred method of payment?"])) === PaymentMethod.CREDIT_CARD ? PaymentStatus.PAID : PaymentStatus.PENDING
+      ),
       invoiceNumber: readString(firstValue(payment, ["invoiceNumber", "invoice"])),
       quickBooksPaymentRef: readString(firstValue(payment, ["quickBooksPaymentRef", "quickbooksPaymentId"])),
       notes: readString(firstValue(payment, ["paymentNotes"]))
