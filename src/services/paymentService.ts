@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { paymentCreateSchema, paymentStatusUpdateSchema, paymentUpdateSchema } from "@/validators/payment";
 import { logAuditEventAsync } from "./auditService";
 import { queueRegistrationCrmSync } from "./crmSyncService";
+import { getRecipientCommunicationSummary } from "./communicationService";
 
 export async function createPaymentRecord(input: z.input<typeof paymentCreateSchema>) {
   const data = paymentCreateSchema.parse(input);
@@ -32,16 +33,28 @@ export async function updatePaymentRecord(id: string, input: z.input<typeof paym
 }
 
 export async function listPayments() {
-  return prisma.paymentRecord.findMany({
+  const payments = await prisma.paymentRecord.findMany({
     orderBy: { createdAt: "desc" },
     include: { registration: true, cohort: true, organization: true }
   });
+  const summaries = await getRecipientCommunicationSummary(payments.map((payment) => payment.registration.primaryContactEmail));
+
+  return payments.map((payment) => ({
+    ...payment,
+    emailSummary: summaries[payment.registration.primaryContactEmail.toLowerCase()]
+  }));
 }
 
 export async function getPendingPayments() {
-  return prisma.paymentRecord.findMany({
+  const payments = await prisma.paymentRecord.findMany({
     where: { status: { in: [PaymentStatus.PENDING, PaymentStatus.INVOICED, PaymentStatus.PARTIALLY_PAID] } },
     orderBy: { createdAt: "asc" },
     include: { registration: true, cohort: true, organization: true }
   });
+  const summaries = await getRecipientCommunicationSummary(payments.map((payment) => payment.registration.primaryContactEmail));
+
+  return payments.map((payment) => ({
+    ...payment,
+    emailSummary: summaries[payment.registration.primaryContactEmail.toLowerCase()]
+  }));
 }

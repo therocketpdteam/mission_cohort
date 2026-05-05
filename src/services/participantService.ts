@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { participantCreateSchema, participantUpdateSchema } from "@/validators/participant";
 import { logAuditEventAsync } from "./auditService";
 import { queueParticipantCrmSync } from "./crmSyncService";
+import { getRecipientCommunicationSummary } from "./communicationService";
 
 async function syncRegistrationParticipantListStatus(registrationId: string) {
   const registration = await prisma.registration.findUnique({
@@ -60,16 +61,28 @@ export async function removeParticipant(id: string) {
 }
 
 export async function listParticipantsByCohort(cohortId: string) {
-  return prisma.participant.findMany({
+  const participants = await prisma.participant.findMany({
     where: { cohortId },
     orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
     include: { organization: true, registration: { include: { paymentRecords: true } } }
   });
+  const summaries = await getRecipientCommunicationSummary(participants.map((participant) => participant.email));
+
+  return participants.map((participant) => ({
+    ...participant,
+    emailSummary: summaries[participant.email.toLowerCase()]
+  }));
 }
 
 export async function listParticipants() {
-  return prisma.participant.findMany({
+  const participants = await prisma.participant.findMany({
     orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
     include: { cohort: true, organization: true, registration: { include: { paymentRecords: true } } }
   });
+  const summaries = await getRecipientCommunicationSummary(participants.map((participant) => participant.email));
+
+  return participants.map((participant) => ({
+    ...participant,
+    emailSummary: summaries[participant.email.toLowerCase()]
+  }));
 }

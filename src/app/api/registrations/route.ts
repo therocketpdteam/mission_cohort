@@ -1,5 +1,6 @@
 import { fail, handleApiError, ok } from "@/lib/api";
 import {
+  bulkUpdateRegistrations,
   cancelRegistration,
   confirmRegistration,
   createRegistration,
@@ -37,6 +38,10 @@ export async function PATCH(request: Request) {
     const body = await request.json();
 
     if (!body.id) {
+      if (body.action === "bulk" && Array.isArray(body.ids)) {
+        return ok(await bulkUpdateRegistrations({ ...body, action: body.bulkAction }));
+      }
+
       return fail("id is required", "BAD_REQUEST", 400);
     }
 

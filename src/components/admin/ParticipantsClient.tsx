@@ -3,6 +3,7 @@
 import DeleteOutline from "@mui/icons-material/DeleteOutline";
 import DoneAllOutlined from "@mui/icons-material/DoneAllOutlined";
 import EditOutlined from "@mui/icons-material/EditOutlined";
+import SendOutlined from "@mui/icons-material/SendOutlined";
 import {
   Autocomplete,
   Box,
@@ -141,8 +142,49 @@ function ParticipantEditor({
   );
 }
 
-function ParticipantDetailDialog({ participant, open, onClose }: { participant: AdminRow | null; open: boolean; onClose: () => void }) {
+function ParticipantDetailDialog({
+  participant,
+  open,
+  templates,
+  onClose,
+  onSent,
+  onError
+}: {
+  participant: AdminRow | null;
+  open: boolean;
+  templates: AdminRow[];
+  onClose: () => void;
+  onSent: () => Promise<void>;
+  onError: (message: string) => void;
+}) {
   const latestPayment = participant?.registration?.paymentRecords?.[0];
+  const [templateId, setTemplateId] = useState("");
+  const [sending, setSending] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setTemplateId("");
+    }
+  }, [open]);
+
+  async function sendTemplate() {
+    if (!participant || !templateId) {
+      return;
+    }
+
+    setSending(true);
+    try {
+      await adminApi("/api/communications", {
+        method: "PATCH",
+        body: { action: "sendTemplateToParticipant", participantId: participant.id, templateId }
+      });
+      await onSent();
+    } catch (error) {
+      onError((error as Error).message);
+    } finally {
+      setSending(false);
+    }
+  }
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
@@ -161,6 +203,8 @@ function ParticipantDetailDialog({ participant, open, onClose }: { participant: 
               ["Organization", participant.organization?.name ?? "-"],
               ["Registration POC", participant.registration?.primaryContactName ?? "-"],
               ["POC Email", participant.registration?.primaryContactEmail ?? "-"],
+              ["Last Email Status", participant.emailSummary?.lastEmailEvent ?? "-"],
+              ["Last Email Sent", participant.emailSummary?.lastEmailEventAt ? new Date(participant.emailSummary.lastEmailEventAt).toLocaleString() : "-"],
               ["Payment", participant.registration?.paymentStatus ?? latestPayment?.status ?? "-"],
               ["Amount", `$${Number(participant.registration?.totalAmount ?? latestPayment?.amount ?? 0).toLocaleString()}`]
             ].map(([label, value]) => (
@@ -169,6 +213,24 @@ function ParticipantDetailDialog({ participant, open, onClose }: { participant: 
                 <Typography>{value}</Typography>
               </Grid>
             ))}
+            <Grid size={{ xs: 12 }}>
+              <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} sx={{ mt: 1 }}>
+                <TextField
+                  select
+                  label="Resend template"
+                  value={templateId}
+                  onChange={(event) => setTemplateId(event.target.value)}
+                  sx={{ minWidth: 280 }}
+                >
+                  {templates.filter((template) => template.active).map((template) => (
+                    <MenuItem value={template.id} key={template.id}>{template.name}</MenuItem>
+                  ))}
+                </TextField>
+                <Button variant="outlined" startIcon={<SendOutlined />} disabled={!templateId || sending} onClick={sendTemplate}>
+                  {sending ? "Sending" : "Send / Resend"}
+                </Button>
+              </Stack>
+            </Grid>
           </Grid>
         ) : (
           <Typography color="text.secondary">No participant selected.</Typography>
@@ -185,6 +247,7 @@ export function ParticipantsClient() {
   const [rows, setRows] = useState<AdminRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [registrations, setRegistrations] = useState<AdminRow[]>([]);
+  const [templates, setTemplates] = useState<AdminRow[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<AdminRow | null>(null);
   const [detail, setDetail] = useState<AdminRow | null>(null);
@@ -197,12 +260,14 @@ export function ParticipantsClient() {
   const { notifySuccess, notifyError, snackbar } = useNotifier();
 
   async function load() {
-    const [participantRows, registrationRows] = await Promise.all([
+    const [participantRows, registrationRows, templateRows] = await Promise.all([
       adminApi<AdminRow[]>("/api/participants"),
-      adminApi<AdminRow[]>("/api/registrations")
+      adminApi<AdminRow[]>("/api/registrations"),
+      adminApi<AdminRow[]>("/api/communications/templates")
     ]);
     setRows(participantRows);
     setRegistrations(registrationRows);
+    setTemplates(templateRows);
     setLoading(false);
   }
 
@@ -263,13 +328,15 @@ export function ParticipantsClient() {
   }
 
   const columns: GridColDef[] = [
-    { field: "name", headerName: "Name", flex: 1, minWidth: 180, valueGetter: (_value, row) => `${row.firstName} ${row.lastName}` },
+    { field: "organization", headerName: "Organization", flex: 1, minWidth: 210, valueGetter: (_value, row) => row.organization?.name ?? "" },
+    { field: "name", headerName: "Participant", flex: 1, minWidth: 180, valueGetter: (_value, row) => `${row.firstName} ${row.lastName}` },
     { field: "email", headerName: "Email", flex: 1, minWidth: 220 },
     { field: "cohort", headerName: "Cohort", flex: 1, minWidth: 220, valueGetter: (_value, row) => row.cohort?.title ?? "" },
-    { field: "organization", headerName: "Organization", flex: 1, minWidth: 200, valueGetter: (_value, row) => row.organization?.name ?? "" },
     { field: "registrationPoc", headerName: "Registration POC", width: 180, valueGetter: (_value, row) => row.registration?.primaryContactName ?? "" },
     { field: "title", headerName: "Title", width: 170 },
     { field: "phone", headerName: "Phone", width: 150 },
+    { field: "emailStatus", headerName: "Email Status", width: 140, valueGetter: (_value, row) => row.emailSummary?.lastEmailEvent ?? "", renderCell: (params) => params.value ? <StatusChip value={params.value} /> : <Typography color="text.secondary">-</Typography> },
+    { field: "lastSent", headerName: "Last Sent", width: 170, valueGetter: (_value, row) => row.emailSummary?.lastEmailEventAt ?? "", valueFormatter: (value) => value ? new Date(value).toLocaleString() : "" },
     { field: "status", headerName: "Status", width: 140, renderCell: (params) => <StatusChip value={params.value} /> },
     { field: "certificateIssued", headerName: "Certificate", width: 130, renderCell: (params) => <StatusChip value={params.value} /> },
     { field: "createdAt", headerName: "Created", width: 130, valueFormatter: (value) => value ? new Date(value).toLocaleDateString() : "" },
@@ -280,13 +347,14 @@ export function ParticipantsClient() {
       sortable: false,
       renderCell: (params) => (
         <Stack direction="row" spacing={1} onClick={(event) => event.stopPropagation()}>
-          <Button variant="outlined" startIcon={<EditOutlined />} onClick={() => { setEditing(params.row); setDialogOpen(true); }}>
+          <Button size="small" variant="outlined" startIcon={<EditOutlined />} onClick={() => { setEditing(params.row); setDialogOpen(true); }}>
             Edit
           </Button>
-          <Button variant="outlined" color="success" startIcon={<DoneAllOutlined />} onClick={() => patchParticipant({ id: params.row.id, status: "COMPLETED" }, "Participant completed")}>
+          <Button size="small" variant="outlined" color="success" startIcon={<DoneAllOutlined />} onClick={() => patchParticipant({ id: params.row.id, status: "COMPLETED" }, "Participant completed")}>
             Complete
           </Button>
           <Button
+            size="small"
             variant="outlined"
             color="error"
             startIcon={<DeleteOutline />}
@@ -349,6 +417,8 @@ export function ParticipantsClient() {
             pageSizeOptions={[10, 25, 50]}
             initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
             disableRowSelectionOnClick
+            rowHeight={46}
+            sx={{ "& .MuiDataGrid-cell": { py: 0.5 }, "& .MuiButton-startIcon": { mr: 0.5 }, "& .MuiSvgIcon-root": { fontSize: 18 } }}
             onRowClick={(params: GridRowParams) => setDetail(params.row)}
           />
         </TableShell>
@@ -364,7 +434,17 @@ export function ParticipantsClient() {
           await load();
         }}
       />
-      <ParticipantDetailDialog participant={detail} open={Boolean(detail)} onClose={() => setDetail(null)} />
+      <ParticipantDetailDialog
+        participant={detail}
+        open={Boolean(detail)}
+        templates={templates}
+        onClose={() => setDetail(null)}
+        onSent={async () => {
+          notifySuccess("Participant communication sent");
+          await load();
+        }}
+        onError={notifyError}
+      />
       <Box>{snackbar}</Box>
     </PageStack>
   );

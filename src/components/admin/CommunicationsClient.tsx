@@ -150,12 +150,17 @@ export function CommunicationsClient() {
 
   const outboxColumns: GridColDef[] = [
     { field: "subject", headerName: "Subject", flex: 1, minWidth: 220 },
+    { field: "cohort", headerName: "Cohort", width: 190, valueGetter: (_value, row) => row.cohort?.title ?? cohorts.find((cohort) => cohort.id === row.cohortId)?.title ?? "" },
     { field: "template", headerName: "Template", width: 190, valueGetter: (_value, row) => row.template?.name ?? "Custom" },
     { field: "session", headerName: "Session", width: 180, valueGetter: (_value, row) => row.session?.title ?? "" },
     { field: "recipientScope", headerName: "Recipients", width: 180, valueFormatter: (value) => String(value ?? "").replace(/_/g, " ") },
     { field: "status", headerName: "Status", width: 130, renderCell: (params) => <StatusChip value={params.value} /> },
     { field: "scheduledFor", headerName: "Scheduled", width: 170, valueFormatter: (value) => value ? new Date(value).toLocaleString() : "" },
     { field: "sentAt", headerName: "Sent", width: 170, valueFormatter: (value) => value ? new Date(value).toLocaleString() : "" },
+    { field: "delivered", headerName: "Delivered", width: 110, valueGetter: (_value, row) => row.emailSummary?.deliveredCount ?? 0 },
+    { field: "opened", headerName: "Opened", width: 100, valueGetter: (_value, row) => row.emailSummary?.openedCount ?? 0 },
+    { field: "bounced", headerName: "Bounced", width: 100, valueGetter: (_value, row) => row.emailSummary?.bouncedCount ?? 0 },
+    { field: "failed", headerName: "Failed", width: 90, valueGetter: (_value, row) => row.emailSummary?.failedCount ?? 0 },
     {
       field: "actions",
       headerName: "Actions",

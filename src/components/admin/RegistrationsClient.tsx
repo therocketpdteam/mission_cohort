@@ -24,7 +24,7 @@ import {
   TextField,
   Typography
 } from "@mui/material";
-import { DataGrid, GridColDef, GridRowParams } from "@mui/x-data-grid";
+import { DataGrid, GridColDef, GridRowParams, GridRowSelectionModel } from "@mui/x-data-grid";
 import { useEffect, useMemo, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
 import {
@@ -413,6 +413,12 @@ export function RegistrationsClient() {
   const [loading, setLoading] = useState(true);
   const [cohorts, setCohorts] = useState<AdminRow[]>([]);
   const [organizations, setOrganizations] = useState<AdminRow[]>([]);
+  const [templates, setTemplates] = useState<AdminRow[]>([]);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkPaymentStatus, setBulkPaymentStatus] = useState("");
+  const [bulkRosterStatus, setBulkRosterStatus] = useState("");
+  const [bulkDocumentStatus, setBulkDocumentStatus] = useState("");
+  const [bulkTemplateId, setBulkTemplateId] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<AdminRow | null>(null);
   const [detail, setDetail] = useState<AdminRow | null>(null);
@@ -423,14 +429,16 @@ export function RegistrationsClient() {
   const { notifySuccess, notifyError, snackbar } = useNotifier();
 
   async function load() {
-    const [registrationRows, cohortRows, organizationRows] = await Promise.all([
+    const [registrationRows, cohortRows, organizationRows, templateRows] = await Promise.all([
       adminApi<AdminRow[]>("/api/registrations"),
       adminApi<AdminRow[]>("/api/cohorts"),
-      adminApi<AdminRow[]>("/api/organizations")
+      adminApi<AdminRow[]>("/api/organizations"),
+      adminApi<AdminRow[]>("/api/communications/templates").catch(() => [])
     ]);
     setRows(registrationRows);
     setCohorts(cohortRows);
     setOrganizations(organizationRows);
+    setTemplates(templateRows);
     setLoading(false);
   }
 
@@ -479,11 +487,70 @@ export function RegistrationsClient() {
     () => Array.from(new Set(rows.map((row) => row.source).filter(Boolean))) as string[],
     [rows]
   );
+  const rowSelectionModel = useMemo<GridRowSelectionModel>(
+    () => ({ type: "include", ids: new Set(selectedIds) }),
+    [selectedIds]
+  );
 
   async function mutate(body: AdminRow, success: string) {
     try {
       await adminApi("/api/registrations", { method: "PATCH", body });
       notifySuccess(success);
+      await load();
+    } catch (error) {
+      notifyError((error as Error).message);
+    }
+  }
+
+  async function runBulkAction(action: "confirm" | "cancel" | "payment" | "roster" | "docs" | "send") {
+    if (selectedIds.length === 0) {
+      return;
+    }
+
+    try {
+      if (action === "send") {
+        if (!bulkTemplateId) {
+          notifyError("Choose an email template first");
+          return;
+        }
+
+        await adminApi("/api/communications", {
+          method: "PATCH",
+          body: { action: "sendTemplateToRegistrations", templateId: bulkTemplateId, registrationIds: selectedIds }
+        });
+        notifySuccess("Selected communication sent");
+      } else {
+        if (action === "payment" && !bulkPaymentStatus) {
+          notifyError("Choose a payment status first");
+          return;
+        }
+
+        if (action === "roster" && !bulkRosterStatus) {
+          notifyError("Choose a roster status first");
+          return;
+        }
+
+        if (action === "docs" && !bulkDocumentStatus) {
+          notifyError("Choose a document status first");
+          return;
+        }
+
+        await adminApi("/api/registrations", {
+          method: "PATCH",
+          body: {
+            action: "bulk",
+            ids: selectedIds,
+            ...(action === "confirm" ? { bulkAction: "confirm" } : {}),
+            ...(action === "cancel" ? { bulkAction: "cancel" } : {}),
+            ...(action === "payment" && bulkPaymentStatus ? { paymentStatus: bulkPaymentStatus } : {}),
+            ...(action === "roster" && bulkRosterStatus ? { participantListStatus: bulkRosterStatus } : {}),
+            ...(action === "docs" && bulkDocumentStatus ? { supportingDocumentStatus: bulkDocumentStatus } : {})
+          }
+        });
+        notifySuccess("Bulk update complete");
+      }
+
+      setSelectedIds([]);
       await load();
     } catch (error) {
       notifyError((error as Error).message);
@@ -512,13 +579,13 @@ export function RegistrationsClient() {
       sortable: false,
       renderCell: (params) => (
         <Stack direction="row" spacing={1} onClick={(event) => event.stopPropagation()}>
-          <Button variant="outlined" startIcon={<EditOutlined />} onClick={() => { setEditing(params.row); setDialogOpen(true); }}>
+          <Button size="small" variant="outlined" startIcon={<EditOutlined />} onClick={() => { setEditing(params.row); setDialogOpen(true); }}>
             Edit
           </Button>
-          <Button variant="outlined" color="success" startIcon={<CheckCircleOutline />} onClick={() => mutate({ id: params.row.id, action: "confirm" }, "Registration confirmed")}>
+          <Button size="small" variant="outlined" color="success" startIcon={<CheckCircleOutline />} onClick={() => mutate({ id: params.row.id, action: "confirm" }, "Registration confirmed")}>
             Confirm
           </Button>
-          <Button variant="outlined" color="warning" startIcon={<CancelOutlined />} onClick={() => mutate({ id: params.row.id, action: "cancel" }, "Registration cancelled")}>
+          <Button size="small" variant="outlined" color="warning" startIcon={<CancelOutlined />} onClick={() => mutate({ id: params.row.id, action: "cancel" }, "Registration cancelled")}>
             Cancel
           </Button>
         </Stack>
@@ -547,14 +614,42 @@ export function RegistrationsClient() {
         </Stack>
       </SectionCard>
       <SectionCard title="Registration Management">
+        {selectedIds.length > 0 && (
+          <Stack direction={{ xs: "column", lg: "row" }} spacing={1.5} alignItems={{ xs: "stretch", lg: "center" }} sx={{ mb: 2 }}>
+            <StatusChip value={`${selectedIds.length} selected`} />
+            <Button size="small" variant="outlined" color="success" onClick={() => runBulkAction("confirm")}>Confirm</Button>
+            <Button size="small" variant="outlined" color="warning" onClick={() => runBulkAction("cancel")}>Cancel</Button>
+            <TextField select size="small" label="Payment" value={bulkPaymentStatus} onChange={(event) => setBulkPaymentStatus(event.target.value)} sx={{ minWidth: 170 }}>
+              {paymentStatuses.map((value) => <MenuItem value={value} key={value}>{value.replace(/_/g, " ")}</MenuItem>)}
+            </TextField>
+            <Button size="small" variant="outlined" onClick={() => runBulkAction("payment")}>Apply Payment</Button>
+            <TextField select size="small" label="Roster" value={bulkRosterStatus} onChange={(event) => setBulkRosterStatus(event.target.value)} sx={{ minWidth: 170 }}>
+              {rosterStatuses.map((value) => <MenuItem value={value} key={value}>{value.replace(/_/g, " ")}</MenuItem>)}
+            </TextField>
+            <Button size="small" variant="outlined" onClick={() => runBulkAction("roster")}>Apply Roster</Button>
+            <TextField select size="small" label="Docs" value={bulkDocumentStatus} onChange={(event) => setBulkDocumentStatus(event.target.value)} sx={{ minWidth: 160 }}>
+              {documentStatuses.map((value) => <MenuItem value={value} key={value}>{value.replace(/_/g, " ")}</MenuItem>)}
+            </TextField>
+            <Button size="small" variant="outlined" onClick={() => runBulkAction("docs")}>Apply Docs</Button>
+            <TextField select size="small" label="Template" value={bulkTemplateId} onChange={(event) => setBulkTemplateId(event.target.value)} sx={{ minWidth: 220 }}>
+              {templates.filter((template) => template.active).map((template) => <MenuItem value={template.id} key={template.id}>{template.name}</MenuItem>)}
+            </TextField>
+            <Button size="small" variant="outlined" onClick={() => runBulkAction("send")}>Send/Resend</Button>
+          </Stack>
+        )}
         <TableShell>
           <DataGrid
             rows={filteredRows}
             columns={columns}
             loading={loading}
+            checkboxSelection
+            rowHeight={46}
             pageSizeOptions={[10, 25, 50]}
             initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
             disableRowSelectionOnClick
+            rowSelectionModel={rowSelectionModel}
+            onRowSelectionModelChange={(model) => setSelectedIds(Array.from(model.ids).map(String))}
+            sx={{ "& .MuiDataGrid-cell": { py: 0.5 }, "& .MuiButton-startIcon": { mr: 0.5 }, "& .MuiSvgIcon-root": { fontSize: 18 } }}
             onRowClick={(params: GridRowParams) => openDetail(String(params.id))}
           />
         </TableShell>

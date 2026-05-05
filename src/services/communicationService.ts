@@ -1,4 +1,4 @@
-import { CommunicationStatus, EmailEventType, Prisma, RecipientScope } from "@prisma/client";
+import { CommunicationStatus, EmailEventType, Prisma, RecipientScope, Role, TemplateType } from "@prisma/client";
 import { z } from "zod";
 import { env } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
@@ -11,6 +11,118 @@ import {
 import { logAuditEventAsync } from "./auditService";
 import { generateSessionReminderSchedule } from "@/modules/email";
 import { sendEmail } from "@/services/emailService";
+
+const defaultTemplates: Array<{
+  type: TemplateType;
+  name: string;
+  subject: string;
+  bodyHtml: string;
+  bodyText: string;
+}> = [
+  {
+    type: TemplateType.REGISTRATION_CONFIRMATION,
+    name: "Registration Confirmation",
+    subject: "Registration confirmation: {{cohort.title}}",
+    bodyHtml: "<p>Hello {{registration.primaryContactName}},</p><p>Your registration for <strong>{{cohort.title}}</strong> has been received.</p>",
+    bodyText: "Hello {{registration.primaryContactName}}, your registration for {{cohort.title}} has been received."
+  },
+  {
+    type: TemplateType.WEEK_BEFORE_REMINDER,
+    name: "1 Week Before Session",
+    subject: "One week reminder: {{session.title}}",
+    bodyHtml: "<p>Hello {{participant.firstName}},</p><p>{{session.title}} for {{cohort.title}} is coming up in one week.</p>",
+    bodyText: "Hello {{participant.firstName}}, {{session.title}} for {{cohort.title}} is coming up in one week."
+  },
+  {
+    type: TemplateType.DAY_BEFORE_REMINDER,
+    name: "24 Hours Before Session",
+    subject: "Tomorrow: {{session.title}}",
+    bodyHtml: "<p>Hello {{participant.firstName}},</p><p>This is your 24-hour reminder for {{session.title}}.</p>",
+    bodyText: "Hello {{participant.firstName}}, this is your 24-hour reminder for {{session.title}}."
+  },
+  {
+    type: TemplateType.HOUR_BEFORE_REMINDER,
+    name: "60 Minutes Before Session",
+    subject: "Starting soon: {{session.title}}",
+    bodyHtml: "<p>Hello {{participant.firstName}},</p><p>{{session.title}} starts in about 60 minutes.</p>",
+    bodyText: "Hello {{participant.firstName}}, {{session.title}} starts in about 60 minutes."
+  },
+  {
+    type: TemplateType.FOLLOW_UP,
+    name: "24 Hours Post Session",
+    subject: "Follow-up: {{session.title}}",
+    bodyHtml: "<p>Hello {{participant.firstName}},</p><p>Thank you for attending {{session.title}}. Resources and next steps will be shared here.</p>",
+    bodyText: "Hello {{participant.firstName}}, thank you for attending {{session.title}}. Resources and next steps will be shared here."
+  },
+  {
+    type: TemplateType.PAYMENT_REMINDER,
+    name: "Payment Reminder",
+    subject: "Payment reminder: {{cohort.title}}",
+    bodyHtml: "<p>Hello {{registration.primaryContactName}},</p><p>This is a friendly reminder about payment status for {{cohort.title}}.</p>",
+    bodyText: "Hello {{registration.primaryContactName}}, this is a friendly reminder about payment status for {{cohort.title}}."
+  }
+];
+
+const sessionTemplateTypes = [
+  TemplateType.REGISTRATION_CONFIRMATION,
+  TemplateType.WEEK_BEFORE_REMINDER,
+  TemplateType.DAY_BEFORE_REMINDER,
+  TemplateType.HOUR_BEFORE_REMINDER,
+  TemplateType.FOLLOW_UP
+] as const;
+
+export async function getSystemUserId() {
+  const user = await prisma.user.upsert({
+    where: { email: "system@mission-control.local" },
+    update: { active: true },
+    create: {
+      email: "system@mission-control.local",
+      firstName: "Mission",
+      lastName: "Control",
+      role: Role.SUPER_ADMIN,
+      active: true
+    }
+  });
+
+  return user.id;
+}
+
+export async function ensureDefaultCommunicationTemplates() {
+  const templates = [];
+
+  for (const template of defaultTemplates) {
+    const existing = await prisma.communicationTemplate.findFirst({ where: { type: template.type, name: template.name } });
+    templates.push(
+      existing
+        ? await prisma.communicationTemplate.update({
+            where: { id: existing.id },
+            data: { active: existing.active, subject: existing.subject || template.subject, bodyHtml: existing.bodyHtml || template.bodyHtml, bodyText: existing.bodyText || template.bodyText }
+          })
+        : await prisma.communicationTemplate.create({ data: { ...template, active: true } })
+    );
+  }
+
+  return templates;
+}
+
+function emailEventSummary(events: Array<{ eventType: EmailEventType; createdAt: Date }>) {
+  const counts = events.reduce<Record<string, number>>((acc, event) => {
+    acc[event.eventType] = (acc[event.eventType] ?? 0) + 1;
+    return acc;
+  }, {});
+  const latest = [...events].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
+
+  return {
+    lastEmailEvent: latest?.eventType ?? null,
+    lastEmailEventAt: latest?.createdAt ?? null,
+    sentCount: counts.SENT ?? 0,
+    deliveredCount: counts.DELIVERED ?? 0,
+    openedCount: counts.OPENED ?? 0,
+    bouncedCount: counts.BOUNCED ?? 0,
+    failedCount: counts.FAILED ?? 0,
+    unsubscribedCount: counts.UNSUBSCRIBED ?? 0
+  };
+}
 
 export async function createTemplate(input: z.input<typeof communicationTemplateCreateSchema>) {
   const data = communicationTemplateCreateSchema.parse(input);
@@ -47,18 +159,27 @@ export async function scheduleCommunicationPlaceholder(input: z.input<typeof com
 }
 
 export async function listCommunicationsByCohort(cohortId: string) {
-  return prisma.cohortCommunication.findMany({
+  const communications = await prisma.cohortCommunication.findMany({
     where: { cohortId },
     orderBy: { createdAt: "desc" },
-    include: { template: true, session: true, createdBy: true }
+    include: { template: true, session: true, createdBy: true, emailEvents: true }
   });
+
+  return communications.map((communication) => ({
+    ...communication,
+    emailSummary: emailEventSummary(communication.emailEvents)
+  }));
 }
 
 function emailValues(values: Array<string | null | undefined>) {
   return values.filter((value): value is string => Boolean(value?.trim()));
 }
 
-async function resolveCommunicationRecipients(communication: Awaited<ReturnType<typeof listCommunicationsByCohort>>[number]): Promise<string[]> {
+async function resolveCommunicationRecipients(communication: {
+  cohortId: string;
+  recipientScope: RecipientScope;
+  recipientEmails: Prisma.JsonValue | null;
+}): Promise<string[]> {
   const cohort = await prisma.cohort.findUnique({
     where: { id: communication.cohortId },
     include: {
@@ -88,7 +209,7 @@ async function resolveCommunicationRecipients(communication: Awaited<ReturnType<
   return emailValues(cohort.participants.map((participant) => participant.email));
 }
 
-export async function sendCommunication(id: string) {
+export async function sendCommunication(id: string, options?: { recipients?: string[]; context?: Parameters<typeof sendEmail>[0]["context"] }) {
   if (!env.SENDGRID_API_KEY || !env.SENDGRID_FROM_EMAIL) {
     throw Object.assign(new Error("SendGrid is not configured. Add SENDGRID_API_KEY and SENDGRID_FROM_EMAIL before sending email."), {
       code: "BAD_REQUEST",
@@ -111,7 +232,7 @@ export async function sendCommunication(id: string) {
   });
 
   try {
-    const recipients = await resolveCommunicationRecipients(communication);
+    const recipients = options?.recipients ?? await resolveCommunicationRecipients(communication);
 
     if (recipients.length === 0) {
       throw Object.assign(new Error("No recipients were resolved for this communication."), {
@@ -125,7 +246,7 @@ export async function sendCommunication(id: string) {
       subject: communication.subject,
       bodyHtml: communication.bodyHtml,
       bodyText: communication.bodyText ?? undefined,
-      context: {
+      context: options?.context ?? {
         cohort: {
           title: communication.cohort.title,
           startDate: communication.cohort.startDate,
@@ -164,6 +285,173 @@ export async function sendCommunication(id: string) {
     });
     throw error;
   }
+}
+
+async function createCommunicationFromTemplate(input: {
+  templateId: string;
+  cohortId: string;
+  sessionId?: string;
+  recipientScope: RecipientScope;
+  recipientEmails?: string[];
+  scheduledFor?: Date;
+}) {
+  const template = await prisma.communicationTemplate.findUnique({ where: { id: input.templateId } });
+
+  if (!template) {
+    throw Object.assign(new Error("Communication template not found"), { code: "NOT_FOUND", status: 404 });
+  }
+
+  const createdById = await getSystemUserId();
+
+  return prisma.cohortCommunication.create({
+    data: {
+      cohortId: input.cohortId,
+      sessionId: input.sessionId,
+      templateId: template.id,
+      subject: template.subject,
+      bodyHtml: template.bodyHtml,
+      bodyText: template.bodyText,
+      scheduledFor: input.scheduledFor,
+      status: input.scheduledFor ? CommunicationStatus.SCHEDULED : CommunicationStatus.DRAFT,
+      recipientScope: input.recipientScope,
+      recipientEmails: input.recipientEmails,
+      createdById
+    }
+  });
+}
+
+export async function sendTemplateToParticipant(input: { templateId: string; participantId: string }) {
+  const participant = await prisma.participant.findUnique({
+    where: { id: input.participantId },
+    include: { cohort: { include: { presenter: true } }, organization: true, registration: true }
+  });
+
+  if (!participant) {
+    throw Object.assign(new Error("Participant not found"), { code: "NOT_FOUND", status: 404 });
+  }
+
+  const communication = await createCommunicationFromTemplate({
+    templateId: input.templateId,
+    cohortId: participant.cohortId,
+    recipientScope: RecipientScope.CUSTOM,
+    recipientEmails: [participant.email]
+  });
+
+  return sendCommunication(communication.id, {
+    recipients: [participant.email],
+    context: {
+      cohort: {
+        title: participant.cohort.title,
+        startDate: participant.cohort.startDate,
+        presenterName: `${participant.cohort.presenter.firstName} ${participant.cohort.presenter.lastName}`
+      },
+      participant,
+      organization: participant.organization,
+      registration: participant.registration
+    }
+  });
+}
+
+export async function sendTemplateToRegistrations(input: { templateId: string; registrationIds: string[] }) {
+  const registrations = await prisma.registration.findMany({
+    where: { id: { in: input.registrationIds } },
+    include: { cohort: { include: { presenter: true } }, organization: true }
+  });
+  const results = [];
+
+  for (const registration of registrations) {
+    const communication = await createCommunicationFromTemplate({
+      templateId: input.templateId,
+      cohortId: registration.cohortId,
+      recipientScope: RecipientScope.CUSTOM,
+      recipientEmails: [registration.primaryContactEmail]
+    });
+    results.push(await sendCommunication(communication.id, {
+      recipients: [registration.primaryContactEmail],
+      context: {
+        cohort: {
+          title: registration.cohort.title,
+          startDate: registration.cohort.startDate,
+          presenterName: `${registration.cohort.presenter.firstName} ${registration.cohort.presenter.lastName}`
+        },
+        organization: registration.organization,
+        registration
+      }
+    }));
+  }
+
+  return results;
+}
+
+export async function createDefaultSessionCommunications(sessionId: string) {
+  const session = await prisma.cohortSession.findUnique({ where: { id: sessionId }, include: { cohort: true } });
+
+  if (!session) {
+    throw Object.assign(new Error("Session not found"), { code: "NOT_FOUND", status: 404 });
+  }
+
+  const templates = await ensureDefaultCommunicationTemplates();
+  const createdById = await getSystemUserId();
+  const existing = await prisma.cohortCommunication.findMany({
+    where: {
+      sessionId,
+      template: { type: { in: [...sessionTemplateTypes] } }
+    },
+    include: { template: true }
+  });
+  const existingTypes = new Set(existing.map((communication) => communication.template?.type).filter(Boolean));
+  const records = [];
+
+  for (const template of templates.filter((item) => sessionTemplateTypes.includes(item.type as (typeof sessionTemplateTypes)[number]))) {
+    if (existingTypes.has(template.type)) {
+      continue;
+    }
+
+    const start = new Date(session.startTime);
+    const scheduledFor =
+      template.type === TemplateType.WEEK_BEFORE_REMINDER
+        ? new Date(start.getTime() - 7 * 24 * 60 * 60 * 1000)
+        : template.type === TemplateType.DAY_BEFORE_REMINDER
+          ? new Date(start.getTime() - 24 * 60 * 60 * 1000)
+          : template.type === TemplateType.HOUR_BEFORE_REMINDER
+            ? new Date(start.getTime() - 60 * 60 * 1000)
+            : template.type === TemplateType.FOLLOW_UP
+              ? new Date(start.getTime() + 24 * 60 * 60 * 1000)
+              : undefined;
+
+    records.push(await prisma.cohortCommunication.create({
+      data: {
+        cohortId: session.cohortId,
+        sessionId,
+        templateId: template.id,
+        subject: template.subject,
+        bodyHtml: template.bodyHtml,
+        bodyText: template.bodyText,
+        scheduledFor,
+        status: scheduledFor ? CommunicationStatus.SCHEDULED : CommunicationStatus.DRAFT,
+        recipientScope: template.type === TemplateType.REGISTRATION_CONFIRMATION ? RecipientScope.PRIMARY_CONTACTS : RecipientScope.ALL_PARTICIPANTS,
+        createdById
+      }
+    }));
+  }
+
+  return records;
+}
+
+export async function getRecipientCommunicationSummary(emails: string[]) {
+  const normalizedEmails = emails.map((email) => email.toLowerCase()).filter(Boolean);
+  const events = await prisma.emailEvent.findMany({
+    where: { recipientEmail: { in: normalizedEmails } },
+    orderBy: { createdAt: "desc" }
+  });
+  const grouped = new Map<string, typeof events>();
+
+  for (const event of events) {
+    const key = event.recipientEmail.toLowerCase();
+    grouped.set(key, [...(grouped.get(key) ?? []), event]);
+  }
+
+  return Object.fromEntries(normalizedEmails.map((email) => [email, emailEventSummary(grouped.get(email) ?? [])]));
 }
 
 export async function processScheduledCommunications(limit = 25) {
@@ -245,6 +533,8 @@ export async function markCommunicationScheduled(id: string, scheduledFor: Date)
 }
 
 export async function listTemplates() {
+  await ensureDefaultCommunicationTemplates();
+
   return prisma.communicationTemplate.findMany({
     orderBy: { name: "asc" }
   });
@@ -261,6 +551,7 @@ export async function createPlannedSessionReminders(sessionId: string, createdBy
   }
 
   const schedule = generateSessionReminderSchedule(session);
+  const resolvedCreatedById = createdById || (await getSystemUserId());
   const records = await Promise.all(
     schedule.map((item) =>
       prisma.cohortCommunication.create({
@@ -273,7 +564,7 @@ export async function createPlannedSessionReminders(sessionId: string, createdBy
           scheduledFor: item.scheduledFor,
           status: CommunicationStatus.SCHEDULED,
           recipientScope: RecipientScope.ALL_PARTICIPANTS,
-          createdById
+          createdById: resolvedCreatedById
         }
       })
     )

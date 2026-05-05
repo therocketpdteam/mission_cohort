@@ -1,4 +1,4 @@
-import { RegistrationStatus } from "@prisma/client";
+import { ParticipantListStatus, PaymentStatus, RegistrationStatus, SupportingDocumentStatus } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { registrationCreateSchema, registrationUpdateSchema } from "@/validators/registration";
@@ -57,6 +57,59 @@ export async function cancelRegistration(id: string) {
 
   void queueRegistrationCrmSync(registration.id, "registration.cancelled");
   return registration;
+}
+
+export async function bulkUpdateRegistrations(input: {
+  ids: string[];
+  action?: "confirm" | "cancel";
+  paymentStatus?: PaymentStatus;
+  participantListStatus?: ParticipantListStatus;
+  supportingDocumentStatus?: SupportingDocumentStatus;
+}) {
+  const ids = input.ids.filter(Boolean);
+
+  if (ids.length === 0) {
+    return { count: 0 };
+  }
+
+  if (input.action === "confirm") {
+    await prisma.registration.updateMany({ where: { id: { in: ids } }, data: { status: RegistrationStatus.CONFIRMED } });
+  } else if (input.action === "cancel") {
+    await prisma.registration.updateMany({ where: { id: { in: ids } }, data: { status: RegistrationStatus.CANCELLED } });
+  } else {
+    const data: {
+      paymentStatus?: PaymentStatus;
+      participantListStatus?: ParticipantListStatus;
+      supportingDocumentStatus?: SupportingDocumentStatus;
+    } = {};
+
+    if (input.paymentStatus) {
+      data.paymentStatus = input.paymentStatus;
+    }
+
+    if (input.participantListStatus) {
+      data.participantListStatus = input.participantListStatus;
+    }
+
+    if (input.supportingDocumentStatus) {
+      data.supportingDocumentStatus = input.supportingDocumentStatus;
+    }
+
+    await prisma.registration.updateMany({ where: { id: { in: ids } }, data });
+
+    if (input.paymentStatus) {
+      await prisma.paymentRecord.updateMany({
+        where: { registrationId: { in: ids } },
+        data: { status: input.paymentStatus }
+      });
+    }
+  }
+
+  for (const id of ids) {
+    void queueRegistrationCrmSync(id, "registration.bulk_updated");
+  }
+
+  return { count: ids.length };
 }
 
 export async function listRegistrations(cohortId?: string) {
