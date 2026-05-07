@@ -40,8 +40,26 @@ function mappingFields(cohorts: AdminRow[]): FieldConfig[] {
   ];
 }
 
+const roleOptions = ["SUPER_ADMIN", "ADMIN", "OPERATIONS", "SALES", "PRESENTER", "VIEWER"].map((value) => ({
+  label: value.replace(/_/g, " "),
+  value
+}));
+
+function userFields(editing: AdminRow | null): FieldConfig[] {
+  return [
+    { name: "firstName", label: "First name", required: true },
+    { name: "lastName", label: "Last name", required: true },
+    { name: "email", label: "Email", type: "email", required: true },
+    { name: "role", label: "Role", type: "select", options: roleOptions, required: true },
+    { name: "active", label: "Active", type: "checkbox" },
+    { name: "sendInvite", label: "Send Supabase invite email", type: "checkbox" },
+    { name: "password", label: editing ? "New password (optional)" : "Temporary password", type: "password", required: !editing }
+  ];
+}
+
 export function SettingsClient() {
   const [health, setHealth] = useState<AdminRow | null>(null);
+  const [users, setUsers] = useState<AdminRow[]>([]);
   const [mappings, setMappings] = useState<AdminRow[]>([]);
   const [cohorts, setCohorts] = useState<AdminRow[]>([]);
   const [integrationStatus, setIntegrationStatus] = useState<AdminRow | null>(null);
@@ -50,17 +68,21 @@ export function SettingsClient() {
   const [testResult, setTestResult] = useState<AdminRow | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<AdminRow | null>(null);
+  const [userDialogOpen, setUserDialogOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<AdminRow | null>(null);
   const { notifySuccess, notifyError, snackbar } = useNotifier();
 
   async function load() {
-    const [healthData, mappingRows, cohortRows, integrationRows, eventRows] = await Promise.all([
+    const [healthData, userRows, mappingRows, cohortRows, integrationRows, eventRows] = await Promise.all([
       adminApi<AdminRow>("/api/health"),
+      adminApi<AdminRow[]>("/api/users").catch(() => []),
       adminApi<AdminRow[]>("/api/jotform/mappings").catch(() => []),
       adminApi<AdminRow[]>("/api/cohorts").catch(() => []),
       adminApi<AdminRow>("/api/integrations/status").catch(() => null),
       adminApi<AdminRow[]>("/api/webhooks/events").catch(() => [])
     ]);
     setHealth(healthData);
+    setUsers(userRows);
     setMappings(mappingRows);
     setCohorts(cohortRows);
     setIntegrationStatus(integrationRows);
@@ -95,6 +117,40 @@ export function SettingsClient() {
         body: { id: row.id, active: !row.active }
       });
       notifySuccess(row.active ? "Jotform mapping deactivated" : "Jotform mapping activated");
+      await load();
+    } catch (error) {
+      notifyError((error as Error).message);
+    }
+  }
+
+  async function saveUser(values: AdminRow) {
+    try {
+      const payload = { ...values };
+
+      if (editingUser && !payload.password) {
+        delete payload.password;
+      }
+
+      await adminApi("/api/users", {
+        method: editingUser ? "PATCH" : "POST",
+        body: editingUser ? { ...payload, id: editingUser.id } : payload
+      });
+      notifySuccess(editingUser ? "User updated" : "User created");
+      setEditingUser(null);
+      await load();
+    } catch (error) {
+      notifyError((error as Error).message);
+      throw error;
+    }
+  }
+
+  async function toggleUser(row: AdminRow) {
+    try {
+      await adminApi("/api/users", {
+        method: "PATCH",
+        body: { id: row.id, active: !row.active }
+      });
+      notifySuccess(row.active ? "User deactivated" : "User activated");
       await load();
     } catch (error) {
       notifyError((error as Error).message);
@@ -142,6 +198,29 @@ export function SettingsClient() {
             Edit
           </Button>
           <Button variant="outlined" startIcon={<PowerSettingsNewOutlined />} onClick={() => toggleMapping(params.row)}>
+            {params.row.active ? "Disable" : "Enable"}
+          </Button>
+        </Stack>
+      )
+    }
+  ];
+  const userColumns: GridColDef[] = [
+    { field: "name", headerName: "User", flex: 1, minWidth: 180, valueGetter: (_value, row) => `${row.firstName} ${row.lastName}` },
+    { field: "email", headerName: "Email", flex: 1.2, minWidth: 240 },
+    { field: "role", headerName: "Role", width: 160, valueFormatter: (value) => String(value ?? "").replace(/_/g, " ") },
+    { field: "active", headerName: "Active", width: 120, renderCell: (params) => <StatusChip value={params.value} /> },
+    { field: "updatedAt", headerName: "Updated", width: 170, valueFormatter: (value) => value ? new Date(value).toLocaleString() : "" },
+    {
+      field: "actions",
+      headerName: "Actions",
+      width: 230,
+      sortable: false,
+      renderCell: (params) => (
+        <Stack direction="row" spacing={1}>
+          <Button variant="outlined" startIcon={<EditOutlined />} onClick={() => { setEditingUser(params.row); setUserDialogOpen(true); }}>
+            Edit
+          </Button>
+          <Button variant="outlined" startIcon={<PowerSettingsNewOutlined />} onClick={() => toggleUser(params.row)}>
             {params.row.active ? "Disable" : "Enable"}
           </Button>
         </Stack>
@@ -216,6 +295,16 @@ export function SettingsClient() {
           </SectionCard>
         </Grid>
         <Grid size={{ xs: 12 }}>
+          <SectionCard title="Admin Users" action={<Button startIcon={<AddIcon />} onClick={() => setUserDialogOpen(true)}>Add User</Button>}>
+            <Typography color="text.secondary" sx={{ mb: 2 }}>
+              Users authenticate through Supabase Auth. Mission Control roles and active status control internal authorization.
+            </Typography>
+            <TableShell>
+              <DataGrid rows={users} columns={userColumns} pageSizeOptions={[10, 25]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} disableRowSelectionOnClick />
+            </TableShell>
+          </SectionCard>
+        </Grid>
+        <Grid size={{ xs: 12 }}>
           <SectionCard title="Jotform Webhook Setup">
             <Typography color="text.secondary">
               Configure the three Jotform registration forms here. Use cohortSlug in the shared 5-session form URL so Mission Control can route submissions to the right cohort.
@@ -267,6 +356,14 @@ export function SettingsClient() {
         initialValues={editing ?? { sessionCount: 5, active: true, requireCohortSlug: false }}
         onClose={() => { setDialogOpen(false); setEditing(null); }}
         onSubmit={saveMapping}
+      />
+      <MutationDialog
+        title={editingUser ? "Edit Admin User" : "Create Admin User"}
+        open={userDialogOpen}
+        fields={userFields(editingUser)}
+        initialValues={editingUser ?? { role: "VIEWER", active: true, sendInvite: false }}
+        onClose={() => { setUserDialogOpen(false); setEditingUser(null); }}
+        onSubmit={saveUser}
       />
       {snackbar}
     </PageStack>

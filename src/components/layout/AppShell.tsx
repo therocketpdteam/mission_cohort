@@ -34,9 +34,10 @@ import {
 } from "@mui/material";
 import type { Route } from "next";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { ReactNode, useMemo, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { ReactNode, useEffect, useMemo, useState } from "react";
 import { useTheme } from "@mui/material/styles";
+import { adminApi } from "@/lib/adminApi";
 
 const drawerWidth = 268;
 
@@ -68,12 +69,32 @@ export function AppShell({ children }: { children: ReactNode }) {
   const theme = useTheme();
   const isDesktop = useMediaQuery(theme.breakpoints.up("lg"));
   const pathname = usePathname();
+  const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
+  const [user, setUser] = useState<{ firstName?: string; lastName?: string; email?: string; role?: string } | null>(null);
   const title = titleFromPath(pathname);
   const crumbs = useMemo(() => breadcrumbsFor(pathname), [pathname]);
 
-  if (pathname.startsWith("/reports/share/")) {
+  useEffect(() => {
+    if (pathname === "/login" || pathname.startsWith("/reports/share/")) {
+      return;
+    }
+
+    adminApi<{ firstName?: string; lastName?: string; email?: string; role?: string }>("/api/auth/me")
+      .then(setUser)
+      .catch(() => setUser(null));
+  }, [pathname]);
+
+  async function logout() {
+    await adminApi("/api/auth/logout", { method: "POST" }).catch(() => undefined);
+    setMenuAnchor(null);
+    setUser(null);
+    router.replace("/login");
+    router.refresh();
+  }
+
+  if (pathname === "/login" || pathname.startsWith("/reports/share/")) {
     return <Box sx={{ minHeight: "100vh", bgcolor: "background.default" }}>{children}</Box>;
   }
 
@@ -158,17 +179,20 @@ export function AppShell({ children }: { children: ReactNode }) {
             </Breadcrumbs>
           </Box>
           <Button variant="outlined" color="inherit" startIcon={<AccountCircle />} onClick={(event) => setMenuAnchor(event.currentTarget)}>
-            Admin
+            {user?.firstName ?? "Admin"}
           </Button>
           <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={() => setMenuAnchor(null)}>
             <MenuItem disabled>
-              <Avatar sx={{ width: 24, height: 24, mr: 1 }}>A</Avatar>
-              Internal Admin
+              <Avatar sx={{ width: 24, height: 24, mr: 1 }}>{user?.firstName?.[0] ?? "A"}</Avatar>
+              <Box>
+                <Typography variant="body2">{[user?.firstName, user?.lastName].filter(Boolean).join(" ") || "Internal Admin"}</Typography>
+                <Typography variant="caption" color="text.secondary">{user?.role ?? "ADMIN"}</Typography>
+              </Box>
             </MenuItem>
             <Divider />
-            <MenuItem onClick={() => setMenuAnchor(null)}>
+            <MenuItem onClick={logout}>
               <LogoutOutlined fontSize="small" sx={{ mr: 1 }} />
-              Logout placeholder
+              Logout
             </MenuItem>
           </Menu>
         </Toolbar>

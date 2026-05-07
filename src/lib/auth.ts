@@ -1,5 +1,10 @@
+import { cookies } from "next/headers";
 import { Role } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { createSupabaseAdminClient } from "@/lib/supabase";
+
+export const ACCESS_TOKEN_COOKIE = "mc-access-token";
+export const REFRESH_TOKEN_COOKIE = "mc-refresh-token";
 
 export const ADMIN_ROLES = [
   Role.SUPER_ADMIN,
@@ -17,18 +22,38 @@ export const MUTATION_ROLES = [
   Role.SALES
 ] as const;
 
+export const USER_MANAGEMENT_ROLES = [Role.SUPER_ADMIN, Role.ADMIN] as const;
+
 export type InternalRole = (typeof ADMIN_ROLES)[number];
 
-export async function currentUser() {
-  const configuredEmail = process.env.ADMIN_EMAIL;
+export function safeUser<T extends object>(user: T) {
+  const { supabaseUserId: _supabaseUserId, ...safe } = user as T & { supabaseUserId?: string | null };
+  return safe;
+}
 
-  if (!configuredEmail) {
+export async function currentUser() {
+  const cookieStore = await cookies();
+  const accessToken = cookieStore.get(ACCESS_TOKEN_COOKIE)?.value;
+
+  if (!accessToken) {
     return null;
   }
 
-  return prisma.user.findUnique({
-    where: { email: configuredEmail }
-  });
+  const supabase = createSupabaseAdminClient();
+  const { data, error } = await supabase.auth.getUser(accessToken);
+
+  if (error || !data.user?.email) {
+    return null;
+  }
+
+  const email = data.user.email.toLowerCase();
+  const user = await prisma.user.findUnique({ where: { email } });
+
+  if (!user?.active) {
+    return null;
+  }
+
+  return user;
 }
 
 export async function requireUser() {

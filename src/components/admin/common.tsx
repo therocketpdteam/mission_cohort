@@ -31,7 +31,7 @@ export type AdminRow = Record<string, any>;
 export type FieldConfig = {
   name: string;
   label: string;
-  type?: "text" | "number" | "date" | "datetime-local" | "email" | "textarea" | "select" | "checkbox";
+  type?: "text" | "number" | "date" | "datetime-local" | "email" | "password" | "textarea" | "select" | "checkbox";
   options?: Array<{ label: string; value: string }>;
   required?: boolean;
 };

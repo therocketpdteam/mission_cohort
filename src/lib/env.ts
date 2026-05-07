@@ -28,6 +28,7 @@ const envSchema = z.object({
   MUX_TOKEN_SECRET: optionalString,
   MUX_WEBHOOK_SECRET: optionalString,
   INTEGRATION_ENCRYPTION_KEY: optionalString,
+  AUTH_BOOTSTRAP_SECRET: optionalString,
   WEBHOOK_SECRET: optionalString,
   CRON_SECRET: optionalString,
   APP_BASE_URL: optionalString
@@ -59,6 +60,7 @@ export function getEnvPresence() {
     sendgridWebhookConfigured: Boolean(env.SENDGRID_WEBHOOK_PUBLIC_KEY),
     crmConfigured: Boolean(env.CRM_WEBHOOK_URL && env.CRM_WEBHOOK_SECRET),
     muxConfigured: Boolean(env.MUX_TOKEN_ID && env.MUX_TOKEN_SECRET),
+    authBootstrapConfigured: Boolean(env.AUTH_BOOTSTRAP_SECRET),
     webhookSecretConfigured: Boolean(env.WEBHOOK_SECRET),
     cronSecretConfigured: Boolean(env.CRON_SECRET),
     appBaseUrlConfigured: Boolean(env.APP_BASE_URL)

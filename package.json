@@ -19,7 +19,8 @@
     "smoke": "tsx scripts/smoke.ts",
     "qa:smoke": "tsx scripts/final-smoke.ts",
     "qa:prepush": "bash scripts/pre-push-qa.sh",
-    "readiness": "node scripts/readiness-check.mjs"
+    "readiness": "node scripts/readiness-check.mjs",
+    "auth:create-admin": "tsx scripts/create-admin-user.ts"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

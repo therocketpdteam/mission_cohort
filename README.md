@@ -19,7 +19,7 @@ When a registration arrives, Mission Control stores the organization, registrati
 - Material UI
 - Prisma
 - Supabase Postgres
-- Supabase Auth-ready architecture
+- Supabase Auth
 - Zod validation
 - Service-layer architecture
 
@@ -78,6 +78,7 @@ MUX_TOKEN_ID
 MUX_TOKEN_SECRET
 MUX_WEBHOOK_SECRET
 INTEGRATION_ENCRYPTION_KEY
+AUTH_BOOTSTRAP_SECRET
 WEBHOOK_SECRET
 CRON_SECRET
 APP_BASE_URL
@@ -112,9 +113,47 @@ pnpm prisma:push
 ```
 
 3. Open `/api/health` and confirm `database: true`.
-4. Create Jotform mappings in `/settings`.
-5. Send one real Jotform test submission and verify registration, optional participants, payment record, operations tasks, and webhook event logging.
-6. Configure SendGrid, then Google Calendar, then QuickBooks, then CRM, then Mux.
+4. Create the first admin user, then sign in at `/login`.
+5. Create Jotform mappings in `/settings`.
+6. Send one real Jotform test submission and verify registration, optional participants, payment record, operations tasks, and webhook event logging.
+7. Configure SendGrid, then Google Calendar, then QuickBooks, then CRM, then Mux.
+
+## Admin Authentication
+
+Mission Control uses Supabase Auth for passwords and secure sessions. Mission Control's `User` table controls internal role authorization and active/inactive access.
+
+Create the first SUPER_ADMIN from a trusted local terminal:
+
+```bash
+MC_ADMIN_EMAIL=you@rocketpd.com \
+MC_ADMIN_PASSWORD='use-a-long-temporary-password' \
+MC_ADMIN_FIRST_NAME=Your \
+MC_ADMIN_LAST_NAME=Name \
+pnpm auth:create-admin
+```
+
+If local database credentials are not available, set `AUTH_BOOTSTRAP_SECRET` in Vercel temporarily and call the production bootstrap endpoint once:
+
+```bash
+curl -X POST https://mission-cohort-six.vercel.app/api/auth/bootstrap \
+  -H 'Content-Type: application/json' \
+  -d '{"secret":"<AUTH_BOOTSTRAP_SECRET>","email":"you@rocketpd.com","password":"use-a-long-temporary-password","firstName":"Your","lastName":"Name"}'
+```
+
+Then open `/login`. SUPER_ADMIN and ADMIN users can create additional users in `/settings` under "Admin Users". Remove or rotate `AUTH_BOOTSTRAP_SECRET` after the first real admin is created.
+
+Supported roles:
+
+```bash
+SUPER_ADMIN
+ADMIN
+OPERATIONS
+SALES
+PRESENTER
+VIEWER
+```
+
+Users can be deactivated from Settings without deleting historical audit or communication records.
 
 Readiness helper:
 
