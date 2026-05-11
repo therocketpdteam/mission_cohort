@@ -354,3 +354,50 @@ export function normalizeJotformRegistrationPayload(payload: UnknownRecord, mapp
     }
   };
 }
+
+export function previewJotformRegistrationPayload(payload: UnknownRecord, mappings: JotformFormMapping[] = []) {
+  const flat = normalizeFlatPayload(payload);
+  const fieldPreview = Object.entries(flat)
+    .filter(([, value]) => readString(value))
+    .slice(0, 30)
+    .map(([key, value]) => ({
+      key,
+      value: readString(value).slice(0, 240)
+    }));
+
+  try {
+    const normalized = normalizeJotformRegistrationPayload(payload, mappings);
+
+    return {
+      formId: normalized.routing.formId,
+      submissionId: normalized.externalSubmissionId,
+      cohortSlug: normalized.routing.cohortSlug,
+      mappingId: normalized.routing.mappingId,
+      hasMapping: Boolean(normalized.routing.mappingId),
+      primaryContactName: normalized.registration.primaryContactName,
+      primaryContactEmail: normalized.registration.primaryContactEmail,
+      organizationName: normalized.organization.name,
+      participantCount: normalized.registration.participantCount,
+      parsedParticipantCount: normalized.participants.length,
+      participantParseErrors: normalized.participantParseErrors,
+      normalized,
+      fieldPreview
+    };
+  } catch (error) {
+    return {
+      formId: readString(firstValue(flat, ["formID", "formId", "form_id"])),
+      submissionId: readString(firstValue(flat, ["submissionID", "submissionId", "submission_id", "id"])),
+      cohortSlug: readString(firstValue(flat, ["cohortSlug", "cohort_slug", "CohortSlug"])),
+      mappingId: "",
+      hasMapping: false,
+      primaryContactName: readString(firstValue(flat, ["primaryContactName", "contactName", "registrantName", "name"])),
+      primaryContactEmail: readString(firstValue(flat, ["primaryContactEmail", "contactEmail", "registrantEmail", "email"])),
+      organizationName: readString(firstValue(flat, ["Name of Organization", "organizationName", "districtOrganizationName", "districtOrOrganizationName", "organization", "districtName", "DistrictName", "name"])),
+      participantCount: readParticipantCount(firstValue(flat, ["participantCount", "numberOfParticipants", "participantsCount"])),
+      parsedParticipantCount: 0,
+      participantParseErrors: [error instanceof Error ? error.message : "Unable to normalize Jotform payload"],
+      normalized: null,
+      fieldPreview
+    };
+  }
+}

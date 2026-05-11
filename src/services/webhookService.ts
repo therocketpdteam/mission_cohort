@@ -11,6 +11,7 @@ import {
 import { env } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
 import { normalizeJotformRegistrationPayload } from "@/modules/jotform";
+import { getDecryptedIntegrationConnection } from "@/services/integrationService";
 import { listActiveJotformFormMappings } from "@/services/jotformMappingService";
 import { createDefaultRegistrationOperationsTasks } from "@/services/operationsTaskService";
 import { queueParticipantCrmSync, queueRegistrationCrmSync } from "@/services/crmSyncService";
@@ -44,20 +45,22 @@ function badWebhookPayload(message: string) {
   });
 }
 
-export function validateWebhookSecret(request: Request) {
-  if (!env.WEBHOOK_SECRET) {
-    return true;
-  }
-
-  const configuredSecret = env.WEBHOOK_SECRET;
+export async function validateWebhookSecret(request: Request) {
   const headerSecret = request.headers.get("x-webhook-secret");
   const bearerSecret = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
   const querySecret = new URL(request.url).searchParams.get("secret");
+  const providedSecret = headerSecret || bearerSecret || querySecret;
+  const jotformConnection = await getDecryptedIntegrationConnection("JOTFORM");
+  const configuredSecrets = [env.WEBHOOK_SECRET, jotformConnection?.accessToken].filter(Boolean);
 
-  return headerSecret === configuredSecret || bearerSecret === configuredSecret || querySecret === configuredSecret;
+  if (configuredSecrets.length === 0) {
+    return true;
+  }
+
+  return configuredSecrets.includes(providedSecret ?? "");
 }
 
-export async function processRegistrationWebhook(payload: Record<string, any>) {
+export async function processRegistrationWebhook(payload: Record<string, any>, options?: { existingEventId?: string }) {
   const isJotformPayload = Boolean(
     stringValue(payload.source).toLowerCase() === "jotform" ||
       payload.answers ||
@@ -66,11 +69,19 @@ export async function processRegistrationWebhook(payload: Record<string, any>) {
       payload.formId ||
       payload.submissionID
   );
-  const event = await recordWebhookEvent({
-    source: stringValue(payload.source, isJotformPayload ? "jotform" : "registration_form"),
-    eventType: stringValue(payload.eventType, "registration.submitted"),
-    payload: payload as Prisma.InputJsonValue
-  });
+  const event = options?.existingEventId
+    ? await prisma.webhookEvent.update({
+        where: { id: options.existingEventId },
+        data: {
+          status: WebhookProcessingStatus.PROCESSING,
+          errorMessage: null
+        }
+      })
+    : await recordWebhookEvent({
+        source: stringValue(payload.source, isJotformPayload ? "jotform" : "registration_form"),
+        eventType: stringValue(payload.eventType, "registration.submitted"),
+        payload: payload as Prisma.InputJsonValue
+      });
 
   try {
     const mappings = isJotformPayload ? await listActiveJotformFormMappings() : [];
@@ -78,6 +89,15 @@ export async function processRegistrationWebhook(payload: Record<string, any>) {
       isJotformPayload
         ? normalizeJotformRegistrationPayload(payload, mappings)
         : payload;
+    const formId = stringValue(normalized.routing?.formId);
+
+    if (isJotformPayload && !formId) {
+      throw badWebhookPayload("Jotform formID is required before processing");
+    }
+
+    if (isJotformPayload && !stringValue(normalized.routing?.mappingId)) {
+      throw badWebhookPayload(`Jotform form ${formId} needs a mapping before processing`);
+    }
     const organizationInput = normalized.organization ?? {};
     const registrationInput = normalized.registration ?? normalized;
     const participantsInput = Array.isArray(normalized.participants)

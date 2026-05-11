@@ -4,7 +4,7 @@ import { processRegistrationWebhook, validateWebhookSecret } from "@/services/we
 
 export async function POST(request: Request) {
   try {
-    if (!validateWebhookSecret(request)) {
+    if (!(await validateWebhookSecret(request))) {
       return fail("Invalid webhook secret", "FORBIDDEN", 403);
     }
 

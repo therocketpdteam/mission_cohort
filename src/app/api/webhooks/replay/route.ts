@@ -1,5 +1,6 @@
 import { fail, handleApiError, ok } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
+import { replayJotformWebhookEvent } from "@/services/jotformIntakeService";
 import { processQuickBooksWebhook } from "@/services/quickBooksService";
 import { processRegistrationWebhook } from "@/services/webhookService";
 
@@ -19,6 +20,10 @@ export async function POST(request: Request) {
 
     if (event.source === "quickbooks") {
       return ok(await processQuickBooksWebhook(JSON.stringify(event.payload), null, true), { status: 202 });
+    }
+
+    if (event.source === "jotform") {
+      return ok(await replayJotformWebhookEvent(event.id), { status: 202 });
     }
 
     return ok(await processRegistrationWebhook(event.payload as Record<string, any>), { status: 202 });
