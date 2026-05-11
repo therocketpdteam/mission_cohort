@@ -1,24 +1,37 @@
 "use client";
 
 import AddIcon from "@mui/icons-material/Add";
+import CheckCircleOutline from "@mui/icons-material/CheckCircleOutline";
 import ContentCopyOutlined from "@mui/icons-material/ContentCopyOutlined";
 import EditOutlined from "@mui/icons-material/EditOutlined";
+import ExpandMoreOutlined from "@mui/icons-material/ExpandMoreOutlined";
 import KeyOutlined from "@mui/icons-material/KeyOutlined";
 import PowerSettingsNewOutlined from "@mui/icons-material/PowerSettingsNewOutlined";
 import ReplayOutlined from "@mui/icons-material/ReplayOutlined";
+import RouteOutlined from "@mui/icons-material/RouteOutlined";
 import ScienceOutlined from "@mui/icons-material/ScienceOutlined";
+import VisibilityOutlined from "@mui/icons-material/VisibilityOutlined";
+import WarningAmberOutlined from "@mui/icons-material/WarningAmberOutlined";
 import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
+  Alert,
   Box,
   Button,
+  Card,
+  CardContent,
   Chip,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
-  Divider,
   Grid,
   MenuItem,
   Stack,
+  Step,
+  StepLabel,
+  Stepper,
   TextField,
   Typography
 } from "@mui/material";
@@ -27,6 +40,7 @@ import { useEffect, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
 import {
   AdminRow,
+  EmptyState,
   FieldConfig,
   MutationDialog,
   PageHeader,
@@ -73,24 +87,65 @@ function userFields(editing: AdminRow | null): FieldConfig[] {
   ];
 }
 
+const wizardSteps = ["Summary", "Routing", "Detected Fields", "Preview", "Save & Replay"];
+
+function InfoTile({ label, value }: { label: string; value: unknown }) {
+  return (
+    <Box sx={{ border: 1, borderColor: "divider", borderRadius: 1, p: 1.5, minHeight: 74 }}>
+      <Typography variant="caption" color="text.secondary">
+        {label}
+      </Typography>
+      <Typography fontWeight={800} sx={{ mt: 0.25, overflowWrap: "anywhere" }}>
+        {value == null || value === "" ? "-" : String(value)}
+      </Typography>
+    </Box>
+  );
+}
+
+function FieldChipGroup({ title, fields }: { title: string; fields: Array<[string, unknown]> }) {
+  const visibleFields = fields.filter(([, value]) => value != null && value !== "");
+
+  return (
+    <Stack spacing={1}>
+      <Typography variant="h4">{title}</Typography>
+      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+        {visibleFields.length > 0
+          ? visibleFields.map(([label, value]) => (
+              <Chip
+                key={label}
+                label={`${label}: ${String(value).slice(0, 90)}`}
+                variant="outlined"
+                sx={{ maxWidth: "100%", justifyContent: "flex-start" }}
+              />
+            ))
+          : <Chip label="No value detected" variant="outlined" />}
+      </Stack>
+    </Stack>
+  );
+}
+
 function JotformMappingWizard({
   event,
   cohorts,
   existingMapping,
   onClose,
-  onSaved
+  onSaved,
+  onReplay
 }: {
   event: AdminRow | null;
   cohorts: AdminRow[];
   existingMapping?: AdminRow;
   onClose: () => void;
   onSaved: () => Promise<void>;
+  onReplay: (event: AdminRow) => Promise<void>;
 }) {
   const preview = event?.preview ?? {};
+  const readiness = event?.readiness ?? {};
   const [sessionCount, setSessionCount] = useState(5);
   const [routingMode, setRoutingMode] = useState<"default" | "slug">("slug");
   const [defaultCohortId, setDefaultCohortId] = useState("");
   const [label, setLabel] = useState("");
+  const [activeStep, setActiveStep] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -102,11 +157,12 @@ function JotformMappingWizard({
       setRoutingMode(useSlug ? "slug" : "default");
       setDefaultCohortId(existingMapping?.defaultCohortId ?? "");
       setLabel(existingMapping?.label ?? `Jotform ${preview.formId || "form"} intake`);
+      setActiveStep(0);
       setError(null);
     }
   }, [event, existingMapping, preview.cohortSlug, preview.formId]);
 
-  async function save() {
+  async function save({ replayAfterSave = false } = {}) {
     if (!event) {
       return;
     }
@@ -137,6 +193,9 @@ function JotformMappingWizard({
         }
       });
       await onSaved();
+      if (replayAfterSave) {
+        await onReplay(event);
+      }
       onClose();
     } catch (saveError) {
       setError((saveError as Error).message);
@@ -145,76 +204,310 @@ function JotformMappingWizard({
     }
   }
 
+  const normalized = preview.normalized ?? {};
+  const registration = normalized.registration ?? {};
+  const organization = normalized.organization ?? {};
+  const payment = normalized.payment ?? {};
+  const participants = Array.isArray(normalized.participants) ? normalized.participants : [];
+  const missingFields = Array.isArray(readiness.missingRequiredFields) ? readiness.missingRequiredFields : [];
+  const detectedFieldGroups = [
+    {
+      title: "Contact",
+      fields: [
+        ["Name", preview.primaryContactName],
+        ["Email", preview.primaryContactEmail],
+        ["Phone", registration.primaryContactPhone],
+        ["Title", registration.primaryContactTitle]
+      ] as Array<[string, unknown]>
+    },
+    {
+      title: "Organization",
+      fields: [
+        ["Name", preview.organizationName],
+        ["Address", registration.billingAddress],
+        ["Phone", organization.phone]
+      ] as Array<[string, unknown]>
+    },
+    {
+      title: "Payment",
+      fields: [
+        ["Method", registration.paymentMethod],
+        ["Status", registration.paymentStatus],
+        ["Amount", registration.totalAmount],
+        ["Invoice", registration.invoiceNumber],
+        ["PO", registration.purchaseOrderNumber]
+      ] as Array<[string, unknown]>
+    },
+    {
+      title: "Routing",
+      fields: [
+        ["Form ID", preview.formId],
+        ["Submission ID", preview.submissionId],
+        ["cohortSlug", preview.cohortSlug],
+        ["Current mapping", preview.hasMapping ? "Mapped" : "Not mapped"]
+      ] as Array<[string, unknown]>
+    }
+  ];
+
   return (
-    <Dialog open={Boolean(event)} onClose={onClose} fullWidth maxWidth="lg">
-      <DialogTitle>Jotform Mapping Wizard</DialogTitle>
+    <Dialog open={Boolean(event)} onClose={onClose} fullWidth maxWidth="lg" PaperProps={{ sx: { minHeight: "80vh" } }}>
+      <DialogTitle>
+        <Stack direction={{ xs: "column", md: "row" }} spacing={1.5} justifyContent="space-between" alignItems={{ xs: "flex-start", md: "center" }}>
+          <Box>
+            <Typography variant="h3">Review Jotform Submission</Typography>
+            <Typography color="text.secondary" variant="body2">
+              Confirm the route, preview what Mission Control will create, then replay when ready.
+            </Typography>
+          </Box>
+          <StatusChip value={event?.reviewStatus ?? event?.status} />
+        </Stack>
+      </DialogTitle>
       <DialogContent>
         {event && (
-          <Stack spacing={2}>
-            {error && <Typography color="error">{error}</Typography>}
-            <Grid container spacing={2}>
-              {[
-                ["Form ID", preview.formId || "-"],
-                ["Submission ID", preview.submissionId || "-"],
-                ["Detected Contact", preview.primaryContactName || "-"],
-                ["Detected Email", preview.primaryContactEmail || "-"],
-                ["Detected Organization", preview.organizationName || "-"],
-                ["cohortSlug", preview.cohortSlug || "-"],
-                ["Parsed Participants", preview.parsedParticipantCount ?? 0],
-                ["Participant Count", preview.participantCount ?? 0]
-              ].map(([name, value]) => (
-                <Grid size={{ xs: 12, sm: 6, md: 3 }} key={String(name)}>
-                  <Typography variant="body2" color="text.secondary">{name}</Typography>
-                  <Typography>{String(value)}</Typography>
-                </Grid>
+          <Stack spacing={3} sx={{ pt: 1 }}>
+            <Stepper activeStep={activeStep} alternativeLabel sx={{ display: { xs: "none", md: "flex" } }}>
+              {wizardSteps.map((step) => (
+                <Step key={step}>
+                  <StepLabel>{step}</StepLabel>
+                </Step>
               ))}
-            </Grid>
-            <Divider />
-            <Grid container spacing={2}>
-              <Grid size={{ xs: 12, md: 6 }}>
-                <TextField fullWidth label="Mapping label" value={label} onChange={(event) => setLabel(event.target.value)} />
-              </Grid>
-              <Grid size={{ xs: 12, md: 3 }}>
-                <TextField select fullWidth label="Session count" value={sessionCount} onChange={(event) => setSessionCount(Number(event.target.value))}>
-                  {[3, 5, 8].map((value) => <MenuItem value={value} key={value}>{value} sessions</MenuItem>)}
-                </TextField>
-              </Grid>
-              <Grid size={{ xs: 12, md: 3 }}>
-                <TextField select fullWidth label="Routing" value={routingMode} onChange={(event) => setRoutingMode(event.target.value as "default" | "slug")}>
-                  <MenuItem value="default">Default cohort</MenuItem>
-                  <MenuItem value="slug">Require cohortSlug</MenuItem>
-                </TextField>
-              </Grid>
-              {routingMode === "default" && (
-                <Grid size={{ xs: 12 }}>
-                  <TextField select fullWidth label="Default cohort" value={defaultCohortId} onChange={(event) => setDefaultCohortId(event.target.value)}>
-                    {cohorts.map((cohort) => <MenuItem value={cohort.id} key={cohort.id}>{cohort.title}</MenuItem>)}
+            </Stepper>
+            {error && <Alert severity="error">{error}</Alert>}
+            {readiness.recommendedAction && <Alert severity={event.reviewStatus === "PROCESSED" ? "success" : event.reviewStatus === "FAILED" ? "error" : "info"}>{readiness.recommendedAction}</Alert>}
+
+            {activeStep === 0 && (
+              <Stack spacing={2}>
+                <Grid container spacing={1.5}>
+                  <Grid size={{ xs: 12, md: 3 }}><InfoTile label="Form ID" value={preview.formId} /></Grid>
+                  <Grid size={{ xs: 12, md: 3 }}><InfoTile label="Submission ID" value={preview.submissionId} /></Grid>
+                  <Grid size={{ xs: 12, md: 3 }}><InfoTile label="Detected Contact" value={preview.primaryContactName || preview.primaryContactEmail} /></Grid>
+                  <Grid size={{ xs: 12, md: 3 }}><InfoTile label="Organization" value={preview.organizationName} /></Grid>
+                  <Grid size={{ xs: 12, md: 3 }}><InfoTile label="Cohort Route" value={preview.cohortSlug || registration.cohortId || "Needs routing"} /></Grid>
+                  <Grid size={{ xs: 12, md: 3 }}><InfoTile label="Participants" value={`${preview.parsedParticipantCount ?? 0}${preview.participantCount ? ` / ${preview.participantCount}` : ""}`} /></Grid>
+                  <Grid size={{ xs: 12, md: 3 }}><InfoTile label="Payment" value={[registration.paymentMethod, registration.paymentStatus].filter(Boolean).join(" / ")} /></Grid>
+                  <Grid size={{ xs: 12, md: 3 }}><InfoTile label="Amount" value={registration.totalAmount ? `$${Number(registration.totalAmount).toLocaleString()}` : ""} /></Grid>
+                </Grid>
+                {missingFields.length > 0 && (
+                  <Alert severity="warning">
+                    Missing: {missingFields.join(", ")}
+                  </Alert>
+                )}
+                {preview.participantParseErrors?.length > 0 && (
+                  <Alert severity="error">
+                    Participant parsing issue: {preview.participantParseErrors.join("; ")}
+                  </Alert>
+                )}
+              </Stack>
+            )}
+
+            {activeStep === 1 && (
+              <Grid container spacing={2}>
+                <Grid size={{ xs: 12, md: 6 }}>
+                  <TextField fullWidth label="Mapping label" value={label} onChange={(event) => setLabel(event.target.value)} />
+                </Grid>
+                <Grid size={{ xs: 12, md: 3 }}>
+                  <TextField select fullWidth label="Session count" value={sessionCount} onChange={(event) => setSessionCount(Number(event.target.value))}>
+                    {[3, 5, 8].map((value) => <MenuItem value={value} key={value}>{value} sessions</MenuItem>)}
                   </TextField>
                 </Grid>
-              )}
-            </Grid>
-            <Grid container spacing={2}>
-              <Grid size={{ xs: 12, md: 6 }}>
-                <Typography variant="h4" sx={{ mb: 1 }}>Detected Fields</Typography>
-                <Box component="pre" sx={{ p: 2, bgcolor: "background.default", borderRadius: 1, overflow: "auto", maxHeight: 300 }}>
-                  {JSON.stringify(preview.fieldPreview ?? [], null, 2)}
-                </Box>
+                <Grid size={{ xs: 12, md: 3 }}>
+                  <TextField select fullWidth label="Routing mode" value={routingMode} onChange={(event) => setRoutingMode(event.target.value as "default" | "slug")}>
+                    <MenuItem value="default">Use one default cohort</MenuItem>
+                    <MenuItem value="slug">Require cohortSlug from Jotform URL</MenuItem>
+                  </TextField>
+                </Grid>
+                {routingMode === "default" && (
+                  <Grid size={{ xs: 12 }}>
+                    <TextField select fullWidth label="Default cohort" value={defaultCohortId} onChange={(event) => setDefaultCohortId(event.target.value)}>
+                      {cohorts.map((cohort) => <MenuItem value={cohort.id} key={cohort.id}>{cohort.title}</MenuItem>)}
+                    </TextField>
+                  </Grid>
+                )}
+                <Grid size={{ xs: 12 }}>
+                  <Alert severity="info">
+                    For the shared 5-session form, use cohortSlug routing. For one-form-one-cohort forms, choose a default cohort.
+                  </Alert>
+                </Grid>
               </Grid>
-              <Grid size={{ xs: 12, md: 6 }}>
-                <Typography variant="h4" sx={{ mb: 1 }}>Normalized Preview</Typography>
-                <Box component="pre" sx={{ p: 2, bgcolor: "background.default", borderRadius: 1, overflow: "auto", maxHeight: 300 }}>
-                  {JSON.stringify(preview.normalized ?? preview.participantParseErrors ?? {}, null, 2)}
-                </Box>
+            )}
+
+            {activeStep === 2 && (
+              <Grid container spacing={2}>
+                {detectedFieldGroups.map((group) => (
+                  <Grid size={{ xs: 12, md: 6 }} key={group.title}>
+                    <FieldChipGroup title={group.title} fields={group.fields} />
+                  </Grid>
+                ))}
+                <Grid size={{ xs: 12 }}>
+                  <FieldChipGroup
+                    title="Participants"
+                    fields={[
+                      ["Parsed", preview.parsedParticipantCount ?? 0],
+                      ["Expected", preview.participantCount ?? 0],
+                      ["First participant", participants[0] ? `${participants[0].firstName} ${participants[0].lastName} (${participants[0].email})` : ""]
+                    ]}
+                  />
+                </Grid>
               </Grid>
-            </Grid>
+            )}
+
+            {activeStep === 3 && (
+              <Grid container spacing={2}>
+                <Grid size={{ xs: 12, md: 4 }}><InfoTile label="Registration POC" value={`${registration.primaryContactName || "-"} ${registration.primaryContactEmail ? `<${registration.primaryContactEmail}>` : ""}`} /></Grid>
+                <Grid size={{ xs: 12, md: 4 }}><InfoTile label="Organization" value={organization.name} /></Grid>
+                <Grid size={{ xs: 12, md: 4 }}><InfoTile label="Cohort" value={preview.cohortSlug || registration.cohortId || "Selected by mapping"} /></Grid>
+                <Grid size={{ xs: 12, md: 4 }}><InfoTile label="Participant roster" value={`${participants.length} parsed from submission`} /></Grid>
+                <Grid size={{ xs: 12, md: 4 }}><InfoTile label="Payment record" value={`${payment.method || registration.paymentMethod || "Unknown"} / ${payment.status || registration.paymentStatus || "Unknown"}`} /></Grid>
+                <Grid size={{ xs: 12, md: 4 }}><InfoTile label="Amount" value={payment.amount ? `$${Number(payment.amount).toLocaleString()}` : "$0"} /></Grid>
+                {participants.length > 0 && (
+                  <Grid size={{ xs: 12 }}>
+                    <Stack spacing={1}>
+                      <Typography variant="h4">Participant Preview</Typography>
+                      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                        {participants.slice(0, 12).map((participant: AdminRow) => (
+                          <Chip key={participant.email} label={`${participant.firstName} ${participant.lastName} · ${participant.email}`} />
+                        ))}
+                        {participants.length > 12 && <Chip label={`+${participants.length - 12} more`} />}
+                      </Stack>
+                    </Stack>
+                  </Grid>
+                )}
+              </Grid>
+            )}
+
+            {activeStep === 4 && (
+              <Stack spacing={2}>
+                <Alert severity={readiness.canReplay || event.reviewStatus === "PROCESSED" ? "success" : "warning"}>
+                  {readiness.canReplay
+                    ? "This submission is ready to replay into Mission Control."
+                    : event.reviewStatus === "PROCESSED"
+                      ? "This submission has already been processed."
+                      : "Save the mapping first. If anything is still missing, Mission Control will keep the submission in review instead of creating bad data."}
+                </Alert>
+                <Grid container spacing={1.5}>
+                  <Grid size={{ xs: 12, md: 4 }}><InfoTile label="Mapping" value={label} /></Grid>
+                  <Grid size={{ xs: 12, md: 4 }}><InfoTile label="Session count" value={`${sessionCount} sessions`} /></Grid>
+                  <Grid size={{ xs: 12, md: 4 }}><InfoTile label="Routing" value={routingMode === "slug" ? "Requires cohortSlug" : "Default cohort"} /></Grid>
+                </Grid>
+              </Stack>
+            )}
+
+            <Accordion disableGutters>
+              <AccordionSummary expandIcon={<ExpandMoreOutlined />}>
+                <Typography fontWeight={800}>Advanced payload</Typography>
+              </AccordionSummary>
+              <AccordionDetails>
+                <Grid container spacing={2}>
+                  <Grid size={{ xs: 12, md: 6 }}>
+                    <Typography variant="h4" sx={{ mb: 1 }}>Detected Fields</Typography>
+                    <Box component="pre" sx={{ p: 2, bgcolor: "background.default", borderRadius: 1, overflow: "auto", maxHeight: 300 }}>
+                      {JSON.stringify(preview.fieldPreview ?? [], null, 2)}
+                    </Box>
+                  </Grid>
+                  <Grid size={{ xs: 12, md: 6 }}>
+                    <Typography variant="h4" sx={{ mb: 1 }}>Normalized Preview</Typography>
+                    <Box component="pre" sx={{ p: 2, bgcolor: "background.default", borderRadius: 1, overflow: "auto", maxHeight: 300 }}>
+                      {JSON.stringify(preview.normalized ?? preview.participantParseErrors ?? {}, null, 2)}
+                    </Box>
+                  </Grid>
+                </Grid>
+              </AccordionDetails>
+            </Accordion>
           </Stack>
         )}
       </DialogContent>
       <DialogActions>
         <Button variant="outlined" onClick={onClose}>Cancel</Button>
-        <Button onClick={save} disabled={saving}>{saving ? "Saving" : "Save Mapping"}</Button>
+        <Button variant="outlined" disabled={activeStep === 0} onClick={() => setActiveStep((step) => Math.max(0, step - 1))}>Back</Button>
+        {activeStep < wizardSteps.length - 1 ? (
+          <Button onClick={() => setActiveStep((step) => Math.min(wizardSteps.length - 1, step + 1))}>Next</Button>
+        ) : (
+          <Stack direction="row" spacing={1}>
+            <Button variant="outlined" onClick={() => save()} disabled={saving}>{saving ? "Saving" : "Save Mapping"}</Button>
+            <Button onClick={() => save({ replayAfterSave: true })} disabled={saving || event?.reviewStatus === "PROCESSED"}>
+              {saving ? "Working" : "Save & Replay"}
+            </Button>
+          </Stack>
+        )}
       </DialogActions>
     </Dialog>
+  );
+}
+
+function JotformSubmissionCard({
+  row,
+  onReview,
+  onReplay
+}: {
+  row: AdminRow;
+  onReview: (row: AdminRow) => void;
+  onReplay: (row: AdminRow) => void;
+}) {
+  const preview = row.preview ?? {};
+  const readiness = row.readiness ?? {};
+  const normalized = preview.normalized ?? {};
+  const registration = normalized.registration ?? {};
+  const status = row.reviewStatus ?? row.status;
+  const statusIcon =
+    status === "PROCESSED"
+      ? <CheckCircleOutline fontSize="small" color="success" />
+      : status === "FAILED"
+        ? <WarningAmberOutlined fontSize="small" color="error" />
+        : status === "NEEDS_MAPPING"
+          ? <RouteOutlined fontSize="small" color="warning" />
+          : <VisibilityOutlined fontSize="small" color="info" />;
+
+  return (
+    <Card variant="outlined" sx={{ height: "100%" }}>
+      <CardContent>
+        <Stack spacing={2}>
+          <Stack direction="row" spacing={1.5} alignItems="flex-start" justifyContent="space-between">
+            <Stack spacing={0.75} sx={{ minWidth: 0 }}>
+              <Stack direction="row" spacing={1} alignItems="center">
+                {statusIcon}
+                <StatusChip value={status} />
+              </Stack>
+              <Typography variant="h4" sx={{ overflowWrap: "anywhere" }}>
+                {preview.organizationName || "Unknown organization"}
+              </Typography>
+              <Typography color="text.secondary" sx={{ overflowWrap: "anywhere" }}>
+                {preview.primaryContactName || "Unknown contact"}{preview.primaryContactEmail ? ` · ${preview.primaryContactEmail}` : ""}
+              </Typography>
+            </Stack>
+            <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: "nowrap" }}>
+              {row.createdAt ? new Date(row.createdAt).toLocaleDateString() : ""}
+            </Typography>
+          </Stack>
+
+          <Grid container spacing={1}>
+            <Grid size={{ xs: 6, md: 4 }}><InfoTile label="Form" value={preview.formId || "Missing"} /></Grid>
+            <Grid size={{ xs: 6, md: 4 }}><InfoTile label="Submission" value={preview.submissionId} /></Grid>
+            <Grid size={{ xs: 6, md: 4 }}><InfoTile label="Cohort" value={preview.cohortSlug || registration.cohortId || "Needs route"} /></Grid>
+            <Grid size={{ xs: 6, md: 4 }}><InfoTile label="Participants" value={`${preview.parsedParticipantCount ?? 0}${preview.participantCount ? ` / ${preview.participantCount}` : ""}`} /></Grid>
+            <Grid size={{ xs: 6, md: 4 }}><InfoTile label="Payment" value={[registration.paymentMethod, registration.paymentStatus].filter(Boolean).join(" / ")} /></Grid>
+            <Grid size={{ xs: 6, md: 4 }}><InfoTile label="Amount" value={registration.totalAmount ? `$${Number(registration.totalAmount).toLocaleString()}` : ""} /></Grid>
+          </Grid>
+
+          {(readiness.recommendedAction || row.errorMessage) && (
+            <Alert severity={status === "FAILED" ? "error" : status === "PROCESSED" ? "success" : "info"}>
+              {row.errorMessage || readiness.recommendedAction}
+            </Alert>
+          )}
+
+          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+            <Button startIcon={<EditOutlined />} onClick={() => onReview(row)}>
+              Review & Map
+            </Button>
+            <Button variant="outlined" startIcon={<ReplayOutlined />} disabled={status === "PROCESSED"} onClick={() => onReplay(row)}>
+              Replay
+            </Button>
+            <Button variant="outlined" startIcon={<VisibilityOutlined />} onClick={() => onReview(row)}>
+              View Details
+            </Button>
+          </Stack>
+        </Stack>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -334,13 +627,16 @@ export function SettingsClient() {
     }
   }
 
-  async function replayWebhook(row: AdminRow) {
+  async function replayWebhook(row: AdminRow, throwOnError = false) {
     try {
       await adminApi("/api/jotform/replay", { method: "POST", body: { id: row.id } });
       notifySuccess("Jotform submission replayed");
       await load();
     } catch (error) {
       notifyError((error as Error).message);
+      if (throwOnError) {
+        throw error;
+      }
     }
   }
 
@@ -411,43 +707,6 @@ export function SettingsClient() {
           </Button>
           <Button variant="outlined" startIcon={<PowerSettingsNewOutlined />} onClick={() => toggleUser(params.row)}>
             {params.row.active ? "Disable" : "Enable"}
-          </Button>
-        </Stack>
-      )
-    }
-  ];
-  const eventColumns: GridColDef[] = [
-    { field: "reviewStatus", headerName: "Review", width: 150, valueGetter: (_value, row) => row.reviewStatus ?? row.status, renderCell: (params) => <StatusChip value={params.value} /> },
-    { field: "formId", headerName: "Form ID", width: 145, valueGetter: (_value, row) => row.preview?.formId ?? "-" },
-    { field: "submissionId", headerName: "Submission ID", minWidth: 170, flex: 0.9, valueGetter: (_value, row) => row.preview?.submissionId ?? "-" },
-    { field: "contact", headerName: "Detected contact", minWidth: 190, flex: 1, valueGetter: (_value, row) => row.preview?.primaryContactName ?? row.preview?.primaryContactEmail ?? "-" },
-    { field: "organization", headerName: "Organization", minWidth: 180, flex: 1, valueGetter: (_value, row) => row.preview?.organizationName ?? "-" },
-    { field: "cohortSlug", headerName: "cohortSlug", width: 160, valueGetter: (_value, row) => row.preview?.cohortSlug ?? "-" },
-    {
-      field: "participants",
-      headerName: "Participants",
-      width: 135,
-      valueGetter: (_value, row) => {
-        const parsed = row.preview?.parsedParticipantCount ?? 0;
-        const expected = row.preview?.participantCount ?? 0;
-        return expected ? `${parsed}/${expected}` : String(parsed);
-      }
-    },
-    { field: "status", headerName: "Status", width: 130, renderCell: (params) => <StatusChip value={params.value} /> },
-    { field: "errorMessage", headerName: "Error", flex: 1, minWidth: 260 },
-    { field: "createdAt", headerName: "Created", width: 170, valueFormatter: (value) => value ? new Date(value).toLocaleString() : "" },
-    {
-      field: "actions",
-      headerName: "Actions",
-      width: 220,
-      sortable: false,
-      renderCell: (params) => (
-        <Stack direction="row" spacing={1}>
-          <Button variant="outlined" startIcon={<EditOutlined />} onClick={() => setMappingWizardEvent(params.row)}>
-            Map
-          </Button>
-          <Button variant="outlined" startIcon={<ReplayOutlined />} onClick={() => replayWebhook(params.row)}>
-            Replay
           </Button>
         </Stack>
       )
@@ -557,33 +816,64 @@ export function SettingsClient() {
           </SectionCard>
         </Grid>
         <Grid size={{ xs: 12 }}>
-          <SectionCard title="Jotform Form Mappings" action={<Button startIcon={<AddIcon />} onClick={() => setDialogOpen(true)}>Add Mapping</Button>}>
-            <TableShell>
-              <DataGrid rows={mappings} columns={mappingColumns} pageSizeOptions={[10, 25]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} disableRowSelectionOnClick />
-            </TableShell>
-          </SectionCard>
-        </Grid>
-        <Grid size={{ xs: 12, lg: 5 }}>
-          <SectionCard title="Jotform Dry Run" action={<Button startIcon={<ScienceOutlined />} onClick={testJotformPayload}>Normalize</Button>}>
-            <Stack spacing={2}>
-              <TextField fullWidth multiline minRows={10} value={testPayload} onChange={(event) => setTestPayload(event.target.value)} />
-              {testResult && (
-                <Box component="pre" sx={{ p: 2, bgcolor: "background.default", borderRadius: 1, overflow: "auto", maxHeight: 320 }}>
-                  {JSON.stringify(testResult, null, 2)}
-                </Box>
-              )}
-            </Stack>
-          </SectionCard>
-        </Grid>
-        <Grid size={{ xs: 12, lg: 7 }}>
           <SectionCard title="Test Submissions / Review Queue">
             <Typography color="text.secondary" sx={{ mb: 2 }}>
-              Real Jotform submissions appear here first. If a form is unmapped, create the mapping from the received submission, then replay it into registrations.
+              Real Jotform submissions appear here first. Review the card, confirm the mapping, then replay it into registrations when ready.
             </Typography>
-            <TableShell>
-              <DataGrid rows={webhookEvents} columns={eventColumns} pageSizeOptions={[10, 25]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} disableRowSelectionOnClick />
-            </TableShell>
+            {webhookEvents.length === 0 ? (
+              <EmptyState
+                title="No Jotform submissions received yet"
+                description="Paste the webhook URL into Jotform, send a test submission, and it will show up here for review."
+              />
+            ) : (
+              <Grid container spacing={2}>
+                {webhookEvents.map((row) => (
+                  <Grid size={{ xs: 12, xl: 6 }} key={row.id}>
+                    <JotformSubmissionCard
+                      row={row}
+                      onReview={setMappingWizardEvent}
+                      onReplay={(event) => { void replayWebhook(event); }}
+                    />
+                  </Grid>
+                ))}
+              </Grid>
+            )}
           </SectionCard>
+        </Grid>
+        <Grid size={{ xs: 12 }}>
+          <Accordion>
+            <AccordionSummary expandIcon={<ExpandMoreOutlined />}>
+              <Stack spacing={0.25}>
+                <Typography variant="h3">Advanced Jotform Tools</Typography>
+                <Typography color="text.secondary" variant="body2">
+                  Manual mappings and JSON dry-runs live here for troubleshooting.
+                </Typography>
+              </Stack>
+            </AccordionSummary>
+            <AccordionDetails>
+              <Grid container spacing={2}>
+                <Grid size={{ xs: 12 }}>
+                  <SectionCard title="Manual Form Mappings" action={<Button startIcon={<AddIcon />} onClick={() => setDialogOpen(true)}>Add Mapping</Button>}>
+                    <TableShell>
+                      <DataGrid rows={mappings} columns={mappingColumns} pageSizeOptions={[10, 25]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} disableRowSelectionOnClick />
+                    </TableShell>
+                  </SectionCard>
+                </Grid>
+                <Grid size={{ xs: 12 }}>
+                  <SectionCard title="Jotform Dry Run" action={<Button startIcon={<ScienceOutlined />} onClick={testJotformPayload}>Normalize</Button>}>
+                    <Stack spacing={2}>
+                      <TextField fullWidth multiline minRows={8} value={testPayload} onChange={(event) => setTestPayload(event.target.value)} />
+                      {testResult && (
+                        <Box component="pre" sx={{ p: 2, bgcolor: "background.default", borderRadius: 1, overflow: "auto", maxHeight: 320 }}>
+                          {JSON.stringify(testResult, null, 2)}
+                        </Box>
+                      )}
+                    </Stack>
+                  </SectionCard>
+                </Grid>
+              </Grid>
+            </AccordionDetails>
+          </Accordion>
         </Grid>
       </Grid>
       <MutationDialog
@@ -607,6 +897,7 @@ export function SettingsClient() {
         cohorts={cohorts}
         existingMapping={currentWizardMapping}
         onClose={() => setMappingWizardEvent(null)}
+        onReplay={(event) => replayWebhook(event, true)}
         onSaved={async () => {
           notifySuccess("Jotform mapping saved");
           await load();

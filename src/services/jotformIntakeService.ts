@@ -62,17 +62,48 @@ export async function listJotformIntakeEvents() {
   return events.map((event) => {
     const preview = previewJotformRegistrationPayload(event.payload as Record<string, unknown>, mappings);
     const needsMapping = Boolean(preview.formId) && !preview.hasMapping;
+    const missingRequiredFields = [
+      !preview.formId ? "Jotform form ID" : "",
+      !preview.submissionId ? "submission ID" : "",
+      !preview.primaryContactName ? "primary contact name" : "",
+      !preview.primaryContactEmail ? "primary contact email" : "",
+      !preview.organizationName ? "organization name" : "",
+      !preview.cohortSlug && !preview.normalized?.registration?.cohortId ? "cohort routing" : ""
+    ].filter(Boolean);
+    const hasParticipantErrors = preview.participantParseErrors.length > 0;
+    const isProcessed = event.status === WebhookProcessingStatus.PROCESSED;
+    const canReplay = !isProcessed && !needsMapping && !hasParticipantErrors && missingRequiredFields.length === 0;
+    const reviewStatus = isProcessed
+      ? "PROCESSED"
+      : hasParticipantErrors || event.status === WebhookProcessingStatus.FAILED
+        ? "FAILED"
+        : needsMapping
+          ? "NEEDS_MAPPING"
+          : canReplay
+            ? "READY_TO_REPLAY"
+            : "REVIEW_REQUIRED";
+    const recommendedAction = isProcessed
+      ? "Already imported into Mission Control."
+      : hasParticipantErrors
+        ? "Fix the participant list in Jotform or review the bad lines before replaying."
+        : needsMapping
+          ? "Review this submission, confirm the form mapping, then replay it."
+          : missingRequiredFields.length > 0
+            ? `Review missing ${missingRequiredFields.join(", ")} before replaying.`
+            : "Ready to replay into registrations.";
 
     return {
       ...event,
       preview,
       needsMapping,
-      reviewStatus:
-        event.status === WebhookProcessingStatus.PROCESSED
-          ? "PROCESSED"
-          : needsMapping
-            ? "NEEDS_MAPPING"
-            : event.status
+      reviewStatus,
+      readiness: {
+        canReplay,
+        needsMapping,
+        hasParticipantErrors,
+        missingRequiredFields,
+        recommendedAction
+      }
     };
   });
 }
