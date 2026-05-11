@@ -454,6 +454,7 @@ model JotformFormMapping {
   sessionCount      Int
   defaultCohortId   String?
   requireCohortSlug Boolean  @default(false)
+  fieldMapJson      Json?
   active            Boolean  @default(true)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt

@@ -9,6 +9,7 @@ const jotformFormMappingBaseSchema = z.object({
     z.string().min(1).optional()
   ),
   requireCohortSlug: z.boolean().default(false),
+  fieldMapJson: z.record(z.string()).optional(),
   active: z.boolean().default(true)
 });
 

@@ -23,6 +23,13 @@ When a registration arrives, Mission Control stores the organization, registrati
 - Zod validation
 - Service-layer architecture
 
+## Project Guides
+
+Before changing UI or app workflows, consult:
+
+- `docs/UI_GUIDE.md` for Mission Control visual, layout, density, and admin UX standards.
+- `docs/DEVELOPMENT_GUIDE.md` for scope, architecture, and QA expectations.
+
 ## Setup
 
 Prerequisites:

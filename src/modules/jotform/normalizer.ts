@@ -9,8 +9,39 @@ type ParsedParticipant = {
   title?: string;
   phone?: string;
 };
+type FieldMap = Record<string, string>;
+type JotformTargetField = {
+  target: string;
+  label: string;
+  category: string;
+  aliases: string[];
+};
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export const jotformTargetFields: JotformTargetField[] = [
+  { target: "formId", label: "Jotform form ID", category: "Form", aliases: ["formID", "formId", "form_id"] },
+  { target: "submissionId", label: "Submission ID", category: "Form", aliases: ["submissionID", "submissionId", "submission_id", "id"] },
+  { target: "cohortSlug", label: "Cohort slug", category: "Routing", aliases: ["cohortSlug", "cohort_slug", "CohortSlug"] },
+  { target: "primaryContactName", label: "POC name", category: "Contact", aliases: ["primaryContactName", "contactName", "registrantName", "name", "Name"] },
+  { target: "primaryContactEmail", label: "POC email", category: "Contact", aliases: ["primaryContactEmail", "contactEmail", "registrantEmail", "email", "Email"] },
+  { target: "primaryContactPhone", label: "POC phone", category: "Contact", aliases: ["primaryContactPhone", "contactPhone", "registrantPhone", "phone", "Phone Number"] },
+  { target: "primaryContactTitle", label: "POC title", category: "Contact", aliases: ["primaryContactTitle", "contactTitle", "title", "Title"] },
+  { target: "organizationName", label: "Organization name", category: "Organization", aliases: ["Name of Organization", "organizationName", "districtOrganizationName", "districtOrOrganizationName", "organization", "districtName", "DistrictName", "name"] },
+  { target: "organizationAddress", label: "Organization address", category: "Organization", aliases: ["billingAddress", "address", "Address"] },
+  { target: "organizationPhone", label: "Organization phone", category: "Organization", aliases: ["organizationPhone", "phone", "Phone", "Phone Number"] },
+  { target: "participantCount", label: "Participant count", category: "Registration", aliases: ["participantCount", "numberOfParticipants", "participantsCount", "How many participants will be joining?", "Please select how many participants will be joining?"] },
+  { target: "paymentMethod", label: "Payment method", category: "Payment", aliases: ["paymentMethod", "method", "Preferred method of payment?"] },
+  { target: "paymentStatus", label: "Payment status", category: "Payment", aliases: ["paymentStatus", "status"] },
+  { target: "totalAmount", label: "Total amount", category: "Payment", aliases: ["totalAmount", "amount", "total", "CC - Total", "Total Cost"] },
+  { target: "purchaseOrderNumber", label: "PO number", category: "Payment", aliases: ["purchaseOrderNumber", "poNumber", "purchaseOrder"] },
+  { target: "invoiceNumber", label: "Invoice number", category: "Payment", aliases: ["invoiceNumber", "invoice"] },
+  { target: "notes", label: "Notes/source", category: "Registration", aliases: ["notes", "additionalNotes", "How did you hear about us?"] },
+  { target: "participantText", label: "Participant names/emails text box", category: "Participants", aliases: ["participantCsv", "participantsCsv", "participantText", "participantNamesEmails", "participantNamesAndEmails", "teamParticipants", "TeamParticipants", "namesAndEmails", "NamesEmails", "Please enter the names and email addresses of all participants, one per line, in the following format: Full Name, Email"] },
+  { target: "w9Url", label: "W-9 URL", category: "Documents", aliases: ["w9Url", "w9", "w9Link"] },
+  { target: "invoiceUrl", label: "Invoice URL", category: "Documents", aliases: ["invoiceUrl", "invoiceLink"] },
+  { target: "confirmationDocsSentAt", label: "Confirmation docs sent date", category: "Documents", aliases: ["confirmationDocsSentAt"] }
+];
 
 function normalizeKey(value: string): string {
   return value.replace(/[^a-z0-9]+/gi, "").toLowerCase();
@@ -93,6 +124,54 @@ function firstValue(payload: UnknownRecord, keys: string[]): unknown {
   }
 
   return undefined;
+}
+
+function readFieldMap(mapping?: JotformFormMapping): FieldMap {
+  const value = mapping?.fieldMapJson;
+
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+
+  return Object.entries(value as UnknownRecord).reduce<FieldMap>((acc, [target, sourceKey]) => {
+    const key = readString(sourceKey);
+
+    if (key) {
+      acc[target] = key;
+    }
+
+    return acc;
+  }, {});
+}
+
+function mappedFirstValue(flat: UnknownRecord, source: UnknownRecord, fieldMap: FieldMap, target: string, fallbackKeys: string[]): unknown {
+  const mappedKey = readString(fieldMap[target]);
+  const mappedValue = mappedKey ? firstValue(flat, [mappedKey]) : undefined;
+
+  if (mappedValue != null && readString(mappedValue)) {
+    return mappedValue;
+  }
+
+  return firstValue(source, fallbackKeys);
+}
+
+function findSuggestedFieldKey(flat: UnknownRecord, target: JotformTargetField): string {
+  const value = firstValue(flat, target.aliases);
+
+  if (value == null || !readString(value)) {
+    return "";
+  }
+
+  const aliasKeys = target.aliases.map(normalizeKey);
+  return Object.keys(flat).find((key) => aliasKeys.includes(normalizeKey(key)) && readString(flat[key])) ?? "";
+}
+
+function humanizeFieldKey(key: string): string {
+  return key
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function parseJsonObject(value: unknown): UnknownRecord {
@@ -255,30 +334,33 @@ export function normalizeJotformRegistrationPayload(payload: UnknownRecord, mapp
   const registration = (flat.registration && typeof flat.registration === "object" ? flat.registration : flat) as UnknownRecord;
   const payment = (flat.payment && typeof flat.payment === "object" ? flat.payment : registration) as UnknownRecord;
   const supportingDocuments = (flat.supportingDocuments && typeof flat.supportingDocuments === "object" ? flat.supportingDocuments : registration) as UnknownRecord;
+  const initialFormId = readString(firstValue(flat, ["formID", "formId", "form_id"]));
+  const existingMapping = mappings.find((item) => item.active && item.formId === initialFormId);
+  const fieldMap = readFieldMap(existingMapping);
   const rawParticipants = flat.participants ?? flat.Participants ?? flat.participantList;
-  const participantText = firstValue(flat, [
+  const participantText = mappedFirstValue(flat, flat, fieldMap, "participantText", [
     "participantCsv",
     "participantsCsv",
     "participantText",
-      "participantNamesEmails",
-      "participantNamesAndEmails",
-      "teamParticipants",
-      "TeamParticipants",
-      "namesAndEmails",
-      "NamesEmails",
-      "Please enter the names and email addresses of all participants, one per line, in the following format: Full Name, Email"
-    ]) ?? Object.values(flat).find((value) => readString(value).includes(",") && /[^\s@]+@[^\s@]+\.[^\s@]+/.test(readString(value)));
+    "participantNamesEmails",
+    "participantNamesAndEmails",
+    "teamParticipants",
+    "TeamParticipants",
+    "namesAndEmails",
+    "NamesEmails",
+    "Please enter the names and email addresses of all participants, one per line, in the following format: Full Name, Email"
+  ]) ?? Object.values(flat).find((value) => readString(value).includes(",") && /[^\s@]+@[^\s@]+\.[^\s@]+/.test(readString(value)));
   const parsedParticipantText = parseParticipantCsvText(participantText);
   const participants = [
     ...normalizeParticipants(rawParticipants),
     ...parsedParticipantText.participants
   ];
-  const formId = readString(firstValue(flat, ["formID", "formId", "form_id"]));
+  const formId = readString(mappedFirstValue(flat, flat, fieldMap, "formId", ["formID", "formId", "form_id"]));
   const routing = resolveJotformCohort(
     {
       routing: {
         cohortId: readString(firstValue(registration, ["cohortId", "cohort_id", "CohortId"])),
-        cohortSlug: readString(firstValue(registration, ["cohortSlug", "cohort_slug", "CohortSlug"])),
+        cohortSlug: readString(mappedFirstValue(flat, registration, fieldMap, "cohortSlug", ["cohortSlug", "cohort_slug", "CohortSlug"])),
         formId
       }
     },
@@ -287,7 +369,7 @@ export function normalizeJotformRegistrationPayload(payload: UnknownRecord, mapp
 
   return {
     source: "jotform",
-    externalSubmissionId: readString(firstValue(flat, ["submissionID", "submissionId", "submission_id", "id"])),
+    externalSubmissionId: readString(mappedFirstValue(flat, flat, fieldMap, "submissionId", ["submissionID", "submissionId", "submission_id", "id"])),
     participantParseErrors: parsedParticipantText.errors,
     routing: {
       formId,
@@ -297,36 +379,36 @@ export function normalizeJotformRegistrationPayload(payload: UnknownRecord, mapp
     },
     organization: {
       id: readString(firstValue(organization, ["organizationId", "orgId"])),
-      name: readString(firstValue(organization, ["Name of Organization", "organizationName", "districtOrganizationName", "districtOrOrganizationName", "organization", "districtName", "DistrictName", "name"])),
+      name: readString(mappedFirstValue(flat, organization, fieldMap, "organizationName", ["Name of Organization", "organizationName", "districtOrganizationName", "districtOrOrganizationName", "organization", "districtName", "DistrictName", "name"])),
       type: readEnumValue(OrganizationType, firstValue(organization, ["organizationType", "type"]), OrganizationType.DISTRICT),
       city: readString(firstValue(organization, ["city", "City"])),
       state: readString(firstValue(organization, ["state", "State"])),
-      phone: readString(firstValue(organization, ["phone", "Phone", "Phone Number"])),
+      phone: readString(mappedFirstValue(flat, organization, fieldMap, "organizationPhone", ["phone", "Phone", "Phone Number"])),
       notes: readString(firstValue(organization, ["organizationNotes", "notes"]))
     },
     registration: {
       cohortId: routing.cohortId,
       cohortSlug: routing.cohortSlug,
       formId: readString(firstValue(registration, ["formId", "form_id"])),
-      primaryContactName: readString(firstValue(registration, ["primaryContactName", "contactName", "registrantName", "name"])),
-      primaryContactEmail: readString(firstValue(registration, ["primaryContactEmail", "contactEmail", "registrantEmail", "email"])),
-      primaryContactPhone: readString(firstValue(registration, ["primaryContactPhone", "contactPhone", "registrantPhone", "phone", "Phone Number"])),
-      primaryContactTitle: readString(firstValue(registration, ["primaryContactTitle", "contactTitle", "title"])),
+      primaryContactName: readString(mappedFirstValue(flat, registration, fieldMap, "primaryContactName", ["primaryContactName", "contactName", "registrantName", "name"])),
+      primaryContactEmail: readString(mappedFirstValue(flat, registration, fieldMap, "primaryContactEmail", ["primaryContactEmail", "contactEmail", "registrantEmail", "email"])),
+      primaryContactPhone: readString(mappedFirstValue(flat, registration, fieldMap, "primaryContactPhone", ["primaryContactPhone", "contactPhone", "registrantPhone", "phone", "Phone Number"])),
+      primaryContactTitle: readString(mappedFirstValue(flat, registration, fieldMap, "primaryContactTitle", ["primaryContactTitle", "contactTitle", "title"])),
       billingContactName: readString(firstValue(registration, ["billingContactName", "billingName"])),
       billingContactEmail: readString(firstValue(registration, ["billingContactEmail", "billingEmail"])),
-      billingAddress: readString(firstValue(registration, ["billingAddress", "address"])),
-      paymentMethod: readPaymentMethod(firstValue(payment, ["paymentMethod", "method", "Preferred method of payment?"])),
+      billingAddress: readString(mappedFirstValue(flat, registration, fieldMap, "organizationAddress", ["billingAddress", "address"])),
+      paymentMethod: readPaymentMethod(mappedFirstValue(flat, payment, fieldMap, "paymentMethod", ["paymentMethod", "method", "Preferred method of payment?"])),
       paymentStatus: readEnumValue(
         PaymentStatus,
-        firstValue(payment, ["paymentStatus", "status"]),
-        readPaymentMethod(firstValue(payment, ["paymentMethod", "method", "Preferred method of payment?"])) === PaymentMethod.CREDIT_CARD ? PaymentStatus.PAID : PaymentStatus.PENDING
+        mappedFirstValue(flat, payment, fieldMap, "paymentStatus", ["paymentStatus", "status"]),
+        readPaymentMethod(mappedFirstValue(flat, payment, fieldMap, "paymentMethod", ["paymentMethod", "method", "Preferred method of payment?"])) === PaymentMethod.CREDIT_CARD ? PaymentStatus.PAID : PaymentStatus.PENDING
       ),
-      invoiceNumber: readString(firstValue(payment, ["invoiceNumber", "invoice"])),
-      purchaseOrderNumber: readString(firstValue(payment, ["purchaseOrderNumber", "poNumber", "purchaseOrder"])),
+      invoiceNumber: readString(mappedFirstValue(flat, payment, fieldMap, "invoiceNumber", ["invoiceNumber", "invoice"])),
+      purchaseOrderNumber: readString(mappedFirstValue(flat, payment, fieldMap, "purchaseOrderNumber", ["purchaseOrderNumber", "poNumber", "purchaseOrder"])),
       quickBooksCustomerRef: readString(firstValue(payment, ["quickBooksCustomerRef", "quickbooksCustomerId"])),
       quickBooksInvoiceRef: readString(firstValue(payment, ["quickBooksInvoiceRef", "quickbooksInvoiceId"])),
-      totalAmount: readNumber(firstValue(payment, ["totalAmount", "amount", "total", "CC - Total", "Total Cost"])),
-      participantCount: readParticipantCount(firstValue(registration, [
+      totalAmount: readNumber(mappedFirstValue(flat, payment, fieldMap, "totalAmount", ["totalAmount", "amount", "total", "CC - Total", "Total Cost"])),
+      participantCount: readParticipantCount(mappedFirstValue(flat, registration, fieldMap, "participantCount", [
         "participantCount",
         "numberOfParticipants",
         "participantsCount",
@@ -334,25 +416,48 @@ export function normalizeJotformRegistrationPayload(payload: UnknownRecord, mapp
         "Please select how many participants will be joining?"
       ])),
       status: readEnumValue(RegistrationStatus, firstValue(registration, ["registrationStatus"]), RegistrationStatus.NEW),
-      notes: readString(firstValue(registration, ["notes", "additionalNotes", "How did you hear about us?"])),
-      w9Url: readString(firstValue(supportingDocuments, ["w9Url", "w9", "w9Link"])),
-      invoiceUrl: readString(firstValue(supportingDocuments, ["invoiceUrl", "invoiceLink"])),
-      confirmationDocsSentAt: readString(firstValue(supportingDocuments, ["confirmationDocsSentAt"]))
+      notes: readString(mappedFirstValue(flat, registration, fieldMap, "notes", ["notes", "additionalNotes", "How did you hear about us?"])),
+      w9Url: readString(mappedFirstValue(flat, supportingDocuments, fieldMap, "w9Url", ["w9Url", "w9", "w9Link"])),
+      invoiceUrl: readString(mappedFirstValue(flat, supportingDocuments, fieldMap, "invoiceUrl", ["invoiceUrl", "invoiceLink"])),
+      confirmationDocsSentAt: readString(mappedFirstValue(flat, supportingDocuments, fieldMap, "confirmationDocsSentAt", ["confirmationDocsSentAt"]))
     },
     participants,
     payment: {
-      amount: readNumber(firstValue(payment, ["paymentAmount", "amount", "totalAmount", "total", "CC - Total", "Total Cost"])),
-      method: readPaymentMethod(firstValue(payment, ["paymentMethod", "method", "Preferred method of payment?"])),
+      amount: readNumber(mappedFirstValue(flat, payment, fieldMap, "totalAmount", ["paymentAmount", "amount", "totalAmount", "total", "CC - Total", "Total Cost"])),
+      method: readPaymentMethod(mappedFirstValue(flat, payment, fieldMap, "paymentMethod", ["paymentMethod", "method", "Preferred method of payment?"])),
       status: readEnumValue(
         PaymentStatus,
-        firstValue(payment, ["paymentStatus", "status"]),
-        readPaymentMethod(firstValue(payment, ["paymentMethod", "method", "Preferred method of payment?"])) === PaymentMethod.CREDIT_CARD ? PaymentStatus.PAID : PaymentStatus.PENDING
+        mappedFirstValue(flat, payment, fieldMap, "paymentStatus", ["paymentStatus", "status"]),
+        readPaymentMethod(mappedFirstValue(flat, payment, fieldMap, "paymentMethod", ["paymentMethod", "method", "Preferred method of payment?"])) === PaymentMethod.CREDIT_CARD ? PaymentStatus.PAID : PaymentStatus.PENDING
       ),
-      invoiceNumber: readString(firstValue(payment, ["invoiceNumber", "invoice"])),
+      invoiceNumber: readString(mappedFirstValue(flat, payment, fieldMap, "invoiceNumber", ["invoiceNumber", "invoice"])),
       quickBooksPaymentRef: readString(firstValue(payment, ["quickBooksPaymentRef", "quickbooksPaymentId"])),
       notes: readString(firstValue(payment, ["paymentNotes"]))
     }
   };
+}
+
+function buildFieldOptions(flat: UnknownRecord) {
+  return Object.entries(flat)
+    .filter(([, value]) => readString(value))
+    .map(([key, value]) => ({
+      key,
+      label: humanizeFieldKey(key),
+      sampleValue: readString(value).slice(0, 180)
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+}
+
+function buildSuggestedFieldMap(flat: UnknownRecord): FieldMap {
+  return jotformTargetFields.reduce<FieldMap>((acc, target) => {
+    const key = findSuggestedFieldKey(flat, target);
+
+    if (key) {
+      acc[target.target] = key;
+    }
+
+    return acc;
+  }, {});
 }
 
 export function previewJotformRegistrationPayload(payload: UnknownRecord, mappings: JotformFormMapping[] = []) {
@@ -381,7 +486,13 @@ export function previewJotformRegistrationPayload(payload: UnknownRecord, mappin
       parsedParticipantCount: normalized.participants.length,
       participantParseErrors: normalized.participantParseErrors,
       normalized,
-      fieldPreview
+      fieldPreview,
+      fieldOptions: buildFieldOptions(flat),
+      targetFields: jotformTargetFields.map(({ target, label, category }) => ({ target, label, category })),
+      suggestedFieldMap: {
+        ...buildSuggestedFieldMap(flat),
+        ...readFieldMap(mappings.find((mapping) => mapping.id === normalized.routing.mappingId))
+      }
     };
   } catch (error) {
     return {
@@ -397,7 +508,10 @@ export function previewJotformRegistrationPayload(payload: UnknownRecord, mappin
       parsedParticipantCount: 0,
       participantParseErrors: [error instanceof Error ? error.message : "Unable to normalize Jotform payload"],
       normalized: null,
-      fieldPreview
+      fieldPreview,
+      fieldOptions: buildFieldOptions(flat),
+      targetFields: jotformTargetFields.map(({ target, label, category }) => ({ target, label, category })),
+      suggestedFieldMap: buildSuggestedFieldMap(flat)
     };
   }
 }
