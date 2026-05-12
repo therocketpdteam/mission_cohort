@@ -23,7 +23,9 @@ export const jotformTargetFields: JotformTargetField[] = [
   { target: "formId", label: "Jotform form ID", category: "Form", aliases: ["formID", "formId", "form_id"] },
   { target: "submissionId", label: "Submission ID", category: "Form", aliases: ["submissionID", "submissionId", "submission_id", "id"] },
   { target: "cohortSlug", label: "Cohort slug", category: "Routing", aliases: ["cohortSlug", "cohort_slug", "CohortSlug"] },
-  { target: "primaryContactName", label: "POC name", category: "Contact", aliases: ["primaryContactName", "contactName", "registrantName", "name", "Name"] },
+  { target: "primaryContactName", label: "POC full name", category: "Contact", aliases: ["primaryContactName", "contactName", "registrantName", "fullName", "name", "Name"] },
+  { target: "primaryContactFirstName", label: "POC first name", category: "Contact", aliases: ["primaryContactFirstName", "contactFirstName", "registrantFirstName", "firstName", "First Name", "first"] },
+  { target: "primaryContactLastName", label: "POC last name", category: "Contact", aliases: ["primaryContactLastName", "contactLastName", "registrantLastName", "lastName", "Last Name", "last"] },
   { target: "primaryContactEmail", label: "POC email", category: "Contact", aliases: ["primaryContactEmail", "contactEmail", "registrantEmail", "email", "Email"] },
   { target: "primaryContactPhone", label: "POC phone", category: "Contact", aliases: ["primaryContactPhone", "contactPhone", "registrantPhone", "phone", "Phone Number"] },
   { target: "primaryContactTitle", label: "POC title", category: "Contact", aliases: ["primaryContactTitle", "contactTitle", "title", "Title"] },
@@ -172,6 +174,76 @@ function humanizeFieldKey(key: string): string {
     .replace(/[_-]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function friendlyJotformFieldLabel(key: string, value: unknown): string {
+  const normalizedKey = normalizeKey(key);
+  const sample = readString(value);
+
+  if (normalizedKey.includes("email") || emailPattern.test(sample)) {
+    return "Email";
+  }
+
+  if (normalizedKey.includes("firstname")) {
+    return "First name";
+  }
+
+  if (normalizedKey.includes("lastname")) {
+    return "Last name";
+  }
+
+  if (normalizedKey.includes("name") && normalizedKey.includes("organization")) {
+    return "Name of organization";
+  }
+
+  if (normalizedKey.includes("name")) {
+    return "Name";
+  }
+
+  if (normalizedKey.includes("howmany") || normalizedKey.includes("participantcount") || normalizedKey.includes("quantity")) {
+    return "Participant count";
+  }
+
+  if (normalizedKey.includes("preferredmethod") || normalizedKey.includes("paymentmethod")) {
+    return "Payment method";
+  }
+
+  if (normalizedKey.includes("totalcost") || normalizedKey.includes("total") || normalizedKey.includes("amount")) {
+    return "Total amount";
+  }
+
+  if (normalizedKey.includes("leadsource") || normalizedKey.includes("source")) {
+    return "Lead source";
+  }
+
+  if (normalizedKey.includes("participant") || normalizedKey.includes("namesemails")) {
+    return "Participant roster text";
+  }
+
+  if (normalizedKey === "formid") {
+    return "Form ID";
+  }
+
+  if (normalizedKey === "submissionid") {
+    return "Submission ID";
+  }
+
+  return humanizeFieldKey(key);
+}
+
+function isNoisyJotformField(key: string, value: unknown): boolean {
+  const normalizedKey = normalizeKey(key);
+  const stringValue = readString(value);
+
+  if (["rawrequest", "jsexecutiontracker", "paymentfieldstoselectedproducts", "selectedproductslist"].includes(normalizedKey)) {
+    return true;
+  }
+
+  if (normalizedKey.includes("eventobserver") || normalizedKey === "ip" || normalizedKey === "path" || normalizedKey === "slug") {
+    return true;
+  }
+
+  return normalizedKey.includes("summary") && stringValue.trim().startsWith("{");
 }
 
 function parseJsonObject(value: unknown): UnknownRecord {
@@ -366,6 +438,10 @@ export function normalizeJotformRegistrationPayload(payload: UnknownRecord, mapp
     },
     mappings
   );
+  const primaryContactFirstName = readString(mappedFirstValue(flat, registration, fieldMap, "primaryContactFirstName", ["primaryContactFirstName", "contactFirstName", "registrantFirstName", "firstName", "First Name", "first"]));
+  const primaryContactLastName = readString(mappedFirstValue(flat, registration, fieldMap, "primaryContactLastName", ["primaryContactLastName", "contactLastName", "registrantLastName", "lastName", "Last Name", "last"]));
+  const primaryContactFullName = readString(mappedFirstValue(flat, registration, fieldMap, "primaryContactName", ["primaryContactName", "contactName", "registrantName", "fullName", "name"]));
+  const primaryContactName = primaryContactFullName || [primaryContactFirstName, primaryContactLastName].filter(Boolean).join(" ");
 
   return {
     source: "jotform",
@@ -390,7 +466,7 @@ export function normalizeJotformRegistrationPayload(payload: UnknownRecord, mapp
       cohortId: routing.cohortId,
       cohortSlug: routing.cohortSlug,
       formId: readString(firstValue(registration, ["formId", "form_id"])),
-      primaryContactName: readString(mappedFirstValue(flat, registration, fieldMap, "primaryContactName", ["primaryContactName", "contactName", "registrantName", "name"])),
+      primaryContactName,
       primaryContactEmail: readString(mappedFirstValue(flat, registration, fieldMap, "primaryContactEmail", ["primaryContactEmail", "contactEmail", "registrantEmail", "email"])),
       primaryContactPhone: readString(mappedFirstValue(flat, registration, fieldMap, "primaryContactPhone", ["primaryContactPhone", "contactPhone", "registrantPhone", "phone", "Phone Number"])),
       primaryContactTitle: readString(mappedFirstValue(flat, registration, fieldMap, "primaryContactTitle", ["primaryContactTitle", "contactTitle", "title"])),
@@ -439,10 +515,11 @@ export function normalizeJotformRegistrationPayload(payload: UnknownRecord, mapp
 
 function buildFieldOptions(flat: UnknownRecord) {
   return Object.entries(flat)
-    .filter(([, value]) => readString(value))
+    .filter(([key, value]) => readString(value) && !isNoisyJotformField(key, value))
     .map(([key, value]) => ({
       key,
-      label: humanizeFieldKey(key),
+      label: friendlyJotformFieldLabel(key, value),
+      rawLabel: humanizeFieldKey(key),
       sampleValue: readString(value).slice(0, 180)
     }))
     .sort((a, b) => a.label.localeCompare(b.label));

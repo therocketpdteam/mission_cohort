@@ -27,8 +27,10 @@ import {
 import { DataGrid, GridColDef, GridRowParams, GridRowSelectionModel } from "@mui/x-data-grid";
 import { useEffect, useMemo, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
+import { formatProperDisplay, formatStatusLabel } from "@/lib/formatting";
 import {
   AdminRow,
+  CompactActionButton,
   EmptyState,
   PageHeader,
   PageStack,
@@ -352,7 +354,9 @@ function RegistrationDetailDialog({
               ].map(([label, value]) => (
                 <Grid size={{ xs: 12, sm: 6, lg: 3 }} key={label}>
                   <Typography variant="body2" color="text.secondary">{label}</Typography>
-                  <Typography>{value}</Typography>
+                  <Typography>
+                    {["POC", "Organization"].includes(label) ? formatProperDisplay(String(value ?? "")) : ["Payment", "Docs", "QB Status", "QB Sync", "Source"].includes(label) ? formatStatusLabel(String(value ?? "")) : value}
+                  </Typography>
                 </Grid>
               ))}
             </Grid>
@@ -369,9 +373,9 @@ function RegistrationDetailDialog({
                   <ListItem
                     key={row.id}
                     divider
-                    secondaryAction={<Button color="error" startIcon={<DeleteOutline />} onClick={() => removeParticipant(row.id)}>Remove</Button>}
+                    secondaryAction={<Button size="small" color="error" startIcon={<DeleteOutline />} onClick={() => removeParticipant(row.id)}>Remove</Button>}
                   >
-                    <ListItemText primary={`${row.firstName} ${row.lastName}`} secondary={`${row.email}${row.title ? ` • ${row.title}` : ""}`} />
+                    <ListItemText primary={formatProperDisplay(`${row.firstName} ${row.lastName}`)} secondary={`${row.email}${row.title ? ` • ${row.title}` : ""}`} />
                   </ListItem>
                 ))}
               </List>
@@ -558,11 +562,11 @@ export function RegistrationsClient() {
   }
 
   const columns: GridColDef[] = [
-    { field: "primaryContactName", headerName: "POC", flex: 1, minWidth: 180 },
+    { field: "primaryContactName", headerName: "POC", flex: 1, minWidth: 180, valueFormatter: (value) => formatProperDisplay(value) },
     { field: "primaryContactEmail", headerName: "POC email", flex: 1, minWidth: 220 },
     { field: "primaryContactPhone", headerName: "Phone", width: 150 },
     { field: "cohort", headerName: "Cohort", flex: 1.2, minWidth: 220, valueGetter: (_value, row) => row.cohort?.title ?? "" },
-    { field: "organization", headerName: "Organization", flex: 1, minWidth: 200, valueGetter: (_value, row) => row.organization?.name ?? "" },
+    { field: "organization", headerName: "Organization", flex: 1, minWidth: 200, valueGetter: (_value, row) => formatProperDisplay(row.organization?.name ?? "") },
     { field: "participantCount", headerName: "Qty", width: 80 },
     { field: "participantListStatus", headerName: "Roster", width: 140, renderCell: (params) => <StatusChip value={params.value} /> },
     { field: "paymentStatus", headerName: "Payment", width: 140, renderCell: (params) => <StatusChip value={params.value} /> },
@@ -575,19 +579,13 @@ export function RegistrationsClient() {
     {
       field: "actions",
       headerName: "Actions",
-      width: 270,
+      width: 118,
       sortable: false,
       renderCell: (params) => (
-        <Stack direction="row" spacing={1} onClick={(event) => event.stopPropagation()}>
-          <Button size="small" variant="outlined" startIcon={<EditOutlined />} onClick={() => { setEditing(params.row); setDialogOpen(true); }}>
-            Edit
-          </Button>
-          <Button size="small" variant="outlined" color="success" startIcon={<CheckCircleOutline />} onClick={() => mutate({ id: params.row.id, action: "confirm" }, "Registration confirmed")}>
-            Confirm
-          </Button>
-          <Button size="small" variant="outlined" color="warning" startIcon={<CancelOutlined />} onClick={() => mutate({ id: params.row.id, action: "cancel" }, "Registration cancelled")}>
-            Cancel
-          </Button>
+        <Stack direction="row" spacing={0.5} onClick={(event) => event.stopPropagation()}>
+          <CompactActionButton label="Edit registration" icon={<EditOutlined fontSize="small" />} onClick={() => { setEditing(params.row); setDialogOpen(true); }} />
+          <CompactActionButton label="Confirm registration" color="success" icon={<CheckCircleOutline fontSize="small" />} onClick={() => mutate({ id: params.row.id, action: "confirm" }, "Registration confirmed")} />
+          <CompactActionButton label="Cancel registration" color="warning" icon={<CancelOutlined fontSize="small" />} onClick={() => mutate({ id: params.row.id, action: "cancel" }, "Registration cancelled")} />
         </Stack>
       )
     }
@@ -643,13 +641,17 @@ export function RegistrationsClient() {
             columns={columns}
             loading={loading}
             checkboxSelection
-            rowHeight={46}
+            rowHeight={44}
             pageSizeOptions={[10, 25, 50]}
             initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
             disableRowSelectionOnClick
             rowSelectionModel={rowSelectionModel}
             onRowSelectionModelChange={(model) => setSelectedIds(Array.from(model.ids).map(String))}
-            sx={{ "& .MuiDataGrid-cell": { py: 0.5 }, "& .MuiButton-startIcon": { mr: 0.5 }, "& .MuiSvgIcon-root": { fontSize: 18 } }}
+            sx={{
+              "& .MuiDataGrid-cell": { py: 0.25, alignItems: "center" },
+              "& .MuiDataGrid-row": { cursor: "pointer" },
+              "& .MuiDataGrid-cell:focus, & .MuiDataGrid-columnHeader:focus": { outline: "none" }
+            }}
             onRowClick={(params: GridRowParams) => openDetail(String(params.id))}
           />
         </TableShell>

@@ -15,8 +15,10 @@ import {
 } from "@mui/material";
 import Link from "next/link";
 import type { Route } from "next";
+import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
+import { formatHumanLabel, formatProperDisplay, formatStatusLabel } from "@/lib/formatting";
 import { AdminRow, EmptyState, LoadingState, PageHeader, PageStack, SectionCard, StatusChip, useNotifier } from "./common";
 
 const metricLabels: ReadonlyArray<[string, string, Route]> = [
@@ -34,6 +36,21 @@ const quickActions: ReadonlyArray<[string, Route]> = [
   ["Add Registration", "/registrations"],
   ["Create Email Template", "/communications"]
 ];
+
+function DashboardPanel({ title, href, actionLabel, children }: { title: string; href: Route; actionLabel: string; children: ReactNode }) {
+  return (
+    <SectionCard
+      title={title}
+      action={<Button component={Link} href={href} size="small" variant="outlined">{actionLabel}</Button>}
+      sx={{ height: "100%" }}
+      contentSx={{ height: "100%", display: "flex", flexDirection: "column" }}
+    >
+      <Box sx={{ flex: 1, minHeight: 0 }}>
+        {children}
+      </Box>
+    </SectionCard>
+  );
+}
 
 export function DashboardClient() {
   const [data, setData] = useState<AdminRow | null>(null);
@@ -101,13 +118,13 @@ export function DashboardClient() {
 
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, lg: 6 }}>
-          <SectionCard title="Open Operations Tasks" action={<Button component={Link} href="/cohorts" variant="outlined">View cohorts</Button>}>
+          <DashboardPanel title="Open Operations Tasks" href="/cohorts" actionLabel="View cohorts">
             <List dense>
-              {(data?.openOperationsTasks ?? []).map((task: AdminRow) => (
+              {(data?.openOperationsTasks ?? []).slice(0, 5).map((task: AdminRow) => (
                 <ListItem key={task.id} divider>
                   <ListItemText
                     primary={task.title}
-                    secondary={`${task.cohort?.title ?? "Operations"} • ${String(task.category ?? "").replace(/_/g, " ")}`}
+                    secondary={`${task.cohort?.title ?? "Operations"} • ${formatStatusLabel(task.category)}`}
                   />
                   <StatusChip value={task.status} />
                 </ListItem>
@@ -116,12 +133,12 @@ export function DashboardClient() {
             {!loading && (data?.openOperationsTasks ?? []).length === 0 && (
               <EmptyState title="No open operations tasks" description="Internal cohort checklist items will appear here." />
             )}
-          </SectionCard>
+          </DashboardPanel>
         </Grid>
         <Grid size={{ xs: 12, lg: 6 }}>
-          <SectionCard title="Upcoming Sessions" action={<Button component={Link} href="/cohorts" variant="outlined">View cohorts</Button>}>
+          <DashboardPanel title="Upcoming Sessions" href="/cohorts" actionLabel="View cohorts">
             <List dense>
-              {(data?.upcomingSessions ?? []).map((session: AdminRow) => (
+              {(data?.upcomingSessions ?? []).slice(0, 5).map((session: AdminRow) => (
                 <ListItem key={session.id} divider>
                   <ListItemText
                     primary={session.title}
@@ -133,16 +150,16 @@ export function DashboardClient() {
             {!loading && (data?.upcomingSessions ?? []).length === 0 && (
               <EmptyState title="No upcoming sessions" description="Upcoming cohort sessions will appear here." />
             )}
-          </SectionCard>
+          </DashboardPanel>
         </Grid>
         <Grid size={{ xs: 12, lg: 6 }}>
-          <SectionCard title="Recent Registrations" action={<Button component={Link} href="/registrations" variant="outlined">View registrations</Button>}>
+          <DashboardPanel title="Recent Registrations" href="/registrations" actionLabel="View registrations">
             <List dense>
-              {(data?.recentRegistrations ?? []).map((registration: AdminRow) => (
+              {(data?.recentRegistrations ?? []).slice(0, 5).map((registration: AdminRow) => (
                 <ListItem key={registration.id} divider>
                   <ListItemText
-                    primary={registration.primaryContactName}
-                    secondary={`${registration.organization?.name ?? "Organization"} • ${registration.cohort?.title ?? "Cohort"}`}
+                    primary={formatProperDisplay(registration.primaryContactName)}
+                    secondary={`${formatProperDisplay(registration.organization?.name ?? "Organization")} • ${registration.cohort?.title ?? "Cohort"}`}
                   />
                   <StatusChip value={registration.status} />
                 </ListItem>
@@ -151,16 +168,16 @@ export function DashboardClient() {
             {!loading && (data?.recentRegistrations ?? []).length === 0 && (
               <EmptyState title="No recent registrations" description="New registrations will appear here as they arrive." />
             )}
-          </SectionCard>
+          </DashboardPanel>
         </Grid>
         <Grid size={{ xs: 12, lg: 6 }}>
-          <SectionCard title="Cohorts Needing Attention" action={<Button component={Link} href="/cohorts" variant="outlined">View cohorts</Button>}>
+          <DashboardPanel title="Cohorts Needing Attention" href="/cohorts" actionLabel="View cohorts">
             <List dense>
-              {(data?.cohortsNeedingAttention ?? []).map((cohort: AdminRow) => (
+              {(data?.cohortsNeedingAttention ?? []).slice(0, 5).map((cohort: AdminRow) => (
                 <ListItem key={cohort.id} divider>
                   <ListItemText
                     primary={cohort.title}
-                    secondary={`${cohort.presenter?.firstName ?? ""} ${cohort.presenter?.lastName ?? ""} • ${cohort._count?.registrations ?? 0} registrations`}
+                    secondary={`${formatProperDisplay(`${cohort.presenter?.firstName ?? ""} ${cohort.presenter?.lastName ?? ""}`)} • ${cohort._count?.registrations ?? 0} registrations`}
                   />
                   <StatusChip value={cohort.status} />
                 </ListItem>
@@ -169,10 +186,10 @@ export function DashboardClient() {
             {!loading && (data?.cohortsNeedingAttention ?? []).length === 0 && (
               <EmptyState title="No cohorts need attention" description="Draft and registration-stage cohorts will appear here." />
             )}
-          </SectionCard>
+          </DashboardPanel>
         </Grid>
         <Grid size={{ xs: 12, lg: 6 }}>
-          <SectionCard title="Payment Status Snapshot" action={<Button component={Link} href="/registrations" variant="outlined">View registrations</Button>}>
+          <DashboardPanel title="Payment Status Snapshot" href="/registrations" actionLabel="View registrations">
             <List dense>
               {(data?.paymentStatusSnapshot ?? []).map((payment: AdminRow) => (
                 <ListItem key={payment.status} divider>
@@ -181,15 +198,15 @@ export function DashboardClient() {
                 </ListItem>
               ))}
             </List>
-          </SectionCard>
+          </DashboardPanel>
         </Grid>
         <Grid size={{ xs: 12 }}>
-          <SectionCard title="Recent Activity" action={<Button component={Link} href="/settings" variant="outlined">View settings</Button>}>
+          <SectionCard title="Recent Activity" action={<Button component={Link} href="/settings" size="small" variant="outlined">View settings</Button>}>
             <List dense>
-              {(data?.recentActivity ?? []).map((activity: AdminRow) => (
+              {(data?.recentActivity ?? []).slice(0, 5).map((activity: AdminRow) => (
                 <ListItem key={activity.id} divider>
                   <ListItemText
-                    primary={`${activity.entityType} ${activity.action}`}
+                    primary={`${formatHumanLabel(activity.entityType)} ${formatStatusLabel(activity.action)}`}
                     secondary={`${activity.description ?? "Activity"} • ${new Date(activity.createdAt).toLocaleString()}`}
                   />
                 </ListItem>

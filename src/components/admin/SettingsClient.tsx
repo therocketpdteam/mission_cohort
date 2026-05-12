@@ -36,11 +36,12 @@ import {
 import { DataGrid, GridColDef } from "@mui/x-data-grid";
 import { useEffect, useMemo, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
-import { formatCurrency, formatProperDisplay } from "@/lib/formatting";
+import { formatCurrency, formatHumanLabel, formatProperDisplay, formatStatusLabel } from "@/lib/formatting";
 import {
   AdminRow,
   EmptyState,
   FieldConfig,
+  FieldValuePill,
   MutationDialog,
   PageHeader,
   PageStack,
@@ -50,11 +51,12 @@ import {
   useNotifier
 } from "./common";
 
-const settingsTabs = ["System", "Users", "Integrations", "Jotform", "Advanced"];
+const settingsTabs = ["System Health", "Admin Users", "Connected Tools", "Jotform Intake", "Advanced Setup"];
 const wizardSteps = ["Summary", "Routing", "Field Mapping", "Preview", "Save"];
 type JotformFieldOption = {
   key: string;
   label: string;
+  rawLabel?: string;
   sampleValue?: string;
 };
 type JotformTargetField = {
@@ -120,13 +122,33 @@ function compactDate(value?: string) {
   return value ? new Date(value).toLocaleDateString() : "-";
 }
 
+function envLabel(key: string) {
+  const labels: Record<string, string> = {
+    databaseUrl: "Database URL",
+    supabaseUrl: "Supabase URL",
+    supabaseAnonKey: "Supabase anon key",
+    supabaseServiceRoleKey: "Supabase service role key",
+    sendgridConfigured: "SendGrid",
+    googleCalendarConfigured: "Google Calendar",
+    quickBooksConfigured: "QuickBooks",
+    sendgridWebhookConfigured: "SendGrid webhook",
+    crmConfigured: "CRM handoff",
+    muxConfigured: "Mux video",
+    authBootstrapConfigured: "Auth bootstrap",
+    webhookSecretConfigured: "Webhook secret",
+    cronSecretConfigured: "Cron secret",
+    appBaseUrlConfigured: "App base URL"
+  };
+
+  return labels[key] ?? formatHumanLabel(key);
+}
+
 function getFieldMapValue(fieldMap: AdminRow, target: string) {
   return typeof fieldMap[target] === "string" ? fieldMap[target] : "";
 }
 
-function fieldOptionLabel(option: JotformFieldOption) {
-  const sample = option.sampleValue ? ` - ${String(option.sampleValue).slice(0, 72)}` : "";
-  return `${option.label || option.key}${sample}`;
+function fieldOptionByKey(fieldOptions: JotformFieldOption[], key: string) {
+  return fieldOptions.find((option) => option.key === key);
 }
 
 function cleanFieldMap(fieldMap: AdminRow) {
@@ -140,7 +162,7 @@ function cleanFieldMap(fieldMap: AdminRow) {
 }
 
 function fieldSample(fieldOptions: JotformFieldOption[], key: string) {
-  return fieldOptions.find((option) => option.key === key)?.sampleValue ?? "";
+  return fieldOptionByKey(fieldOptions, key)?.sampleValue ?? "";
 }
 
 function JotformMappingWizard({
@@ -340,8 +362,8 @@ function JotformMappingWizard({
                           >
                             <MenuItem value="">Do not map</MenuItem>
                             {fieldOptions.map((option) => (
-                              <MenuItem value={option.key} key={`${target.target}-${option.key}`}>
-                                {fieldOptionLabel(option)}
+                              <MenuItem value={option.key} key={`${target.target}-${option.key}`} sx={{ minHeight: 46 }}>
+                                <FieldValuePill label={option.label || option.key} value={option.sampleValue} secondary={option.rawLabel && option.rawLabel !== option.label ? option.rawLabel : option.key} />
                               </MenuItem>
                             ))}
                           </TextField>
@@ -369,7 +391,11 @@ function JotformMappingWizard({
                     {mappedPreviewRows.map((row) => (
                       <Grid size={{ xs: 12, md: 6 }} key={row.target}>
                         <Typography variant="caption" color="text.secondary">{row.label}</Typography>
-                        <Typography sx={{ overflowWrap: "anywhere" }}>{row.sourceKey}: {row.sample || "-"}</Typography>
+                        <FieldValuePill
+                          label={fieldOptionByKey(fieldOptions, row.sourceKey)?.label ?? row.sourceKey}
+                          value={row.sample || "-"}
+                          secondary={fieldOptionByKey(fieldOptions, row.sourceKey)?.rawLabel ?? row.sourceKey}
+                        />
                       </Grid>
                     ))}
                   </Grid>
@@ -423,6 +449,8 @@ function JotformSubmissionRow({
   const preview = row.preview ?? {};
   const readiness = row.readiness ?? {};
   const registration = preview.normalized?.registration ?? {};
+  const participants = Array.isArray(preview.normalized?.participants) ? preview.normalized.participants : [];
+  const fieldOptions: JotformFieldOption[] = Array.isArray(preview.fieldOptions) ? preview.fieldOptions : [];
   const status = row.reviewStatus ?? row.status;
   const organization = formatProperDisplay(preview.organizationName) || "Unknown organization";
   const contact = formatProperDisplay(preview.primaryContactName) || preview.primaryContactEmail || "Unknown POC";
@@ -446,7 +474,7 @@ function JotformSubmissionRow({
         </Grid>
         <Grid size={{ xs: 6, md: 1.4 }}><Typography>{preview.cohortSlug || registration.cohortId || "Needs route"}</Typography></Grid>
         <Grid size={{ xs: 6, md: 1.1 }}><Typography>{preview.parsedParticipantCount ?? 0}{preview.participantCount ? ` / ${preview.participantCount}` : ""}</Typography></Grid>
-        <Grid size={{ xs: 6, md: 1.4 }}><Typography>{[registration.paymentMethod, registration.paymentStatus].filter(Boolean).join(" / ") || "-"}</Typography></Grid>
+        <Grid size={{ xs: 6, md: 1.4 }}><Typography>{[formatStatusLabel(registration.paymentMethod), formatStatusLabel(registration.paymentStatus)].filter((item) => item !== "Unknown").join(" / ") || "-"}</Typography></Grid>
         <Grid size={{ xs: 6, md: 1 }}><Typography>{compactDate(row.createdAt)}</Typography></Grid>
         <Grid size={{ xs: 12, md: 1.5 }}>
           <Stack direction="row" spacing={0.5} justifyContent={{ xs: "flex-start", md: "flex-end" }} onClick={(event) => event.stopPropagation()}>
@@ -471,6 +499,42 @@ function JotformSubmissionRow({
             <Grid size={{ xs: 12, md: 3 }}><InfoTile label="Amount" value={registration.totalAmount ? formatCurrency(registration.totalAmount) : ""} /></Grid>
             <Grid size={{ xs: 12, md: 3 }}><InfoTile label="Field matches" value={`${preview.fieldOptions?.length ?? 0} incoming fields detected`} /></Grid>
           </Grid>
+          {participants.length > 0 && (
+            <Paper variant="outlined" sx={{ p: 1.25 }}>
+              <Typography variant="h4" sx={{ mb: 1 }}>
+                Participants detected
+              </Typography>
+              <Grid container spacing={1}>
+                {participants.slice(0, 6).map((participant: AdminRow, index: number) => (
+                  <Grid size={{ xs: 12, md: 6 }} key={`${participant.email}-${index}`}>
+                    <FieldValuePill
+                      label={`${formatProperDisplay(`${participant.firstName ?? ""} ${participant.lastName ?? ""}`) || `Participant ${index + 1}`}`}
+                      value={participant.email}
+                      secondary={participant.title}
+                    />
+                  </Grid>
+                ))}
+              </Grid>
+            </Paper>
+          )}
+          {fieldOptions.length > 0 && (
+            <Paper variant="outlined" sx={{ p: 1.25 }}>
+              <Typography variant="h4" sx={{ mb: 1 }}>
+                Incoming field preview
+              </Typography>
+              <Grid container spacing={1}>
+                {fieldOptions.slice(0, 12).map((option) => (
+                  <Grid size={{ xs: 12, md: 6 }} key={option.key}>
+                    <FieldValuePill
+                      label={option.label || option.key}
+                      value={option.sampleValue}
+                      secondary={option.rawLabel && option.rawLabel !== option.label ? option.rawLabel : option.key}
+                    />
+                  </Grid>
+                ))}
+              </Grid>
+            </Paper>
+          )}
           <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
             <Button size="small" startIcon={<EditOutlined />} onClick={() => onReview(row)}>Review & Map Fields</Button>
             <Button size="small" variant="outlined" startIcon={<ReplayOutlined />} disabled={status === "PROCESSED"} onClick={() => onReplay(row)}>Replay Submission</Button>
@@ -523,13 +587,13 @@ export function SettingsClient() {
   const currentWizardMapping = mappingWizardEvent
     ? mappings.find((mapping) => mapping.formId === mappingWizardEvent.preview?.formId)
     : undefined;
-  const providers = [
-    ["Google Calendar", env.googleCalendarConfigured, "/api/integrations/google/connect"],
-    ["QuickBooks", env.quickBooksConfigured, "/api/integrations/quickbooks/connect"],
-    ["SendGrid", env.sendgridConfigured, ""],
-    ["CRM", env.crmConfigured, ""],
-    ["Mux", env.muxConfigured, ""],
-    ["Jotform", Boolean(jotformSetup?.configured || env.webhookSecretConfigured), ""]
+  const providers: Array<[string, string, unknown, string]> = [
+    ["Google Calendar", "Shared operations calendar for cohort sessions.", env.googleCalendarConfigured, "/api/integrations/google/connect"],
+    ["QuickBooks", "Financial reporting status sync for invoices and payments.", env.quickBooksConfigured, "/api/integrations/quickbooks/connect"],
+    ["SendGrid Email", "Confirmation, reminder, and resend email delivery.", env.sendgridConfigured, ""],
+    ["CRM Handoff", "Outbound contact and registration updates to RocketPD CRM.", env.crmConfigured, ""],
+    ["Mux Video", "Session recording and lightweight resource playback.", env.muxConfigured, ""],
+    ["Jotform Intake", "Registration submissions, mapping, and replay queue.", Boolean(jotformSetup?.configured || env.webhookSecretConfigured), ""]
   ];
 
   async function saveMapping(values: AdminRow) {
@@ -681,7 +745,7 @@ export function SettingsClient() {
 
   return (
     <PageStack>
-      <PageHeader title="Settings" description="Runtime configuration, admin access, and integration setup." />
+      <PageHeader title="System Configuration" description="Runtime health, admin access, integrations, and Jotform intake setup." />
       <Paper variant="outlined" sx={{ px: 1 }}>
         <Tabs value={activeTab} onChange={(_event, value) => setActiveTab(value)} variant="scrollable" scrollButtons="auto">
           {settingsTabs.map((tab) => <Tab label={tab} key={tab} />)}
@@ -694,8 +758,8 @@ export function SettingsClient() {
             <Grid size={{ xs: 12, md: 4 }}><InfoTile label="Database" value={health?.database ? "Connected" : "Unavailable"} /></Grid>
             {Object.entries(env).map(([key, value]) => (
               <Grid size={{ xs: 12, md: 4 }} key={key}>
-                <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ border: 1, borderColor: "divider", borderRadius: 1, p: 1.25 }}>
-                  <Typography>{key}</Typography>
+                <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ border: 1, borderColor: "divider", borderRadius: 1, p: 1.25, minHeight: 54 }}>
+                  <Typography>{envLabel(key)}</Typography>
                   <StatusChip value={Boolean(value)} />
                 </Stack>
               </Grid>
@@ -718,7 +782,7 @@ export function SettingsClient() {
       <TabPanel active={activeTab} index={2}>
         <SectionCard title="Integration Hub">
           <Grid container spacing={1.5}>
-            {providers.map(([label, configured, href]) => (
+            {providers.map(([label, description, configured, href]) => (
               <Grid size={{ xs: 12, sm: 6, lg: 4 }} key={String(label)}>
                 <Stack spacing={1} sx={{ border: 1, borderColor: "divider", borderRadius: 1, p: 1.5, minHeight: 104 }}>
                   <Stack direction="row" justifyContent="space-between" alignItems="center">
@@ -726,7 +790,7 @@ export function SettingsClient() {
                     <StatusChip value={Boolean(configured)} />
                   </Stack>
                   <Typography variant="caption" color="text.secondary">
-                    {(integrationStatus?.connections ?? []).find((connection: AdminRow) => String(connection.provider).includes(String(label).toUpperCase().replace(/\s+/g, "_")))?.status ?? "Env/config status"}
+                    {description}
                   </Typography>
                   {href && <Button size="small" variant="outlined" href={String(href)}>Connect</Button>}
                 </Stack>

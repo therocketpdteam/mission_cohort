@@ -22,9 +22,11 @@ import {
   Snackbar,
   Stack,
   TextField,
+  Tooltip,
   Typography
 } from "@mui/material";
 import { ReactNode, useCallback, useEffect, useState } from "react";
+import { formatStatusLabel } from "@/lib/formatting";
 
 export type AdminRow = Record<string, any>;
 
@@ -66,10 +68,22 @@ export function PageHeader({
   );
 }
 
-export function SectionCard({ title, children, action }: { title: string; children: ReactNode; action?: ReactNode }) {
+export function SectionCard({
+  title,
+  children,
+  action,
+  sx,
+  contentSx
+}: {
+  title: string;
+  children: ReactNode;
+  action?: ReactNode;
+  sx?: object;
+  contentSx?: object;
+}) {
   return (
-    <Card>
-      <CardContent>
+    <Card sx={sx}>
+      <CardContent sx={contentSx}>
         <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
           <Typography variant="h3">{title}</Typography>
           {action}
@@ -121,16 +135,16 @@ export function EmptyState({
 }
 
 export function StatusChip({ value }: { value?: string | boolean | null }) {
-  const text = typeof value === "boolean" ? (value ? "Active" : "Inactive") : value ?? "Unknown";
+  const text = formatStatusLabel(value);
   const normalized = String(text).toLowerCase();
   const color =
-    normalized.includes("paid") || normalized.includes("confirmed") || normalized.includes("active")
+    normalized.includes("inactive") || normalized.includes("cancel") || normalized.includes("failed")
+      ? "error"
+      : normalized.includes("paid") || normalized.includes("confirmed") || normalized.includes("active") || normalized.includes("complete")
       ? "success"
-      : normalized.includes("pending") || normalized.includes("draft") || normalized.includes("scheduled")
+      : normalized.includes("pending") || normalized.includes("draft") || normalized.includes("scheduled") || normalized.includes("needed") || normalized.includes("partial")
         ? "warning"
-        : normalized.includes("cancel") || normalized.includes("failed")
-          ? "error"
-          : "default";
+        : "default";
 
   return (
     <Box
@@ -138,17 +152,101 @@ export function StatusChip({ value }: { value?: string | boolean | null }) {
       sx={{
         display: "inline-flex",
         alignItems: "center",
+        justifyContent: "center",
         borderRadius: 999,
-        px: 1,
-        py: 0.25,
-        fontSize: 12,
+        px: 0.875,
+        minHeight: 22,
+        lineHeight: 1,
+        fontSize: 11,
         fontWeight: 700,
+        whiteSpace: "nowrap",
         bgcolor: `${color}.light`,
         color: color === "default" ? "text.primary" : `${color}.dark`
       }}
     >
-      {String(text).replace(/_/g, " ")}
+      {text}
     </Box>
+  );
+}
+
+export function CompactActionButton({
+  label,
+  icon,
+  onClick,
+  color = "primary",
+  disabled = false
+}: {
+  label: string;
+  icon: ReactNode;
+  onClick: () => void;
+  color?: "primary" | "success" | "warning" | "error" | "info";
+  disabled?: boolean;
+}) {
+  return (
+    <Tooltip title={label}>
+      <span>
+        <IconButton
+          size="small"
+          color={color}
+          disabled={disabled}
+          onClick={onClick}
+          aria-label={label}
+          sx={{
+            width: 30,
+            height: 30,
+            border: 1,
+            borderColor: "divider",
+            bgcolor: "background.paper"
+          }}
+        >
+          {icon}
+        </IconButton>
+      </span>
+    </Tooltip>
+  );
+}
+
+export function FieldValuePill({
+  label,
+  value,
+  secondary
+}: {
+  label: string;
+  value?: unknown;
+  secondary?: string;
+}) {
+  return (
+    <Stack direction="row" spacing={1} alignItems="center" sx={{ minWidth: 0, maxWidth: "100%" }}>
+      <Box
+        component="span"
+        sx={{
+          borderRadius: 999,
+          border: 1,
+          borderColor: "divider",
+          bgcolor: "background.default",
+          px: 1,
+          py: 0.35,
+          fontSize: 12,
+          fontWeight: 800,
+          whiteSpace: "nowrap",
+          maxWidth: 180,
+          overflow: "hidden",
+          textOverflow: "ellipsis"
+        }}
+      >
+        {label}
+      </Box>
+      <Box sx={{ minWidth: 0 }}>
+        <Typography variant="body2" noWrap title={String(value ?? "")}>
+          {value == null || value === "" ? "No response" : String(value)}
+        </Typography>
+        {secondary && (
+          <Typography variant="caption" color="text.secondary" noWrap title={secondary}>
+            {secondary}
+          </Typography>
+        )}
+      </Box>
+    </Stack>
   );
 }
 

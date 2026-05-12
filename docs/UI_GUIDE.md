@@ -14,6 +14,7 @@ Mission Control is an internal operations console. Screens should feel compact, 
 
 - Use compact buttons in rows and tables: `size="small"`.
 - Button groups inside rows should fit the row height and never clip.
+- Prefer compact icon buttons with tooltips for row actions when three or more actions appear in one row.
 - Use icons only when they clarify action intent.
 - Use dropdowns for mapping/selection tasks. Do not ask admins to inspect JSON to make decisions.
 - Put troubleshooting-only tools in Advanced sections.
@@ -21,6 +22,7 @@ Mission Control is an internal operations console. Screens should feel compact, 
 ## Text And Formatting
 
 - Display names, POCs, and organizations in proper case.
+- Display enum/status values as human labels, for example `Pending`, `Complete`, and `Partially Paid`, never raw all-caps enum strings.
 - Do not transform emails, URLs, IDs, or external references.
 - Labels should be human-readable: “POC email”, “Organization name”, “Payment status”.
 - Avoid unfinished helper chips unless they are actionable or communicate a state.
@@ -29,4 +31,6 @@ Mission Control is an internal operations console. Screens should feel compact, 
 
 - The review queue should be an expandable row list, not cards or wide grids.
 - The mapping wizard must show incoming fields as dropdown options with sample values.
+- Incoming Jotform fields should display as a rounded field-name pill next to the response value.
 - Raw payloads should not appear in the admin UI. If developers need payloads, use API/database inspection.
+- Filter noisy Jotform internals such as raw request payloads, execution trackers, and JSON payment summaries out of normal admin mapping choices.
