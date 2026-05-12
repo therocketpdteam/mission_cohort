@@ -5,13 +5,14 @@ export const theme = createTheme({
   palette: {
     mode: "light",
     primary: {
-      main: "#075B73",
-      light: "#2E8AA5",
-      dark: "#073847"
+      main: "#0B5F75",
+      light: "#E5F4F7",
+      dark: "#063947"
     },
     secondary: {
-      main: "#F4B23D",
-      dark: "#B87910"
+      main: "#E7A93C",
+      light: "#FFF4DA",
+      dark: "#A96805"
     },
     success: {
       main: "#25855A"
@@ -23,25 +24,27 @@ export const theme = createTheme({
       main: "#B42318"
     },
     background: {
-      default: "#F3F6F8",
+      default: "#F6F8FA",
       paper: "#FFFFFF"
     },
     text: {
-      primary: "#17202A",
-      secondary: "#5D6B7A"
+      primary: "#17212B",
+      secondary: "#647386"
     },
-    divider: "#DDE4EC"
+    divider: "#E2E8F0"
   },
   shape: {
-    borderRadius: 8
+    borderRadius: 10
   },
   typography: {
-    fontFamily: "Arial, Helvetica, sans-serif",
-    h1: { fontSize: "2rem", fontWeight: 700 },
-    h2: { fontSize: "1.55rem", fontWeight: 700 },
-    h3: { fontSize: "1.25rem", fontWeight: 700 },
-    h4: { fontSize: "1.1rem", fontWeight: 700 },
-    button: { textTransform: "none", fontWeight: 700 }
+    fontFamily: "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
+    h1: { fontSize: "1.95rem", fontWeight: 800, letterSpacing: 0 },
+    h2: { fontSize: "1.45rem", fontWeight: 800, letterSpacing: 0 },
+    h3: { fontSize: "1.15rem", fontWeight: 800, letterSpacing: 0 },
+    h4: { fontSize: "1rem", fontWeight: 800, letterSpacing: 0 },
+    body1: { fontSize: "0.95rem" },
+    body2: { fontSize: "0.86rem" },
+    button: { textTransform: "none", fontWeight: 800, letterSpacing: 0 }
   },
   components: {
     MuiButton: {
@@ -51,7 +54,9 @@ export const theme = createTheme({
       },
       styleOverrides: {
         root: {
-          minHeight: 34
+          minHeight: 34,
+          borderRadius: 8,
+          boxShadow: "none"
         }
       }
     },
@@ -61,14 +66,22 @@ export const theme = createTheme({
       },
       styleOverrides: {
         root: {
-          borderColor: "#DDE7ED",
-          boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)"
+          borderColor: "#E2E8F0",
+          boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04), 0 12px 28px rgba(15, 23, 42, 0.03)"
         }
       }
     },
     MuiTextField: {
       defaultProps: {
         size: "small"
+      },
+      styleOverrides: {
+        root: {
+          "& .MuiOutlinedInput-root": {
+            borderRadius: 10,
+            backgroundColor: "#FFFFFF"
+          }
+        }
       }
     },
     MuiFormControl: {
@@ -91,11 +104,14 @@ export const theme = createTheme({
       },
       styleOverrides: {
         root: {
-          borderColor: "#DDE7ED",
-          backgroundColor: "#FFFFFF"
+          borderColor: "#E2E8F0",
+          backgroundColor: "#FFFFFF",
+          borderRadius: 10
         },
         columnHeaders: {
-          backgroundColor: "#F7FAFC"
+          backgroundColor: "#F8FAFC",
+          color: "#475569",
+          fontWeight: 800
         },
         cell: {
           outline: "none"

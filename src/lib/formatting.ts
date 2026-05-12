@@ -25,7 +25,7 @@ export function formatProperDisplay(value?: string | null) {
   return text
     .toLowerCase()
     .replace(/\b([a-z])/g, (match) => match.toUpperCase())
-    .replace(/\b(Nyc|Doe|Po|Usa|Us|Ii|Iii|Iv)\b/g, (match) => match.toUpperCase())
+    .replace(/\b(Nyc|Po|Usa|Us|Ii|Iii|Iv)\b/g, (match) => match.toUpperCase())
     .replace(/\bMc([a-z])/g, (_match, letter: string) => `Mc${letter.toUpperCase()}`)
     .replace(/\bO'([a-z])/g, (_match, letter: string) => `O'${letter.toUpperCase()}`);
 }

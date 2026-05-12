@@ -21,8 +21,10 @@ import {
 import { DataGrid, GridColDef, GridRowParams } from "@mui/x-data-grid";
 import { useEffect, useMemo, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
+import { formatProperDisplay } from "@/lib/formatting";
 import {
   AdminRow,
+  CompactActionButton,
   EmptyState,
   PageHeader,
   PageStack,
@@ -99,7 +101,7 @@ function ParticipantEditor({
               options={registrations}
               value={registration}
               onChange={(_event, value) => setRegistration(value)}
-              getOptionLabel={(option) => `${option.primaryContactName ?? "POC"} • ${option.cohort?.title ?? "Cohort"} • ${option.organization?.name ?? "Organization"}`}
+              getOptionLabel={(option) => `${formatProperDisplay(option.primaryContactName ?? "POC")} • ${option.cohort?.title ?? "Cohort"} • ${formatProperDisplay(option.organization?.name ?? "Organization")}`}
               renderInput={(params) => <TextField {...params} label="Registration" required />}
             />
           </Grid>
@@ -193,15 +195,15 @@ function ParticipantDetailDialog({
         {participant ? (
           <Grid container spacing={2}>
             {[
-              ["Participant", `${participant.firstName} ${participant.lastName}`],
+              ["Participant", formatProperDisplay(`${participant.firstName} ${participant.lastName}`)],
               ["Email", participant.email],
               ["Phone", participant.phone ?? "-"],
               ["Title", participant.title ?? "-"],
               ["Status", participant.status],
               ["Certificate", participant.certificateIssued ? "Issued" : "Not issued"],
               ["Cohort", participant.cohort?.title ?? "-"],
-              ["Organization", participant.organization?.name ?? "-"],
-              ["Registration POC", participant.registration?.primaryContactName ?? "-"],
+              ["Organization", formatProperDisplay(participant.organization?.name ?? "-")],
+              ["Registration POC", formatProperDisplay(participant.registration?.primaryContactName ?? "-")],
               ["POC Email", participant.registration?.primaryContactEmail ?? "-"],
               ["Last Email Status", participant.emailSummary?.lastEmailEvent ?? "-"],
               ["Last Email Sent", participant.emailSummary?.lastEmailEventAt ? new Date(participant.emailSummary.lastEmailEventAt).toLocaleString() : "-"],
@@ -328,36 +330,27 @@ export function ParticipantsClient() {
   }
 
   const columns: GridColDef[] = [
-    { field: "organization", headerName: "Organization", flex: 1, minWidth: 210, valueGetter: (_value, row) => row.organization?.name ?? "" },
-    { field: "name", headerName: "Participant", flex: 1, minWidth: 180, valueGetter: (_value, row) => `${row.firstName} ${row.lastName}` },
+    { field: "organization", headerName: "Organization", flex: 1.1, minWidth: 190, valueGetter: (_value, row) => formatProperDisplay(row.organization?.name ?? "") },
+    { field: "name", headerName: "Participant", flex: 1, minWidth: 170, valueGetter: (_value, row) => formatProperDisplay(`${row.firstName} ${row.lastName}`) },
     { field: "email", headerName: "Email", flex: 1, minWidth: 220 },
-    { field: "cohort", headerName: "Cohort", flex: 1, minWidth: 220, valueGetter: (_value, row) => row.cohort?.title ?? "" },
-    { field: "registrationPoc", headerName: "Registration POC", width: 180, valueGetter: (_value, row) => row.registration?.primaryContactName ?? "" },
-    { field: "title", headerName: "Title", width: 170 },
-    { field: "phone", headerName: "Phone", width: 150 },
-    { field: "emailStatus", headerName: "Email Status", width: 140, valueGetter: (_value, row) => row.emailSummary?.lastEmailEvent ?? "", renderCell: (params) => params.value ? <StatusChip value={params.value} /> : <Typography color="text.secondary">-</Typography> },
-    { field: "lastSent", headerName: "Last Sent", width: 170, valueGetter: (_value, row) => row.emailSummary?.lastEmailEventAt ?? "", valueFormatter: (value) => value ? new Date(value).toLocaleString() : "" },
-    { field: "status", headerName: "Status", width: 140, renderCell: (params) => <StatusChip value={params.value} /> },
-    { field: "certificateIssued", headerName: "Certificate", width: 130, renderCell: (params) => <StatusChip value={params.value} /> },
-    { field: "createdAt", headerName: "Created", width: 130, valueFormatter: (value) => value ? new Date(value).toLocaleDateString() : "" },
+    { field: "cohort", headerName: "Cohort", flex: 0.95, minWidth: 170, valueGetter: (_value, row) => row.cohort?.title ?? "" },
+    { field: "registrationPoc", headerName: "Registration POC", flex: 0.85, minWidth: 150, valueGetter: (_value, row) => formatProperDisplay(row.registration?.primaryContactName ?? "") },
+    { field: "emailStatus", headerName: "Email", width: 116, valueGetter: (_value, row) => row.emailSummary?.lastEmailEvent ?? "", renderCell: (params) => params.value ? <StatusChip value={params.value} /> : <Typography color="text.secondary">-</Typography> },
+    { field: "status", headerName: "Status", width: 116, renderCell: (params) => <StatusChip value={params.value} /> },
+    { field: "certificateIssued", headerName: "Certificate", width: 112, renderCell: (params) => <StatusChip value={params.value} /> },
     {
       field: "actions",
       headerName: "Actions",
-      width: 260,
+      width: 118,
       sortable: false,
       renderCell: (params) => (
-        <Stack direction="row" spacing={1} onClick={(event) => event.stopPropagation()}>
-          <Button size="small" variant="outlined" startIcon={<EditOutlined />} onClick={() => { setEditing(params.row); setDialogOpen(true); }}>
-            Edit
-          </Button>
-          <Button size="small" variant="outlined" color="success" startIcon={<DoneAllOutlined />} onClick={() => patchParticipant({ id: params.row.id, status: "COMPLETED" }, "Participant completed")}>
-            Complete
-          </Button>
-          <Button
-            size="small"
-            variant="outlined"
+        <Stack direction="row" spacing={0.5} onClick={(event) => event.stopPropagation()}>
+          <CompactActionButton label="Edit participant" icon={<EditOutlined fontSize="small" />} onClick={() => { setEditing(params.row); setDialogOpen(true); }} />
+          <CompactActionButton label="Mark complete" color="success" icon={<DoneAllOutlined fontSize="small" />} onClick={() => patchParticipant({ id: params.row.id, status: "COMPLETED" }, "Participant completed")} />
+          <CompactActionButton
+            label="Remove participant"
             color="error"
-            startIcon={<DeleteOutline />}
+            icon={<DeleteOutline fontSize="small" />}
             onClick={async () => {
               try {
                 await adminApi(`/api/participants?id=${params.row.id}`, { method: "DELETE" });
@@ -367,9 +360,7 @@ export function ParticipantsClient() {
                 notifyError((error as Error).message);
               }
             }}
-          >
-            Remove
-          </Button>
+          />
         </Stack>
       )
     }
@@ -400,11 +391,11 @@ export function ParticipantsClient() {
           </TextField>
           <TextField select label="Organization" value={organizationId} onChange={(event) => setOrganizationId(event.target.value)} sx={{ minWidth: 220 }}>
             <MenuItem value="">All organizations</MenuItem>
-            {organizationOptions.map(([id, label]) => <MenuItem value={id} key={id}>{label}</MenuItem>)}
+            {organizationOptions.map(([id, label]) => <MenuItem value={id} key={id}>{formatProperDisplay(label)}</MenuItem>)}
           </TextField>
           <TextField select label="Registration POC" value={registrationPoc} onChange={(event) => setRegistrationPoc(event.target.value)} sx={{ minWidth: 220 }}>
             <MenuItem value="">All POCs</MenuItem>
-            {pocOptions.map((value) => <MenuItem value={value} key={value}>{value}</MenuItem>)}
+            {pocOptions.map((value) => <MenuItem value={value} key={value}>{formatProperDisplay(value)}</MenuItem>)}
           </TextField>
         </Stack>
       </SectionCard>
@@ -417,8 +408,8 @@ export function ParticipantsClient() {
             pageSizeOptions={[10, 25, 50]}
             initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
             disableRowSelectionOnClick
-            rowHeight={46}
-            sx={{ "& .MuiDataGrid-cell": { py: 0.5 }, "& .MuiButton-startIcon": { mr: 0.5 }, "& .MuiSvgIcon-root": { fontSize: 18 } }}
+            rowHeight={48}
+            sx={{ "& .MuiDataGrid-cell": { py: 0.25, alignItems: "center" }, "& .MuiDataGrid-row": { cursor: "pointer" } }}
             onRowClick={(params: GridRowParams) => setDetail(params.row)}
           />
         </TableShell>

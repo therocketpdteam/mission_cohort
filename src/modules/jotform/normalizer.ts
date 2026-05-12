@@ -20,22 +20,22 @@ type JotformTargetField = {
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export const jotformTargetFields: JotformTargetField[] = [
-  { target: "formId", label: "Jotform form ID", category: "Form", aliases: ["formID", "formId", "form_id"] },
+  { target: "formId", label: "Jotform form ID", category: "Form", aliases: ["formID", "formId", "form_id", "form ID"] },
   { target: "submissionId", label: "Submission ID", category: "Form", aliases: ["submissionID", "submissionId", "submission_id", "id"] },
   { target: "cohortSlug", label: "Cohort slug", category: "Routing", aliases: ["cohortSlug", "cohort_slug", "CohortSlug"] },
-  { target: "primaryContactName", label: "POC full name", category: "Contact", aliases: ["primaryContactName", "contactName", "registrantName", "fullName", "name", "Name"] },
+  { target: "primaryContactName", label: "POC full name", category: "Contact", aliases: ["primaryContactName", "contactName", "registrantName", "fullName", "Name", "q7_name", "name"] },
   { target: "primaryContactFirstName", label: "POC first name", category: "Contact", aliases: ["primaryContactFirstName", "contactFirstName", "registrantFirstName", "firstName", "First Name", "first"] },
   { target: "primaryContactLastName", label: "POC last name", category: "Contact", aliases: ["primaryContactLastName", "contactLastName", "registrantLastName", "lastName", "Last Name", "last"] },
-  { target: "primaryContactEmail", label: "POC email", category: "Contact", aliases: ["primaryContactEmail", "contactEmail", "registrantEmail", "email", "Email"] },
-  { target: "primaryContactPhone", label: "POC phone", category: "Contact", aliases: ["primaryContactPhone", "contactPhone", "registrantPhone", "phone", "Phone Number"] },
-  { target: "primaryContactTitle", label: "POC title", category: "Contact", aliases: ["primaryContactTitle", "contactTitle", "title", "Title"] },
-  { target: "organizationName", label: "Organization name", category: "Organization", aliases: ["Name of Organization", "organizationName", "districtOrganizationName", "districtOrOrganizationName", "organization", "districtName", "DistrictName", "name"] },
+  { target: "primaryContactEmail", label: "POC email", category: "Contact", aliases: ["primaryContactEmail", "contactEmail", "registrantEmail", "Email", "q12_email", "email"] },
+  { target: "primaryContactPhone", label: "POC phone", category: "Contact", aliases: ["primaryContactPhone", "contactPhone", "registrantPhone", "Phone Number", "q13_billTo13", "phone"] },
+  { target: "primaryContactTitle", label: "POC title", category: "Contact", aliases: ["primaryContactTitle", "contactTitle", "Title", "q63_title", "title"] },
+  { target: "organizationName", label: "Organization name", category: "Organization", aliases: ["Name of Organization", "q15_nameOf", "organizationName", "districtOrganizationName", "districtOrOrganizationName", "organization", "districtName", "DistrictName"] },
   { target: "organizationAddress", label: "Organization address", category: "Organization", aliases: ["billingAddress", "address", "Address"] },
   { target: "organizationPhone", label: "Organization phone", category: "Organization", aliases: ["organizationPhone", "phone", "Phone", "Phone Number"] },
-  { target: "participantCount", label: "Participant count", category: "Registration", aliases: ["participantCount", "numberOfParticipants", "participantsCount", "How many participants will be joining?", "Please select how many participants will be joining?"] },
-  { target: "paymentMethod", label: "Payment method", category: "Payment", aliases: ["paymentMethod", "method", "Preferred method of payment?"] },
+  { target: "participantCount", label: "Participant count", category: "Registration", aliases: ["participantCount", "How many participants will be joining?", "Please select how many participants will be joining?", "q20_howMany", "numberOfParticipants", "participantsCount"] },
+  { target: "paymentMethod", label: "Payment method", category: "Payment", aliases: ["paymentMethod", "Preferred method of payment?", "q46_preferredMethod", "method"] },
   { target: "paymentStatus", label: "Payment status", category: "Payment", aliases: ["paymentStatus", "status"] },
-  { target: "totalAmount", label: "Total amount", category: "Payment", aliases: ["totalAmount", "amount", "total", "CC - Total", "Total Cost"] },
+  { target: "totalAmount", label: "Total amount", category: "Payment", aliases: ["totalAmount", "Total Cost", "CC - Total", "q56_totalCost56", "amount", "total"] },
   { target: "purchaseOrderNumber", label: "PO number", category: "Payment", aliases: ["purchaseOrderNumber", "poNumber", "purchaseOrder"] },
   { target: "invoiceNumber", label: "Invoice number", category: "Payment", aliases: ["invoiceNumber", "invoice"] },
   { target: "notes", label: "Notes/source", category: "Registration", aliases: ["notes", "additionalNotes", "How did you hear about us?"] },
@@ -166,14 +166,22 @@ function mappedFirstValue(flat: UnknownRecord, source: UnknownRecord, fieldMap: 
 }
 
 function findSuggestedFieldKey(flat: UnknownRecord, target: JotformTargetField): string {
-  const value = firstValue(flat, target.aliases);
+  for (const alias of target.aliases) {
+    const directValue = flat[alias];
 
-  if (value == null || !readString(value)) {
-    return "";
+    if (directValue != null && readString(directValue)) {
+      return alias;
+    }
+
+    const normalizedAlias = normalizeKey(alias);
+    const key = Object.keys(flat).find((candidate) => normalizeKey(candidate) === normalizedAlias && readString(flat[candidate]));
+
+    if (key) {
+      return key;
+    }
   }
 
-  const aliasKeys = target.aliases.map(normalizeKey);
-  return Object.keys(flat).find((key) => aliasKeys.includes(normalizeKey(key)) && readString(flat[key])) ?? "";
+  return "";
 }
 
 function humanizeFieldKey(key: string): string {
@@ -243,7 +251,7 @@ function isNoisyJotformField(key: string, value: unknown): boolean {
   const normalizedKey = normalizeKey(key);
   const stringValue = readString(value);
 
-  if (["rawrequest", "jsexecutiontracker", "paymentfieldstoselectedproducts", "selectedproductslist"].includes(normalizedKey)) {
+  if (["rawrequest", "jsexecutiontracker", "paymentfieldstoselectedproducts", "selectedproductslist", "builddate", "eventid", "eventobserver", "eventobserverpayment", "hiddenpaymentfield", "username", "submitdate", "submitsource", "uploadserverurl", "documentid", "customparams", "custombody", "customtitle"].includes(normalizedKey)) {
     return true;
   }
 
@@ -252,6 +260,20 @@ function isNoisyJotformField(key: string, value: unknown): boolean {
   }
 
   return normalizedKey.includes("summary") && stringValue.trim().startsWith("{");
+}
+
+function optionRank(key: string) {
+  const normalizedKey = normalizeKey(key);
+
+  if (!/^q\d+/i.test(key) && !normalizedKey.includes("id")) {
+    return 0;
+  }
+
+  if (/^q\d+/i.test(key)) {
+    return 1;
+  }
+
+  return 2;
 }
 
 function parseJsonObject(value: unknown): UnknownRecord {
@@ -477,7 +499,7 @@ export function normalizeJotformRegistrationPayload(payload: UnknownRecord, mapp
   );
   const primaryContactFirstName = readString(mappedFirstValue(flat, registration, fieldMap, "primaryContactFirstName", ["primaryContactFirstName", "contactFirstName", "registrantFirstName", "firstName", "First Name", "first"]));
   const primaryContactLastName = readString(mappedFirstValue(flat, registration, fieldMap, "primaryContactLastName", ["primaryContactLastName", "contactLastName", "registrantLastName", "lastName", "Last Name", "last"]));
-  const primaryContactFullName = readString(mappedFirstValue(flat, registration, fieldMap, "primaryContactName", ["primaryContactName", "contactName", "registrantName", "fullName", "name"]));
+  const primaryContactFullName = readString(mappedFirstValue(flat, registration, fieldMap, "primaryContactName", ["primaryContactName", "contactName", "registrantName", "fullName", "q7_name", "Name", "name"]));
   const primaryContactName = primaryContactFullName || [primaryContactFirstName, primaryContactLastName].filter(Boolean).join(" ");
 
   return {
@@ -492,7 +514,7 @@ export function normalizeJotformRegistrationPayload(payload: UnknownRecord, mapp
     },
     organization: {
       id: readString(firstValue(organization, ["organizationId", "orgId"])),
-      name: readString(mappedFirstValue(flat, organization, fieldMap, "organizationName", ["Name of Organization", "organizationName", "districtOrganizationName", "districtOrOrganizationName", "organization", "districtName", "DistrictName", "name"])),
+      name: readString(mappedFirstValue(flat, organization, fieldMap, "organizationName", ["Name of Organization", "q15_nameOf", "organizationName", "districtOrganizationName", "districtOrOrganizationName", "organization", "districtName", "DistrictName"])),
       type: readEnumValue(OrganizationType, firstValue(organization, ["organizationType", "type"]), OrganizationType.DISTRICT),
       city: readString(firstValue(organization, ["city", "City"])),
       state: readString(firstValue(organization, ["state", "State"])),
@@ -504,25 +526,26 @@ export function normalizeJotformRegistrationPayload(payload: UnknownRecord, mapp
       cohortSlug: routing.cohortSlug,
       formId: readString(firstValue(registration, ["formId", "form_id"])),
       primaryContactName,
-      primaryContactEmail: readString(mappedFirstValue(flat, registration, fieldMap, "primaryContactEmail", ["primaryContactEmail", "contactEmail", "registrantEmail", "email"])),
-      primaryContactPhone: readString(mappedFirstValue(flat, registration, fieldMap, "primaryContactPhone", ["primaryContactPhone", "contactPhone", "registrantPhone", "phone", "Phone Number"])),
-      primaryContactTitle: readString(mappedFirstValue(flat, registration, fieldMap, "primaryContactTitle", ["primaryContactTitle", "contactTitle", "title"])),
+      primaryContactEmail: readString(mappedFirstValue(flat, registration, fieldMap, "primaryContactEmail", ["primaryContactEmail", "contactEmail", "registrantEmail", "q12_email", "Email", "email"])),
+      primaryContactPhone: readString(mappedFirstValue(flat, registration, fieldMap, "primaryContactPhone", ["primaryContactPhone", "contactPhone", "registrantPhone", "q13_billTo13", "Phone Number", "phone"])),
+      primaryContactTitle: readString(mappedFirstValue(flat, registration, fieldMap, "primaryContactTitle", ["primaryContactTitle", "contactTitle", "q63_title", "Title", "title"])),
       billingContactName: readString(firstValue(registration, ["billingContactName", "billingName"])),
       billingContactEmail: readString(firstValue(registration, ["billingContactEmail", "billingEmail"])),
       billingAddress: readString(mappedFirstValue(flat, registration, fieldMap, "organizationAddress", ["billingAddress", "address"])),
-      paymentMethod: readPaymentMethod(mappedFirstValue(flat, payment, fieldMap, "paymentMethod", ["paymentMethod", "method", "Preferred method of payment?"])),
+      paymentMethod: readPaymentMethod(mappedFirstValue(flat, payment, fieldMap, "paymentMethod", ["paymentMethod", "q46_preferredMethod", "method", "Preferred method of payment?"])),
       paymentStatus: readEnumValue(
         PaymentStatus,
         mappedFirstValue(flat, payment, fieldMap, "paymentStatus", ["paymentStatus", "status"]),
-        readPaymentMethod(mappedFirstValue(flat, payment, fieldMap, "paymentMethod", ["paymentMethod", "method", "Preferred method of payment?"])) === PaymentMethod.CREDIT_CARD ? PaymentStatus.PAID : PaymentStatus.PENDING
+        readPaymentMethod(mappedFirstValue(flat, payment, fieldMap, "paymentMethod", ["paymentMethod", "q46_preferredMethod", "method", "Preferred method of payment?"])) === PaymentMethod.CREDIT_CARD ? PaymentStatus.PAID : PaymentStatus.PENDING
       ),
       invoiceNumber: readString(mappedFirstValue(flat, payment, fieldMap, "invoiceNumber", ["invoiceNumber", "invoice"])),
       purchaseOrderNumber: readString(mappedFirstValue(flat, payment, fieldMap, "purchaseOrderNumber", ["purchaseOrderNumber", "poNumber", "purchaseOrder"])),
       quickBooksCustomerRef: readString(firstValue(payment, ["quickBooksCustomerRef", "quickbooksCustomerId"])),
       quickBooksInvoiceRef: readString(firstValue(payment, ["quickBooksInvoiceRef", "quickbooksInvoiceId"])),
-      totalAmount: readNumber(mappedFirstValue(flat, payment, fieldMap, "totalAmount", ["totalAmount", "amount", "total", "CC - Total", "Total Cost"])),
+      totalAmount: readNumber(mappedFirstValue(flat, payment, fieldMap, "totalAmount", ["totalAmount", "q56_totalCost56", "amount", "total", "CC - Total", "Total Cost"])),
       participantCount: readParticipantCount(mappedFirstValue(flat, registration, fieldMap, "participantCount", [
         "participantCount",
+        "q20_howMany",
         "numberOfParticipants",
         "participantsCount",
         "How many participants will be joining?",
@@ -536,12 +559,12 @@ export function normalizeJotformRegistrationPayload(payload: UnknownRecord, mapp
     },
     participants,
     payment: {
-      amount: readNumber(mappedFirstValue(flat, payment, fieldMap, "totalAmount", ["paymentAmount", "amount", "totalAmount", "total", "CC - Total", "Total Cost"])),
-      method: readPaymentMethod(mappedFirstValue(flat, payment, fieldMap, "paymentMethod", ["paymentMethod", "method", "Preferred method of payment?"])),
+      amount: readNumber(mappedFirstValue(flat, payment, fieldMap, "totalAmount", ["paymentAmount", "q56_totalCost56", "amount", "totalAmount", "total", "CC - Total", "Total Cost"])),
+      method: readPaymentMethod(mappedFirstValue(flat, payment, fieldMap, "paymentMethod", ["paymentMethod", "q46_preferredMethod", "method", "Preferred method of payment?"])),
       status: readEnumValue(
         PaymentStatus,
         mappedFirstValue(flat, payment, fieldMap, "paymentStatus", ["paymentStatus", "status"]),
-        readPaymentMethod(mappedFirstValue(flat, payment, fieldMap, "paymentMethod", ["paymentMethod", "method", "Preferred method of payment?"])) === PaymentMethod.CREDIT_CARD ? PaymentStatus.PAID : PaymentStatus.PENDING
+        readPaymentMethod(mappedFirstValue(flat, payment, fieldMap, "paymentMethod", ["paymentMethod", "q46_preferredMethod", "method", "Preferred method of payment?"])) === PaymentMethod.CREDIT_CARD ? PaymentStatus.PAID : PaymentStatus.PENDING
       ),
       invoiceNumber: readString(mappedFirstValue(flat, payment, fieldMap, "invoiceNumber", ["invoiceNumber", "invoice"])),
       quickBooksPaymentRef: readString(firstValue(payment, ["quickBooksPaymentRef", "quickbooksPaymentId"])),
@@ -551,15 +574,26 @@ export function normalizeJotformRegistrationPayload(payload: UnknownRecord, mapp
 }
 
 function buildFieldOptions(flat: UnknownRecord) {
-  return Object.entries(flat)
+  const deduped = new Map<string, { key: string; label: string; rawLabel: string; sampleValue: string }>();
+
+  Object.entries(flat)
     .filter(([key, value]) => readString(value) && !isNoisyJotformField(key, value))
-    .map(([key, value]) => ({
-      key,
-      label: friendlyJotformFieldLabel(key, value),
-      rawLabel: humanizeFieldKey(key),
-      sampleValue: readString(value).slice(0, 180)
-    }))
-    .sort((a, b) => a.label.localeCompare(b.label));
+    .forEach(([key, value]) => {
+      const option = {
+        key,
+        label: friendlyJotformFieldLabel(key, value),
+        rawLabel: humanizeFieldKey(key),
+        sampleValue: readString(value).slice(0, 180)
+      };
+      const dedupeKey = `${normalizeKey(option.label)}:${normalizeKey(option.sampleValue)}`;
+      const existing = deduped.get(dedupeKey);
+
+      if (!existing || optionRank(option.key) < optionRank(existing.key)) {
+        deduped.set(dedupeKey, option);
+      }
+    });
+
+  return Array.from(deduped.values()).sort((a, b) => a.label.localeCompare(b.label));
 }
 
 function buildSuggestedFieldMap(flat: UnknownRecord): FieldMap {
@@ -615,10 +649,10 @@ export function previewJotformRegistrationPayload(payload: UnknownRecord, mappin
       cohortSlug: readString(firstValue(flat, ["cohortSlug", "cohort_slug", "CohortSlug"])),
       mappingId: "",
       hasMapping: false,
-      primaryContactName: readString(firstValue(flat, ["primaryContactName", "contactName", "registrantName", "name"])),
-      primaryContactEmail: readString(firstValue(flat, ["primaryContactEmail", "contactEmail", "registrantEmail", "email"])),
-      organizationName: readString(firstValue(flat, ["Name of Organization", "organizationName", "districtOrganizationName", "districtOrOrganizationName", "organization", "districtName", "DistrictName", "name"])),
-      participantCount: readParticipantCount(firstValue(flat, ["participantCount", "numberOfParticipants", "participantsCount"])),
+      primaryContactName: readString(firstValue(flat, ["primaryContactName", "contactName", "registrantName", "q7_name", "Name", "name"])),
+      primaryContactEmail: readString(firstValue(flat, ["primaryContactEmail", "contactEmail", "registrantEmail", "q12_email", "Email", "email"])),
+      organizationName: readString(firstValue(flat, ["Name of Organization", "q15_nameOf", "organizationName", "districtOrganizationName", "districtOrOrganizationName", "organization", "districtName", "DistrictName"])),
+      participantCount: readParticipantCount(firstValue(flat, ["participantCount", "q20_howMany", "numberOfParticipants", "participantsCount"])),
       parsedParticipantCount: 0,
       participantParseErrors: [error instanceof Error ? error.message : "Unable to normalize Jotform payload"],
       normalized: null,

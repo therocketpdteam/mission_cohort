@@ -26,7 +26,7 @@ import {
   Typography
 } from "@mui/material";
 import { ReactNode, useCallback, useEffect, useState } from "react";
-import { formatStatusLabel } from "@/lib/formatting";
+import { formatProperDisplay, formatStatusLabel } from "@/lib/formatting";
 
 export type AdminRow = Record<string, any>;
 
@@ -247,6 +247,54 @@ export function FieldValuePill({
         )}
       </Box>
     </Stack>
+  );
+}
+
+export function MetadataPill({ children }: { children: ReactNode }) {
+  return (
+    <Box
+      component="span"
+      sx={{
+        display: "inline-flex",
+        alignItems: "center",
+        borderRadius: 999,
+        bgcolor: "primary.light",
+        color: "primary.dark",
+        px: 1,
+        py: 0.35,
+        fontSize: 12,
+        fontWeight: 800,
+        maxWidth: "100%",
+        whiteSpace: "nowrap",
+        overflow: "hidden",
+        textOverflow: "ellipsis"
+      }}
+    >
+      {children}
+    </Box>
+  );
+}
+
+export function ProperText({ value, strong = false }: { value?: string | null; strong?: boolean }) {
+  return (
+    <Typography fontWeight={strong ? 800 : undefined} noWrap title={formatProperDisplay(value)}>
+      {formatProperDisplay(value) || "-"}
+    </Typography>
+  );
+}
+
+export function DetailField({ label, value, proper = false }: { label: string; value: unknown; proper?: boolean }) {
+  const displayValue = proper ? formatProperDisplay(String(value ?? "")) : value;
+
+  return (
+    <Box sx={{ minWidth: 0 }}>
+      <Typography variant="caption" color="text.secondary">
+        {label}
+      </Typography>
+      <Typography fontWeight={700} sx={{ overflowWrap: "anywhere" }}>
+        {displayValue == null || displayValue === "" ? "-" : String(displayValue)}
+      </Typography>
+    </Box>
   );
 }
 

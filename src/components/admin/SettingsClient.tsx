@@ -53,6 +53,24 @@ import {
 
 const settingsTabs = ["System Health", "Admin Users", "Connected Tools", "Jotform Intake", "Advanced Setup"];
 const wizardSteps = ["Summary", "Routing", "Field Mapping", "Preview", "Save"];
+const smartMappingTargets = [
+  "formId",
+  "submissionId",
+  "cohortSlug",
+  "primaryContactName",
+  "primaryContactFirstName",
+  "primaryContactLastName",
+  "primaryContactEmail",
+  "primaryContactPhone",
+  "organizationName",
+  "organizationAddress",
+  "participantCount",
+  "paymentMethod",
+  "totalAmount",
+  "participantText",
+  "notes"
+];
+const requiredMappingTargets = ["formId", "submissionId", "primaryContactName", "primaryContactEmail", "organizationName", "participantCount"];
 type JotformFieldOption = {
   key: string;
   label: string;
@@ -278,6 +296,30 @@ function JotformMappingWizard({
       };
     })
     .filter((row) => row.sourceKey);
+  const smartTargets = targetFields.filter((target) => smartMappingTargets.includes(target.target));
+  const confirmedSmartRows = smartTargets
+    .map((target) => {
+      const sourceKey = getFieldMapValue(fieldMap, target.target);
+      return {
+        ...target,
+        sourceKey,
+        sample: sourceKey ? fieldSample(fieldOptions, sourceKey) : ""
+      };
+    })
+    .filter((row) => row.sourceKey);
+  const hasFullNameMapping = Boolean(getFieldMapValue(fieldMap, "primaryContactName"));
+  const hasSplitNameMapping = Boolean(getFieldMapValue(fieldMap, "primaryContactFirstName") && getFieldMapValue(fieldMap, "primaryContactLastName"));
+  const unresolvedSmartTargets = smartTargets.filter((target) => {
+    if (["primaryContactFirstName", "primaryContactLastName", "cohortSlug", "primaryContactPhone", "organizationAddress", "paymentMethod", "totalAmount", "participantText", "notes"].includes(target.target)) {
+      return false;
+    }
+
+    if (target.target === "primaryContactName") {
+      return !(hasFullNameMapping || hasSplitNameMapping);
+    }
+
+    return requiredMappingTargets.includes(target.target) && !getFieldMapValue(fieldMap, target.target);
+  });
 
   return (
     <Dialog open={Boolean(event)} onClose={onClose} fullWidth maxWidth="lg" PaperProps={{ sx: { minHeight: "78vh" } }}>
@@ -346,11 +388,17 @@ function JotformMappingWizard({
 
             {activeStep === 2 && (
               <Stack spacing={2}>
-                {Object.entries(groupedTargets).map(([category, targets]) => (
-                  <Paper variant="outlined" sx={{ p: 1.5 }} key={category}>
-                    <Typography variant="h4" sx={{ mb: 1.5 }}>{category}</Typography>
+                <Alert severity={unresolvedSmartTargets.length ? "warning" : "success"}>
+                  {unresolvedSmartTargets.length
+                    ? `Mission Control mapped ${confirmedSmartRows.length} fields. Review the ${unresolvedSmartTargets.length} unresolved field${unresolvedSmartTargets.length === 1 ? "" : "s"} below.`
+                    : `Mission Control mapped ${confirmedSmartRows.length} fields confidently. You can continue or open Advanced field mapping for edge cases.`}
+                </Alert>
+
+                {unresolvedSmartTargets.length > 0 && (
+                  <Paper variant="outlined" sx={{ p: 1.5 }}>
+                    <Typography variant="h4" sx={{ mb: 1.5 }}>Needs review</Typography>
                     <Grid container spacing={1.5}>
-                      {targets.map((target) => (
+                      {unresolvedSmartTargets.map((target) => (
                         <Grid size={{ xs: 12, md: 6 }} key={target.target}>
                           <TextField
                             select
@@ -371,7 +419,64 @@ function JotformMappingWizard({
                       ))}
                     </Grid>
                   </Paper>
-                ))}
+                )}
+
+                <Paper variant="outlined" sx={{ p: 1.5 }}>
+                  <Typography variant="h4" sx={{ mb: 1.5 }}>Confirmed mappings</Typography>
+                  <Grid container spacing={1}>
+                    {confirmedSmartRows.map((row) => (
+                      <Grid size={{ xs: 12, md: 6 }} key={row.target}>
+                        <Typography variant="caption" color="text.secondary">{row.label}</Typography>
+                        <FieldValuePill
+                          label={fieldOptionByKey(fieldOptions, row.sourceKey)?.label ?? row.sourceKey}
+                          value={row.sample || "-"}
+                          secondary={fieldOptionByKey(fieldOptions, row.sourceKey)?.rawLabel ?? row.sourceKey}
+                        />
+                      </Grid>
+                    ))}
+                  </Grid>
+                </Paper>
+
+                <Accordion>
+                  <AccordionSummary expandIcon={<ExpandMoreOutlined />}>
+                    <Box>
+                      <Typography variant="h4">Advanced field mapping</Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Open only if a field was matched incorrectly or this Jotform version changed.
+                      </Typography>
+                    </Box>
+                  </AccordionSummary>
+                  <AccordionDetails>
+                    <Stack spacing={2}>
+                      {Object.entries(groupedTargets).map(([category, targets]) => (
+                        <Paper variant="outlined" sx={{ p: 1.5 }} key={category}>
+                          <Typography variant="h4" sx={{ mb: 1.5 }}>{category}</Typography>
+                          <Grid container spacing={1.5}>
+                            {targets.map((target) => (
+                              <Grid size={{ xs: 12, md: 6 }} key={target.target}>
+                                <TextField
+                                  select
+                                  fullWidth
+                                  size="small"
+                                  label={target.label}
+                                  value={getFieldMapValue(fieldMap, target.target)}
+                                  onChange={(event) => updateFieldMap(target.target, event.target.value)}
+                                >
+                                  <MenuItem value="">Do not map</MenuItem>
+                                  {fieldOptions.map((option) => (
+                                    <MenuItem value={option.key} key={`${target.target}-${option.key}`}>
+                                      <FieldValuePill label={option.label || option.key} value={option.sampleValue} secondary={option.rawLabel && option.rawLabel !== option.label ? option.rawLabel : option.key} />
+                                    </MenuItem>
+                                  ))}
+                                </TextField>
+                              </Grid>
+                            ))}
+                          </Grid>
+                        </Paper>
+                      ))}
+                    </Stack>
+                  </AccordionDetails>
+                </Accordion>
               </Stack>
             )}
 

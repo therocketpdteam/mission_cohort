@@ -562,20 +562,45 @@ export function RegistrationsClient() {
   }
 
   const columns: GridColDef[] = [
-    { field: "primaryContactName", headerName: "POC", flex: 1, minWidth: 180, valueFormatter: (value) => formatProperDisplay(value) },
-    { field: "primaryContactEmail", headerName: "POC email", flex: 1, minWidth: 220 },
-    { field: "primaryContactPhone", headerName: "Phone", width: 150 },
-    { field: "cohort", headerName: "Cohort", flex: 1.2, minWidth: 220, valueGetter: (_value, row) => row.cohort?.title ?? "" },
-    { field: "organization", headerName: "Organization", flex: 1, minWidth: 200, valueGetter: (_value, row) => formatProperDisplay(row.organization?.name ?? "") },
-    { field: "participantCount", headerName: "Qty", width: 80 },
-    { field: "participantListStatus", headerName: "Roster", width: 140, renderCell: (params) => <StatusChip value={params.value} /> },
-    { field: "paymentStatus", headerName: "Payment", width: 140, renderCell: (params) => <StatusChip value={params.value} /> },
-    { field: "invoiceNumber", headerName: "Invoice", width: 130 },
-    { field: "purchaseOrderNumber", headerName: "PO", width: 120 },
-    { field: "totalAmount", headerName: "Amount", width: 120, valueFormatter: (value) => money(value) },
-    { field: "supportingDocumentStatus", headerName: "Docs", width: 130, renderCell: (params) => <StatusChip value={params.value} /> },
-    { field: "quickBooksSyncStatus", headerName: "QB Sync", width: 130, renderCell: (params) => <StatusChip value={params.value ?? "NOT_SYNCED"} /> },
-    { field: "source", headerName: "Source", width: 120 },
+    {
+      field: "primaryContactName",
+      headerName: "POC",
+      flex: 1.15,
+      minWidth: 190,
+      renderCell: (params) => (
+        <Box sx={{ minWidth: 0 }}>
+          <Typography fontWeight={800} noWrap>{formatProperDisplay(params.row.primaryContactName)}</Typography>
+          <Typography variant="caption" color="text.secondary" noWrap>{params.row.primaryContactEmail}</Typography>
+        </Box>
+      )
+    },
+    { field: "organization", headerName: "Organization", flex: 1.05, minWidth: 180, valueGetter: (_value, row) => formatProperDisplay(row.organization?.name ?? "") },
+    { field: "cohort", headerName: "Cohort", flex: 1, minWidth: 170, valueGetter: (_value, row) => row.cohort?.title ?? "" },
+    {
+      field: "roster",
+      headerName: "Qty / Roster",
+      width: 128,
+      renderCell: (params) => (
+        <Stack spacing={0.5}>
+          <Typography variant="caption">{params.row.participantCount ?? 0} seats</Typography>
+          <StatusChip value={params.row.participantListStatus} />
+        </Stack>
+      )
+    },
+    { field: "paymentStatus", headerName: "Payment", width: 112, renderCell: (params) => <StatusChip value={params.value} /> },
+    {
+      field: "invoicePo",
+      headerName: "Invoice / PO",
+      flex: 0.75,
+      minWidth: 130,
+      renderCell: (params) => (
+        <Box sx={{ minWidth: 0 }}>
+          <Typography variant="caption" noWrap>{params.row.invoiceNumber || "No invoice"}</Typography>
+          <Typography variant="caption" color="text.secondary" display="block" noWrap>{params.row.purchaseOrderNumber || "No PO"}</Typography>
+        </Box>
+      )
+    },
+    { field: "source", headerName: "Source", width: 110 },
     {
       field: "actions",
       headerName: "Actions",
@@ -641,7 +666,7 @@ export function RegistrationsClient() {
             columns={columns}
             loading={loading}
             checkboxSelection
-            rowHeight={44}
+            rowHeight={52}
             pageSizeOptions={[10, 25, 50]}
             initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
             disableRowSelectionOnClick
