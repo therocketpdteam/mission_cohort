@@ -58,3 +58,41 @@ export function formatHumanLabel(value: string) {
     .replace(/\b([a-z])/gi, (match) => match.toUpperCase())
     .replace(/\b(Url|Id|Api|Crm|Qb|Po|Poc|Sms|Csv|Json|Ics|Lms|Rls)\b/g, (match) => match.toUpperCase());
 }
+
+export function formatRegistrationSource(input: {
+  utmSource?: string | null;
+  utmMedium?: string | null;
+  utmCampaign?: string | null;
+  landingPageUrl?: string | null;
+  source?: string | null;
+}) {
+  const campaign = String(input.utmCampaign ?? "").trim();
+  const source = String(input.utmSource ?? "").trim();
+  const medium = String(input.utmMedium ?? "").trim();
+  const landingPage = String(input.landingPageUrl ?? "").trim();
+  const fallback = String(input.source ?? "").trim();
+
+  if (campaign && source) {
+    return `${formatProperDisplay(campaign)} / ${formatProperDisplay(source)}`;
+  }
+
+  if (campaign) {
+    return formatProperDisplay(campaign);
+  }
+
+  if (source) {
+    return medium ? `${formatProperDisplay(source)} / ${formatProperDisplay(medium)}` : formatProperDisplay(source);
+  }
+
+  if (landingPage) {
+    try {
+      const url = new URL(landingPage);
+      const path = url.pathname.replace(/^\/+|\/+$/g, "").split("/").filter(Boolean).pop();
+      return path ? formatProperDisplay(path.replace(/-/g, " ")) : url.hostname;
+    } catch {
+      return landingPage;
+    }
+  }
+
+  return fallback ? formatStatusLabel(fallback) : "-";
+}

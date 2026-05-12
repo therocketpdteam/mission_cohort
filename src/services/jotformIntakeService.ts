@@ -72,22 +72,22 @@ export async function listJotformIntakeEvents() {
     ].filter(Boolean);
     const hasParticipantErrors = preview.participantParseErrors.length > 0;
     const isProcessed = event.status === WebhookProcessingStatus.PROCESSED;
-    const canReplay = !isProcessed && !needsMapping && !hasParticipantErrors && missingRequiredFields.length === 0;
+    const canReplay = !isProcessed && !needsMapping && missingRequiredFields.length === 0;
     const reviewStatus = isProcessed
       ? "PROCESSED"
-      : hasParticipantErrors || event.status === WebhookProcessingStatus.FAILED
-        ? "FAILED"
-        : needsMapping
-          ? "NEEDS_MAPPING"
-          : canReplay
-            ? "READY_TO_REPLAY"
+      : needsMapping
+        ? "NEEDS_MAPPING"
+        : canReplay
+          ? "READY_TO_REPLAY"
+          : event.status === WebhookProcessingStatus.FAILED
+            ? "FAILED"
             : "REVIEW_REQUIRED";
     const recommendedAction = isProcessed
       ? "Already imported into Mission Control."
-      : hasParticipantErrors
-        ? "Fix the participant list in Jotform or review the bad lines before replaying."
-        : needsMapping
-          ? "Review this submission, confirm the form mapping, then replay it."
+      : needsMapping
+        ? "Review this submission, confirm the form mapping, then replay it."
+        : hasParticipantErrors
+          ? "Replay will import the registration and valid participants, then flag the roster lines that need follow-up."
           : missingRequiredFields.length > 0
             ? `Review missing ${missingRequiredFields.join(", ")} before replaying.`
             : "Ready to replay into registrations.";

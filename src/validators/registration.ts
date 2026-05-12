@@ -33,6 +33,13 @@ export const registrationCreateSchema = z.object({
   participantCount: nonNegativeIntInput.default(0),
   status: z.nativeEnum(RegistrationStatus).default(RegistrationStatus.NEW),
   source: z.string().optional(),
+  utmSource: z.string().optional(),
+  utmMedium: z.string().optional(),
+  utmCampaign: z.string().optional(),
+  utmContent: z.string().optional(),
+  utmTerm: z.string().optional(),
+  landingPageUrl: z.string().optional(),
+  referrerUrl: z.string().optional(),
   externalSource: z.string().optional(),
   externalSubmissionId: z.string().optional(),
   notes: z.string().optional()

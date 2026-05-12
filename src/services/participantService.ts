@@ -43,14 +43,14 @@ export async function addParticipant(input: z.input<typeof participantCreateSche
     metadata: { cohortId: participant.cohortId, registrationId: participant.registrationId }
   });
   void syncRegistrationParticipantListStatus(participant.registrationId);
-  void queueParticipantCrmSync(participant.id, "participant.created");
+  void queueParticipantCrmSync(participant.id, "participant.created").catch(() => undefined);
   return participant;
 }
 
 export async function updateParticipant(id: string, input: z.input<typeof participantUpdateSchema>) {
   const data = participantUpdateSchema.parse(input);
   const participant = await prisma.participant.update({ where: { id }, data });
-  void queueParticipantCrmSync(participant.id, "participant.updated");
+  void queueParticipantCrmSync(participant.id, "participant.updated").catch(() => undefined);
   return participant;
 }
 

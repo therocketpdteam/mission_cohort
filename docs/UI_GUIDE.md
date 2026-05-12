@@ -4,7 +4,7 @@ Mission Control is an internal operations console. Screens should feel compact, 
 
 ## Layout
 
-- Use the Modern SaaS Ops direction: calm surfaces, clear hierarchy, compact controls, and RocketPD color as accent.
+- Use the RocketPD-inspired Modern SaaS Ops direction: dark navy headings, white/off-white operational surfaces, teal primary actions, and gold secondary accents.
 - Prefer tabs or focused sections when a page contains unrelated admin areas.
 - Use cards for repeated objects only when the card adds clarity; prefer compact rows for operational queues.
 - Keep default views condensed. Expanded detail should be optional and collapsible.
@@ -16,7 +16,7 @@ Mission Control is an internal operations console. Screens should feel compact, 
 
 - Use compact buttons in rows and tables: `size="small"`.
 - Button groups inside rows should fit the row height and never clip.
-- Prefer compact icon buttons with tooltips for row actions when three or more actions appear in one row.
+- Prefer a compact `...` row action menu when three or more actions appear in one row.
 - Use icons only when they clarify action intent.
 - Use dropdowns for mapping/selection tasks. Do not ask admins to inspect JSON to make decisions.
 - Put troubleshooting-only tools in Advanced sections.
@@ -44,5 +44,13 @@ Mission Control is an internal operations console. Screens should feel compact, 
 
 - Dashboard should prioritize cohort readiness over raw task lists.
 - Group operations tasks by cohort and open details in a modal.
+- Sort cohort readiness by nearest upcoming session before open-task count.
 - Emphasize upcoming session dates and times visually.
-- Use lightweight inline charts for snapshots when they help scanning.
+- Use lightweight inline charts for snapshots when they help scanning; donut charts are preferred for payment status summaries.
+- Primary dashboard rows must reserve separate space for content, status, and actions so text never overlaps buttons.
+
+## Source And UTM Display
+
+- Registration source should use structured UTM fields when present.
+- Show a compact source pill in tables, then expose full UTM/source/referrer detail inside registration detail modals.
+- Do not display raw `jotform` as the primary source label when a campaign, source, or landing page is available.

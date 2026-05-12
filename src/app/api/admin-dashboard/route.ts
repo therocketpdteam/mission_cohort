@@ -18,6 +18,7 @@ export async function GET() {
     cohorts,
     tasks,
     paymentSnapshot,
+    paymentRecords,
     activity
   ] = await Promise.all([
     prisma.cohort.count({ where: { status: { in: [CohortStatus.REGISTRATION_OPEN, CohortStatus.ACTIVE, CohortStatus.PUBLISHED] } } }),
@@ -60,6 +61,15 @@ export async function GET() {
       _count: { status: true },
       _sum: { amount: true }
     }),
+    prisma.paymentRecord.findMany({
+      select: {
+        id: true,
+        cohortId: true,
+        status: true,
+        amount: true,
+        cohort: { select: { id: true, title: true } }
+      }
+    }),
     prisma.auditLog.findMany({
       orderBy: { createdAt: "desc" },
       take: 8
@@ -81,6 +91,7 @@ export async function GET() {
     cohortsNeedingAttention: cohorts,
     openOperationsTasks: tasks,
     paymentStatusSnapshot: paymentSnapshot,
+    paymentRecordsSnapshot: paymentRecords,
     recentActivity: activity
   });
 }

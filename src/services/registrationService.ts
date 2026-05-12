@@ -25,14 +25,14 @@ export async function createRegistration(input: z.input<typeof registrationCreat
     paymentStatus: registration.paymentStatus,
     hasSupportingDocs: Boolean(registration.w9Url || registration.invoiceUrl || registration.confirmationDocsSentAt)
   });
-  void queueRegistrationCrmSync(registration.id, "registration.created");
+  void queueRegistrationCrmSync(registration.id, "registration.created").catch(() => undefined);
   return registration;
 }
 
 export async function updateRegistration(id: string, input: z.input<typeof registrationUpdateSchema>) {
   const data = registrationUpdateSchema.parse(input);
   const registration = await prisma.registration.update({ where: { id }, data });
-  void queueRegistrationCrmSync(registration.id, "registration.updated");
+  void queueRegistrationCrmSync(registration.id, "registration.updated").catch(() => undefined);
   return registration;
 }
 
@@ -44,7 +44,7 @@ export async function confirmRegistration(id: string) {
     action: "CONFIRMED",
     description: "Registration confirmed"
   });
-  void queueRegistrationCrmSync(registration.id, "registration.confirmed");
+  void queueRegistrationCrmSync(registration.id, "registration.confirmed").catch(() => undefined);
   return registration;
 }
 
@@ -55,7 +55,7 @@ export async function cancelRegistration(id: string) {
     void voidRegistrationQuickBooksInvoice(registration.id).catch(() => undefined);
   }
 
-  void queueRegistrationCrmSync(registration.id, "registration.cancelled");
+  void queueRegistrationCrmSync(registration.id, "registration.cancelled").catch(() => undefined);
   return registration;
 }
 
@@ -106,7 +106,7 @@ export async function bulkUpdateRegistrations(input: {
   }
 
   for (const id of ids) {
-    void queueRegistrationCrmSync(id, "registration.bulk_updated");
+    void queueRegistrationCrmSync(id, "registration.bulk_updated").catch(() => undefined);
   }
 
   return { count: ids.length };

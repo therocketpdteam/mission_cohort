@@ -18,6 +18,7 @@ type JotformTargetField = {
 };
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const emailInTextPattern = /[^\s<>,;]+@[^\s<>,;]+\.[^\s<>,;]+/;
 
 export const jotformTargetFields: JotformTargetField[] = [
   { target: "formId", label: "Jotform form ID", category: "Form", aliases: ["formID", "formId", "form_id", "form ID"] },
@@ -39,6 +40,13 @@ export const jotformTargetFields: JotformTargetField[] = [
   { target: "purchaseOrderNumber", label: "PO number", category: "Payment", aliases: ["purchaseOrderNumber", "poNumber", "purchaseOrder"] },
   { target: "invoiceNumber", label: "Invoice number", category: "Payment", aliases: ["invoiceNumber", "invoice"] },
   { target: "notes", label: "Notes/source", category: "Registration", aliases: ["notes", "additionalNotes", "How did you hear about us?"] },
+  { target: "utmSource", label: "UTM source", category: "Source", aliases: ["utm_source", "utmSource", "UTM Source"] },
+  { target: "utmMedium", label: "UTM medium", category: "Source", aliases: ["utm_medium", "utmMedium", "UTM Medium"] },
+  { target: "utmCampaign", label: "UTM campaign", category: "Source", aliases: ["utm_campaign", "utmCampaign", "UTM Campaign"] },
+  { target: "utmContent", label: "UTM content", category: "Source", aliases: ["utm_content", "utmContent", "UTM Content"] },
+  { target: "utmTerm", label: "UTM term", category: "Source", aliases: ["utm_term", "utmTerm", "UTM Term"] },
+  { target: "landingPageUrl", label: "Landing page URL", category: "Source", aliases: ["landingPageUrl", "landing_page_url", "Get Page URL", "lead_source", "q25_leadSource", "q59_typeA59"] },
+  { target: "referrerUrl", label: "Referrer URL", category: "Source", aliases: ["referrerUrl", "referrer", "Referrer"] },
   { target: "participantText", label: "Participant names/emails text box", category: "Participants", aliases: ["participantCsv", "participantsCsv", "participantText", "participantNamesEmails", "participantNamesAndEmails", "teamParticipants", "TeamParticipants", "namesAndEmails", "NamesEmails", "Please enter the names and email addresses of all participants, one per line, in the following format: Full Name, Email"] },
   { target: "w9Url", label: "W-9 URL", category: "Documents", aliases: ["w9Url", "w9", "w9Link"] },
   { target: "invoiceUrl", label: "Invoice URL", category: "Documents", aliases: ["invoiceUrl", "invoiceLink"] },
@@ -94,6 +102,46 @@ function readParticipantCount(value: unknown): number {
   }
 
   return readNumber(value);
+}
+
+function firstUrlFromText(value: unknown): string {
+  const text = readString(value);
+  const match = text.match(/https?:\/\/[^\s,'"]+/i);
+  return match?.[0] ?? "";
+}
+
+function readUrlSearchParam(value: unknown, param: string): string {
+  const rawUrl = firstUrlFromText(value) || readString(value);
+
+  if (!rawUrl) {
+    return "";
+  }
+
+  try {
+    return new URL(rawUrl).searchParams.get(param) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function readUtmValue(flat: UnknownRecord, fieldMap: FieldMap, target: string, aliases: string[], sourceUrls: unknown[]): string {
+  const direct = readString(mappedFirstValue(flat, flat, fieldMap, target, aliases));
+
+  if (direct) {
+    return direct;
+  }
+
+  const paramName = target.replace(/[A-Z]/g, (match) => `_${match.toLowerCase()}`).toLowerCase();
+
+  for (const sourceUrl of sourceUrls) {
+    const value = readUrlSearchParam(sourceUrl, paramName);
+
+    if (value) {
+      return value;
+    }
+  }
+
+  return "";
 }
 
 function readPaymentMethod(value: unknown): PaymentMethod {
@@ -372,7 +420,13 @@ function normalizeParticipants(input: unknown): ParsedParticipant[] {
 }
 
 export function parseParticipantCsvText(text: unknown): { participants: ParsedParticipant[]; errors: string[] } {
-  const lines = readString(text)
+  const rawText = readString(text);
+
+  if (!emailInTextPattern.test(rawText)) {
+    return { participants: [], errors: [] };
+  }
+
+  const lines = rawText
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean);
@@ -380,7 +434,7 @@ export function parseParticipantCsvText(text: unknown): { participants: ParsedPa
   const errors: string[] = [];
 
   for (const [index, line] of lines.entries()) {
-    const emailMatch = line.match(/[^\s<>,;]+@[^\s<>,;]+\.[^\s<>,;]+/);
+    const emailMatch = line.match(emailInTextPattern);
     const hasComma = line.includes(",");
     const [commaNamePart = "", commaEmailPart = ""] = line.split(",").map((part) => part.trim());
     const namePart = hasComma ? commaNamePart : line.replace(emailMatch?.[0] ?? "", "").trim();
@@ -480,7 +534,7 @@ export function normalizeJotformRegistrationPayload(payload: UnknownRecord, mapp
     "namesAndEmails",
     "NamesEmails",
     "Please enter the names and email addresses of all participants, one per line, in the following format: Full Name, Email"
-  ]) ?? Object.values(flat).find((value) => readString(value).includes(",") && /[^\s@]+@[^\s@]+\.[^\s@]+/.test(readString(value)));
+  ]) ?? Object.values(flat).find((value) => readString(value).includes(",") && emailInTextPattern.test(readString(value)));
   const parsedParticipantText = parseParticipantCsvText(participantText);
   const participants = [
     ...normalizeParticipants(rawParticipants),
@@ -501,6 +555,11 @@ export function normalizeJotformRegistrationPayload(payload: UnknownRecord, mapp
   const primaryContactLastName = readString(mappedFirstValue(flat, registration, fieldMap, "primaryContactLastName", ["primaryContactLastName", "contactLastName", "registrantLastName", "lastName", "Last Name", "last"]));
   const primaryContactFullName = readString(mappedFirstValue(flat, registration, fieldMap, "primaryContactName", ["primaryContactName", "contactName", "registrantName", "fullName", "q7_name", "Name", "name"]));
   const primaryContactName = primaryContactFullName || [primaryContactFirstName, primaryContactLastName].filter(Boolean).join(" ");
+  const landingPageCandidate = mappedFirstValue(flat, registration, fieldMap, "landingPageUrl", ["landingPageUrl", "landing_page_url", "Get Page URL", "lead_source", "q25_leadSource", "q59_typeA59"]);
+  const referrerCandidate = mappedFirstValue(flat, registration, fieldMap, "referrerUrl", ["referrerUrl", "referrer", "Referrer"]);
+  const landingPageUrl = firstUrlFromText(landingPageCandidate);
+  const referrerUrl = firstUrlFromText(referrerCandidate);
+  const sourceUrls = [landingPageUrl, referrerUrl, landingPageCandidate, referrerCandidate, firstValue(flat, ["pretty", "rawRequest"])];
 
   return {
     source: "jotform",
@@ -553,6 +612,13 @@ export function normalizeJotformRegistrationPayload(payload: UnknownRecord, mapp
       ])),
       status: readEnumValue(RegistrationStatus, firstValue(registration, ["registrationStatus"]), RegistrationStatus.NEW),
       notes: readString(mappedFirstValue(flat, registration, fieldMap, "notes", ["notes", "additionalNotes", "How did you hear about us?"])),
+      utmSource: readUtmValue(flat, fieldMap, "utmSource", ["utm_source", "utmSource", "UTM Source"], sourceUrls),
+      utmMedium: readUtmValue(flat, fieldMap, "utmMedium", ["utm_medium", "utmMedium", "UTM Medium"], sourceUrls),
+      utmCampaign: readUtmValue(flat, fieldMap, "utmCampaign", ["utm_campaign", "utmCampaign", "UTM Campaign"], sourceUrls),
+      utmContent: readUtmValue(flat, fieldMap, "utmContent", ["utm_content", "utmContent", "UTM Content"], sourceUrls),
+      utmTerm: readUtmValue(flat, fieldMap, "utmTerm", ["utm_term", "utmTerm", "UTM Term"], sourceUrls),
+      landingPageUrl,
+      referrerUrl,
       w9Url: readString(mappedFirstValue(flat, supportingDocuments, fieldMap, "w9Url", ["w9Url", "w9", "w9Link"])),
       invoiceUrl: readString(mappedFirstValue(flat, supportingDocuments, fieldMap, "invoiceUrl", ["invoiceUrl", "invoiceLink"])),
       confirmationDocsSentAt: readString(mappedFirstValue(flat, supportingDocuments, fieldMap, "confirmationDocsSentAt", ["confirmationDocsSentAt"]))

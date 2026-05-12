@@ -118,9 +118,9 @@ export async function processRegistrationWebhook(payload: Record<string, any>, o
     const externalSource = stringValue(normalized.source, "webhook");
     const externalSubmissionId = stringValue(normalized.externalSubmissionId);
 
-    if (Array.isArray(normalized.participantParseErrors) && normalized.participantParseErrors.length > 0) {
-      throw badWebhookPayload(`Participant list could not be parsed: ${normalized.participantParseErrors.join("; ")}`);
-    }
+    const participantParseWarnings = Array.isArray(normalized.participantParseErrors)
+      ? normalized.participantParseErrors.filter(Boolean)
+      : [];
 
     if (!cohortId && cohortSlug) {
       const cohort = await prisma.cohort.findUnique({ where: { slug: cohortSlug } });
@@ -178,7 +178,7 @@ export async function processRegistrationWebhook(payload: Record<string, any>, o
     const registrationData = {
       cohortId,
       organizationId: organization.id,
-      formId: stringValue(registrationInput.formId) || undefined,
+      formId: isJotformPayload ? undefined : stringValue(registrationInput.formId) || undefined,
       primaryContactName,
       primaryContactEmail,
       primaryContactPhone: stringValue(registrationInput.primaryContactPhone) || undefined,
@@ -213,6 +213,13 @@ export async function processRegistrationWebhook(payload: Record<string, any>, o
       participantCount,
       status: (registrationInput.status as RegistrationStatus) ?? RegistrationStatus.NEW,
       source: externalSource,
+      utmSource: stringValue(registrationInput.utmSource) || undefined,
+      utmMedium: stringValue(registrationInput.utmMedium) || undefined,
+      utmCampaign: stringValue(registrationInput.utmCampaign) || undefined,
+      utmContent: stringValue(registrationInput.utmContent) || undefined,
+      utmTerm: stringValue(registrationInput.utmTerm) || undefined,
+      landingPageUrl: stringValue(registrationInput.landingPageUrl) || undefined,
+      referrerUrl: stringValue(registrationInput.referrerUrl) || undefined,
       externalSource: externalSubmissionId ? externalSource : undefined,
       externalSubmissionId: externalSubmissionId || undefined,
       notes: stringValue(registrationInput.notes) || undefined
@@ -289,7 +296,10 @@ export async function processRegistrationWebhook(payload: Record<string, any>, o
       where: { id: event.id },
       data: {
         status: WebhookProcessingStatus.PROCESSED,
-        processedAt: new Date()
+        processedAt: new Date(),
+        errorMessage: participantParseWarnings.length
+          ? `Imported with participant roster warning: ${participantParseWarnings.join("; ")}`
+          : null
       }
     });
 
@@ -303,9 +313,13 @@ export async function processRegistrationWebhook(payload: Record<string, any>, o
           paymentStatus: registration.paymentStatus,
           hasSupportingDocs: Boolean(registration.w9Url || registration.invoiceUrl || registration.confirmationDocsSentAt)
         });
-    void queueRegistrationCrmSync(registration.id, existingRegistration ? "registration.updated" : "registration.created");
+    void queueRegistrationCrmSync(registration.id, existingRegistration ? "registration.updated" : "registration.created").catch((crmError) => {
+      console.warn("CRM registration sync queue failed", crmError);
+    });
     for (const participant of participants) {
-      void queueParticipantCrmSync(participant.id, existingRegistration ? "participant.updated" : "participant.created");
+      void queueParticipantCrmSync(participant.id, existingRegistration ? "participant.updated" : "participant.created").catch((crmError) => {
+        console.warn("CRM participant sync queue failed", crmError);
+      });
     }
 
     return {

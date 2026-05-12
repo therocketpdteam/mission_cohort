@@ -2,6 +2,7 @@
 
 import AddIcon from "@mui/icons-material/Add";
 import CloseIcon from "@mui/icons-material/Close";
+import MoreHorizIcon from "@mui/icons-material/MoreHoriz";
 import {
   Alert,
   Box,
@@ -16,6 +17,9 @@ import {
   FormControlLabel,
   Grid,
   IconButton,
+  ListItemIcon,
+  ListItemText,
+  Menu,
   MenuItem,
   Paper,
   Switch,
@@ -25,8 +29,8 @@ import {
   Tooltip,
   Typography
 } from "@mui/material";
-import { ReactNode, useCallback, useEffect, useState } from "react";
-import { formatProperDisplay, formatStatusLabel } from "@/lib/formatting";
+import { ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { formatProperDisplay, formatRegistrationSource, formatStatusLabel } from "@/lib/formatting";
 
 export type AdminRow = Record<string, any>;
 
@@ -272,6 +276,161 @@ export function MetadataPill({ children }: { children: ReactNode }) {
     >
       {children}
     </Box>
+  );
+}
+
+export function SourcePill({ row }: { row: AdminRow }) {
+  return (
+    <MetadataPill>
+      {formatRegistrationSource(row)}
+    </MetadataPill>
+  );
+}
+
+export function DateBadge({ value, emptyLabel = "No date" }: { value?: string | Date | null; emptyLabel?: string }) {
+  const date = value ? new Date(value) : null;
+  const month = date && Number.isFinite(date.getTime()) ? new Intl.DateTimeFormat("en-US", { month: "short" }).format(date) : "";
+  const day = date && Number.isFinite(date.getTime()) ? new Intl.DateTimeFormat("en-US", { day: "numeric" }).format(date) : "";
+
+  return (
+    <Box
+      sx={{
+        width: 58,
+        minWidth: 58,
+        borderRadius: 2,
+        border: 1,
+        borderColor: "primary.light",
+        bgcolor: "primary.light",
+        color: "primary.dark",
+        textAlign: "center",
+        py: 0.65
+      }}
+    >
+      {date && Number.isFinite(date.getTime()) ? (
+        <>
+          <Typography variant="caption" fontWeight={900} sx={{ display: "block", lineHeight: 1 }}>{month}</Typography>
+          <Typography variant="h4" sx={{ lineHeight: 1.1 }}>{day}</Typography>
+        </>
+      ) : (
+        <Typography variant="caption" fontWeight={800}>{emptyLabel}</Typography>
+      )}
+    </Box>
+  );
+}
+
+export function RowActionMenu({
+  actions
+}: {
+  actions: Array<{ label: string; icon?: ReactNode; onClick: () => void; color?: "primary" | "success" | "warning" | "error"; disabled?: boolean }>;
+}) {
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+
+  return (
+    <>
+      <Tooltip title="Actions">
+        <IconButton
+          aria-label="Row actions"
+          size="small"
+          onClick={(event) => {
+            event.stopPropagation();
+            setAnchor(event.currentTarget);
+          }}
+          sx={{ width: 30, height: 30, border: 1, borderColor: "divider", bgcolor: "background.paper" }}
+        >
+          <MoreHorizIcon fontSize="small" />
+        </IconButton>
+      </Tooltip>
+      <Menu anchorEl={anchor} open={Boolean(anchor)} onClose={() => setAnchor(null)}>
+        {actions.map((action) => (
+          <MenuItem
+            key={action.label}
+            disabled={action.disabled}
+            onClick={(event) => {
+              event.stopPropagation();
+              setAnchor(null);
+              action.onClick();
+            }}
+            sx={{ color: action.color ? `${action.color}.main` : undefined }}
+          >
+            {action.icon && <ListItemIcon sx={{ color: "inherit" }}>{action.icon}</ListItemIcon>}
+            <ListItemText>{action.label}</ListItemText>
+          </MenuItem>
+        ))}
+      </Menu>
+    </>
+  );
+}
+
+export function DonutChart({
+  rows,
+  valueKey = "amount",
+  labelKey = "label",
+  size = 150
+}: {
+  rows: AdminRow[];
+  valueKey?: string;
+  labelKey?: string;
+  size?: number;
+}) {
+  const colors = ["#0B5F75", "#E7A93C", "#25855A", "#C97A16", "#B42318", "#9AA8B8"];
+  const radius = 58;
+  const circumference = 2 * Math.PI * radius;
+  const total = rows.reduce((sum, row) => sum + Number(row[valueKey] ?? 0), 0);
+  const segments = useMemo(() => {
+    let offset = 0;
+
+    return rows.map((row, index) => {
+      const value = Number(row[valueKey] ?? 0);
+      const length = total > 0 ? (value / total) * circumference : 0;
+      const segment = {
+        row,
+        color: colors[index % colors.length],
+        dasharray: `${length} ${Math.max(circumference - length, 0)}`,
+        dashoffset: -offset
+      };
+      offset += length;
+      return segment;
+    });
+  }, [circumference, rows, total, valueKey]);
+
+  return (
+    <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems="center">
+      <Box sx={{ position: "relative", width: size, height: size }}>
+        <Box component="svg" viewBox="0 0 150 150" sx={{ width: size, height: size, transform: "rotate(-90deg)" }}>
+          <circle cx="75" cy="75" r={radius} fill="none" stroke="#E6EEF4" strokeWidth="18" />
+          {segments.map((segment) => (
+            <circle
+              key={`${segment.row[labelKey]}-${segment.color}`}
+              cx="75"
+              cy="75"
+              r={radius}
+              fill="none"
+              stroke={segment.color}
+              strokeWidth="18"
+              strokeDasharray={segment.dasharray}
+              strokeDashoffset={segment.dashoffset}
+              strokeLinecap="round"
+            />
+          ))}
+        </Box>
+        <Stack alignItems="center" justifyContent="center" sx={{ position: "absolute", inset: 0 }}>
+          <Typography variant="h3">${total.toLocaleString()}</Typography>
+          <Typography variant="caption" color="text.secondary">total</Typography>
+        </Stack>
+      </Box>
+      <Stack spacing={0.75} sx={{ minWidth: 0, width: "100%" }}>
+        {rows.map((row, index) => (
+          <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between" key={`${row[labelKey]}-${index}`}>
+            <Stack direction="row" spacing={1} alignItems="center" sx={{ minWidth: 0 }}>
+              <Box sx={{ width: 10, height: 10, borderRadius: 999, bgcolor: colors[index % colors.length] }} />
+              <Typography variant="body2" noWrap>{row[labelKey]}</Typography>
+            </Stack>
+            <Typography variant="body2" fontWeight={800}>${Number(row[valueKey] ?? 0).toLocaleString()}</Typography>
+          </Stack>
+        ))}
+        {rows.length === 0 && <Typography color="text.secondary">No payment data for this filter.</Typography>}
+      </Stack>
+    </Stack>
   );
 }
 

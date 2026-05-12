@@ -15,6 +15,7 @@ import {
   DialogTitle,
   Grid,
   MenuItem,
+  Snackbar,
   Stack,
   Step,
   StepLabel,
@@ -23,8 +24,6 @@ import {
   Typography
 } from "@mui/material";
 import { DataGrid, GridColDef } from "@mui/x-data-grid";
-import Link from "next/link";
-import type { Route } from "next";
 import { useEffect, useMemo, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
 import {
@@ -34,6 +33,7 @@ import {
   MutationDialog,
   PageHeader,
   PageStack,
+  RowActionMenu,
   SectionCard,
   StatusChip,
   TableShell,
@@ -470,6 +470,7 @@ export function CohortsClient() {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
   const [presenterId, setPresenterId] = useState("");
+  const [archiveUndo, setArchiveUndo] = useState<{ id: string; title: string; previousStatus: string } | null>(null);
   const { notifySuccess, notifyError, snackbar } = useNotifier();
 
   async function load() {
@@ -498,7 +499,7 @@ export function CohortsClient() {
           .join(" ")
           .toLowerCase()
           .includes(search.toLowerCase());
-        const matchesStatus = status ? row.status === status : true;
+        const matchesStatus = status ? row.status === status : row.status !== "ARCHIVED";
         const matchesPresenter = presenterId ? row.presenterId === presenterId : true;
         return matchesSearch && matchesStatus && matchesPresenter;
       }),
@@ -530,36 +531,57 @@ export function CohortsClient() {
     {
       field: "actions",
       headerName: "Actions",
-      width: 260,
+      width: 84,
       sortable: false,
       renderCell: (params) => (
-        <Stack direction="row" spacing={1}>
-          <Button component={Link} href={`/cohorts/${params.row.id}` as Route} variant="outlined" startIcon={<VisibilityOutlined />}>
-            View
-          </Button>
-          <Button variant="outlined" startIcon={<EditOutlined />} onClick={() => setEditing(params.row)}>
-            Edit
-          </Button>
-          <Button
-            color="warning"
-            variant="outlined"
-            startIcon={<ArchiveOutlined />}
-            onClick={async () => {
-              try {
-                await adminApi(`/api/cohorts/${params.row.id}`, { method: "PATCH", body: { status: "ARCHIVED" } });
-                notifySuccess("Cohort archived");
-                await load();
-              } catch (error) {
-                notifyError((error as Error).message);
+        <Box onClick={(event) => event.stopPropagation()}>
+          <RowActionMenu
+            actions={[
+              { label: "View cohort", icon: <VisibilityOutlined fontSize="small" />, onClick: () => window.location.assign(`/cohorts/${params.row.id}`) },
+              { label: "Edit cohort", icon: <EditOutlined fontSize="small" />, onClick: () => setEditing(params.row) },
+              {
+                label: params.row.status === "ARCHIVED" ? "Restore cohort" : "Archive cohort",
+                icon: <ArchiveOutlined fontSize="small" />,
+                color: "warning",
+                onClick: async () => {
+                  const nextStatus = params.row.status === "ARCHIVED" ? "DRAFT" : "ARCHIVED";
+                  const previousStatus = params.row.status;
+
+                  try {
+                    await adminApi(`/api/cohorts/${params.row.id}`, { method: "PATCH", body: { status: nextStatus } });
+                    if (nextStatus === "ARCHIVED") {
+                      setArchiveUndo({ id: params.row.id, title: params.row.title, previousStatus });
+                    } else {
+                      notifySuccess("Cohort restored");
+                    }
+                    await load();
+                  } catch (error) {
+                    notifyError((error as Error).message);
+                  }
+                }
               }
-            }}
-          >
-            Archive
-          </Button>
-        </Stack>
+            ]}
+          />
+        </Box>
       )
     }
   ];
+
+  async function undoArchive() {
+    if (!archiveUndo) {
+      return;
+    }
+
+    const undo = archiveUndo;
+    setArchiveUndo(null);
+    try {
+      await adminApi(`/api/cohorts/${undo.id}`, { method: "PATCH", body: { status: undo.previousStatus } });
+      notifySuccess("Archive undone");
+      await load();
+    } catch (error) {
+      notifyError((error as Error).message);
+    }
+  }
 
   async function saveEdit(values: AdminRow) {
     try {
@@ -629,6 +651,13 @@ export function CohortsClient() {
         onSubmit={saveEdit}
       />
       <Box>{snackbar}</Box>
+      <Snackbar
+        open={Boolean(archiveUndo)}
+        autoHideDuration={30000}
+        onClose={() => setArchiveUndo(null)}
+        message={archiveUndo ? `${archiveUndo.title} archived` : ""}
+        action={<Button color="secondary" size="small" onClick={undoArchive}>Undo</Button>}
+      />
     </PageStack>
   );
 }

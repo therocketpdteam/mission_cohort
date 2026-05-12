@@ -24,10 +24,10 @@ import { adminApi } from "@/lib/adminApi";
 import { formatProperDisplay } from "@/lib/formatting";
 import {
   AdminRow,
-  CompactActionButton,
   EmptyState,
   PageHeader,
   PageStack,
+  RowActionMenu,
   SectionCard,
   StatusChip,
   TableShell,
@@ -341,27 +341,31 @@ export function ParticipantsClient() {
     {
       field: "actions",
       headerName: "Actions",
-      width: 118,
+      width: 84,
       sortable: false,
       renderCell: (params) => (
-        <Stack direction="row" spacing={0.5} onClick={(event) => event.stopPropagation()}>
-          <CompactActionButton label="Edit participant" icon={<EditOutlined fontSize="small" />} onClick={() => { setEditing(params.row); setDialogOpen(true); }} />
-          <CompactActionButton label="Mark complete" color="success" icon={<DoneAllOutlined fontSize="small" />} onClick={() => patchParticipant({ id: params.row.id, status: "COMPLETED" }, "Participant completed")} />
-          <CompactActionButton
-            label="Remove participant"
-            color="error"
-            icon={<DeleteOutline fontSize="small" />}
-            onClick={async () => {
-              try {
-                await adminApi(`/api/participants?id=${params.row.id}`, { method: "DELETE" });
-                notifySuccess("Participant removed");
-                await load();
-              } catch (error) {
-                notifyError((error as Error).message);
+        <Box onClick={(event) => event.stopPropagation()}>
+          <RowActionMenu
+            actions={[
+              { label: "Edit participant", icon: <EditOutlined fontSize="small" />, onClick: () => { setEditing(params.row); setDialogOpen(true); } },
+              { label: "Mark complete", icon: <DoneAllOutlined fontSize="small" />, color: "success", onClick: () => patchParticipant({ id: params.row.id, status: "COMPLETED" }, "Participant completed") },
+              {
+                label: "Remove participant",
+                icon: <DeleteOutline fontSize="small" />,
+                color: "error",
+                onClick: async () => {
+                  try {
+                    await adminApi(`/api/participants?id=${params.row.id}`, { method: "DELETE" });
+                    notifySuccess("Participant removed");
+                    await load();
+                  } catch (error) {
+                    notifyError((error as Error).message);
+                  }
+                }
               }
-            }}
+            ]}
           />
-        </Stack>
+        </Box>
       )
     }
   ];

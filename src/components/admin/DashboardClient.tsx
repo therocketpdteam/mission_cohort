@@ -26,7 +26,7 @@ import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
 import { formatHumanLabel, formatProperDisplay, formatStatusLabel } from "@/lib/formatting";
-import { AdminRow, EmptyState, LoadingState, MetadataPill, PageHeader, PageStack, SectionCard, StatusChip, useNotifier } from "./common";
+import { AdminRow, DateBadge, DetailField, DonutChart, EmptyState, LoadingState, MetadataPill, PageHeader, PageStack, SectionCard, SourcePill, StatusChip, useNotifier } from "./common";
 
 const metricLabels: ReadonlyArray<[string, string, Route]> = [
   ["activeCohorts", "Active Cohorts", "/cohorts"],
@@ -79,8 +79,10 @@ export function DashboardClient() {
   const [data, setData] = useState<AdminRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [readinessCohort, setReadinessCohort] = useState<AdminRow | null>(null);
+  const [recentRegistration, setRecentRegistration] = useState<AdminRow | null>(null);
   const [sessionView, setSessionView] = useState("list");
   const [paymentFilter, setPaymentFilter] = useState("ALL");
+  const [paymentCohortFilter, setPaymentCohortFilter] = useState("ALL");
   const { notifyError, snackbar } = useNotifier();
 
   useEffect(() => {
@@ -117,14 +119,50 @@ export function DashboardClient() {
       grouped.set(cohortId, current);
     }
 
-    return Array.from(grouped.values()).slice(0, 6);
+    return Array.from(grouped.values())
+      .sort((a, b) => {
+        const aTime = a.nextSession?.startTime ? new Date(a.nextSession.startTime).getTime() : Number.MAX_SAFE_INTEGER;
+        const bTime = b.nextSession?.startTime ? new Date(b.nextSession.startTime).getTime() : Number.MAX_SAFE_INTEGER;
+
+        if (aTime !== bTime) {
+          return aTime - bTime;
+        }
+
+        return (b.tasks?.length ?? 0) - (a.tasks?.length ?? 0);
+      })
+      .slice(0, 6);
   }, [data]);
 
-  const filteredPayments = useMemo(
-    () => (data?.paymentStatusSnapshot ?? []).filter((payment: AdminRow) => paymentFilter === "ALL" || payment.status === paymentFilter),
-    [data, paymentFilter]
+  const paymentCohorts = useMemo(
+    () => Array.from(new Map((data?.paymentRecordsSnapshot ?? []).map((payment: AdminRow) => [payment.cohortId, payment.cohort?.title ?? "Cohort"])).entries()),
+    [data]
   );
-  const maxPaymentAmount = Math.max(...filteredPayments.map((payment: AdminRow) => Number(payment._sum?.amount ?? 0)), 1);
+  const paymentChartRows = useMemo(() => {
+    const filtered = (data?.paymentRecordsSnapshot ?? []).filter((payment: AdminRow) => {
+      const matchesStatus = paymentFilter === "ALL" || payment.status === paymentFilter;
+      const matchesCohort = paymentCohortFilter === "ALL" || payment.cohortId === paymentCohortFilter;
+      return matchesStatus && matchesCohort;
+    });
+    const grouped = new Map<string, AdminRow>();
+
+    for (const payment of filtered) {
+      const key = payment.status ?? "UNKNOWN";
+      const current = grouped.get(key) ?? { label: formatStatusLabel(key), amount: 0, count: 0 };
+      current.amount += Number(payment.amount ?? 0);
+      current.count += 1;
+      grouped.set(key, current);
+    }
+
+    return Array.from(grouped.values());
+  }, [data, paymentCohortFilter, paymentFilter]);
+
+  async function openRecentRegistration(id: string) {
+    try {
+      setRecentRegistration(await adminApi<AdminRow>(`/api/registrations?id=${id}`));
+    } catch (error) {
+      notifyError((error as Error).message);
+    }
+  }
 
   return (
     <PageStack>
@@ -181,17 +219,32 @@ export function DashboardClient() {
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, lg: 6 }}>
           <DashboardPanel title="Open Operations Tasks" href="/cohorts" actionLabel="View cohorts">
-            <List dense>
+            <Stack spacing={1}>
               {readinessRows.map((row: AdminRow) => (
-                <ListItem key={row.cohort.id} divider secondaryAction={<Button size="small" variant="outlined" onClick={() => setReadinessCohort(row)}>Details</Button>}>
-                  <ListItemText
-                    primary={row.cohort.title}
-                    secondary={`${row.tasks.length} open task${row.tasks.length === 1 ? "" : "s"} • ${row.registrationCount} registrations • ${row.nextSession ? `Next ${shortDate(row.nextSession.startTime)}` : "No upcoming session"}`}
-                  />
+                <Box
+                  key={row.cohort.id}
+                  sx={{
+                    display: "grid",
+                    gridTemplateColumns: { xs: "1fr", sm: "64px minmax(0, 1fr) auto auto" },
+                    gap: 1.5,
+                    alignItems: "center",
+                    borderBottom: 1,
+                    borderColor: "divider",
+                    py: 1.15
+                  }}
+                >
+                  <DateBadge value={row.nextSession?.startTime} />
+                  <Box sx={{ minWidth: 0 }}>
+                    <Typography fontWeight={900} noWrap>{row.cohort.title}</Typography>
+                    <Typography color="text.secondary" variant="body2" noWrap>
+                      {row.tasks.length} open task{row.tasks.length === 1 ? "" : "s"} • {row.registrationCount} registrations • {row.nextSession ? `Next ${shortDate(row.nextSession.startTime)}` : "No upcoming session"}
+                    </Typography>
+                  </Box>
                   <StatusChip value={row.tasks.length ? "Needs Attention" : "On Track"} />
-                </ListItem>
+                  <Button size="small" variant="outlined" onClick={() => setReadinessCohort(row)}>Details</Button>
+                </Box>
               ))}
-            </List>
+            </Stack>
             {!loading && readinessRows.length === 0 && (
               <EmptyState title="No cohort readiness items" description="Calendar invite tasks are handled automatically; actionable cohort work will appear here." />
             )}
@@ -210,8 +263,8 @@ export function DashboardClient() {
               <List dense>
                 {(data?.upcomingSessions ?? []).slice(0, 5).map((session: AdminRow) => (
                   <ListItem key={session.id} divider>
-                    <Box sx={{ minWidth: 74, mr: 1.5 }}>
-                      <Typography variant="h4" color="primary.main">{shortDate(session.startTime)}</Typography>
+                    <Box sx={{ mr: 1.5 }}>
+                      <DateBadge value={session.startTime} />
                       <Typography variant="caption" color="text.secondary">{timeText(session.startTime)}</Typography>
                     </Box>
                     <ListItemText
@@ -243,13 +296,14 @@ export function DashboardClient() {
           <DashboardPanel title="Recent Registrations" href="/registrations" actionLabel="View registrations">
             <List dense>
               {(data?.recentRegistrations ?? []).slice(0, 5).map((registration: AdminRow) => (
-                <ListItem key={registration.id} divider>
+                <ListItem key={registration.id} divider onClick={() => openRecentRegistration(registration.id)} sx={{ cursor: "pointer", borderRadius: 1, "&:hover": { bgcolor: "background.default" } }}>
                   <ListItemText
                     primary={formatProperDisplay(registration.primaryContactName)}
                     secondary={
                       <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap sx={{ mt: 0.5 }}>
                         <MetadataPill>{formatProperDisplay(registration.organization?.name ?? "Organization")}</MetadataPill>
                         <MetadataPill>{registration.cohort?.title ?? "Cohort"}</MetadataPill>
+                        <SourcePill row={registration} />
                       </Stack>
                     }
                   />
@@ -282,27 +336,17 @@ export function DashboardClient() {
         </Grid>
         <Grid size={{ xs: 12, lg: 6 }}>
           <DashboardPanel title="Payment Status Snapshot" href="/registrations" actionLabel="View registrations">
-            <TextField select label="Status" value={paymentFilter} onChange={(event) => setPaymentFilter(event.target.value)} sx={{ minWidth: 180, mb: 1 }}>
-              <MenuItem value="ALL">All statuses</MenuItem>
-              {(data?.paymentStatusSnapshot ?? []).map((payment: AdminRow) => <MenuItem value={payment.status} key={payment.status}>{formatStatusLabel(payment.status)}</MenuItem>)}
-            </TextField>
-            <Stack spacing={1.25}>
-              {filteredPayments.map((payment: AdminRow) => {
-                const amount = Number(payment._sum?.amount ?? 0);
-                return (
-                  <Box key={payment.status}>
-                    <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 0.5 }}>
-                      <StatusChip value={payment.status} />
-                      <Typography fontWeight={800}>${amount.toLocaleString()}</Typography>
-                    </Stack>
-                    <Box sx={{ height: 10, borderRadius: 999, bgcolor: "background.default", overflow: "hidden" }}>
-                      <Box sx={{ width: `${Math.max(8, (amount / maxPaymentAmount) * 100)}%`, height: "100%", bgcolor: "primary.main", borderRadius: 999 }} />
-                    </Box>
-                    <Typography variant="caption" color="text.secondary">{payment._count?.status ?? 0} records</Typography>
-                  </Box>
-                );
-              })}
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ mb: 2 }}>
+              <TextField select label="Cohort" value={paymentCohortFilter} onChange={(event) => setPaymentCohortFilter(event.target.value)} sx={{ minWidth: 190 }}>
+                <MenuItem value="ALL">All cohorts</MenuItem>
+                {paymentCohorts.map(([id, title]) => <MenuItem value={String(id)} key={String(id)}>{String(title)}</MenuItem>)}
+              </TextField>
+              <TextField select label="Status" value={paymentFilter} onChange={(event) => setPaymentFilter(event.target.value)} sx={{ minWidth: 170 }}>
+                <MenuItem value="ALL">All statuses</MenuItem>
+                {(data?.paymentStatusSnapshot ?? []).map((payment: AdminRow) => <MenuItem value={payment.status} key={payment.status}>{formatStatusLabel(payment.status)}</MenuItem>)}
+              </TextField>
             </Stack>
+            <DonutChart rows={paymentChartRows} />
           </DashboardPanel>
         </Grid>
         <Grid size={{ xs: 12 }}>
@@ -343,6 +387,27 @@ export function DashboardClient() {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setReadinessCohort(null)}>Close</Button>
+        </DialogActions>
+      </Dialog>
+      <Dialog open={Boolean(recentRegistration)} onClose={() => setRecentRegistration(null)} fullWidth maxWidth="md">
+        <DialogTitle>Registration Detail</DialogTitle>
+        <DialogContent>
+          {recentRegistration && (
+            <Grid container spacing={2}>
+              <Grid size={{ xs: 12, sm: 6 }}><DetailField label="POC" value={recentRegistration.primaryContactName} proper /></Grid>
+              <Grid size={{ xs: 12, sm: 6 }}><DetailField label="Email" value={recentRegistration.primaryContactEmail} /></Grid>
+              <Grid size={{ xs: 12, sm: 6 }}><DetailField label="Organization" value={recentRegistration.organization?.name} proper /></Grid>
+              <Grid size={{ xs: 12, sm: 6 }}><DetailField label="Cohort" value={recentRegistration.cohort?.title} /></Grid>
+              <Grid size={{ xs: 12, sm: 6 }}><DetailField label="Participants" value={`${recentRegistration.participants?.length ?? 0} of ${recentRegistration.participantCount ?? 0}`} /></Grid>
+              <Grid size={{ xs: 12, sm: 6 }}><DetailField label="Payment" value={formatStatusLabel(recentRegistration.paymentStatus)} /></Grid>
+              <Grid size={{ xs: 12, sm: 6 }}><DetailField label="Source" value={recentRegistration.utmCampaign || recentRegistration.utmSource || recentRegistration.landingPageUrl || recentRegistration.source} /></Grid>
+              <Grid size={{ xs: 12, sm: 6 }}><DetailField label="Amount" value={`$${Number(recentRegistration.totalAmount ?? 0).toLocaleString()}`} /></Grid>
+            </Grid>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setRecentRegistration(null)}>Close</Button>
+          {recentRegistration?.id && <Button component={Link} href="/registrations">Open registrations</Button>}
         </DialogActions>
       </Dialog>
       {snackbar}

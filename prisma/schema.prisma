@@ -422,6 +422,13 @@ model Registration {
   participantCount      Int                @default(0)
   status                RegistrationStatus @default(NEW)
   source                String?
+  utmSource             String?
+  utmMedium             String?
+  utmCampaign           String?
+  utmContent            String?
+  utmTerm               String?
+  landingPageUrl        String?
+  referrerUrl           String?
   externalSource        String?
   externalSubmissionId  String?
   notes                 String?
@@ -442,6 +449,8 @@ model Registration {
   @@index([paymentStatus])
   @@index([participantListStatus])
   @@index([supportingDocumentStatus])
+  @@index([utmSource])
+  @@index([utmCampaign])
   @@index([quickBooksInvoiceRef])
   @@index([quickBooksSyncStatus])
   @@unique([externalSource, externalSubmissionId])

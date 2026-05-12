@@ -19,7 +19,7 @@ export async function createOrganization(input: z.input<typeof organizationCreat
       city: organization.city,
       state: organization.state
     }
-  });
+  }).catch(() => undefined);
   return organization;
 }
 
@@ -39,7 +39,7 @@ export async function updateOrganization(id: string, input: z.input<typeof organ
       city: organization.city,
       state: organization.state
     }
-  });
+  }).catch(() => undefined);
   return organization;
 }
 

@@ -27,14 +27,15 @@ import {
 import { DataGrid, GridColDef, GridRowParams, GridRowSelectionModel } from "@mui/x-data-grid";
 import { useEffect, useMemo, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
-import { formatProperDisplay, formatStatusLabel } from "@/lib/formatting";
+import { formatProperDisplay, formatRegistrationSource, formatStatusLabel } from "@/lib/formatting";
 import {
   AdminRow,
-  CompactActionButton,
   EmptyState,
   PageHeader,
   PageStack,
+  RowActionMenu,
   SectionCard,
+  SourcePill,
   StatusChip,
   TableShell,
   ToolbarButton,
@@ -350,7 +351,12 @@ function RegistrationDetailDialog({
                 ["QB Invoice", registration.quickBooksInvoiceRef ?? "-"],
                 ["QB Status", registration.quickBooksInvoiceStatus ?? "UNKNOWN"],
                 ["QB Sync", registration.quickBooksSyncStatus ?? "NOT SYNCED"],
-                ["Source", registration.source ?? "-"]
+                ["Source", formatRegistrationSource(registration)],
+                ["UTM Source", registration.utmSource ?? "-"],
+                ["UTM Medium", registration.utmMedium ?? "-"],
+                ["UTM Campaign", registration.utmCampaign ?? "-"],
+                ["Landing Page", registration.landingPageUrl ?? "-"],
+                ["Referrer", registration.referrerUrl ?? "-"]
               ].map(([label, value]) => (
                 <Grid size={{ xs: 12, sm: 6, lg: 3 }} key={label}>
                   <Typography variant="body2" color="text.secondary">{label}</Typography>
@@ -481,14 +487,15 @@ export function RegistrationsClient() {
           .toLowerCase()
           .includes(search.toLowerCase());
         const matchPayment = paymentStatus ? row.paymentStatus === paymentStatus : true;
-        const matchSource = source ? row.source === source : true;
+        const sourceLabel = formatRegistrationSource(row);
+        const matchSource = source ? sourceLabel === source : true;
         return matchSearch && matchPayment && matchSource;
       }),
     [rows, search, paymentStatus, source]
   );
 
   const sourceOptions = useMemo(
-    () => Array.from(new Set(rows.map((row) => row.source).filter(Boolean))) as string[],
+    () => Array.from(new Set(rows.map((row) => formatRegistrationSource(row)).filter((value) => value && value !== "-"))) as string[],
     [rows]
   );
   const rowSelectionModel = useMemo<GridRowSelectionModel>(
@@ -600,18 +607,27 @@ export function RegistrationsClient() {
         </Box>
       )
     },
-    { field: "source", headerName: "Source", width: 110 },
+    {
+      field: "source",
+      headerName: "Source",
+      width: 180,
+      renderCell: (params) => <SourcePill row={params.row} />
+    },
     {
       field: "actions",
       headerName: "Actions",
-      width: 118,
+      width: 84,
       sortable: false,
       renderCell: (params) => (
-        <Stack direction="row" spacing={0.5} onClick={(event) => event.stopPropagation()}>
-          <CompactActionButton label="Edit registration" icon={<EditOutlined fontSize="small" />} onClick={() => { setEditing(params.row); setDialogOpen(true); }} />
-          <CompactActionButton label="Confirm registration" color="success" icon={<CheckCircleOutline fontSize="small" />} onClick={() => mutate({ id: params.row.id, action: "confirm" }, "Registration confirmed")} />
-          <CompactActionButton label="Cancel registration" color="warning" icon={<CancelOutlined fontSize="small" />} onClick={() => mutate({ id: params.row.id, action: "cancel" }, "Registration cancelled")} />
-        </Stack>
+        <Box onClick={(event) => event.stopPropagation()}>
+          <RowActionMenu
+            actions={[
+              { label: "Edit registration", icon: <EditOutlined fontSize="small" />, onClick: () => { setEditing(params.row); setDialogOpen(true); } },
+              { label: "Confirm registration", icon: <CheckCircleOutline fontSize="small" />, color: "success", onClick: () => mutate({ id: params.row.id, action: "confirm" }, "Registration confirmed") },
+              { label: "Cancel registration", icon: <CancelOutlined fontSize="small" />, color: "warning", onClick: () => mutate({ id: params.row.id, action: "cancel" }, "Registration cancelled") }
+            ]}
+          />
+        </Box>
       )
     }
   ];

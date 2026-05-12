@@ -9,7 +9,7 @@ import { getRecipientCommunicationSummary } from "./communicationService";
 export async function createPaymentRecord(input: z.input<typeof paymentCreateSchema>) {
   const data = paymentCreateSchema.parse(input);
   const payment = await prisma.paymentRecord.create({ data });
-  void queueRegistrationCrmSync(payment.registrationId, "payment.created");
+  void queueRegistrationCrmSync(payment.registrationId, "payment.created").catch(() => undefined);
   return payment;
 }
 
@@ -23,7 +23,7 @@ export async function updatePaymentStatus(id: string, input: z.input<typeof paym
     description: "Payment status changed",
     metadata: { status: payment.status, registrationId: payment.registrationId }
   });
-  void queueRegistrationCrmSync(payment.registrationId, "payment.status_changed");
+  void queueRegistrationCrmSync(payment.registrationId, "payment.status_changed").catch(() => undefined);
   return payment;
 }
 

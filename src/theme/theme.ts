@@ -5,14 +5,14 @@ export const theme = createTheme({
   palette: {
     mode: "light",
     primary: {
-      main: "#0B5F75",
-      light: "#E5F4F7",
-      dark: "#063947"
+      main: "#075C70",
+      light: "#E8F6F7",
+      dark: "#062F3D"
     },
     secondary: {
-      main: "#E7A93C",
-      light: "#FFF4DA",
-      dark: "#A96805"
+      main: "#E6A935",
+      light: "#FFF5D9",
+      dark: "#94640A"
     },
     success: {
       main: "#25855A"
@@ -24,24 +24,24 @@ export const theme = createTheme({
       main: "#B42318"
     },
     background: {
-      default: "#F6F8FA",
+      default: "#F7F5EF",
       paper: "#FFFFFF"
     },
     text: {
-      primary: "#17212B",
-      secondary: "#647386"
+      primary: "#101B2B",
+      secondary: "#657389"
     },
-    divider: "#E2E8F0"
+    divider: "#E4E8EC"
   },
   shape: {
     borderRadius: 10
   },
   typography: {
     fontFamily: "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
-    h1: { fontSize: "1.95rem", fontWeight: 800, letterSpacing: 0 },
-    h2: { fontSize: "1.45rem", fontWeight: 800, letterSpacing: 0 },
-    h3: { fontSize: "1.15rem", fontWeight: 800, letterSpacing: 0 },
-    h4: { fontSize: "1rem", fontWeight: 800, letterSpacing: 0 },
+    h1: { fontSize: "2rem", fontWeight: 900, letterSpacing: 0 },
+    h2: { fontSize: "1.48rem", fontWeight: 900, letterSpacing: 0 },
+    h3: { fontSize: "1.16rem", fontWeight: 900, letterSpacing: 0 },
+    h4: { fontSize: "1rem", fontWeight: 900, letterSpacing: 0 },
     body1: { fontSize: "0.95rem" },
     body2: { fontSize: "0.86rem" },
     button: { textTransform: "none", fontWeight: 800, letterSpacing: 0 }
@@ -55,8 +55,11 @@ export const theme = createTheme({
       styleOverrides: {
         root: {
           minHeight: 34,
-          borderRadius: 8,
-          boxShadow: "none"
+          borderRadius: 10,
+          boxShadow: "none",
+          "&:hover": {
+            boxShadow: "0 8px 18px rgba(7, 92, 112, 0.14)"
+          }
         }
       }
     },
@@ -66,8 +69,9 @@ export const theme = createTheme({
       },
       styleOverrides: {
         root: {
-          borderColor: "#E2E8F0",
-          boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04), 0 12px 28px rgba(15, 23, 42, 0.03)"
+          borderColor: "#E4E8EC",
+          borderRadius: 14,
+          boxShadow: "0 1px 2px rgba(16, 27, 43, 0.04), 0 16px 34px rgba(16, 27, 43, 0.05)"
         }
       }
     },
@@ -79,7 +83,10 @@ export const theme = createTheme({
         root: {
           "& .MuiOutlinedInput-root": {
             borderRadius: 10,
-            backgroundColor: "#FFFFFF"
+            backgroundColor: "#FFFFFF",
+            "&:hover .MuiOutlinedInput-notchedOutline": {
+              borderColor: "#075C70"
+            }
           }
         }
       }
@@ -106,12 +113,17 @@ export const theme = createTheme({
         root: {
           borderColor: "#E2E8F0",
           backgroundColor: "#FFFFFF",
-          borderRadius: 10
+          borderRadius: 14
         },
         columnHeaders: {
-          backgroundColor: "#F8FAFC",
-          color: "#475569",
+          backgroundColor: "#FBFAF7",
+          color: "#445166",
           fontWeight: 800
+        },
+        row: {
+          "&:hover": {
+            backgroundColor: "#FBFAF7"
+          }
         },
         cell: {
           outline: "none"

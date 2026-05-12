@@ -67,6 +67,9 @@ const smartMappingTargets = [
   "participantCount",
   "paymentMethod",
   "totalAmount",
+  "utmSource",
+  "utmCampaign",
+  "landingPageUrl",
   "participantText",
   "notes"
 ];
@@ -310,7 +313,7 @@ function JotformMappingWizard({
   const hasFullNameMapping = Boolean(getFieldMapValue(fieldMap, "primaryContactName"));
   const hasSplitNameMapping = Boolean(getFieldMapValue(fieldMap, "primaryContactFirstName") && getFieldMapValue(fieldMap, "primaryContactLastName"));
   const unresolvedSmartTargets = smartTargets.filter((target) => {
-    if (["primaryContactFirstName", "primaryContactLastName", "cohortSlug", "primaryContactPhone", "organizationAddress", "paymentMethod", "totalAmount", "participantText", "notes"].includes(target.target)) {
+    if (["primaryContactFirstName", "primaryContactLastName", "cohortSlug", "primaryContactPhone", "organizationAddress", "paymentMethod", "totalAmount", "utmSource", "utmCampaign", "landingPageUrl", "participantText", "notes"].includes(target.target)) {
       return false;
     }
 
