@@ -72,6 +72,18 @@ function combineDateTime(date: string, time: string) {
   return `${date}T${time || "09:00"}:00`;
 }
 
+function addWeeks(date: string, weeks: number) {
+  if (!date) {
+    return "";
+  }
+
+  const [year, month, day] = date.split("-").map(Number);
+  const nextDate = new Date(Date.UTC(year, month - 1, day));
+  nextDate.setUTCDate(nextDate.getUTCDate() + weeks * 7);
+
+  return nextDate.toISOString().slice(0, 10);
+}
+
 function defaultSession(index: number, timezone = "America/New_York") {
   return {
     title: `Session ${index + 1}`,
@@ -112,6 +124,7 @@ function CreateCohortWizard({
   const [newPresenterEmail, setNewPresenterEmail] = useState("");
   const [sessionCount, setSessionCount] = useState(1);
   const [sessions, setSessions] = useState<AdminRow[]>([defaultSession(0)]);
+  const [manuallyEditedSessionIndexes, setManuallyEditedSessionIndexes] = useState<Set<number>>(new Set());
   const [saving, setSaving] = useState(false);
   const [creatingPresenter, setCreatingPresenter] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -137,6 +150,7 @@ function CreateCohortWizard({
       setNewPresenterEmail("");
       setSessionCount(1);
       setSessions([defaultSession(0)]);
+      setManuallyEditedSessionIndexes(new Set());
       setError(null);
     }
   }, [open]);
@@ -144,9 +158,55 @@ function CreateCohortWizard({
   function syncSessionCount(count: number) {
     const safeCount = Math.max(1, Math.min(24, count || 1));
     setSessionCount(safeCount);
-    setSessions((current) =>
-      Array.from({ length: safeCount }, (_item, index) => current[index] ?? defaultSession(index, current[0]?.timezone ?? "America/New_York"))
-    );
+    setSessions((current) => {
+      const firstSession = current[0] ?? defaultSession(0);
+
+      return Array.from({ length: safeCount }, (_item, index) => {
+        const existing = current[index];
+
+        if (existing) {
+          return existing;
+        }
+
+        return {
+          ...defaultSession(index, firstSession.timezone ?? "America/New_York"),
+          date: firstSession.date ? addWeeks(firstSession.date, index) : "",
+          startTime: firstSession.startTime ?? "09:00",
+          endTime: firstSession.endTime ?? "10:00",
+          timezone: firstSession.timezone ?? "America/New_York"
+        };
+      });
+    });
+    setManuallyEditedSessionIndexes((current) => new Set(Array.from(current).filter((index) => index < safeCount)));
+  }
+
+  function updateSession(index: number, field: string, value: string) {
+    setSessions((current) => {
+      const nextSessions = current.map((session, sessionIndex) => sessionIndex === index ? { ...session, [field]: value } : session);
+      const firstSession = nextSessions[0] ?? defaultSession(0);
+
+      if (index !== 0 || !["date", "startTime", "endTime", "timezone"].includes(field)) {
+        return nextSessions;
+      }
+
+      return nextSessions.map((session, sessionIndex) => {
+        if (sessionIndex === 0 || manuallyEditedSessionIndexes.has(sessionIndex)) {
+          return session;
+        }
+
+        return {
+          ...session,
+          date: firstSession.date ? addWeeks(firstSession.date, sessionIndex) : session.date,
+          startTime: firstSession.startTime,
+          endTime: firstSession.endTime,
+          timezone: firstSession.timezone
+        };
+      });
+    });
+
+    if (index > 0 && ["date", "startTime", "endTime", "timezone"].includes(field)) {
+      setManuallyEditedSessionIndexes((current) => new Set(current).add(index));
+    }
   }
 
   async function createPresenterInline() {
@@ -364,42 +424,25 @@ function CreateCohortWizard({
 
         {activeStep === 2 && (
           <Stack spacing={2}>
+            <Alert severity="info">
+              Set the first session date, time, and timezone. Mission Control will draft the remaining sessions weekly with the same timing, and you can still fine-tune any row.
+            </Alert>
             {sessions.map((session, index) => (
               <Grid container spacing={2} key={index} alignItems="center">
                 <Grid size={{ xs: 12, md: 3 }}>
-                  <TextField fullWidth label="Session title" value={session.title} onChange={(event) => {
-                    const nextSessions = [...sessions];
-                    nextSessions[index] = { ...session, title: event.target.value };
-                    setSessions(nextSessions);
-                  }} />
+                  <TextField fullWidth label="Session title" value={session.title} onChange={(event) => updateSession(index, "title", event.target.value)} />
                 </Grid>
                 <Grid size={{ xs: 12, md: 2 }}>
-                  <TextField fullWidth label="Date" type="date" value={session.date} InputLabelProps={{ shrink: true }} onChange={(event) => {
-                    const nextSessions = [...sessions];
-                    nextSessions[index] = { ...session, date: event.target.value };
-                    setSessions(nextSessions);
-                  }} />
+                  <TextField fullWidth label="Date" type="date" value={session.date} InputLabelProps={{ shrink: true }} onChange={(event) => updateSession(index, "date", event.target.value)} />
                 </Grid>
                 <Grid size={{ xs: 6, md: 2 }}>
-                  <TextField fullWidth label="Start" type="time" value={session.startTime} InputLabelProps={{ shrink: true }} onChange={(event) => {
-                    const nextSessions = [...sessions];
-                    nextSessions[index] = { ...session, startTime: event.target.value };
-                    setSessions(nextSessions);
-                  }} />
+                  <TextField fullWidth label="Start" type="time" value={session.startTime} InputLabelProps={{ shrink: true }} onChange={(event) => updateSession(index, "startTime", event.target.value)} />
                 </Grid>
                 <Grid size={{ xs: 6, md: 2 }}>
-                  <TextField fullWidth label="End" type="time" value={session.endTime} InputLabelProps={{ shrink: true }} onChange={(event) => {
-                    const nextSessions = [...sessions];
-                    nextSessions[index] = { ...session, endTime: event.target.value };
-                    setSessions(nextSessions);
-                  }} />
+                  <TextField fullWidth label="End" type="time" value={session.endTime} InputLabelProps={{ shrink: true }} onChange={(event) => updateSession(index, "endTime", event.target.value)} />
                 </Grid>
                 <Grid size={{ xs: 12, md: 3 }}>
-                  <TextField fullWidth select label="Timezone" value={session.timezone} onChange={(event) => {
-                    const nextSessions = [...sessions];
-                    nextSessions[index] = { ...session, timezone: event.target.value };
-                    setSessions(nextSessions);
-                  }}>
+                  <TextField fullWidth select label="Timezone" value={session.timezone} onChange={(event) => updateSession(index, "timezone", event.target.value)}>
                     {timezoneOptions.map((option) => <MenuItem value={option.value} key={option.value}>{option.label}</MenuItem>)}
                   </TextField>
                 </Grid>
