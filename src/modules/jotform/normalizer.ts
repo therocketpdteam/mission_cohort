@@ -64,6 +64,14 @@ function readString(value: unknown): string {
 
   if (value && typeof value === "object") {
     const record = value as UnknownRecord;
+    const firstName = readString(record.first ?? record.firstName);
+    const lastName = readString(record.last ?? record.lastName);
+    const fullName = [firstName, lastName].filter(Boolean).join(" ");
+
+    if (fullName) {
+      return fullName;
+    }
+
     return readString(record.full ?? record.prettyFormat ?? record.answer ?? record.value ?? "");
   }
 
@@ -259,6 +267,33 @@ function parseJsonObject(value: unknown): UnknownRecord {
   }
 }
 
+function parsePrettyFields(value: unknown): UnknownRecord {
+  const pretty = readString(value);
+
+  if (!pretty) {
+    return {};
+  }
+
+  return pretty
+    .split(/,\s+(?=[^:,]{1,90}:)/)
+    .reduce<UnknownRecord>((acc, part) => {
+      const separatorIndex = part.indexOf(":");
+
+      if (separatorIndex <= 0) {
+        return acc;
+      }
+
+      const key = part.slice(0, separatorIndex).trim();
+      const fieldValue = part.slice(separatorIndex + 1).trim();
+
+      if (key && fieldValue && acc[key] == null) {
+        acc[key] = fieldValue;
+      }
+
+      return acc;
+    }, {});
+}
+
 function normalizeAnswers(payload: UnknownRecord): UnknownRecord {
   const answers = payload.answers;
 
@@ -286,6 +321,8 @@ function normalizeFlatPayload(payload: UnknownRecord): UnknownRecord {
   const rawRequest = parseJsonObject(payload.rawRequest);
   return {
     ...rawRequest,
+    ...parsePrettyFields(rawRequest.pretty),
+    ...parsePrettyFields(payload.pretty),
     ...normalizeAnswers(rawRequest),
     ...normalizeAnswers(payload),
     ...payload
