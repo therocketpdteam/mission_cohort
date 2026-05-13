@@ -24,12 +24,13 @@ import {
   TextField,
   Typography
 } from "@mui/material";
-import { DataGrid, GridColDef, GridRowParams, GridRowSelectionModel } from "@mui/x-data-grid";
+import { GridColDef, GridRowParams, GridRowSelectionModel } from "@mui/x-data-grid";
 import { useEffect, useMemo, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
 import { formatProperDisplay, formatRegistrationSource, formatStatusLabel } from "@/lib/formatting";
 import {
   AdminRow,
+  AppDataGrid,
   EmptyState,
   PageHeader,
   PageStack,
@@ -187,17 +188,17 @@ function RegistrationEditor({
           </Grid>
           <Grid size={{ xs: 12, md: 3 }}>
             <TextField fullWidth select label="Roster status" value={values.participantListStatus ?? "NEEDED"} onChange={(event) => setValue("participantListStatus", event.target.value)}>
-              {rosterStatuses.map((value) => <MenuItem value={value} key={value}>{value.replace(/_/g, " ")}</MenuItem>)}
+              {rosterStatuses.map((value) => <MenuItem value={value} key={value}>{formatStatusLabel(value)}</MenuItem>)}
             </TextField>
           </Grid>
           <Grid size={{ xs: 12, md: 3 }}>
             <TextField fullWidth select label="Payment method" value={values.paymentMethod ?? "UNKNOWN"} onChange={(event) => setValue("paymentMethod", event.target.value)}>
-              {paymentMethods.map((value) => <MenuItem value={value} key={value}>{value.replace(/_/g, " ")}</MenuItem>)}
+              {paymentMethods.map((value) => <MenuItem value={value} key={value}>{formatStatusLabel(value)}</MenuItem>)}
             </TextField>
           </Grid>
           <Grid size={{ xs: 12, md: 3 }}>
             <TextField fullWidth select label="Payment status" value={values.paymentStatus ?? "PENDING"} onChange={(event) => setValue("paymentStatus", event.target.value)}>
-              {paymentStatuses.map((value) => <MenuItem value={value} key={value}>{value.replace(/_/g, " ")}</MenuItem>)}
+              {paymentStatuses.map((value) => <MenuItem value={value} key={value}>{formatStatusLabel(value)}</MenuItem>)}
             </TextField>
           </Grid>
           <Grid size={{ xs: 12, md: 3 }}>
@@ -211,7 +212,7 @@ function RegistrationEditor({
           </Grid>
           <Grid size={{ xs: 12, md: 3 }}>
             <TextField fullWidth select label="Docs status" value={values.supportingDocumentStatus ?? "NOT_READY"} onChange={(event) => setValue("supportingDocumentStatus", event.target.value)}>
-              {documentStatuses.map((value) => <MenuItem value={value} key={value}>{value.replace(/_/g, " ")}</MenuItem>)}
+              {documentStatuses.map((value) => <MenuItem value={value} key={value}>{formatStatusLabel(value)}</MenuItem>)}
             </TextField>
           </Grid>
           <Grid size={{ xs: 12, md: 6 }}>
@@ -591,10 +592,10 @@ export function RegistrationsClient() {
     {
       field: "roster",
       headerName: "Qty / Roster",
-      width: 128,
+      width: 156,
       renderCell: (params) => (
-        <Stack spacing={0.5}>
-          <Typography variant="caption">{params.row.participantCount ?? 0} seats</Typography>
+        <Stack direction="row" spacing={0.75} alignItems="center" sx={{ minWidth: 0 }}>
+          <Typography variant="body2" fontWeight={800} noWrap>{params.row.participantCount ?? 0} seats</Typography>
           <StatusChip value={params.row.participantListStatus} />
         </Stack>
       )
@@ -615,7 +616,7 @@ export function RegistrationsClient() {
     {
       field: "source",
       headerName: "Source",
-      width: 180,
+      width: 154,
       renderCell: (params) => <SourcePill row={params.row} />
     },
     {
@@ -649,7 +650,7 @@ export function RegistrationsClient() {
           <TextField label="Search" value={search} onChange={(event) => setSearch(event.target.value)} />
           <TextField select label="Payment status" value={paymentStatus} onChange={(event) => setPaymentStatus(event.target.value)} sx={{ minWidth: 220 }}>
             <MenuItem value="">All payment statuses</MenuItem>
-            {paymentStatuses.map((value) => <MenuItem value={value} key={value}>{value.replace(/_/g, " ")}</MenuItem>)}
+            {paymentStatuses.map((value) => <MenuItem value={value} key={value}>{formatStatusLabel(value)}</MenuItem>)}
           </TextField>
           <TextField select label="Source" value={source} onChange={(event) => setSource(event.target.value)} sx={{ minWidth: 180 }}>
             <MenuItem value="">All sources</MenuItem>
@@ -664,15 +665,15 @@ export function RegistrationsClient() {
             <Button size="small" variant="outlined" color="success" onClick={() => runBulkAction("confirm")}>Confirm</Button>
             <Button size="small" variant="outlined" color="warning" onClick={() => runBulkAction("cancel")}>Cancel</Button>
             <TextField select size="small" label="Payment" value={bulkPaymentStatus} onChange={(event) => setBulkPaymentStatus(event.target.value)} sx={{ minWidth: 170 }}>
-              {paymentStatuses.map((value) => <MenuItem value={value} key={value}>{value.replace(/_/g, " ")}</MenuItem>)}
+              {paymentStatuses.map((value) => <MenuItem value={value} key={value}>{formatStatusLabel(value)}</MenuItem>)}
             </TextField>
             <Button size="small" variant="outlined" onClick={() => runBulkAction("payment")}>Apply Payment</Button>
             <TextField select size="small" label="Roster" value={bulkRosterStatus} onChange={(event) => setBulkRosterStatus(event.target.value)} sx={{ minWidth: 170 }}>
-              {rosterStatuses.map((value) => <MenuItem value={value} key={value}>{value.replace(/_/g, " ")}</MenuItem>)}
+              {rosterStatuses.map((value) => <MenuItem value={value} key={value}>{formatStatusLabel(value)}</MenuItem>)}
             </TextField>
             <Button size="small" variant="outlined" onClick={() => runBulkAction("roster")}>Apply Roster</Button>
             <TextField select size="small" label="Docs" value={bulkDocumentStatus} onChange={(event) => setBulkDocumentStatus(event.target.value)} sx={{ minWidth: 160 }}>
-              {documentStatuses.map((value) => <MenuItem value={value} key={value}>{value.replace(/_/g, " ")}</MenuItem>)}
+              {documentStatuses.map((value) => <MenuItem value={value} key={value}>{formatStatusLabel(value)}</MenuItem>)}
             </TextField>
             <Button size="small" variant="outlined" onClick={() => runBulkAction("docs")}>Apply Docs</Button>
             <TextField select size="small" label="Template" value={bulkTemplateId} onChange={(event) => setBulkTemplateId(event.target.value)} sx={{ minWidth: 220 }}>
@@ -682,22 +683,17 @@ export function RegistrationsClient() {
           </Stack>
         )}
         <TableShell>
-          <DataGrid
+          <AppDataGrid
             rows={filteredRows}
             columns={columns}
             loading={loading}
             checkboxSelection
-            rowHeight={52}
+            rowHeight={64}
             pageSizeOptions={[10, 25, 50]}
             initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
             disableRowSelectionOnClick
             rowSelectionModel={rowSelectionModel}
             onRowSelectionModelChange={(model) => setSelectedIds(Array.from(model.ids).map(String))}
-            sx={{
-              "& .MuiDataGrid-cell": { py: 0.25, alignItems: "center" },
-              "& .MuiDataGrid-row": { cursor: "pointer" },
-              "& .MuiDataGrid-cell:focus, & .MuiDataGrid-columnHeader:focus": { outline: "none" }
-            }}
             onRowClick={(params: GridRowParams) => openDetail(String(params.id))}
           />
         </TableShell>

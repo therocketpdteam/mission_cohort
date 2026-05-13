@@ -29,6 +29,8 @@ import {
   Tooltip,
   Typography
 } from "@mui/material";
+import type { ButtonProps } from "@mui/material/Button";
+import { DataGrid, type DataGridProps, type GridValidRowModel } from "@mui/x-data-grid";
 import { ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { formatProperDisplay, formatRegistrationSource, formatStatusLabel } from "@/lib/formatting";
 
@@ -183,11 +185,14 @@ export function StatusChip({ value }: { value?: string | boolean | null }) {
         justifyContent: "center",
         borderRadius: 999,
         px: 0.875,
-        minHeight: 22,
-        lineHeight: 1,
-        fontSize: 11,
+        height: 24,
+        lineHeight: "24px",
+        fontSize: 11.5,
         fontWeight: 700,
         whiteSpace: "nowrap",
+        maxWidth: "100%",
+        overflow: "hidden",
+        textOverflow: "ellipsis",
         bgcolor: color === "default" ? "#F1F5F9" : `${color}.light`,
         color: color === "default" ? "#334155" : `${color}.dark`
       }}
@@ -196,6 +201,8 @@ export function StatusChip({ value }: { value?: string | boolean | null }) {
     </Box>
   );
 }
+
+export const StatusBadge = StatusChip;
 
 export function CompactActionButton({
   label,
@@ -280,7 +287,7 @@ export function FieldValuePill({
   );
 }
 
-export function MetadataPill({ children }: { children: ReactNode }) {
+export function MetadataPill({ children, maxWidth = "100%" }: { children: ReactNode; maxWidth?: number | string }) {
   return (
     <Box
       component="span"
@@ -294,7 +301,8 @@ export function MetadataPill({ children }: { children: ReactNode }) {
         py: 0.35,
         fontSize: 12,
         fontWeight: 800,
-        maxWidth: "100%",
+        maxWidth,
+        minWidth: 0,
         whiteSpace: "nowrap",
         overflow: "hidden",
         textOverflow: "ellipsis"
@@ -306,10 +314,16 @@ export function MetadataPill({ children }: { children: ReactNode }) {
 }
 
 export function SourcePill({ row }: { row: AdminRow }) {
+  const label = formatRegistrationSource(row);
+
   return (
-    <MetadataPill>
-      {formatRegistrationSource(row)}
-    </MetadataPill>
+    <Tooltip title={label}>
+      <Box component="span" sx={{ display: "inline-flex", maxWidth: "100%", minWidth: 0 }}>
+        <MetadataPill maxWidth="100%">
+          {label}
+        </MetadataPill>
+      </Box>
+    </Tooltip>
   );
 }
 
@@ -504,6 +518,54 @@ export function ToolbarButton({ children, onClick }: { children: ReactNode; onCl
     <Button startIcon={<AddIcon />} onClick={onClick}>
       {children}
     </Button>
+  );
+}
+
+export function AppButton(props: ButtonProps) {
+  return <Button {...props} />;
+}
+
+export function AppDataGrid<R extends GridValidRowModel = AdminRow>({
+  sx,
+  rowHeight = 64,
+  columnHeaderHeight = 44,
+  pageSizeOptions = [10, 25, 50],
+  disableRowSelectionOnClick = true,
+  ...props
+}: DataGridProps<R>) {
+  const baseSx = {
+    "& .MuiDataGrid-columnHeaderTitle": {
+      fontWeight: 800,
+      color: "#334155"
+    },
+    "& .MuiDataGrid-cell": {
+      alignItems: "center",
+      display: "flex",
+      minWidth: 0,
+      overflow: "hidden",
+      py: 0.75
+    },
+    "& .MuiDataGrid-cellContent": {
+      overflow: "hidden",
+      textOverflow: "ellipsis"
+    },
+    "& .MuiDataGrid-row": {
+      cursor: props.onRowClick ? "pointer" : "default"
+    },
+    "& .MuiDataGrid-cell:focus, & .MuiDataGrid-columnHeader:focus": {
+      outline: "none"
+    }
+  };
+
+  return (
+    <DataGrid
+      rowHeight={rowHeight}
+      columnHeaderHeight={columnHeaderHeight}
+      pageSizeOptions={pageSizeOptions}
+      disableRowSelectionOnClick={disableRowSelectionOnClick}
+      {...props}
+      sx={Array.isArray(sx) ? [baseSx, ...sx] : [baseSx, sx]}
+    />
   );
 }
 

@@ -33,12 +33,13 @@ import {
   TextField,
   Typography
 } from "@mui/material";
-import { DataGrid, GridColDef } from "@mui/x-data-grid";
+import { GridColDef } from "@mui/x-data-grid";
 import { useEffect, useMemo, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
 import { formatCurrency, formatHumanLabel, formatProperDisplay, formatStatusLabel } from "@/lib/formatting";
 import {
   AdminRow,
+  AppDataGrid,
   EmptyState,
   FieldConfig,
   FieldValuePill,
@@ -93,7 +94,7 @@ type LandingPageRoute = {
 };
 
 const roleOptions = ["SUPER_ADMIN", "ADMIN", "OPERATIONS", "SALES", "PRESENTER", "VIEWER"].map((value) => ({
-  label: value.replace(/_/g, " "),
+  label: formatStatusLabel(value),
   value
 }));
 
@@ -1009,7 +1010,7 @@ export function SettingsClient() {
   const userColumns: GridColDef[] = [
     { field: "name", headerName: "User", flex: 1, minWidth: 180, valueGetter: (_value, row) => `${formatProperDisplay(row.firstName)} ${formatProperDisplay(row.lastName)}`.trim() },
     { field: "email", headerName: "Email", flex: 1.2, minWidth: 240 },
-    { field: "role", headerName: "Role", width: 150, valueFormatter: (value) => String(value ?? "").replace(/_/g, " ") },
+    { field: "role", headerName: "Role", width: 150, valueFormatter: (value) => formatStatusLabel(String(value ?? "")) },
     { field: "active", headerName: "Active", width: 110, renderCell: (params) => <StatusChip value={params.value} /> },
     { field: "updatedAt", headerName: "Updated", width: 160, valueFormatter: (value) => value ? new Date(value).toLocaleString() : "" },
     {
@@ -1061,7 +1062,7 @@ export function SettingsClient() {
             Users authenticate through Supabase Auth. Mission Control roles and active status control internal authorization.
           </Typography>
           <TableShell>
-            <DataGrid rows={users} columns={userColumns} pageSizeOptions={[10, 25]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} disableRowSelectionOnClick />
+            <AppDataGrid rows={users} columns={userColumns} pageSizeOptions={[10, 25]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} />
           </TableShell>
         </SectionCard>
       </TabPanel>
@@ -1164,7 +1165,7 @@ export function SettingsClient() {
             Most mapping should happen from the Jotform review wizard. Use this table only for quick enable/disable or routing edits.
           </Typography>
           <TableShell>
-            <DataGrid rows={mappings} columns={mappingColumns} pageSizeOptions={[10, 25]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} disableRowSelectionOnClick />
+            <AppDataGrid rows={mappings} columns={mappingColumns} pageSizeOptions={[10, 25]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} />
           </TableShell>
         </SectionCard>
       </TabPanel>

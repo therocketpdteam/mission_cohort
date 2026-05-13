@@ -23,11 +23,13 @@ import {
   TextField,
   Typography
 } from "@mui/material";
-import { DataGrid, GridColDef } from "@mui/x-data-grid";
+import { GridColDef } from "@mui/x-data-grid";
 import { useEffect, useMemo, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
+import { formatProperDisplay, formatStatusLabel } from "@/lib/formatting";
 import {
   AdminRow,
+  AppDataGrid,
   EmptyState,
   FieldConfig,
   MutationDialog,
@@ -69,10 +71,10 @@ const taskFields: FieldConfig[] = [
       "SUPPORTING_DOCUMENTS",
       "QUICKBOOKS_REVIEW",
       "OTHER"
-    ].map((value) => ({ label: value.replace(/_/g, " "), value })),
+    ].map((value) => ({ label: formatStatusLabel(value), value })),
     required: true
   },
-  { name: "priority", label: "Priority", type: "select", options: ["LOW", "MEDIUM", "HIGH", "URGENT"].map((value) => ({ label: value, value })) },
+  { name: "priority", label: "Priority", type: "select", options: ["LOW", "MEDIUM", "HIGH", "URGENT"].map((value) => ({ label: formatStatusLabel(value), value })) },
   { name: "dueDate", label: "Due date", type: "datetime-local" },
   { name: "ownerName", label: "Owner" }
 ];
@@ -84,7 +86,7 @@ const resourceFields: FieldConfig[] = [
     name: "type",
     label: "Type",
     type: "select",
-    options: ["VIDEO", "SLIDES", "PDF", "LINK", "WORKBOOK", "OTHER"].map((value) => ({ label: value, value })),
+    options: ["VIDEO", "SLIDES", "PDF", "LINK", "WORKBOOK", "OTHER"].map((value) => ({ label: formatStatusLabel(value), value })),
     required: true
   },
   { name: "url", label: "URL" },
@@ -94,7 +96,7 @@ const resourceFields: FieldConfig[] = [
     name: "visibility",
     label: "Visibility",
     type: "select",
-    options: ["ADMIN_ONLY", "PARTICIPANTS", "PUBLIC_LINK"].map((value) => ({ label: value.replace(/_/g, " "), value })),
+    options: ["ADMIN_ONLY", "PARTICIPANTS", "PUBLIC_LINK"].map((value) => ({ label: formatStatusLabel(value), value })),
     required: true
   }
 ];
@@ -257,7 +259,7 @@ function PaymentDetailDialog({
               ))}
               <Grid size={{ xs: 12, sm: 6 }}>
                 <TextField select fullWidth label="Status" value={status} onChange={(event) => setStatus(event.target.value)}>
-                  {paymentStatuses.map((value) => <MenuItem value={value} key={value}>{value.replace(/_/g, " ")}</MenuItem>)}
+                  {paymentStatuses.map((value) => <MenuItem value={value} key={value}>{formatStatusLabel(value)}</MenuItem>)}
                 </TextField>
               </Grid>
               <Grid size={{ xs: 12, sm: 6 }}>
@@ -459,8 +461,8 @@ export function CohortDetailClient({ id }: { id: string }) {
   ];
 
   const registrationColumns: GridColDef[] = [
-    { field: "primaryContactName", headerName: "Contact", flex: 1, minWidth: 180 },
-    { field: "organization", headerName: "Organization", flex: 1, minWidth: 200, valueGetter: (_value, row) => row.organization?.name ?? "" },
+    { field: "primaryContactName", headerName: "Contact", flex: 1, minWidth: 180, valueGetter: (_value, row) => formatProperDisplay(row.primaryContactName ?? "") },
+    { field: "organization", headerName: "Organization", flex: 1, minWidth: 200, valueGetter: (_value, row) => formatProperDisplay(row.organization?.name ?? "") },
     { field: "participantCount", headerName: "Participants", width: 120 },
     { field: "participantListStatus", headerName: "Roster", width: 150, renderCell: (params) => <StatusChip value={params.value} /> },
     { field: "paymentStatus", headerName: "Payment", width: 150, renderCell: (params) => <StatusChip value={params.value} /> },
@@ -471,18 +473,18 @@ export function CohortDetailClient({ id }: { id: string }) {
   ];
 
   const participantColumns: GridColDef[] = [
-    { field: "name", headerName: "Name", flex: 1, minWidth: 180, valueGetter: (_value, row) => `${row.firstName} ${row.lastName}` },
+    { field: "name", headerName: "Name", flex: 1, minWidth: 180, valueGetter: (_value, row) => formatProperDisplay(`${row.firstName} ${row.lastName}`) },
     { field: "email", headerName: "Email", flex: 1, minWidth: 220 },
-    { field: "organization", headerName: "Organization", flex: 1, minWidth: 200, valueGetter: (_value, row) => row.organization?.name ?? "" },
+    { field: "organization", headerName: "Organization", flex: 1, minWidth: 200, valueGetter: (_value, row) => formatProperDisplay(row.organization?.name ?? "") },
     { field: "attendanceStatus", headerName: "Attendance", width: 150, renderCell: (params) => <StatusChip value={params.value} /> }
   ];
 
   const paymentColumns: GridColDef[] = [
-    { field: "organization", headerName: "Organization", flex: 1, minWidth: 220, valueGetter: (_value, row) => row.organization?.name ?? row.registration?.organization?.name ?? "" },
-    { field: "billingName", headerName: "Billing / POC Name", width: 190, valueGetter: (_value, row) => row.registration?.billingContactName ?? row.registration?.primaryContactName ?? "" },
+    { field: "organization", headerName: "Organization", flex: 1, minWidth: 220, valueGetter: (_value, row) => formatProperDisplay(row.organization?.name ?? row.registration?.organization?.name ?? "") },
+    { field: "billingName", headerName: "Billing / POC Name", width: 190, valueGetter: (_value, row) => formatProperDisplay(row.registration?.billingContactName ?? row.registration?.primaryContactName ?? "") },
     { field: "phone", headerName: "Phone", width: 150, valueGetter: (_value, row) => row.registration?.primaryContactPhone ?? row.organization?.phone ?? "" },
     { field: "address", headerName: "Address", flex: 1, minWidth: 220, valueGetter: (_value, row) => row.registration?.billingAddress ?? row.organization?.addressLine1 ?? "" },
-    { field: "method", headerName: "Method", width: 150, valueFormatter: (value) => String(value ?? "").replace(/_/g, " ") },
+    { field: "method", headerName: "Method", width: 150, valueFormatter: (value) => formatStatusLabel(String(value ?? "")) },
     { field: "status", headerName: "Status", width: 140, renderCell: (params) => <StatusChip value={params.value} /> },
     { field: "amount", headerName: "Amount", width: 120, valueFormatter: (value) => money(value) },
     { field: "invoiceNumber", headerName: "Invoice", width: 140 },
@@ -493,7 +495,7 @@ export function CohortDetailClient({ id }: { id: string }) {
 
   const taskColumns: GridColDef[] = [
     { field: "title", headerName: "Task", flex: 1, minWidth: 220 },
-    { field: "category", headerName: "Category", width: 190, valueFormatter: (value) => String(value ?? "").replace(/_/g, " ") },
+    { field: "category", headerName: "Category", width: 190, valueFormatter: (value) => formatStatusLabel(String(value ?? "")) },
     { field: "priority", headerName: "Priority", width: 120, renderCell: (params) => <StatusChip value={params.value} /> },
     { field: "status", headerName: "Status", width: 140, renderCell: (params) => <StatusChip value={params.value} /> },
     { field: "dueDate", headerName: "Due", width: 170, valueFormatter: (value) => value ? new Date(value).toLocaleDateString() : "" },
@@ -643,7 +645,7 @@ export function CohortDetailClient({ id }: { id: string }) {
       {tab === 1 && (
         <SectionCard title="Operations Checklist" action={<Button startIcon={<AddIcon />} onClick={() => setTaskDialogOpen(true)}>Add Task</Button>}>
           <TableShell>
-            <DataGrid rows={tasks} columns={taskColumns} loading={loading} pageSizeOptions={[10, 25]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} disableRowSelectionOnClick />
+            <AppDataGrid rows={tasks} columns={taskColumns} loading={loading} pageSizeOptions={[10, 25]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} />
           </TableShell>
           {!loading && tasks.length === 0 && <EmptyState title="No operations tasks" description="Checklist items for participant lists, reminders, resources, recordings, and follow-up will appear here." />}
         </SectionCard>
@@ -652,7 +654,7 @@ export function CohortDetailClient({ id }: { id: string }) {
       {tab === 2 && (
         <SectionCard title="Sessions" action={<Button startIcon={<AddIcon />} onClick={() => setSessionDialogOpen(true)}>Add Session</Button>}>
           <TableShell>
-            <DataGrid rows={sessions} columns={sessionColumns} loading={loading} pageSizeOptions={[10, 25]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} disableRowSelectionOnClick />
+            <AppDataGrid rows={sessions} columns={sessionColumns} loading={loading} pageSizeOptions={[10, 25]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} />
           </TableShell>
           {!loading && sessions.length === 0 && <EmptyState title="No sessions yet" description="Add sessions to build the cohort schedule." />}
         </SectionCard>
@@ -661,7 +663,7 @@ export function CohortDetailClient({ id }: { id: string }) {
       {tab === 3 && (
         <SectionCard title="Registrations" action={<Button href="/registrations" startIcon={<AddIcon />}>Add/Edit Registration</Button>}>
           <TableShell>
-            <DataGrid rows={registrations} columns={registrationColumns} loading={loading} pageSizeOptions={[10, 25]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} disableRowSelectionOnClick />
+            <AppDataGrid rows={registrations} columns={registrationColumns} loading={loading} pageSizeOptions={[10, 25]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} />
           </TableShell>
           {!loading && registrations.length === 0 && <EmptyState title="No registrations yet" description="Registrations for this cohort will appear here." />}
         </SectionCard>
@@ -670,7 +672,7 @@ export function CohortDetailClient({ id }: { id: string }) {
       {tab === 4 && (
         <SectionCard title="Participants" action={<Button href="/participants" startIcon={<AddIcon />}>Add/Edit Participant</Button>}>
           <TableShell>
-            <DataGrid rows={participants} columns={participantColumns} loading={loading} pageSizeOptions={[10, 25]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} disableRowSelectionOnClick />
+            <AppDataGrid rows={participants} columns={participantColumns} loading={loading} pageSizeOptions={[10, 25]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} />
           </TableShell>
           {!loading && participants.length === 0 && <EmptyState title="No participants yet" description="Participants attached to this cohort will appear here." />}
         </SectionCard>
@@ -693,7 +695,7 @@ export function CohortDetailClient({ id }: { id: string }) {
       {tab === 6 && (
         <SectionCard title="Resources" action={<Button startIcon={<AddIcon />} onClick={() => setResourceDialogOpen(true)}>Add Resource</Button>}>
           <TableShell>
-            <DataGrid rows={resources} columns={resourceColumns} loading={loading} pageSizeOptions={[10, 25]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} disableRowSelectionOnClick />
+            <AppDataGrid rows={resources} columns={resourceColumns} loading={loading} pageSizeOptions={[10, 25]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} />
           </TableShell>
           {!loading && resources.length === 0 && <EmptyState title="No resources yet" description="Attach Mux recordings, slides, documents, and session links here." />}
           {resources.filter((resource) => resource.muxPlaybackId).map((resource) => (
@@ -707,15 +709,12 @@ export function CohortDetailClient({ id }: { id: string }) {
       {tab === 7 && (
         <SectionCard title="Payments">
           <TableShell>
-            <DataGrid
+            <AppDataGrid
               rows={payments}
               columns={paymentColumns}
               loading={loading}
               pageSizeOptions={[10, 25]}
               initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
-              disableRowSelectionOnClick
-              rowHeight={46}
-              sx={{ "& .MuiDataGrid-cell": { py: 0.5 } }}
               onRowClick={(params) => setPaymentDetail(params.row)}
             />
           </TableShell>

@@ -23,11 +23,13 @@ import {
   TextField,
   Typography
 } from "@mui/material";
-import { DataGrid, GridColDef } from "@mui/x-data-grid";
+import { GridColDef } from "@mui/x-data-grid";
 import { useEffect, useMemo, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
+import { formatProperDisplay, formatStatusLabel } from "@/lib/formatting";
 import {
   AdminRow,
+  AppDataGrid,
   EmptyState,
   FieldConfig,
   MutationDialog,
@@ -54,10 +56,10 @@ const editFields = (presenters: AdminRow[]): FieldConfig[] => [
     name: "presenterId",
     label: "Presenter",
     type: "select",
-    options: presenters.map((presenter) => ({ label: `${presenter.firstName} ${presenter.lastName}`, value: presenter.id })),
+    options: presenters.map((presenter) => ({ label: formatProperDisplay(`${presenter.firstName} ${presenter.lastName}`), value: presenter.id })),
     required: true
   },
-  { name: "status", label: "Status", type: "select", options: statusOptions.map((value) => ({ label: value.replace(/_/g, " "), value })) }
+  { name: "status", label: "Status", type: "select", options: statusOptions.map((value) => ({ label: formatStatusLabel(value), value })) }
 ];
 
 function slugify(value: string) {
@@ -347,7 +349,7 @@ function CreateCohortWizard({
             </Grid>
             <Grid size={{ xs: 12, md: 6 }}>
               <TextField select fullWidth label="Status" value={status} onChange={(event) => setStatus(event.target.value)}>
-                {statusOptions.map((value) => <MenuItem value={value} key={value}>{value.replace(/_/g, " ")}</MenuItem>)}
+                {statusOptions.map((value) => <MenuItem value={value} key={value}>{formatStatusLabel(value)}</MenuItem>)}
               </TextField>
             </Grid>
             <Grid size={{ xs: 12, md: 6 }}>
@@ -513,7 +515,7 @@ export function CohortsClient() {
       headerName: "Presenter",
       flex: 1,
       minWidth: 160,
-      valueGetter: (_value, row) => `${row.presenter?.firstName ?? ""} ${row.presenter?.lastName ?? ""}`
+      valueGetter: (_value, row) => formatProperDisplay(`${row.presenter?.firstName ?? ""} ${row.presenter?.lastName ?? ""}`)
     },
     { field: "status", headerName: "Status", width: 170, renderCell: (params) => <StatusChip value={params.value} /> },
     { field: "startDate", headerName: "First session", width: 140, valueFormatter: (value) => formatDate(value) },
@@ -609,7 +611,7 @@ export function CohortsClient() {
             <MenuItem value="">All statuses</MenuItem>
             {["DRAFT", "PUBLISHED", "REGISTRATION_OPEN", "REGISTRATION_CLOSED", "ACTIVE", "COMPLETED", "CANCELLED", "ARCHIVED"].map((value) => (
               <MenuItem value={value} key={value}>
-                {value.replace(/_/g, " ")}
+                {formatStatusLabel(value)}
               </MenuItem>
             ))}
           </TextField>
@@ -617,7 +619,7 @@ export function CohortsClient() {
             <MenuItem value="">All presenters</MenuItem>
             {presenters.map((presenter) => (
               <MenuItem value={presenter.id} key={presenter.id}>
-                {presenter.firstName} {presenter.lastName}
+                {formatProperDisplay(`${presenter.firstName} ${presenter.lastName}`)}
               </MenuItem>
             ))}
           </TextField>
@@ -625,7 +627,7 @@ export function CohortsClient() {
       </SectionCard>
       <SectionCard title="Cohort Operations">
         <TableShell>
-          <DataGrid rows={filteredRows} columns={columns} loading={loading} pageSizeOptions={[10, 25, 50]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} disableRowSelectionOnClick />
+          <AppDataGrid rows={filteredRows} columns={columns} loading={loading} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} />
         </TableShell>
         {!loading && filteredRows.length === 0 && <EmptyState title="No cohorts found" description="Create a cohort or adjust the filters." />}
       </SectionCard>

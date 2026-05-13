@@ -3,11 +3,13 @@
 import EditOutlined from "@mui/icons-material/EditOutlined";
 import VisibilityOutlined from "@mui/icons-material/VisibilityOutlined";
 import { Box, TextField } from "@mui/material";
-import { DataGrid, GridColDef } from "@mui/x-data-grid";
+import { GridColDef } from "@mui/x-data-grid";
 import { useEffect, useMemo, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
+import { formatProperDisplay, formatStatusLabel } from "@/lib/formatting";
 import {
   AdminRow,
+  AppDataGrid,
   EmptyState,
   FieldConfig,
   MutationDialog,
@@ -22,7 +24,7 @@ import {
 
 const orgFields: FieldConfig[] = [
   { name: "name", label: "Name", required: true },
-  { name: "type", label: "Type", type: "select", options: ["DISTRICT", "SCHOOL", "COMPANY", "PARTNER", "OTHER"].map((value) => ({ label: value, value })) },
+  { name: "type", label: "Type", type: "select", options: ["DISTRICT", "SCHOOL", "COMPANY", "PARTNER", "OTHER"].map((value) => ({ label: formatStatusLabel(value), value })) },
   { name: "website", label: "Website" },
   { name: "city", label: "City" },
   { name: "state", label: "State" },
@@ -62,8 +64,8 @@ export function OrganizationsClient() {
   );
 
   const columns: GridColDef[] = [
-    { field: "name", headerName: "Name", flex: 1.2, minWidth: 220 },
-    { field: "type", headerName: "Type", width: 140 },
+    { field: "name", headerName: "Name", flex: 1.2, minWidth: 220, valueGetter: (_value, row) => formatProperDisplay(row.name ?? "") },
+    { field: "type", headerName: "Type", width: 140, valueFormatter: (value) => formatStatusLabel(String(value ?? "")) },
     { field: "cityState", headerName: "City/State", width: 160, valueGetter: (_value, row) => [row.city, row.state].filter(Boolean).join(", ") },
     { field: "registrations", headerName: "Registrations", width: 130, valueGetter: (_value, row) => row._count?.registrations ?? 0 },
     { field: "participants", headerName: "Participants", width: 130, valueGetter: (_value, row) => row._count?.participants ?? 0 },
@@ -120,7 +122,7 @@ export function OrganizationsClient() {
       </SectionCard>
       <SectionCard title="Organization Directory">
         <TableShell>
-          <DataGrid rows={filteredRows} columns={columns} loading={loading} pageSizeOptions={[10, 25, 50]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} disableRowSelectionOnClick />
+          <AppDataGrid rows={filteredRows} columns={columns} loading={loading} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} />
         </TableShell>
         {!loading && filteredRows.length === 0 && <EmptyState title="No organizations found" description="Add an organization or adjust the search." />}
       </SectionCard>

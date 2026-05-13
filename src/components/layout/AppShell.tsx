@@ -121,20 +121,33 @@ export function AppShell({ children }: { children: ReactNode }) {
               selected={active}
               onClick={() => setMobileOpen(false)}
               sx={{
-                borderRadius: 1,
-                mb: 0.5,
+                borderRadius: 2,
+                mb: 0.75,
+                minHeight: 50,
                 color: active ? "#FFFFFF" : "#DDE7F0",
+                columnGap: 1,
                 "&.Mui-selected": {
                   bgcolor: "rgba(30,155,222,0.18)",
                   borderLeft: "3px solid #20C7D9",
                   color: "#FFFFFF"
                 },
+                "&.Mui-selected:hover": {
+                  bgcolor: "rgba(30,155,222,0.24)"
+                },
                 "&:hover": {
-                  bgcolor: "rgba(255,255,255,0.1)"
+                  bgcolor: "rgba(255,255,255,0.1)",
+                  color: "#FFFFFF"
+                },
+                "& .MuiListItemIcon-root": {
+                  color: "inherit"
+                },
+                "& .MuiListItemText-primary": {
+                  color: "inherit",
+                  opacity: active ? 1 : 0.92
                 }
               }}
             >
-              <ListItemIcon sx={{ color: "inherit", minWidth: 38 }}>{item.icon}</ListItemIcon>
+              <ListItemIcon sx={{ minWidth: 38 }}>{item.icon}</ListItemIcon>
               <ListItemText primary={item.label} primaryTypographyProps={{ fontSize: 14, fontWeight: 700 }} />
             </ListItemButton>
           );

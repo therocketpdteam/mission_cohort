@@ -5,12 +5,14 @@ import PowerSettingsNewOutlined from "@mui/icons-material/PowerSettingsNewOutlin
 import SendOutlined from "@mui/icons-material/SendOutlined";
 import VisibilityOutlined from "@mui/icons-material/VisibilityOutlined";
 import { Box, Button, Chip, Grid, List, ListItem, ListItemText, MenuItem, Stack, TextField, Typography } from "@mui/material";
-import { DataGrid, GridColDef } from "@mui/x-data-grid";
+import { GridColDef } from "@mui/x-data-grid";
 import { useEffect, useMemo, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
+import { formatStatusLabel } from "@/lib/formatting";
 import { mergeFields, renderMergeFields, sampleMergeContext } from "@/modules/email/mergeFields";
 import {
   AdminRow,
+  AppDataGrid,
   EmptyState,
   FieldConfig,
   MutationDialog,
@@ -37,7 +39,7 @@ const templateTypes = [
 const templateFields: FieldConfig[] = [
   { name: "name", label: "Template name", required: true },
   { name: "subject", label: "Subject", required: true },
-  { name: "type", label: "Type", type: "select", options: templateTypes.map((value) => ({ label: value.replace(/_/g, " "), value })) },
+  { name: "type", label: "Type", type: "select", options: templateTypes.map((value) => ({ label: formatStatusLabel(value), value })) },
   { name: "active", label: "Active", type: "checkbox" },
   { name: "bodyHtml", label: "Body HTML", type: "textarea", required: true },
   { name: "bodyText", label: "Body text", type: "textarea" }
@@ -125,7 +127,7 @@ export function CommunicationsClient() {
 
   const templateColumns: GridColDef[] = [
     { field: "name", headerName: "Template", flex: 1, minWidth: 220 },
-    { field: "type", headerName: "Type", width: 220, valueFormatter: (value) => String(value ?? "").replace(/_/g, " ") },
+    { field: "type", headerName: "Type", width: 220, valueFormatter: (value) => formatStatusLabel(String(value ?? "")) },
     { field: "subject", headerName: "Subject", flex: 1.2, minWidth: 240 },
     { field: "active", headerName: "Active", width: 120, renderCell: (params) => <StatusChip value={params.value} /> },
     {
@@ -152,7 +154,7 @@ export function CommunicationsClient() {
     { field: "cohort", headerName: "Cohort", width: 190, valueGetter: (_value, row) => row.cohort?.title ?? cohorts.find((cohort) => cohort.id === row.cohortId)?.title ?? "" },
     { field: "template", headerName: "Template", width: 190, valueGetter: (_value, row) => row.template?.name ?? "Custom" },
     { field: "session", headerName: "Session", width: 180, valueGetter: (_value, row) => row.session?.title ?? "" },
-    { field: "recipientScope", headerName: "Recipients", width: 180, valueFormatter: (value) => String(value ?? "").replace(/_/g, " ") },
+    { field: "recipientScope", headerName: "Recipients", width: 180, valueFormatter: (value) => formatStatusLabel(String(value ?? "")) },
     { field: "status", headerName: "Status", width: 130, renderCell: (params) => <StatusChip value={params.value} /> },
     { field: "scheduledFor", headerName: "Scheduled", width: 170, valueFormatter: (value) => value ? new Date(value).toLocaleString() : "" },
     { field: "sentAt", headerName: "Sent", width: 170, valueFormatter: (value) => value ? new Date(value).toLocaleString() : "" },
@@ -207,7 +209,7 @@ export function CommunicationsClient() {
         <Grid size={{ xs: 12 }}>
           <SectionCard title="Email Templates">
             <TableShell>
-              <DataGrid rows={templates} columns={templateColumns} loading={loading} pageSizeOptions={[10, 25]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} disableRowSelectionOnClick />
+              <AppDataGrid rows={templates} columns={templateColumns} loading={loading} pageSizeOptions={[10, 25]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} />
             </TableShell>
             {!loading && templates.length === 0 && <EmptyState title="No templates found" description="Create templates for registration confirmations, reminders, and follow-up." />}
           </SectionCard>
@@ -239,7 +241,7 @@ export function CommunicationsClient() {
               ))}
             </TextField>
             <TableShell>
-              <DataGrid rows={communications} columns={outboxColumns} loading={loading} pageSizeOptions={[10, 25]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} disableRowSelectionOnClick />
+              <AppDataGrid rows={communications} columns={outboxColumns} loading={loading} pageSizeOptions={[10, 25]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} />
             </TableShell>
             {communications.length === 0 && <EmptyState title="No scheduled messages" description="Scheduled, sent, and draft cohort messages will appear here." />}
           </SectionCard>

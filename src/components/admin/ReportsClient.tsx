@@ -3,10 +3,11 @@
 import AddLinkOutlined from "@mui/icons-material/AddLinkOutlined";
 import BlockOutlined from "@mui/icons-material/BlockOutlined";
 import { Box, Button, Grid, MenuItem, Stack, TextField, Typography } from "@mui/material";
-import { DataGrid, GridColDef } from "@mui/x-data-grid";
+import { GridColDef } from "@mui/x-data-grid";
 import { useEffect, useMemo, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
-import { AdminRow, EmptyState, PageHeader, PageStack, RowActionMenu, SectionCard, StatusChip, TableShell, useNotifier } from "./common";
+import { AdminRow, AppDataGrid, EmptyState, PageHeader, PageStack, RowActionMenu, SectionCard, StatusChip, TableShell, useNotifier } from "./common";
+import { formatStatusLabel } from "@/lib/formatting";
 
 export function ReportsClient() {
   const [cohorts, setCohorts] = useState<AdminRow[]>([]);
@@ -148,15 +149,21 @@ export function ReportsClient() {
         </Grid>
         <Grid size={{ xs: 12, lg: 6 }}>
           <SectionCard title="Payment Status Snapshot">
-            <Box component="pre" sx={{ p: 2, bgcolor: "background.default", borderRadius: 1, overflow: "auto" }}>
-              {JSON.stringify(currentReport?.paymentSummary?.byStatus ?? {}, null, 2)}
-            </Box>
+            <Stack spacing={1}>
+              {Object.entries(currentReport?.paymentSummary?.byStatus ?? {}).map(([status, value]) => (
+                <Stack key={status} direction="row" justifyContent="space-between" alignItems="center" sx={{ borderBottom: 1, borderColor: "divider", py: 1 }}>
+                  <StatusChip value={status} />
+                  <Typography fontWeight={800}>{String(value)}</Typography>
+                </Stack>
+              ))}
+              {!currentReport && <EmptyState title="No payment data" description="Payment status data will appear after registrations are imported." />}
+            </Stack>
           </SectionCard>
         </Grid>
         <Grid size={{ xs: 12 }}>
           <SectionCard title="Secure Share Links">
             <TableShell>
-              <DataGrid rows={links} columns={linkColumns} pageSizeOptions={[10, 25]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} disableRowSelectionOnClick />
+              <AppDataGrid rows={links} columns={linkColumns} pageSizeOptions={[10, 25]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} />
             </TableShell>
           </SectionCard>
         </Grid>

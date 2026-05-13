@@ -3,11 +3,13 @@
 import EditOutlined from "@mui/icons-material/EditOutlined";
 import PersonOffOutlined from "@mui/icons-material/PersonOffOutlined";
 import { Box, TextField } from "@mui/material";
-import { DataGrid, GridColDef } from "@mui/x-data-grid";
+import { GridColDef } from "@mui/x-data-grid";
 import { useEffect, useMemo, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
+import { formatProperDisplay } from "@/lib/formatting";
 import {
   AdminRow,
+  AppDataGrid,
   EmptyState,
   FieldConfig,
   MutationDialog,
@@ -57,9 +59,9 @@ export function PresentersClient() {
   );
 
   const columns: GridColDef[] = [
-    { field: "name", headerName: "Name", flex: 1, minWidth: 180, valueGetter: (_value, row) => `${row.firstName} ${row.lastName}` },
+    { field: "name", headerName: "Name", flex: 1, minWidth: 180, valueGetter: (_value, row) => formatProperDisplay(`${row.firstName} ${row.lastName}`) },
     { field: "email", headerName: "Email", flex: 1, minWidth: 220 },
-    { field: "organization", headerName: "Organization", flex: 1, minWidth: 200 },
+    { field: "organization", headerName: "Organization", flex: 1, minWidth: 200, valueGetter: (_value, row) => formatProperDisplay(row.organization ?? "") },
     { field: "active", headerName: "Active", width: 120, renderCell: (params) => <StatusChip value={params.value} /> },
     { field: "cohortCount", headerName: "Cohorts", width: 120, valueGetter: (_value, row) => row._count?.cohorts ?? 0 },
     {
@@ -121,7 +123,7 @@ export function PresentersClient() {
       </SectionCard>
       <SectionCard title="Presenter Directory">
         <TableShell>
-          <DataGrid rows={filteredRows} columns={columns} loading={loading} pageSizeOptions={[10, 25, 50]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} disableRowSelectionOnClick />
+          <AppDataGrid rows={filteredRows} columns={columns} loading={loading} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} />
         </TableShell>
         {!loading && filteredRows.length === 0 && <EmptyState title="No presenters found" description="Create a presenter to attach to cohorts." />}
       </SectionCard>

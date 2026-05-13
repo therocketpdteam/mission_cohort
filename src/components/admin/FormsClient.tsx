@@ -3,11 +3,12 @@
 import ContentCopyOutlined from "@mui/icons-material/ContentCopyOutlined";
 import EditOutlined from "@mui/icons-material/EditOutlined";
 import { Box, MenuItem, Stack, TextField, Typography } from "@mui/material";
-import { DataGrid, GridColDef } from "@mui/x-data-grid";
+import { GridColDef } from "@mui/x-data-grid";
 import { useEffect, useMemo, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
 import {
   AdminRow,
+  AppDataGrid,
   EmptyState,
   FieldConfig,
   MutationDialog,
@@ -156,7 +157,7 @@ export function FormsClient() {
       </SectionCard>
       <SectionCard title={`Forms${selectedCohort ? ` for ${selectedCohort.title}` : ""}`}>
         <TableShell>
-          <DataGrid rows={forms} columns={columns} loading={loading} pageSizeOptions={[10, 25]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} disableRowSelectionOnClick />
+          <AppDataGrid rows={forms} columns={columns} loading={loading} pageSizeOptions={[10, 25]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} />
         </TableShell>
         {!loading && forms.length === 0 && <EmptyState title="No forms found" description="Create a registration form for the selected cohort." />}
       </SectionCard>

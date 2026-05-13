@@ -18,12 +18,13 @@ import {
   TextField,
   Typography
 } from "@mui/material";
-import { DataGrid, GridColDef, GridRowParams } from "@mui/x-data-grid";
+import { GridColDef, GridRowParams } from "@mui/x-data-grid";
 import { useEffect, useMemo, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
-import { formatProperDisplay } from "@/lib/formatting";
+import { formatProperDisplay, formatStatusLabel } from "@/lib/formatting";
 import {
   AdminRow,
+  AppDataGrid,
   EmptyState,
   PageHeader,
   PageStack,
@@ -122,7 +123,7 @@ function ParticipantEditor({
           </Grid>
           <Grid size={{ xs: 12, md: 6 }}>
             <TextField fullWidth select label="Status" value={values.status ?? "REGISTERED"} onChange={(event) => setValue("status", event.target.value)}>
-              {participantStatuses.map((value) => <MenuItem value={value} key={value}>{value.replace(/_/g, " ")}</MenuItem>)}
+              {participantStatuses.map((value) => <MenuItem value={value} key={value}>{formatStatusLabel(value)}</MenuItem>)}
             </TextField>
           </Grid>
           <Grid size={{ xs: 12, md: 6 }}>
@@ -382,7 +383,7 @@ export function ParticipantsClient() {
           <TextField label="Search" value={search} onChange={(event) => setSearch(event.target.value)} />
           <TextField select label="Status" value={status} onChange={(event) => setStatus(event.target.value)} sx={{ minWidth: 180 }}>
             <MenuItem value="">All statuses</MenuItem>
-            {participantStatuses.map((value) => <MenuItem value={value} key={value}>{value.replace(/_/g, " ")}</MenuItem>)}
+            {participantStatuses.map((value) => <MenuItem value={value} key={value}>{formatStatusLabel(value)}</MenuItem>)}
           </TextField>
           <TextField select label="Certificate" value={certificateIssued} onChange={(event) => setCertificateIssued(event.target.value)} sx={{ minWidth: 180 }}>
             <MenuItem value="">All certificates</MenuItem>
@@ -405,15 +406,11 @@ export function ParticipantsClient() {
       </SectionCard>
       <SectionCard title="Participant Roster">
         <TableShell>
-          <DataGrid
+          <AppDataGrid
             rows={filteredRows}
             columns={columns}
             loading={loading}
-            pageSizeOptions={[10, 25, 50]}
             initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
-            disableRowSelectionOnClick
-            rowHeight={48}
-            sx={{ "& .MuiDataGrid-cell": { py: 0.25, alignItems: "center" }, "& .MuiDataGrid-row": { cursor: "pointer" } }}
             onRowClick={(params: GridRowParams) => setDetail(params.row)}
           />
         </TableShell>

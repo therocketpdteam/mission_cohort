@@ -21,6 +21,8 @@ When editing existing screens:
 - Do not only update colors. Also update spacing, button hierarchy, card structure, and responsive behavior.
 - If a screen has overlapping buttons, refactor the container layout instead of shrinking text or hiding buttons.
 - Replace duplicate/custom button styles with the shared button variants.
+- Treat MUI as the underlying engine, not the visible design system. Admin pages should use Mission Control wrappers instead of raw MUI controls when a wrapper exists.
+- Do not add raw `DataGrid`, ad hoc status text, one-off chips, or custom row action groups to screens. Use `AppDataGrid`, `StatusChip`/`StatusBadge`, `RowActionMenu`, `PageHeader`, `SectionCard`, and shared formatting helpers.
 - Remove one-off colors unless they map to the approved tokens.
 - Do not introduce raw technical payloads into admin-facing workflows.
 - Preserve the admin-only scope: no learner dashboard, LaunchPad, course catalog, Asana, or Google Sheets UI.
@@ -261,11 +263,14 @@ Rules:
 - Table headers should be subtle, not heavy.
 - Row hover background: `#F8FAFC`.
 - Status badges should use token colors.
+- Use `AppDataGrid` for admin data tables. Do not import MUI `DataGrid` directly into pages.
+- Row height must be tall enough for all visible content. Do not stack multiple badges/text lines inside a short row.
 - Row actions should not crowd the row.
 - If more than 2 row actions exist, use a dropdown.
 - Avoid placing full-size primary buttons inside table rows.
 - Avoid horizontal scrolling in primary workflows. Prefer fewer columns, detail modals, row expansion, or action menus.
 - Use proper-case formatting for people, POCs, organizations, and presenters.
+- Long pills, sources, URLs, and labels must truncate with a tooltip or move into a detail modal; they must not stretch the table.
 
 ## Badges / Status Pills
 
@@ -286,6 +291,7 @@ Status rules:
 - Never show raw all-caps enum strings in user-facing UI.
 - Use approved token backgrounds and text colors.
 - Keep badges compact enough to fit rows without clipping.
+- Select menus, filters, table cells, dashboard panels, modals, and snackbars all use the same human status labels.
 
 ## Navigation
 
@@ -296,6 +302,7 @@ Navigation should feel branded:
 - Avoid plain gray-only navigation.
 - Icons should be consistent size.
 - Active state must be obvious.
+- Sidebar labels and icons must always be readable on navy. Explicitly set child text/icon colors; do not rely on inherited MUI color alone.
 - The RocketPD/Mission Control brand block should feel intentional and not like placeholder text.
 
 ## Text And Formatting
@@ -344,5 +351,14 @@ After updating this guide, UI implementation work should also:
 4. Replace inconsistent button styles with documented variants.
 5. Apply the system broadly to main admin screens, not only one or two isolated areas.
 6. Run `pnpm typecheck`, `pnpm build`, and `pnpm qa:prepush` before pushing.
+
+Visual QA must verify:
+
+- Sidebar labels are readable in active, inactive, hover, and selected states.
+- No raw all-caps statuses appear on Cohorts, Registrations, Participants, Settings, Reports, or Communications.
+- Registration rows do not clip roster, payment, source, or action controls.
+- Table action controls use compact menus and never overlap row text.
+- Names and organizations display in proper case everywhere user-facing.
+- Primary workflows avoid horizontal scrolling on a desktop viewport.
 
 Do not invent a totally new design system. Use this RocketPD-inspired admin system consistently.
