@@ -45,6 +45,7 @@ import {
   MutationDialog,
   PageHeader,
   PageStack,
+  RowActionMenu,
   SectionCard,
   StatusChip,
   TableShell,
@@ -696,7 +697,7 @@ function JotformMappingWizard({
         {activeStep < wizardSteps.length - 1 ? (
           <Button size="small" onClick={() => setActiveStep((step) => Math.min(wizardSteps.length - 1, step + 1))}>Next</Button>
         ) : (
-          <Stack direction="row" spacing={1}>
+          <Stack direction="row" flexWrap="wrap" useFlexGap gap={1}>
             <Button variant="outlined" size="small" onClick={() => save()} disabled={saving}>{saving ? "Saving" : "Save Mapping"}</Button>
             <Button size="small" onClick={() => save({ replayAfterSave: true })} disabled={saving || event?.reviewStatus === "PROCESSED"}>
               {saving ? "Working" : "Save & Replay"}
@@ -749,7 +750,7 @@ function JotformSubmissionRow({
         <Grid size={{ xs: 6, md: 1.4 }}><Typography>{[formatStatusLabel(registration.paymentMethod), formatStatusLabel(registration.paymentStatus)].filter((item) => item !== "Unknown").join(" / ") || "-"}</Typography></Grid>
         <Grid size={{ xs: 6, md: 1 }}><Typography>{compactDate(row.createdAt)}</Typography></Grid>
         <Grid size={{ xs: 12, md: 1.5 }}>
-          <Stack direction="row" spacing={0.5} justifyContent={{ xs: "flex-start", md: "flex-end" }} onClick={(event) => event.stopPropagation()}>
+          <Stack direction="row" flexWrap="wrap" useFlexGap gap={0.75} justifyContent={{ xs: "flex-start", md: "flex-end" }} onClick={(event) => event.stopPropagation()}>
             <Button size="small" variant="outlined" startIcon={<EditOutlined />} onClick={() => onReview(row)}>Map</Button>
             <Button size="small" variant="outlined" startIcon={<ReplayOutlined />} disabled={status === "PROCESSED"} onClick={() => onReplay(row)}>Replay</Button>
             <IconButton size="small" onClick={() => setExpanded((current) => !current)} aria-label={expanded ? "Collapse" : "Expand"}>
@@ -991,17 +992,17 @@ export function SettingsClient() {
     {
       field: "actions",
       headerName: "Actions",
-      width: 210,
+      width: 84,
       sortable: false,
       renderCell: (params) => (
-        <Stack direction="row" spacing={0.5}>
-          <Button size="small" variant="outlined" startIcon={<EditOutlined />} onClick={() => { setEditing(params.row); setDialogOpen(true); }}>
-            Edit
-          </Button>
-          <Button size="small" variant="outlined" startIcon={<PowerSettingsNewOutlined />} onClick={() => toggleMapping(params.row)}>
-            {params.row.active ? "Disable" : "Enable"}
-          </Button>
-        </Stack>
+        <Box onClick={(event) => event.stopPropagation()}>
+          <RowActionMenu
+            actions={[
+              { label: "Edit mapping", icon: <EditOutlined fontSize="small" />, onClick: () => { setEditing(params.row); setDialogOpen(true); } },
+              { label: params.row.active ? "Disable mapping" : "Enable mapping", icon: <PowerSettingsNewOutlined fontSize="small" />, onClick: () => toggleMapping(params.row) }
+            ]}
+          />
+        </Box>
       )
     }
   ];
@@ -1014,17 +1015,17 @@ export function SettingsClient() {
     {
       field: "actions",
       headerName: "Actions",
-      width: 210,
+      width: 84,
       sortable: false,
       renderCell: (params) => (
-        <Stack direction="row" spacing={0.5}>
-          <Button size="small" variant="outlined" startIcon={<EditOutlined />} onClick={() => { setEditingUser(params.row); setUserDialogOpen(true); }}>
-            Edit
-          </Button>
-          <Button size="small" variant="outlined" startIcon={<PowerSettingsNewOutlined />} onClick={() => toggleUser(params.row)}>
-            {params.row.active ? "Disable" : "Enable"}
-          </Button>
-        </Stack>
+        <Box onClick={(event) => event.stopPropagation()}>
+          <RowActionMenu
+            actions={[
+              { label: "Edit user", icon: <EditOutlined fontSize="small" />, onClick: () => { setEditingUser(params.row); setUserDialogOpen(true); } },
+              { label: params.row.active ? "Disable user" : "Enable user", icon: <PowerSettingsNewOutlined fontSize="small" />, onClick: () => toggleUser(params.row) }
+            ]}
+          />
+        </Box>
       )
     }
   ];
@@ -1091,7 +1092,7 @@ export function SettingsClient() {
           <SectionCard
             title="Jotform Intake Setup"
             action={
-              <Stack direction="row" spacing={1} flexWrap="wrap">
+              <Stack direction="row" flexWrap="wrap" useFlexGap gap={1}>
                 <Button size="small" variant="outlined" startIcon={<ContentCopyOutlined />} onClick={copyJotformWebhookUrl}>
                   Copy URL
                 </Button>

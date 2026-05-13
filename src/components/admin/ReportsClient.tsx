@@ -6,7 +6,7 @@ import { Box, Button, Grid, MenuItem, Stack, TextField, Typography } from "@mui/
 import { DataGrid, GridColDef } from "@mui/x-data-grid";
 import { useEffect, useMemo, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
-import { AdminRow, EmptyState, PageHeader, PageStack, SectionCard, StatusChip, TableShell, useNotifier } from "./common";
+import { AdminRow, EmptyState, PageHeader, PageStack, RowActionMenu, SectionCard, StatusChip, TableShell, useNotifier } from "./common";
 
 export function ReportsClient() {
   const [cohorts, setCohorts] = useState<AdminRow[]>([]);
@@ -87,12 +87,16 @@ export function ReportsClient() {
     {
       field: "actions",
       headerName: "Actions",
-      width: 140,
+      width: 84,
       sortable: false,
       renderCell: (params) => (
-        <Button variant="outlined" color="error" startIcon={<BlockOutlined />} onClick={() => revokeLink(params.row.id)}>
-          Revoke
-        </Button>
+        <Box onClick={(event) => event.stopPropagation()}>
+          <RowActionMenu
+            actions={[
+              { label: "Revoke link", icon: <BlockOutlined fontSize="small" />, color: "error", onClick: () => revokeLink(params.row.id) }
+            ]}
+          />
+        </Box>
       )
     }
   ];

@@ -99,12 +99,12 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   const drawer = (
-    <Stack sx={{ height: "100%", bgcolor: "#082E3A", color: "#F6F7F9" }}>
+    <Stack sx={{ height: "100%", bgcolor: "#071D33", color: "#F8FAFC" }}>
       <Box sx={{ px: 2.5, py: 2.5 }}>
         <Typography variant="h3" sx={{ color: "white" }}>
           RocketPD
         </Typography>
-        <Typography variant="body2" sx={{ color: "#B6C4D2", mt: 0.5 }}>
+        <Typography variant="body2" sx={{ color: "#BDE6F8", mt: 0.5 }}>
           Mission Control
         </Typography>
       </Box>
@@ -125,12 +125,12 @@ export function AppShell({ children }: { children: ReactNode }) {
                 mb: 0.5,
                 color: active ? "#FFFFFF" : "#DDE7F0",
                 "&.Mui-selected": {
-                  bgcolor: "rgba(244,178,61,0.18)",
-                  borderLeft: "3px solid #F4B23D",
+                  bgcolor: "rgba(30,155,222,0.18)",
+                  borderLeft: "3px solid #20C7D9",
                   color: "#FFFFFF"
                 },
                 "&:hover": {
-                  bgcolor: "rgba(255,255,255,0.08)"
+                  bgcolor: "rgba(255,255,255,0.1)"
                 }
               }}
             >
@@ -178,7 +178,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               ))}
             </Breadcrumbs>
           </Box>
-          <Button variant="outlined" color="inherit" startIcon={<AccountCircle />} onClick={(event) => setMenuAnchor(event.currentTarget)}>
+          <Button variant="outlined" startIcon={<AccountCircle />} onClick={(event) => setMenuAnchor(event.currentTarget)}>
             {user?.firstName ?? "Admin"}
           </Button>
           <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={() => setMenuAnchor(null)}>

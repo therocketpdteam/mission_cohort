@@ -391,7 +391,7 @@ function CreateCohortWizard({
                         <TextField fullWidth type="email" label="Email" value={newPresenterEmail} onChange={(event) => setNewPresenterEmail(event.target.value)} required />
                       </Grid>
                     </Grid>
-                    <Stack direction="row" spacing={1}>
+                    <Stack direction="row" flexWrap="wrap" useFlexGap gap={1}>
                       <Button startIcon={<AddIcon />} onClick={createPresenterInline} disabled={creatingPresenter}>
                         {creatingPresenter ? "Saving presenter" : "Save Presenter"}
                       </Button>

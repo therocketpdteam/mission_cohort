@@ -2,7 +2,7 @@
 
 import EditOutlined from "@mui/icons-material/EditOutlined";
 import PersonOffOutlined from "@mui/icons-material/PersonOffOutlined";
-import { Box, Button, Stack, TextField } from "@mui/material";
+import { Box, TextField } from "@mui/material";
 import { DataGrid, GridColDef } from "@mui/x-data-grid";
 import { useEffect, useMemo, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
@@ -13,6 +13,7 @@ import {
   MutationDialog,
   PageHeader,
   PageStack,
+  RowActionMenu,
   SectionCard,
   StatusChip,
   TableShell,
@@ -64,30 +65,31 @@ export function PresentersClient() {
     {
       field: "actions",
       headerName: "Actions",
-      width: 250,
+      width: 84,
       sortable: false,
       renderCell: (params) => (
-        <Stack direction="row" spacing={1}>
-          <Button variant="outlined" startIcon={<EditOutlined />} onClick={() => { setEditing(params.row); setDialogOpen(true); }}>
-            Edit
-          </Button>
-          <Button
-            variant="outlined"
-            color="warning"
-            startIcon={<PersonOffOutlined />}
-            onClick={async () => {
-              try {
-                await adminApi("/api/presenters", { method: "PATCH", body: { id: params.row.id, active: false } });
-                notifySuccess("Presenter deactivated");
-                await load();
-              } catch (error) {
-                notifyError((error as Error).message);
+        <Box onClick={(event) => event.stopPropagation()}>
+          <RowActionMenu
+            actions={[
+              { label: "Edit presenter", icon: <EditOutlined fontSize="small" />, onClick: () => { setEditing(params.row); setDialogOpen(true); } },
+              {
+                label: "Deactivate presenter",
+                icon: <PersonOffOutlined fontSize="small" />,
+                color: "warning",
+                disabled: !params.row.active,
+                onClick: async () => {
+                  try {
+                    await adminApi("/api/presenters", { method: "PATCH", body: { id: params.row.id, active: false } });
+                    notifySuccess("Presenter deactivated");
+                    await load();
+                  } catch (error) {
+                    notifyError((error as Error).message);
+                  }
+                }
               }
-            }}
-          >
-            Deactivate
-          </Button>
-        </Stack>
+            ]}
+          />
+        </Box>
       )
     }
   ];

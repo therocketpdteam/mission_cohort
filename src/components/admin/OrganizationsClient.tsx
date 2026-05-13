@@ -2,10 +2,8 @@
 
 import EditOutlined from "@mui/icons-material/EditOutlined";
 import VisibilityOutlined from "@mui/icons-material/VisibilityOutlined";
-import { Box, Button, Stack, TextField } from "@mui/material";
+import { Box, TextField } from "@mui/material";
 import { DataGrid, GridColDef } from "@mui/x-data-grid";
-import Link from "next/link";
-import type { Route } from "next";
 import { useEffect, useMemo, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
 import {
@@ -15,6 +13,7 @@ import {
   MutationDialog,
   PageHeader,
   PageStack,
+  RowActionMenu,
   SectionCard,
   TableShell,
   ToolbarButton,
@@ -79,17 +78,17 @@ export function OrganizationsClient() {
     {
       field: "actions",
       headerName: "Actions",
-      width: 220,
+      width: 84,
       sortable: false,
       renderCell: (params) => (
-        <Stack direction="row" spacing={1}>
-          <Button component={Link} href={`/organizations/${params.row.id}` as Route} variant="outlined" startIcon={<VisibilityOutlined />}>
-            View
-          </Button>
-          <Button variant="outlined" startIcon={<EditOutlined />} onClick={() => { setEditing(params.row); setDialogOpen(true); }}>
-            Edit
-          </Button>
-        </Stack>
+        <Box onClick={(event) => event.stopPropagation()}>
+          <RowActionMenu
+            actions={[
+              { label: "View organization", icon: <VisibilityOutlined fontSize="small" />, onClick: () => window.location.assign(`/organizations/${params.row.id}`) },
+              { label: "Edit organization", icon: <EditOutlined fontSize="small" />, onClick: () => { setEditing(params.row); setDialogOpen(true); } }
+            ]}
+          />
+        </Box>
       )
     }
   ];

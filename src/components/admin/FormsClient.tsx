@@ -2,7 +2,7 @@
 
 import ContentCopyOutlined from "@mui/icons-material/ContentCopyOutlined";
 import EditOutlined from "@mui/icons-material/EditOutlined";
-import { Box, Button, MenuItem, Stack, TextField, Typography } from "@mui/material";
+import { Box, MenuItem, Stack, TextField, Typography } from "@mui/material";
 import { DataGrid, GridColDef } from "@mui/x-data-grid";
 import { useEffect, useMemo, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
@@ -13,6 +13,7 @@ import {
   MutationDialog,
   PageHeader,
   PageStack,
+  RowActionMenu,
   SectionCard,
   StatusChip,
   TableShell,
@@ -82,24 +83,24 @@ export function FormsClient() {
     {
       field: "actions",
       headerName: "Actions",
-      width: 270,
+      width: 84,
       sortable: false,
       renderCell: (params) => (
-        <Stack direction="row" spacing={1}>
-          <Button variant="outlined" startIcon={<EditOutlined />} onClick={() => { setEditing(params.row); setDialogOpen(true); }}>
-            Edit
-          </Button>
-          <Button
-            variant="outlined"
-            startIcon={<ContentCopyOutlined />}
-            onClick={async () => {
-              await navigator.clipboard.writeText(`${publicBase}/forms/${params.row.slug}`);
-              notifySuccess("Form URL copied");
-            }}
-          >
-            Copy URL
-          </Button>
-        </Stack>
+        <Box onClick={(event) => event.stopPropagation()}>
+          <RowActionMenu
+            actions={[
+              { label: "Edit form", icon: <EditOutlined fontSize="small" />, onClick: () => { setEditing(params.row); setDialogOpen(true); } },
+              {
+                label: "Copy URL",
+                icon: <ContentCopyOutlined fontSize="small" />,
+                onClick: async () => {
+                  await navigator.clipboard.writeText(`${publicBase}/forms/${params.row.slug}`);
+                  notifySuccess("Form URL copied");
+                }
+              }
+            ]}
+          />
+        </Box>
       )
     }
   ];

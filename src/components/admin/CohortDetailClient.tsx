@@ -33,6 +33,7 @@ import {
   MutationDialog,
   PageHeader,
   PageStack,
+  RowActionMenu,
   SectionCard,
   StatusChip,
   TableShell,
@@ -418,43 +419,41 @@ export function CohortDetailClient({ id }: { id: string }) {
     {
       field: "actions",
       headerName: "Actions",
-      width: 320,
+      width: 84,
       sortable: false,
       renderCell: (params) => (
-        <Stack direction="row" spacing={1}>
-          <Button variant="outlined" startIcon={<EditOutlined />} onClick={() => { setEditingSession(params.row); setSessionDialogOpen(true); }}>
-            Edit
-          </Button>
-          <Button
-            variant="outlined"
-            startIcon={<CalendarMonthOutlined />}
-            onClick={async () => {
-              try {
-                await adminApi("/api/calendar", { method: "POST", body: { sessionId: params.row.id, mode: "ics" } });
-                notifySuccess("ICS invite generated");
-              } catch (error) {
-                notifyError((error as Error).message);
+        <Box onClick={(event) => event.stopPropagation()}>
+          <RowActionMenu
+            actions={[
+              { label: "Edit session", icon: <EditOutlined fontSize="small" />, onClick: () => { setEditingSession(params.row); setSessionDialogOpen(true); } },
+              {
+                label: "Generate ICS",
+                icon: <CalendarMonthOutlined fontSize="small" />,
+                onClick: async () => {
+                  try {
+                    await adminApi("/api/calendar", { method: "POST", body: { sessionId: params.row.id, mode: "ics" } });
+                    notifySuccess("ICS invite generated");
+                  } catch (error) {
+                    notifyError((error as Error).message);
+                  }
+                }
+              },
+              {
+                label: "Sync Google Calendar",
+                icon: <CalendarMonthOutlined fontSize="small" />,
+                onClick: async () => {
+                  try {
+                    await adminApi("/api/calendar", { method: "POST", body: { sessionId: params.row.id, mode: "google" } });
+                    notifySuccess("Google Calendar invite synced");
+                    await load();
+                  } catch (error) {
+                    notifyError((error as Error).message);
+                  }
+                }
               }
-            }}
-          >
-            ICS
-          </Button>
-          <Button
-            variant="outlined"
-            startIcon={<CalendarMonthOutlined />}
-            onClick={async () => {
-              try {
-                await adminApi("/api/calendar", { method: "POST", body: { sessionId: params.row.id, mode: "google" } });
-                notifySuccess("Google Calendar invite synced");
-                await load();
-              } catch (error) {
-                notifyError((error as Error).message);
-              }
-            }}
-          >
-            Google
-          </Button>
-        </Stack>
+            ]}
+          />
+        </Box>
       )
     }
   ];
@@ -615,7 +614,7 @@ export function CohortDetailClient({ id }: { id: string }) {
           <SectionCard
             title="Registration Evolution"
             action={
-              <Stack direction="row" spacing={1}>
+              <Stack direction="row" flexWrap="wrap" useFlexGap gap={1}>
                 <Button size="small" variant={chartMode === "count" ? "contained" : "outlined"} onClick={() => setChartMode("count")}>Registrants #</Button>
                 <Button size="small" variant={chartMode === "amount" ? "contained" : "outlined"} onClick={() => setChartMode("amount")}>$$</Button>
               </Stack>

@@ -16,6 +16,7 @@ import {
   MutationDialog,
   PageHeader,
   PageStack,
+  RowActionMenu,
   SectionCard,
   StatusChip,
   TableShell,
@@ -130,20 +131,18 @@ export function CommunicationsClient() {
     {
       field: "actions",
       headerName: "Actions",
-      width: 340,
+      width: 84,
       sortable: false,
       renderCell: (params) => (
-        <Stack direction="row" spacing={1}>
-          <Button variant="outlined" startIcon={<EditOutlined />} onClick={() => { setEditing(params.row); setDialogOpen(true); }}>
-            Edit
-          </Button>
-          <Button variant="outlined" startIcon={<VisibilityOutlined />} onClick={() => setPreviewTemplate(params.row)}>
-            Preview
-          </Button>
-          <Button variant="outlined" startIcon={<PowerSettingsNewOutlined />} onClick={() => toggleTemplate(params.row)}>
-            {params.row.active ? "Deactivate" : "Activate"}
-          </Button>
-        </Stack>
+        <Box onClick={(event) => event.stopPropagation()}>
+          <RowActionMenu
+            actions={[
+              { label: "Edit template", icon: <EditOutlined fontSize="small" />, onClick: () => { setEditing(params.row); setDialogOpen(true); } },
+              { label: "Preview template", icon: <VisibilityOutlined fontSize="small" />, onClick: () => setPreviewTemplate(params.row) },
+              { label: params.row.active ? "Deactivate template" : "Activate template", icon: <PowerSettingsNewOutlined fontSize="small" />, onClick: () => toggleTemplate(params.row) }
+            ]}
+          />
+        </Box>
       )
     }
   ];
@@ -164,11 +163,12 @@ export function CommunicationsClient() {
     {
       field: "actions",
       headerName: "Actions",
-      width: 190,
+      width: 112,
       sortable: false,
       renderCell: (params) => (
         <Button
           variant="outlined"
+          size="small"
           startIcon={<SendOutlined />}
           onClick={() => sendCommunication(params.row, params.row.sentAt ? "resend" : "send")}
         >

@@ -44,7 +44,31 @@ export type FieldConfig = {
 
 export function PageStack({ children }: { children: ReactNode }) {
   return (
-    <Stack spacing={3} sx={{ maxWidth: 1600 }}>
+    <Stack spacing={3} sx={{ maxWidth: 1600, mx: "auto", width: "100%" }}>
+      {children}
+    </Stack>
+  );
+}
+
+export function ActionGroup({
+  children,
+  justify = "flex-end",
+  sx
+}: {
+  children: ReactNode;
+  justify?: "flex-start" | "flex-end" | "space-between";
+  sx?: object;
+}) {
+  return (
+    <Stack
+      direction="row"
+      flexWrap="wrap"
+      useFlexGap
+      gap={1}
+      alignItems="center"
+      justifyContent={{ xs: "flex-start", md: justify }}
+      sx={sx}
+    >
       {children}
     </Stack>
   );
@@ -60,14 +84,14 @@ export function PageHeader({
   action?: ReactNode;
 }) {
   return (
-    <Stack direction={{ xs: "column", md: "row" }} spacing={2} alignItems={{ xs: "stretch", md: "center" }} justifyContent="space-between">
+    <Stack direction={{ xs: "column", lg: "row" }} spacing={2} alignItems={{ xs: "stretch", lg: "center" }} justifyContent="space-between">
       <Box>
         <Typography variant="h1">{title}</Typography>
         <Typography color="text.secondary" sx={{ mt: 0.5 }}>
           {description}
         </Typography>
       </Box>
-      {action}
+      {action && <ActionGroup>{action}</ActionGroup>}
     </Stack>
   );
 }
@@ -88,9 +112,9 @@ export function SectionCard({
   return (
     <Card sx={sx}>
       <CardContent sx={contentSx}>
-        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+        <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" alignItems={{ xs: "flex-start", sm: "center" }} gap={1.5} sx={{ mb: 2 }}>
           <Typography variant="h3">{title}</Typography>
-          {action}
+          {action && <ActionGroup>{action}</ActionGroup>}
         </Stack>
         {children}
       </CardContent>
@@ -164,8 +188,8 @@ export function StatusChip({ value }: { value?: string | boolean | null }) {
         fontSize: 11,
         fontWeight: 700,
         whiteSpace: "nowrap",
-        bgcolor: `${color}.light`,
-        color: color === "default" ? "text.primary" : `${color}.dark`
+        bgcolor: color === "default" ? "#F1F5F9" : `${color}.light`,
+        color: color === "default" ? "#334155" : `${color}.dark`
       }}
     >
       {text}
@@ -199,8 +223,9 @@ export function CompactActionButton({
             width: 30,
             height: 30,
             border: 1,
-            borderColor: "divider",
-            bgcolor: "background.paper"
+            borderColor: "#CBD5E1",
+            bgcolor: "background.paper",
+            "&:hover": { bgcolor: "#F1F5F9" }
           }}
         >
           {icon}
@@ -227,7 +252,8 @@ export function FieldValuePill({
           borderRadius: 999,
           border: 1,
           borderColor: "divider",
-          bgcolor: "background.default",
+          bgcolor: "#F8FAFC",
+          color: "#071D33",
           px: 1,
           py: 0.35,
           fontSize: 12,
@@ -262,8 +288,8 @@ export function MetadataPill({ children }: { children: ReactNode }) {
         display: "inline-flex",
         alignItems: "center",
         borderRadius: 999,
-        bgcolor: "primary.light",
-        color: "primary.dark",
+        bgcolor: "#E8F5FC",
+        color: "#123C5A",
         px: 1,
         py: 0.35,
         fontSize: 12,
@@ -299,9 +325,9 @@ export function DateBadge({ value, emptyLabel = "No date" }: { value?: string | 
         minWidth: 58,
         borderRadius: 2,
         border: 1,
-        borderColor: "primary.light",
-        bgcolor: "primary.light",
-        color: "primary.dark",
+        borderColor: "#BDE6F8",
+        bgcolor: "#E8F5FC",
+        color: "#071D33",
         textAlign: "center",
         py: 0.65
       }}
@@ -335,7 +361,7 @@ export function RowActionMenu({
             event.stopPropagation();
             setAnchor(event.currentTarget);
           }}
-          sx={{ width: 30, height: 30, border: 1, borderColor: "divider", bgcolor: "background.paper" }}
+          sx={{ width: 30, height: 30, border: 1, borderColor: "#CBD5E1", bgcolor: "background.paper", "&:hover": { bgcolor: "#F1F5F9" } }}
         >
           <MoreHorizIcon fontSize="small" />
         </IconButton>
@@ -372,7 +398,7 @@ export function DonutChart({
   labelKey?: string;
   size?: number;
 }) {
-  const colors = ["#0B5F75", "#E7A93C", "#25855A", "#C97A16", "#B42318", "#9AA8B8"];
+  const colors = ["#1479C9", "#20C7D9", "#F59E0B", "#16A34A", "#DC2626", "#64748B"];
   const radius = 58;
   const circumference = 2 * Math.PI * radius;
   const total = rows.reduce((sum, row) => sum + Number(row[valueKey] ?? 0), 0);
@@ -397,7 +423,7 @@ export function DonutChart({
     <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems="center">
       <Box sx={{ position: "relative", width: size, height: size }}>
         <Box component="svg" viewBox="0 0 150 150" sx={{ width: size, height: size, transform: "rotate(-90deg)" }}>
-          <circle cx="75" cy="75" r={radius} fill="none" stroke="#E6EEF4" strokeWidth="18" />
+          <circle cx="75" cy="75" r={radius} fill="none" stroke="#E2E8F0" strokeWidth="18" />
           {segments.map((segment) => (
             <circle
               key={`${segment.row[labelKey]}-${segment.color}`}
@@ -608,7 +634,15 @@ export function MutationDialog({
 
 export function TableShell({ children }: { children: ReactNode }) {
   return (
-    <Box sx={{ width: "100%", minHeight: 420, "& .MuiDataGrid-root": { minHeight: 420 }, "& .MuiDataGrid-cell": { alignItems: "center" } }}>
+    <Box
+      sx={{
+        width: "100%",
+        minHeight: 420,
+        "& .MuiDataGrid-root": { minHeight: 420 },
+        "& .MuiDataGrid-cell": { alignItems: "center" },
+        "& .MuiDataGrid-actionsCell": { gap: 1 }
+      }}
+    >
       {children}
     </Box>
   );

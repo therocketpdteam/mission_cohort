@@ -366,7 +366,7 @@ function RegistrationDetailDialog({
                 </Grid>
               ))}
             </Grid>
-            <Stack direction="row" spacing={1}>
+            <Stack direction="row" flexWrap="wrap" useFlexGap gap={1}>
               <Button variant="outlined" onClick={syncQuickBooks}>Sync QuickBooks</Button>
               <Button variant="outlined" color="warning" onClick={voidQuickBooksInvoice}>Void QB Invoice</Button>
               {registration.quickBooksSyncError && <Typography color="error.main">{registration.quickBooksSyncError}</Typography>}
@@ -379,9 +379,14 @@ function RegistrationDetailDialog({
                   <ListItem
                     key={row.id}
                     divider
-                    secondaryAction={<Button size="small" color="error" startIcon={<DeleteOutline />} onClick={() => removeParticipant(row.id)}>Remove</Button>}
+                    sx={{ alignItems: "center", gap: 1.5 }}
                   >
-                    <ListItemText primary={formatProperDisplay(`${row.firstName} ${row.lastName}`)} secondary={`${row.email}${row.title ? ` • ${row.title}` : ""}`} />
+                    <ListItemText
+                      primary={formatProperDisplay(`${row.firstName} ${row.lastName}`)}
+                      secondary={`${row.email}${row.title ? ` • ${row.title}` : ""}`}
+                      sx={{ minWidth: 0 }}
+                    />
+                    <Button size="small" variant="text" color="error" startIcon={<DeleteOutline />} onClick={() => removeParticipant(row.id)}>Remove</Button>
                   </ListItem>
                 ))}
               </List>
@@ -654,7 +659,7 @@ export function RegistrationsClient() {
       </SectionCard>
       <SectionCard title="Registration Management">
         {selectedIds.length > 0 && (
-          <Stack direction={{ xs: "column", lg: "row" }} spacing={1.5} alignItems={{ xs: "stretch", lg: "center" }} sx={{ mb: 2 }}>
+          <Stack direction={{ xs: "column", lg: "row" }} flexWrap="wrap" useFlexGap gap={1.5} alignItems={{ xs: "stretch", lg: "center" }} sx={{ mb: 2 }}>
             <StatusChip value={`${selectedIds.length} selected`} />
             <Button size="small" variant="outlined" color="success" onClick={() => runBulkAction("confirm")}>Confirm</Button>
             <Button size="small" variant="outlined" color="warning" onClick={() => runBulkAction("cancel")}>Cancel</Button>
