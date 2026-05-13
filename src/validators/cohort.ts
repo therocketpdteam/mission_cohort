@@ -11,6 +11,7 @@ import {
 
 const cohortBaseSchema = z.object({
   title: z.string().min(1),
+  shortName: z.string().trim().min(1).max(80).optional().or(z.literal("").transform(() => undefined)),
   slug: slugSchema,
   description: z.string().optional(),
   presenterId: z.string().min(1),

@@ -609,7 +609,11 @@ export function MutationDialog({
     setSaving(true);
     setSubmitError(null);
     try {
-      await onSubmit(values);
+      const payload = fields.reduce<AdminRow>((current, field) => {
+        current[field.name] = values[field.name];
+        return current;
+      }, {});
+      await onSubmit(payload);
       onClose();
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : "Unable to save changes");

@@ -25,6 +25,7 @@ import {
 } from "@mui/material";
 import { GridColDef } from "@mui/x-data-grid";
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { adminApi } from "@/lib/adminApi";
 import { formatProperDisplay, formatStatusLabel } from "@/lib/formatting";
 import {
@@ -32,6 +33,7 @@ import {
   AppDataGrid,
   EmptyState,
   FieldConfig,
+  MetadataPill,
   MutationDialog,
   PageHeader,
   PageStack,
@@ -51,6 +53,7 @@ const timezoneOptions = [
 
 const editFields = (presenters: AdminRow[]): FieldConfig[] => [
   { name: "title", label: "Cohort title", required: true },
+  { name: "shortName", label: "Short name" },
   { name: "slug", label: "Slug", required: true },
   {
     name: "presenterId",
@@ -115,6 +118,7 @@ function CreateCohortWizard({
 }) {
   const [activeStep, setActiveStep] = useState(0);
   const [title, setTitle] = useState("");
+  const [shortName, setShortName] = useState("");
   const [slug, setSlug] = useState("");
   const [slugTouched, setSlugTouched] = useState(false);
   const [status, setStatus] = useState("DRAFT");
@@ -141,6 +145,7 @@ function CreateCohortWizard({
     if (!open) {
       setActiveStep(0);
       setTitle("");
+      setShortName("");
       setSlug("");
       setSlugTouched(false);
       setStatus("DRAFT");
@@ -294,6 +299,7 @@ function CreateCohortWizard({
         method: "POST",
         body: {
           title,
+          shortName,
           slug,
           status,
           presenterId: presenter?.id,
@@ -337,6 +343,9 @@ function CreateCohortWizard({
           <Grid container spacing={2}>
             <Grid size={{ xs: 12, md: 6 }}>
               <TextField fullWidth label="Cohort title" value={title} onChange={(event) => setTitle(event.target.value)} required />
+            </Grid>
+            <Grid size={{ xs: 12, md: 6 }}>
+              <TextField fullWidth label="Short name" value={shortName} onChange={(event) => setShortName(event.target.value)} placeholder="KM Fall 2026" />
             </Grid>
             <Grid size={{ xs: 12, md: 6 }}>
               <TextField
@@ -463,6 +472,7 @@ function CreateCohortWizard({
 }
 
 export function CohortsClient() {
+  const router = useRouter();
   const [rows, setRows] = useState<AdminRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [payments, setPayments] = useState<AdminRow[]>([]);
@@ -497,7 +507,7 @@ export function CohortsClient() {
   const filteredRows = useMemo(
     () =>
       rows.filter((row) => {
-        const matchesSearch = [row.title, row.presenter?.firstName, row.presenter?.lastName]
+        const matchesSearch = [row.title, row.shortName, row.presenter?.firstName, row.presenter?.lastName]
           .join(" ")
           .toLowerCase()
           .includes(search.toLowerCase());
@@ -509,7 +519,18 @@ export function CohortsClient() {
   );
 
   const columns: GridColDef[] = [
-    { field: "title", headerName: "Cohort title", flex: 1.4, minWidth: 220 },
+    {
+      field: "title",
+      headerName: "Cohort",
+      flex: 1.4,
+      minWidth: 220,
+      renderCell: (params) => (
+        <Stack spacing={0.5} sx={{ minWidth: 0 }}>
+          <Typography fontWeight={900} noWrap>{params.row.title}</Typography>
+          {params.row.shortName && <MetadataPill maxWidth={160}>{params.row.shortName}</MetadataPill>}
+        </Stack>
+      )
+    },
     {
       field: "presenter",
       headerName: "Presenter",
@@ -627,7 +648,13 @@ export function CohortsClient() {
       </SectionCard>
       <SectionCard title="Cohort Operations">
         <TableShell>
-          <AppDataGrid rows={filteredRows} columns={columns} loading={loading} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} />
+          <AppDataGrid
+            rows={filteredRows}
+            columns={columns}
+            loading={loading}
+            initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
+            onRowClick={(params) => router.push(`/cohorts/${params.id}`)}
+          />
         </TableShell>
         {!loading && filteredRows.length === 0 && <EmptyState title="No cohorts found" description="Create a cohort or adjust the filters." />}
       </SectionCard>

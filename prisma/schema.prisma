@@ -309,6 +309,7 @@ model Presenter {
 model Cohort {
   id                        String                 @id @default(cuid())
   title                     String
+  shortName                 String?
   slug                      String                 @unique
   description               String?
   presenterId               String
