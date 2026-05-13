@@ -10,6 +10,11 @@ type ParsedParticipant = {
   phone?: string;
 };
 type FieldMap = Record<string, string>;
+type LandingPageRoute = {
+  pattern: string;
+  cohortId: string;
+  label?: string;
+};
 type JotformTargetField = {
   target: string;
   label: string;
@@ -200,6 +205,64 @@ function readFieldMap(mapping?: JotformFormMapping): FieldMap {
 
     return acc;
   }, {});
+}
+
+function readLandingPageRoutes(mapping?: JotformFormMapping): LandingPageRoute[] {
+  const fieldMap = mapping?.fieldMapJson;
+  let value: unknown[] = [];
+
+  if (fieldMap && typeof fieldMap === "object" && !Array.isArray(fieldMap)) {
+    try {
+      const parsed = JSON.parse(readString((fieldMap as Record<string, unknown>).__landingPageRoutes) || "[]");
+      value = Array.isArray(parsed) ? parsed : [];
+    } catch {
+      value = [];
+    }
+  }
+
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((route) => {
+      const row = route && typeof route === "object" && !Array.isArray(route) ? route as Record<string, unknown> : {};
+      return {
+        pattern: readString(row.pattern),
+        cohortId: readString(row.cohortId),
+        label: readString(row.label)
+      };
+    })
+    .filter((route) => route.pattern && route.cohortId);
+}
+
+function normalizeUrlForMatch(value: string) {
+  return value.trim().toLowerCase().replace(/\/+$/, "");
+}
+
+function landingPageMatchesPattern(landingPageUrl: string, pattern: string) {
+  const normalizedUrl = normalizeUrlForMatch(landingPageUrl);
+  const normalizedPattern = normalizeUrlForMatch(pattern);
+
+  if (!normalizedUrl || !normalizedPattern) {
+    return false;
+  }
+
+  if (normalizedUrl === normalizedPattern || normalizedUrl.includes(normalizedPattern)) {
+    return true;
+  }
+
+  try {
+    const url = new URL(normalizedUrl);
+    const patternUrl = new URL(normalizedPattern);
+    return url.hostname === patternUrl.hostname && normalizeUrlForMatch(url.pathname) === normalizeUrlForMatch(patternUrl.pathname);
+  } catch {
+    return false;
+  }
+}
+
+function resolveLandingPageRoute(mapping: JotformFormMapping | undefined, landingPageUrl: string) {
+  return readLandingPageRoutes(mapping).find((route) => landingPageMatchesPattern(landingPageUrl, route.pattern));
 }
 
 function mappedFirstValue(flat: UnknownRecord, source: UnknownRecord, fieldMap: FieldMap, target: string, fallbackKeys: string[]): unknown {
@@ -485,7 +548,7 @@ export async function parseJotformWebhookRequest(request: Request): Promise<Unkn
 
 export function resolveJotformCohort(
   payload: {
-    routing: { cohortId?: string; cohortSlug?: string; formId?: string };
+    routing: { cohortId?: string; cohortSlug?: string; formId?: string; landingPageUrl?: string };
   },
   mappings: JotformFormMapping[]
 ): { cohortId: string; cohortSlug: string; mapping?: JotformFormMapping } {
@@ -497,6 +560,12 @@ export function resolveJotformCohort(
 
   if (payload.routing.cohortSlug) {
     return { cohortId: "", cohortSlug: payload.routing.cohortSlug, mapping };
+  }
+
+  const landingPageRoute = resolveLandingPageRoute(mapping, payload.routing.landingPageUrl ?? "");
+
+  if (landingPageRoute) {
+    return { cohortId: landingPageRoute.cohortId, cohortSlug: "", mapping };
   }
 
   if (mapping?.requireCohortSlug) {
@@ -541,11 +610,17 @@ export function normalizeJotformRegistrationPayload(payload: UnknownRecord, mapp
     ...parsedParticipantText.participants
   ];
   const formId = readString(mappedFirstValue(flat, flat, fieldMap, "formId", ["formID", "formId", "form_id"]));
+  const landingPageCandidate = mappedFirstValue(flat, registration, fieldMap, "landingPageUrl", ["landingPageUrl", "landing_page_url", "Get Page URL", "lead_source", "q25_leadSource", "q59_typeA59"]);
+  const referrerCandidate = mappedFirstValue(flat, registration, fieldMap, "referrerUrl", ["referrerUrl", "referrer", "Referrer"]);
+  const landingPageUrl = firstUrlFromText(landingPageCandidate);
+  const referrerUrl = firstUrlFromText(referrerCandidate);
+  const sourceUrls = [landingPageUrl, referrerUrl, landingPageCandidate, referrerCandidate, firstValue(flat, ["pretty", "rawRequest"])];
   const routing = resolveJotformCohort(
     {
       routing: {
         cohortId: readString(firstValue(registration, ["cohortId", "cohort_id", "CohortId"])),
         cohortSlug: readString(mappedFirstValue(flat, registration, fieldMap, "cohortSlug", ["cohortSlug", "cohort_slug", "CohortSlug"])),
+        landingPageUrl,
         formId
       }
     },
@@ -555,11 +630,6 @@ export function normalizeJotformRegistrationPayload(payload: UnknownRecord, mapp
   const primaryContactLastName = readString(mappedFirstValue(flat, registration, fieldMap, "primaryContactLastName", ["primaryContactLastName", "contactLastName", "registrantLastName", "lastName", "Last Name", "last"]));
   const primaryContactFullName = readString(mappedFirstValue(flat, registration, fieldMap, "primaryContactName", ["primaryContactName", "contactName", "registrantName", "fullName", "q7_name", "Name", "name"]));
   const primaryContactName = primaryContactFullName || [primaryContactFirstName, primaryContactLastName].filter(Boolean).join(" ");
-  const landingPageCandidate = mappedFirstValue(flat, registration, fieldMap, "landingPageUrl", ["landingPageUrl", "landing_page_url", "Get Page URL", "lead_source", "q25_leadSource", "q59_typeA59"]);
-  const referrerCandidate = mappedFirstValue(flat, registration, fieldMap, "referrerUrl", ["referrerUrl", "referrer", "Referrer"]);
-  const landingPageUrl = firstUrlFromText(landingPageCandidate);
-  const referrerUrl = firstUrlFromText(referrerCandidate);
-  const sourceUrls = [landingPageUrl, referrerUrl, landingPageCandidate, referrerCandidate, firstValue(flat, ["pretty", "rawRequest"])];
 
   return {
     source: "jotform",
@@ -696,6 +766,7 @@ export function previewJotformRegistrationPayload(payload: UnknownRecord, mappin
       primaryContactName: normalized.registration.primaryContactName,
       primaryContactEmail: normalized.registration.primaryContactEmail,
       organizationName: normalized.organization.name,
+      landingPageUrl: normalized.registration.landingPageUrl,
       participantCount: normalized.registration.participantCount,
       parsedParticipantCount: normalized.participants.length,
       participantParseErrors: normalized.participantParseErrors,
@@ -718,6 +789,7 @@ export function previewJotformRegistrationPayload(payload: UnknownRecord, mappin
       primaryContactName: readString(firstValue(flat, ["primaryContactName", "contactName", "registrantName", "q7_name", "Name", "name"])),
       primaryContactEmail: readString(firstValue(flat, ["primaryContactEmail", "contactEmail", "registrantEmail", "q12_email", "Email", "email"])),
       organizationName: readString(firstValue(flat, ["Name of Organization", "q15_nameOf", "organizationName", "districtOrganizationName", "districtOrOrganizationName", "organization", "districtName", "DistrictName"])),
+      landingPageUrl: firstUrlFromText(firstValue(flat, ["landingPageUrl", "landing_page_url", "Get Page URL", "lead_source", "q25_leadSource", "q59_typeA59"])),
       participantCount: readParticipantCount(firstValue(flat, ["participantCount", "q20_howMany", "numberOfParticipants", "participantsCount"])),
       parsedParticipantCount: 0,
       participantParseErrors: [error instanceof Error ? error.message : "Unable to normalize Jotform payload"],

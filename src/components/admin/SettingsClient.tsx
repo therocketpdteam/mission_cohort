@@ -85,6 +85,11 @@ type JotformTargetField = {
   label: string;
   category: string;
 };
+type LandingPageRoute = {
+  pattern: string;
+  cohortId: string;
+  label?: string;
+};
 
 const roleOptions = ["SUPER_ADMIN", "ADMIN", "OPERATIONS", "SALES", "PRESENTER", "VIEWER"].map((value) => ({
   label: value.replace(/_/g, " "),
@@ -174,12 +179,67 @@ function fieldOptionByKey(fieldOptions: JotformFieldOption[], key: string) {
 
 function cleanFieldMap(fieldMap: AdminRow) {
   return Object.entries(fieldMap).reduce<Record<string, string>>((acc, [target, source]) => {
+    if (target.startsWith("__")) {
+      return acc;
+    }
+
     if (typeof source === "string" && source.trim()) {
       acc[target] = source;
     }
 
     return acc;
   }, {});
+}
+
+function cleanLandingPageRoutes(routes: LandingPageRoute[]) {
+  return routes
+    .map((route) => ({
+      pattern: route.pattern.trim(),
+      cohortId: route.cohortId.trim(),
+      label: route.label?.trim() || undefined
+    }))
+    .filter((route) => route.pattern && route.cohortId);
+}
+
+function readLandingPageRoutes(value: unknown): LandingPageRoute[] {
+  let parsedValue = value;
+
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    const encoded = (value as AdminRow).__landingPageRoutes;
+
+    if (typeof encoded === "string" && encoded.trim()) {
+      try {
+        parsedValue = JSON.parse(encoded);
+      } catch {
+        parsedValue = [];
+      }
+    }
+  }
+
+  return Array.isArray(parsedValue)
+    ? parsedValue
+      .map((route) => {
+        const row = route && typeof route === "object" && !Array.isArray(route) ? route as AdminRow : {};
+        return {
+          pattern: typeof row.pattern === "string" ? row.pattern : "",
+          cohortId: typeof row.cohortId === "string" ? row.cohortId : "",
+          label: typeof row.label === "string" ? row.label : ""
+        };
+      })
+      .filter((route) => route.pattern || route.cohortId)
+    : [];
+}
+
+function fieldMapWithLandingPageRoutes(fieldMap: AdminRow, routes: LandingPageRoute[]) {
+  const clean = cleanFieldMap(fieldMap);
+  const cleanRoutes = cleanLandingPageRoutes(routes);
+  delete clean.__landingPageRoutes;
+
+  if (cleanRoutes.length > 0) {
+    clean.__landingPageRoutes = JSON.stringify(cleanRoutes);
+  }
+
+  return clean;
 }
 
 function fieldSample(fieldOptions: JotformFieldOption[], key: string) {
@@ -218,8 +278,9 @@ function JotformMappingWizard({
     }, {});
   }, [targetFields]);
   const [sessionCount, setSessionCount] = useState(5);
-  const [routingMode, setRoutingMode] = useState<"default" | "slug">("slug");
+  const [routingMode, setRoutingMode] = useState<"default" | "slug" | "url">("slug");
   const [defaultCohortId, setDefaultCohortId] = useState("");
+  const [landingPageRoutes, setLandingPageRoutes] = useState<LandingPageRoute[]>([]);
   const [label, setLabel] = useState("");
   const [fieldMap, setFieldMap] = useState<AdminRow>({});
   const [activeStep, setActiveStep] = useState(0);
@@ -229,10 +290,13 @@ function JotformMappingWizard({
   useEffect(() => {
     if (event) {
       const detectedCount = Number(existingMapping?.sessionCount ?? 5);
+      const existingRoutes = readLandingPageRoutes(existingMapping?.fieldMapJson);
+      const suggestedLandingPageRoute = preview.landingPageUrl ? [{ pattern: preview.landingPageUrl, cohortId: "", label: "Detected landing page" }] : [];
       const useSlug = Boolean(existingMapping?.requireCohortSlug ?? preview.cohortSlug);
       setSessionCount(detectedCount);
-      setRoutingMode(useSlug ? "slug" : "default");
+      setRoutingMode(existingRoutes.length ? "url" : useSlug ? "slug" : preview.landingPageUrl ? "url" : "default");
       setDefaultCohortId(existingMapping?.defaultCohortId ?? "");
+      setLandingPageRoutes(existingRoutes.length ? existingRoutes : suggestedLandingPageRoute);
       setLabel(existingMapping?.label ?? `Jotform ${preview.formId || "form"} intake`);
       setFieldMap(existingMapping?.fieldMapJson ?? preview.suggestedFieldMap ?? {});
       setActiveStep(0);
@@ -242,6 +306,10 @@ function JotformMappingWizard({
 
   function updateFieldMap(target: string, sourceKey: string) {
     setFieldMap((current) => ({ ...current, [target]: sourceKey }));
+  }
+
+  function updateLandingPageRoute(index: number, field: keyof LandingPageRoute, value: string) {
+    setLandingPageRoutes((current) => current.map((route, routeIndex) => routeIndex === index ? { ...route, [field]: value } : route));
   }
 
   async function save({ replayAfterSave = false } = {}) {
@@ -261,6 +329,11 @@ function JotformMappingWizard({
       return;
     }
 
+    if (routingMode === "url" && cleanLandingPageRoutes(landingPageRoutes).length === 0) {
+      setError("Add at least one landing page URL pattern and choose the cohort it should route to.");
+      return;
+    }
+
     setSaving(true);
     setError(null);
     try {
@@ -273,7 +346,7 @@ function JotformMappingWizard({
           sessionCount,
           defaultCohortId: routingMode === "default" ? defaultCohortId : "",
           requireCohortSlug: routingMode === "slug",
-          fieldMapJson: cleanFieldMap(fieldMap),
+          fieldMapJson: routingMode === "url" ? fieldMapWithLandingPageRoutes(fieldMap, landingPageRoutes) : cleanFieldMap(fieldMap),
           active: true
         }
       });
@@ -374,11 +447,85 @@ function JotformMappingWizard({
                   </TextField>
                 </Grid>
                 <Grid size={{ xs: 12, md: 3 }}>
-                  <TextField select fullWidth label="Routing mode" value={routingMode} onChange={(event) => setRoutingMode(event.target.value as "default" | "slug")}>
+                  <TextField select fullWidth label="Routing mode" value={routingMode} onChange={(event) => setRoutingMode(event.target.value as "default" | "slug" | "url")}>
+                    <MenuItem value="url">Route by landing page URL</MenuItem>
                     <MenuItem value="default">Use one default cohort</MenuItem>
                     <MenuItem value="slug">Require cohortSlug from Jotform URL</MenuItem>
                   </TextField>
                 </Grid>
+                {routingMode === "url" && (
+                  <Grid size={{ xs: 12 }}>
+                    <Paper variant="outlined" sx={{ p: 1.5 }}>
+                      <Stack direction={{ xs: "column", sm: "row" }} spacing={1} justifyContent="space-between" alignItems={{ xs: "flex-start", sm: "center" }} sx={{ mb: 1.5 }}>
+                        <Box>
+                          <Typography variant="h4">Landing page routing</Typography>
+                          <Typography color="text.secondary" variant="body2">
+                            Use this for shared Jotforms. Mission Control checks the submitted page URL and routes to the matching cohort.
+                          </Typography>
+                        </Box>
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          startIcon={<AddIcon />}
+                          onClick={() => setLandingPageRoutes((current) => [...current, { pattern: preview.landingPageUrl || "", cohortId: "", label: "" }])}
+                        >
+                          Add URL Rule
+                        </Button>
+                      </Stack>
+                      <Stack spacing={1.25}>
+                        {landingPageRoutes.map((route, index) => (
+                          <Grid container spacing={1} alignItems="center" key={`${route.pattern}-${index}`}>
+                            <Grid size={{ xs: 12, md: 5 }}>
+                              <TextField
+                                fullWidth
+                                size="small"
+                                label="URL pattern"
+                                value={route.pattern}
+                                placeholder="rocketpd.com/cohorts/building-thinking-classrooms"
+                                onChange={(event) => updateLandingPageRoute(index, "pattern", event.target.value)}
+                              />
+                            </Grid>
+                            <Grid size={{ xs: 12, md: 4 }}>
+                              <TextField
+                                select
+                                fullWidth
+                                size="small"
+                                label="Route to cohort"
+                                value={route.cohortId}
+                                onChange={(event) => updateLandingPageRoute(index, "cohortId", event.target.value)}
+                              >
+                                {cohorts.map((cohort) => <MenuItem value={cohort.id} key={cohort.id}>{cohort.title}</MenuItem>)}
+                              </TextField>
+                            </Grid>
+                            <Grid size={{ xs: 12, md: 2 }}>
+                              <TextField
+                                fullWidth
+                                size="small"
+                                label="Label"
+                                value={route.label ?? ""}
+                                placeholder="Peter fall page"
+                                onChange={(event) => updateLandingPageRoute(index, "label", event.target.value)}
+                              />
+                            </Grid>
+                            <Grid size={{ xs: 12, md: 1 }}>
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                color="warning"
+                                onClick={() => setLandingPageRoutes((current) => current.filter((_route, routeIndex) => routeIndex !== index))}
+                              >
+                                Remove
+                              </Button>
+                            </Grid>
+                          </Grid>
+                        ))}
+                        {landingPageRoutes.length === 0 && (
+                          <EmptyState title="No URL rules yet" description="Add one URL pattern for each cohort page that shares this Jotform." />
+                        )}
+                      </Stack>
+                    </Paper>
+                  </Grid>
+                )}
                 {routingMode === "default" && (
                   <Grid size={{ xs: 12 }}>
                     <TextField select fullWidth label="Default cohort" value={defaultCohortId} onChange={(event) => setDefaultCohortId(event.target.value)}>
@@ -519,7 +666,24 @@ function JotformMappingWizard({
                 <Grid container spacing={1.5}>
                   <Grid size={{ xs: 12, md: 4 }}><InfoTile label="Mapping" value={label} /></Grid>
                   <Grid size={{ xs: 12, md: 4 }}><InfoTile label="Session count" value={`${sessionCount} sessions`} /></Grid>
-                  <Grid size={{ xs: 12, md: 4 }}><InfoTile label="Routing" value={routingMode === "slug" ? "Requires cohortSlug" : "Default cohort"} /></Grid>
+                  <Grid size={{ xs: 12, md: 4 }}><InfoTile label="Routing" value={routingMode === "url" ? "Landing page URL rules" : routingMode === "slug" ? "Requires cohortSlug" : "Default cohort"} /></Grid>
+                  {routingMode === "url" && (
+                    <Grid size={{ xs: 12 }}>
+                      <Paper variant="outlined" sx={{ p: 1.5 }}>
+                        <Typography variant="h4" sx={{ mb: 1 }}>URL rules that will be saved</Typography>
+                        <Grid container spacing={1}>
+                          {cleanLandingPageRoutes(landingPageRoutes).map((route) => (
+                            <Grid size={{ xs: 12, md: 6 }} key={`${route.pattern}-${route.cohortId}`}>
+                              <FieldValuePill
+                                label={route.label || "Landing page"}
+                                value={`${route.pattern} -> ${cohorts.find((cohort) => cohort.id === route.cohortId)?.title ?? "Selected cohort"}`}
+                              />
+                            </Grid>
+                          ))}
+                        </Grid>
+                      </Paper>
+                    </Grid>
+                  )}
                 </Grid>
               </Stack>
             )}
@@ -808,7 +972,21 @@ export function SettingsClient() {
     { field: "label", headerName: "Label", flex: 1, minWidth: 180 },
     { field: "formId", headerName: "Form ID", width: 150 },
     { field: "sessionCount", headerName: "Sessions", width: 100 },
-    { field: "defaultCohort", headerName: "Default cohort", flex: 1, minWidth: 220, valueGetter: (_value, row) => row.defaultCohort?.title ?? "Requires cohortSlug" },
+    {
+      field: "defaultCohort",
+      headerName: "Routing",
+      flex: 1,
+      minWidth: 220,
+      valueGetter: (_value, row) => {
+        const routeCount = readLandingPageRoutes(row.fieldMapJson).length;
+
+        if (routeCount > 0) {
+          return `${routeCount} landing page URL rule${routeCount === 1 ? "" : "s"}`;
+        }
+
+        return row.defaultCohort?.title ?? "Requires cohortSlug";
+      }
+    },
     { field: "active", headerName: "Active", width: 110, renderCell: (params) => <StatusChip value={params.value} /> },
     {
       field: "actions",
