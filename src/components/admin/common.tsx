@@ -25,7 +25,7 @@ export type AdminRow = Record<string, any>;
 export type FieldConfig = {
   name: string;
   label: string;
-  type?: "text" | "number" | "date" | "datetime-local" | "email" | "password" | "textarea" | "select" | "checkbox";
+  type?: "text" | "number" | "date" | "datetime-local" | "email" | "password" | "textarea" | "select" | "checkbox" | "image";
   options?: Array<{ label: string; value: string }>;
   required?: boolean;
 };
@@ -505,6 +505,16 @@ export function MutationDialog({
     setValues((current) => ({ ...current, [name]: value }));
   }
 
+  function uploadImage(name: string, file?: File) {
+    if (!file) {
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => setValue(name, reader.result);
+    reader.readAsDataURL(file);
+  }
+
   async function submit(event?: FormEvent) {
     event?.preventDefault();
     const missing = fields.find((field) => field.required && !values[field.name]);
@@ -542,13 +552,31 @@ export function MutationDialog({
           {submitError && <Alert severity="error">{submitError}</Alert>}
           <div className="ui-grid" style={{ gap: 14, marginTop: 12 }}>
             {fields.map((field) => (
-              <div key={field.name} style={{ gridColumn: field.type === "textarea" ? "1 / -1" : undefined }}>
+              <div key={field.name} style={{ gridColumn: field.type === "textarea" || field.type === "image" ? "1 / -1" : undefined }}>
                 {field.type === "select" ? (
                   <TextField select fullWidth label={field.label} required={field.required} value={values[field.name] ?? ""} onChange={(event) => setValue(field.name, event.currentTarget.value)}>
                     {(field.options ?? []).map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
                   </TextField>
                 ) : field.type === "checkbox" ? (
                   <FormControlLabel control={<Switch checked={Boolean(values[field.name])} onChange={(event) => setValue(field.name, event.target.checked)} />} label={field.label} />
+                ) : field.type === "image" ? (
+                  <div className="image-field">
+                    <div className="image-field-preview">
+                      {values[field.name] ? <img src={String(values[field.name])} alt="" /> : <span>No thumbnail</span>}
+                    </div>
+                    <div className="image-field-controls">
+                      <TextField
+                        fullWidth
+                        label={field.label}
+                        value={values[field.name] ?? ""}
+                        onChange={(event) => setValue(field.name, event.currentTarget.value)}
+                      />
+                      <label className="ui-button ui-button-outlined">
+                        <span>Upload image</span>
+                        <input type="file" accept="image/*" onChange={(event) => uploadImage(field.name, event.currentTarget.files?.[0])} hidden />
+                      </label>
+                    </div>
+                  </div>
                 ) : (
                   <TextField
                     fullWidth

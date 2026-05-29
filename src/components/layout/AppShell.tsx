@@ -10,7 +10,9 @@ import {
   InsightsOutlined,
   LogoutOutlined,
   MenuIcon,
-  SettingsOutlined
+  MoonOutlined,
+  SettingsOutlined,
+  SunOutlined
 } from "@/components/ui/icons";
 import { Button, IconButton } from "@/components/ui/primitives";
 import type { Route } from "next";
@@ -49,6 +51,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [density, setDensity] = useState<"standard" | "compact">("standard");
+  const [themeMode, setThemeMode] = useState<"normal" | "night">("normal");
   const [user, setUser] = useState<{ firstName?: string; lastName?: string; email?: string; role?: string } | null>(null);
   const title = titleFromPath(pathname);
   const crumbs = useMemo(() => breadcrumbsFor(pathname), [pathname]);
@@ -60,6 +64,27 @@ export function AppShell({ children }: { children: ReactNode }) {
       .then(setUser)
       .catch(() => setUser(null));
   }, [pathname]);
+
+  useEffect(() => {
+    const storedDensity = window.localStorage.getItem("mission-dashboard-density");
+    const storedTheme = window.localStorage.getItem("mission-dashboard-theme");
+
+    if (storedDensity === "compact" || storedDensity === "standard") {
+      setDensity(storedDensity);
+    }
+
+    if (storedTheme === "night" || storedTheme === "normal") {
+      setThemeMode(storedTheme);
+    }
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem("mission-dashboard-density", density);
+  }, [density]);
+
+  useEffect(() => {
+    window.localStorage.setItem("mission-dashboard-theme", themeMode);
+  }, [themeMode]);
 
   async function logout() {
     await adminApi("/api/auth/logout", { method: "POST" }).catch(() => undefined);
@@ -74,7 +99,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell is-${density} is-${themeMode}`}>
       <aside className={`app-sidebar ${mobileOpen ? "is-open" : ""}`}>
         <div className="app-brand">
           <p className="app-brand-title">RocketPD</p>
@@ -106,6 +131,22 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <span key={`${crumb}-${index}`}>{index > 0 ? `/ ${crumb}` : crumb}</span>
               ))}
             </div>
+          </div>
+          <div className="app-view-controls" aria-label="View controls">
+            <div className="app-density-toggle" aria-label="Density">
+              <button type="button" className={density === "standard" ? "is-active" : ""} onClick={() => setDensity("standard")}>
+                Standard
+              </button>
+              <button type="button" className={density === "compact" ? "is-active" : ""} onClick={() => setDensity("compact")}>
+                Compact
+              </button>
+            </div>
+            <IconButton size="small" className={themeMode === "normal" ? "is-active" : ""} onClick={() => setThemeMode("normal")} aria-label="Normal mode">
+              <SunOutlined />
+            </IconButton>
+            <IconButton size="small" className={themeMode === "night" ? "is-active" : ""} onClick={() => setThemeMode("night")} aria-label="Night mode">
+              <MoonOutlined />
+            </IconButton>
           </div>
           <div className="user-menu">
             <Button type="button" variant="outlined" startIcon={<AccountCircle />} onClick={() => setMenuOpen((current) => !current)}>

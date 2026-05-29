@@ -25,7 +25,13 @@ const cohortBaseSchema = z.object({
   minParticipants: nonNegativeIntInput.optional(),
   pricePerParticipant: moneyInput.default(0),
   cohortType: z.nativeEnum(CohortType).default(CohortType.LIVE_VIRTUAL),
-  thumbnailUrl: z.string().url().optional(),
+  thumbnailUrl: z.string().trim().optional().or(z.literal("").transform(() => undefined)).refine((value) => {
+    if (!value) {
+      return true;
+    }
+
+    return value.startsWith("data:image/") || z.string().url().safeParse(value).success;
+  }, "Thumbnail must be an image upload or a valid URL"),
   publicRegistrationEnabled: z.boolean().default(false)
 });
 

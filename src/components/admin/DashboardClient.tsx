@@ -9,9 +9,7 @@ import {
   EmailOutlined,
   GroupsOutlined,
   InsightsOutlined,
-  MoonOutlined,
-  SendOutlined,
-  SunOutlined
+  SendOutlined
 } from "@/components/ui/icons";
 import {
   Button,
@@ -20,8 +18,7 @@ import {
   DialogContent,
   DialogTitle,
   Divider,
-  Grid,
-  IconButton
+  Grid
 } from "@/components/ui/primitives";
 import Link from "next/link";
 import type { Route } from "next";
@@ -65,9 +62,6 @@ const quickActions: ReadonlyArray<[string, Route]> = [
   ["Add Registration", "/registrations"],
   ["Create Email Template", "/communications"]
 ];
-
-type DashboardDensity = "standard" | "compact";
-type DashboardTheme = "normal" | "night";
 
 type DashboardSelectOption = {
   value: string;
@@ -205,17 +199,7 @@ function DashboardPanel({
   );
 }
 
-function DashboardToolbar({
-  density,
-  theme,
-  onDensityChange,
-  onThemeChange
-}: {
-  density: DashboardDensity;
-  theme: DashboardTheme;
-  onDensityChange: (value: DashboardDensity) => void;
-  onThemeChange: (value: DashboardTheme) => void;
-}) {
+function DashboardToolbar() {
   return (
     <div className="dashboard-toolbar">
       <div className="dashboard-toolbar-actions">
@@ -224,24 +208,6 @@ function DashboardToolbar({
             {label}
           </Button>
         ))}
-      </div>
-      <div className="dashboard-toolbar-controls">
-        <div className="dashboard-segmented" aria-label="Dashboard density">
-          <button type="button" className={density === "standard" ? "is-active" : ""} onClick={() => onDensityChange("standard")}>
-            Standard
-          </button>
-          <button type="button" className={density === "compact" ? "is-active" : ""} onClick={() => onDensityChange("compact")}>
-            Compact
-          </button>
-        </div>
-        <div className="dashboard-icon-toggle" aria-label="Dashboard theme">
-          <IconButton size="small" className={theme === "normal" ? "is-active" : ""} onClick={() => onThemeChange("normal")} aria-label="Normal mode">
-            <SunOutlined />
-          </IconButton>
-          <IconButton size="small" className={theme === "night" ? "is-active" : ""} onClick={() => onThemeChange("night")} aria-label="Night mode">
-            <MoonOutlined />
-          </IconButton>
-        </div>
       </div>
     </div>
   );
@@ -361,23 +327,10 @@ export function DashboardClient() {
   const [recentRegistration, setRecentRegistration] = useState<AdminRow | null>(null);
   const [paymentFilter, setPaymentFilter] = useState("ALL");
   const [paymentCohortFilter, setPaymentCohortFilter] = useState("ALL");
-  const [density, setDensity] = useState<DashboardDensity>("standard");
-  const [theme, setTheme] = useState<DashboardTheme>("normal");
   const [sendingTaskId, setSendingTaskId] = useState("");
   const { notifySuccess, notifyError, snackbar } = useNotifier();
 
   useEffect(() => {
-    const storedDensity = window.localStorage.getItem("mission-dashboard-density");
-    const storedTheme = window.localStorage.getItem("mission-dashboard-theme");
-
-    if (storedDensity === "compact" || storedDensity === "standard") {
-      setDensity(storedDensity);
-    }
-
-    if (storedTheme === "night" || storedTheme === "normal") {
-      setTheme(storedTheme);
-    }
-
     Promise.all([
       adminApi<AdminRow>("/api/admin-dashboard"),
       adminApi<AdminRow[]>("/api/communications/templates")
@@ -389,14 +342,6 @@ export function DashboardClient() {
       .catch((error) => notifyError(error.message))
       .finally(() => setLoading(false));
   }, [notifyError]);
-
-  useEffect(() => {
-    window.localStorage.setItem("mission-dashboard-density", density);
-  }, [density]);
-
-  useEffect(() => {
-    window.localStorage.setItem("mission-dashboard-theme", theme);
-  }, [theme]);
 
   const readinessRows = useMemo(() => {
     const taskRows = (data?.openOperationsTasks ?? []).filter((task: AdminRow) => task.category !== "CALENDAR_INVITE");
@@ -517,8 +462,8 @@ export function DashboardClient() {
   }
 
   return (
-    <PageStack className={`dashboard-page is-${density} is-${theme}`}>
-      <DashboardToolbar density={density} theme={theme} onDensityChange={setDensity} onThemeChange={setTheme} />
+    <PageStack className="dashboard-page">
+      <DashboardToolbar />
       <DashboardHero data={data} readinessCount={readinessRows.length} />
       <MetricGrid data={data} />
       {loading && <LoadingState label="Loading dashboard" />}

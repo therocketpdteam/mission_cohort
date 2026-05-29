@@ -55,6 +55,7 @@ const editFields = (presenters: AdminRow[]): FieldConfig[] => [
   { name: "title", label: "Cohort title", required: true },
   { name: "shortName", label: "Short name" },
   { name: "slug", label: "Slug", required: true },
+  { name: "thumbnailUrl", label: "Cohort thumbnail", type: "image" },
   {
     name: "presenterId",
     label: "Presenter",
@@ -103,6 +104,16 @@ function formatDate(value?: string) {
   return value ? new Date(value).toLocaleDateString() : "";
 }
 
+function readThumbnail(file?: File, onLoad?: (value: string) => void) {
+  if (!file || !onLoad) {
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = () => onLoad(String(reader.result ?? ""));
+  reader.readAsDataURL(file);
+}
+
 function CreateCohortWizard({
   open,
   presenters,
@@ -120,6 +131,7 @@ function CreateCohortWizard({
   const [title, setTitle] = useState("");
   const [shortName, setShortName] = useState("");
   const [slug, setSlug] = useState("");
+  const [thumbnailUrl, setThumbnailUrl] = useState("");
   const [slugTouched, setSlugTouched] = useState(false);
   const [status, setStatus] = useState("DRAFT");
   const [presenter, setPresenter] = useState<AdminRow | null>(null);
@@ -147,6 +159,7 @@ function CreateCohortWizard({
       setTitle("");
       setShortName("");
       setSlug("");
+      setThumbnailUrl("");
       setSlugTouched(false);
       setStatus("DRAFT");
       setPresenter(null);
@@ -308,6 +321,7 @@ function CreateCohortWizard({
           defaultTimezone: firstSession.timezone,
           pricePerParticipant: 0,
           cohortType: "LIVE_VIRTUAL",
+          thumbnailUrl,
           sessions: sessions.map((session, index) => ({
             title: session.title,
             sessionNumber: index + 1,
@@ -355,6 +369,20 @@ function CreateCohortWizard({
                 onChange={(event) => { setSlugTouched(true); setSlug(slugify(event.target.value)); }}
                 required
               />
+            </Grid>
+            <Grid size={{ xs: 12 }}>
+              <div className="image-field">
+                <div className="image-field-preview">
+                  {thumbnailUrl ? <img src={thumbnailUrl} alt="" /> : <span>No thumbnail</span>}
+                </div>
+                <div className="image-field-controls">
+                  <TextField fullWidth label="Cohort thumbnail URL" value={thumbnailUrl} onChange={(event) => setThumbnailUrl(event.target.value)} />
+                  <label className="ui-button ui-button-outlined">
+                    <span>Upload image</span>
+                    <input type="file" accept="image/*" onChange={(event) => readThumbnail(event.currentTarget.files?.[0], setThumbnailUrl)} hidden />
+                  </label>
+                </div>
+              </div>
             </Grid>
             <Grid size={{ xs: 12, md: 6 }}>
               <TextField select fullWidth label="Status" value={status} onChange={(event) => setStatus(event.target.value)}>
@@ -525,10 +553,13 @@ export function CohortsClient() {
       flex: 1.4,
       minWidth: 220,
       renderCell: (params) => (
-        <Stack spacing={0.5} sx={{ minWidth: 0 }}>
-          <Typography fontWeight={900} noWrap>{params.row.title}</Typography>
-          {params.row.shortName && <MetadataPill maxWidth={160}>{params.row.shortName}</MetadataPill>}
-        </Stack>
+        <div className="cohort-cell">
+          {params.row.thumbnailUrl && <img className="cohort-cell-thumb" src={params.row.thumbnailUrl} alt="" />}
+          <Stack spacing={0.5} sx={{ minWidth: 0 }}>
+            <Typography fontWeight={900} noWrap>{params.row.title}</Typography>
+            {params.row.shortName && <MetadataPill maxWidth={160}>{params.row.shortName}</MetadataPill>}
+          </Stack>
+        </div>
       )
     },
     {

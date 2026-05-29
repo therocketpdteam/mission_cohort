@@ -304,6 +304,9 @@ Navigation should feel branded:
 - Active state must be obvious.
 - Sidebar labels and icons must always be readable on navy. Explicitly set child text/icon colors; do not rely on inherited component color alone.
 - The RocketPD/Mission Control brand block should feel intentional and not like placeholder text.
+- Global view controls live in the top bar: Standard/Compact density and normal/night mode. These controls apply across admin pages, not only the dashboard.
+- Night mode must be a complete dark palette: app background, sidebar, top bar, cards, tables, modals, filters, inputs, menus, and row hovers all move dark while preserving readable contrast.
+- Compact mode should reduce spacing and control height by roughly 25-35% without shrinking text into illegibility or breaking row/action hit targets.
 
 ## Text And Formatting
 
@@ -338,9 +341,16 @@ Navigation should feel branded:
 - Use lightweight inline charts for snapshots when they help scanning; donut charts are preferred for payment status summaries and should show both amount/count and percentage context.
 - Dashboard panel content must never overflow the card. Clamp long titles, truncate long pills with a tooltip where available, and keep row actions/statuses in fixed-width areas.
 - Dashboard panels in the same row should use equal height where practical. Priority and agenda panels should be at least four-row panels with independent vertical scrolling so the page itself stays calm.
-- Quick actions and view controls belong in a sticky dashboard toolbar at the top of the content area. The toolbar should expose Standard/Compact density controls and normal/night mode icon toggles.
+- Quick actions belong in a sticky dashboard toolbar at the top of the content area. Standard/Compact density controls and normal/night mode icon toggles belong in the global top bar so every admin page follows the same view state.
 - Use cohort thumbnail imagery as subtle right-side row artwork for cohort, agenda, and registration rows when `thumbnailUrl` is available. The image must fade into the row background and never reduce text contrast.
 - Avoid duplicate operational panels. Do not show a generic audit trail or separate "cohorts needing attention" panel on the dashboard when Cohort readiness already covers the action path.
+
+## Cohort Imagery
+
+- Cohorts should support a thumbnail image because dashboard rows, agenda rows, registration rows, and cohort lists can use that image as lightweight visual identity.
+- The cohort create/edit flow should expose thumbnail URL plus upload/preview behavior where storage supports it.
+- Thumbnail imagery should be decorative in list rows: right-side faded background or compact thumbnail, never required to understand the row.
+- If no thumbnail exists, layouts must remain stable and readable.
 
 ## Source And UTM Display
 
