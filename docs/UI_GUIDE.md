@@ -329,15 +329,18 @@ Navigation should feel branded:
 
 - Dashboard is the command center. It should answer three questions in the first viewport: what is healthy, what needs attention, and what is coming next.
 - Start with a strong operational hero/status band, not a generic page header followed by equal-weight cards. The hero may summarize active cohorts, upcoming sessions, pending payments, and open tasks using existing dashboard data.
-- KPI cards must be compact, stable, and scannable. Use a responsive 4/3/2/1 grid with equal-height tiles; never squeeze seven metric cards into one desktop row.
+- KPI cards must be compact, stable, and scannable. On wide desktop dashboard pages, it is acceptable to keep the full snapshot set in one row when each card remains readable; wrap down to 4/2/1 before the row becomes cramped.
 - Distinguish snapshots from work queues. Snapshot cards show one focused number/chart and a short helper line. Work queues use structured rows with reserved zones for date/icon, content, status, and action.
 - Prioritize cohort readiness/open operations above secondary activity. Group operations tasks by cohort and open details in a modal.
+- Cohort readiness detail modals should show the actual action items with organization, POC, due date/status, and a direct send action when a pre-made communication template exists.
 - Sort cohort readiness by nearest upcoming session before open-task count.
 - Emphasize upcoming session dates and times visually, and render sessions as an agenda by default. Avoid mode toggles unless both modes are equally polished and useful.
-- Use lightweight inline charts for snapshots when they help scanning; donut charts are preferred for payment status summaries.
+- Use lightweight inline charts for snapshots when they help scanning; donut charts are preferred for payment status summaries and should show both amount/count and percentage context.
 - Dashboard panel content must never overflow the card. Clamp long titles, truncate long pills with a tooltip where available, and keep row actions/statuses in fixed-width areas.
-- Dashboard panels in the same row should use equal height where practical, but high-priority panels may intentionally span more width than secondary insight panels.
-- Quick actions belong in the hero/header action area as compact secondary controls; they should not consume a full dashboard row.
+- Dashboard panels in the same row should use equal height where practical. Priority and agenda panels should be at least four-row panels with independent vertical scrolling so the page itself stays calm.
+- Quick actions and view controls belong in a sticky dashboard toolbar at the top of the content area. The toolbar should expose Standard/Compact density controls and normal/night mode icon toggles.
+- Use cohort thumbnail imagery as subtle right-side row artwork for cohort, agenda, and registration rows when `thumbnailUrl` is available. The image must fade into the row background and never reduce text contrast.
+- Avoid duplicate operational panels. Do not show a generic audit trail or separate "cohorts needing attention" panel on the dashboard when Cohort readiness already covers the action path.
 
 ## Source And UTM Display
 

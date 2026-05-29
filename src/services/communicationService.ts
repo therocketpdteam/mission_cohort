@@ -60,6 +60,20 @@ const defaultTemplates: Array<{
     subject: "Payment reminder: {{cohort.title}}",
     bodyHtml: "<p>Hello {{registration.primaryContactName}},</p><p>This is a friendly reminder about payment status for {{cohort.title}}.</p>",
     bodyText: "Hello {{registration.primaryContactName}}, this is a friendly reminder about payment status for {{cohort.title}}."
+  },
+  {
+    type: TemplateType.CUSTOM,
+    name: "Participant List Request",
+    subject: "Participant list needed: {{cohort.title}}",
+    bodyHtml: "<p>Hello {{registration.primaryContactName}},</p><p>We are preparing <strong>{{cohort.title}}</strong> and still need the participant roster for {{organization.name}}.</p><p>Please reply with the participant names and emails when ready.</p>",
+    bodyText: "Hello {{registration.primaryContactName}}, we are preparing {{cohort.title}} and still need the participant roster for {{organization.name}}. Please reply with the participant names and emails when ready."
+  },
+  {
+    type: TemplateType.CUSTOM,
+    name: "Supporting Documents Request",
+    subject: "Supporting documents needed: {{cohort.title}}",
+    bodyHtml: "<p>Hello {{registration.primaryContactName}},</p><p>We are preparing <strong>{{cohort.title}}</strong> and need the remaining supporting documents for {{organization.name}}.</p><p>Please reply with the needed documentation when available.</p>",
+    bodyText: "Hello {{registration.primaryContactName}}, we are preparing {{cohort.title}} and need the remaining supporting documents for {{organization.name}}. Please reply with the needed documentation when available."
   }
 ];
 

@@ -54,7 +54,7 @@ export async function GET() {
       where: { status: { in: [OperationsTaskStatus.OPEN, OperationsTaskStatus.IN_PROGRESS] } },
       orderBy: [{ priority: "desc" }, { dueDate: "asc" }, { createdAt: "desc" }],
       take: 8,
-      include: { cohort: true, registration: true, session: true }
+      include: { cohort: true, registration: { include: { organization: true } }, session: true }
     }),
     prisma.paymentRecord.groupBy({
       by: ["status"],
@@ -67,7 +67,7 @@ export async function GET() {
         cohortId: true,
         status: true,
         amount: true,
-        cohort: { select: { id: true, title: true } }
+        cohort: { select: { id: true, title: true, thumbnailUrl: true } }
       }
     }),
     prisma.auditLog.findMany({

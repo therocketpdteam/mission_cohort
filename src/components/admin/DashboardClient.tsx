@@ -8,7 +8,10 @@ import {
   DashboardOutlined,
   EmailOutlined,
   GroupsOutlined,
-  InsightsOutlined
+  InsightsOutlined,
+  MoonOutlined,
+  SendOutlined,
+  SunOutlined
 } from "@/components/ui/icons";
 import {
   Button,
@@ -18,15 +21,14 @@ import {
   DialogTitle,
   Divider,
   Grid,
-  MenuItem,
-  TextField
+  IconButton
 } from "@/components/ui/primitives";
 import Link from "next/link";
 import type { Route } from "next";
-import type { ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import type { CSSProperties, ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
-import { formatHumanLabel, formatProperDisplay, formatStatusLabel } from "@/lib/formatting";
+import { formatProperDisplay, formatStatusLabel } from "@/lib/formatting";
 import {
   AdminRow,
   DateBadge,
@@ -64,6 +66,40 @@ const quickActions: ReadonlyArray<[string, Route]> = [
   ["Create Email Template", "/communications"]
 ];
 
+type DashboardDensity = "standard" | "compact";
+type DashboardTheme = "normal" | "night";
+
+type DashboardSelectOption = {
+  value: string;
+  label: string;
+};
+
+function cohortThumbnail(row?: AdminRow | null) {
+  return row?.thumbnailUrl ?? row?.cohort?.thumbnailUrl ?? undefined;
+}
+
+function rowArtworkStyle(url?: string): CSSProperties | undefined {
+  if (!url) {
+    return undefined;
+  }
+
+  return {
+    backgroundImage: `linear-gradient(270deg, var(--dashboard-art-fade-strong), var(--dashboard-art-fade-soft)), url(${url})`
+  };
+}
+
+function taskTemplateName(task: AdminRow) {
+  if (task.category === "PAYMENT_FOLLOW_UP") {
+    return "Payment Reminder";
+  }
+
+  if (task.category === "SUPPORTING_DOCUMENTS") {
+    return "Supporting Documents Request";
+  }
+
+  return "Participant List Request";
+}
+
 function shortDate(value?: string) {
   if (!value) {
     return "-";
@@ -80,13 +116,68 @@ function timeText(value?: string) {
   return new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" }).format(new Date(value));
 }
 
+function DashboardSelect({
+  label,
+  value,
+  options,
+  onChange
+}: {
+  label: string;
+  value: string;
+  options: DashboardSelectOption[];
+  onChange: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const selected = options.find((option) => option.value === value) ?? options[0];
+
+  useEffect(() => {
+    function close(event: MouseEvent) {
+      if (!ref.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, []);
+
+  return (
+    <div className="dashboard-select" ref={ref}>
+      <span className="dashboard-select-label">{label}</span>
+      <button type="button" className="dashboard-select-trigger" onClick={() => setOpen((current) => !current)} aria-expanded={open}>
+        <span>{selected?.label ?? "Select"}</span>
+        <span aria-hidden="true">⌄</span>
+      </button>
+      {open && (
+        <div className="dashboard-select-menu">
+          {options.map((option) => (
+            <button
+              type="button"
+              className={`dashboard-select-option ${option.value === value ? "is-selected" : ""}`}
+              key={option.value}
+              onClick={() => {
+                onChange(option.value);
+                setOpen(false);
+              }}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function DashboardPanel({
   title,
   eyebrow,
   href,
   actionLabel,
   children,
-  className = ""
+  className = "",
+  scroll = false
 }: {
   title: string;
   eyebrow?: string;
@@ -94,6 +185,7 @@ function DashboardPanel({
   actionLabel?: string;
   children: ReactNode;
   className?: string;
+  scroll?: boolean;
 }) {
   return (
     <section className={`dashboard-panel ${className}`}>
@@ -108,8 +200,50 @@ function DashboardPanel({
           </Button>
         )}
       </div>
-      <div className="dashboard-panel-body">{children}</div>
+      <div className={`dashboard-panel-body ${scroll ? "dashboard-panel-body-scroll" : ""}`}>{children}</div>
     </section>
+  );
+}
+
+function DashboardToolbar({
+  density,
+  theme,
+  onDensityChange,
+  onThemeChange
+}: {
+  density: DashboardDensity;
+  theme: DashboardTheme;
+  onDensityChange: (value: DashboardDensity) => void;
+  onThemeChange: (value: DashboardTheme) => void;
+}) {
+  return (
+    <div className="dashboard-toolbar">
+      <div className="dashboard-toolbar-actions">
+        {quickActions.map(([label, href]) => (
+          <Button component={Link} href={href} startIcon={<AddIcon />} variant={label === "Create Cohort" ? "contained" : "outlined"} key={label}>
+            {label}
+          </Button>
+        ))}
+      </div>
+      <div className="dashboard-toolbar-controls">
+        <div className="dashboard-segmented" aria-label="Dashboard density">
+          <button type="button" className={density === "standard" ? "is-active" : ""} onClick={() => onDensityChange("standard")}>
+            Standard
+          </button>
+          <button type="button" className={density === "compact" ? "is-active" : ""} onClick={() => onDensityChange("compact")}>
+            Compact
+          </button>
+        </div>
+        <div className="dashboard-icon-toggle" aria-label="Dashboard theme">
+          <IconButton size="small" className={theme === "normal" ? "is-active" : ""} onClick={() => onThemeChange("normal")} aria-label="Normal mode">
+            <SunOutlined />
+          </IconButton>
+          <IconButton size="small" className={theme === "night" ? "is-active" : ""} onClick={() => onThemeChange("night")} aria-label="Night mode">
+            <MoonOutlined />
+          </IconButton>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -134,13 +268,6 @@ function DashboardHero({
         <p>
           {activeCohorts} active cohort{activeCohorts === 1 ? "" : "s"}, {upcomingSessions} upcoming session{upcomingSessions === 1 ? "" : "s"}, {pendingPayments} payment item{pendingPayments === 1 ? "" : "s"} to watch, and {openTasks} open operation{openTasks === 1 ? "" : "s"}.
         </p>
-        <div className="dashboard-hero-actions">
-          {quickActions.map(([label, href]) => (
-            <Button component={Link} href={href} startIcon={<AddIcon />} variant={label === "Create Cohort" ? "contained" : "outlined"} key={label}>
-              {label}
-            </Button>
-          ))}
-        </div>
       </div>
       <div className="dashboard-hero-status">
         <span className={`dashboard-status-orb ${needsAttention ? "is-warning" : "is-success"}`} />
@@ -177,10 +304,11 @@ function PriorityPanel({
   onOpen: (row: AdminRow) => void;
 }) {
   return (
-    <DashboardPanel title="Priority Work" eyebrow="Cohort readiness" href="/cohorts" actionLabel="View cohorts" className="dashboard-panel-priority">
+    <DashboardPanel title="Priority Work" eyebrow="Cohort readiness" href="/cohorts" actionLabel="View cohorts" className="dashboard-panel-priority dashboard-panel-command" scroll>
       <div className="dashboard-priority-list">
         {rows.map((row) => (
           <div className="dashboard-priority-row" key={row.cohort.id}>
+            <span className="dashboard-row-art" style={rowArtworkStyle(cohortThumbnail(row.cohort))} aria-hidden="true" />
             <DateBadge value={row.nextSession?.startTime} />
             <div className="dashboard-row-main">
               <strong title={row.cohort.title}>{row.cohort.title}</strong>
@@ -204,10 +332,11 @@ function PriorityPanel({
 
 function TodayPanel({ loading, sessions }: { loading: boolean; sessions: AdminRow[] }) {
   return (
-    <DashboardPanel title="Upcoming Sessions" eyebrow="Agenda" href="/cohorts" actionLabel="View cohorts">
+    <DashboardPanel title="Upcoming Sessions" eyebrow="Agenda" href="/cohorts" actionLabel="View cohorts" className="dashboard-panel-command" scroll>
       <div className="dashboard-agenda-list">
         {sessions.slice(0, 6).map((session) => (
           <div className="dashboard-agenda-row" key={session.id}>
+            <span className="dashboard-row-art" style={rowArtworkStyle(cohortThumbnail(session))} aria-hidden="true" />
             <div className="dashboard-agenda-date">
               <strong>{shortDate(session.startTime)}</strong>
               <span>{timeText(session.startTime)}</span>
@@ -226,19 +355,48 @@ function TodayPanel({ loading, sessions }: { loading: boolean; sessions: AdminRo
 
 export function DashboardClient() {
   const [data, setData] = useState<AdminRow | null>(null);
+  const [templates, setTemplates] = useState<AdminRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [readinessCohort, setReadinessCohort] = useState<AdminRow | null>(null);
   const [recentRegistration, setRecentRegistration] = useState<AdminRow | null>(null);
   const [paymentFilter, setPaymentFilter] = useState("ALL");
   const [paymentCohortFilter, setPaymentCohortFilter] = useState("ALL");
-  const { notifyError, snackbar } = useNotifier();
+  const [density, setDensity] = useState<DashboardDensity>("standard");
+  const [theme, setTheme] = useState<DashboardTheme>("normal");
+  const [sendingTaskId, setSendingTaskId] = useState("");
+  const { notifySuccess, notifyError, snackbar } = useNotifier();
 
   useEffect(() => {
-    adminApi<AdminRow>("/api/admin-dashboard")
-      .then(setData)
+    const storedDensity = window.localStorage.getItem("mission-dashboard-density");
+    const storedTheme = window.localStorage.getItem("mission-dashboard-theme");
+
+    if (storedDensity === "compact" || storedDensity === "standard") {
+      setDensity(storedDensity);
+    }
+
+    if (storedTheme === "night" || storedTheme === "normal") {
+      setTheme(storedTheme);
+    }
+
+    Promise.all([
+      adminApi<AdminRow>("/api/admin-dashboard"),
+      adminApi<AdminRow[]>("/api/communications/templates")
+    ])
+      .then(([dashboardData, templateRows]) => {
+        setData(dashboardData);
+        setTemplates(templateRows.filter((template) => template.active !== false));
+      })
       .catch((error) => notifyError(error.message))
       .finally(() => setLoading(false));
   }, [notifyError]);
+
+  useEffect(() => {
+    window.localStorage.setItem("mission-dashboard-density", density);
+  }, [density]);
+
+  useEffect(() => {
+    window.localStorage.setItem("mission-dashboard-theme", theme);
+  }, [theme]);
 
   const readinessRows = useMemo(() => {
     const taskRows = (data?.openOperationsTasks ?? []).filter((task: AdminRow) => task.category !== "CALENDAR_INVITE");
@@ -285,6 +443,20 @@ export function DashboardClient() {
     () => Array.from(new Map((data?.paymentRecordsSnapshot ?? []).map((payment: AdminRow) => [payment.cohortId, payment.cohort?.title ?? "Cohort"])).entries()),
     [data]
   );
+  const paymentCohortOptions = useMemo<DashboardSelectOption[]>(
+    () => [
+      { value: "ALL", label: "All cohorts" },
+      ...paymentCohorts.map(([id, title]) => ({ value: String(id), label: String(title) }))
+    ],
+    [paymentCohorts]
+  );
+  const paymentStatusOptions = useMemo<DashboardSelectOption[]>(
+    () => [
+      { value: "ALL", label: "All statuses" },
+      ...(data?.paymentStatusSnapshot ?? []).map((payment: AdminRow) => ({ value: String(payment.status), label: formatStatusLabel(payment.status) }))
+    ],
+    [data]
+  );
 
   const paymentChartRows = useMemo(() => {
     const filtered = (data?.paymentRecordsSnapshot ?? []).filter((payment: AdminRow) => {
@@ -313,8 +485,40 @@ export function DashboardClient() {
     }
   }
 
+  async function sendTaskMessage(task: AdminRow) {
+    const registrationId = task.registrationId ?? task.registration?.id;
+
+    if (!registrationId) {
+      notifyError("This action item is not linked to a registration POC.");
+      return;
+    }
+
+    const templateName = taskTemplateName(task);
+    const template = templates.find((item) => item.name === templateName) ?? templates.find((item) => item.type === "FOLLOW_UP");
+
+    if (!template?.id) {
+      notifyError("No active pre-made template is available for this action item.");
+      return;
+    }
+
+    setSendingTaskId(task.id);
+
+    try {
+      await adminApi("/api/communications", {
+        method: "PATCH",
+        body: { action: "sendTemplateToRegistrations", templateId: template.id, registrationIds: [registrationId] }
+      });
+      notifySuccess(`Sent ${template.name} to ${formatProperDisplay(task.registration?.primaryContactName ?? "the POC")}.`);
+    } catch (error) {
+      notifyError((error as Error).message);
+    } finally {
+      setSendingTaskId("");
+    }
+  }
+
   return (
-    <PageStack>
+    <PageStack className={`dashboard-page is-${density} is-${theme}`}>
+      <DashboardToolbar density={density} theme={theme} onDensityChange={setDensity} onThemeChange={setTheme} />
       <DashboardHero data={data} readinessCount={readinessRows.length} />
       <MetricGrid data={data} />
       {loading && <LoadingState label="Loading dashboard" />}
@@ -327,22 +531,17 @@ export function DashboardClient() {
       <section className="dashboard-insights-grid">
         <DashboardPanel title="Payment Snapshot" eyebrow="Revenue watch" href="/registrations" actionLabel="View registrations">
           <div className="dashboard-filter-row">
-            <TextField select label="Cohort" value={paymentCohortFilter} onChange={(event) => setPaymentCohortFilter(event.target.value)}>
-              <MenuItem value="ALL">All cohorts</MenuItem>
-              {paymentCohorts.map(([id, title]) => <MenuItem value={String(id)} key={String(id)}>{String(title)}</MenuItem>)}
-            </TextField>
-            <TextField select label="Status" value={paymentFilter} onChange={(event) => setPaymentFilter(event.target.value)}>
-              <MenuItem value="ALL">All statuses</MenuItem>
-              {(data?.paymentStatusSnapshot ?? []).map((payment: AdminRow) => <MenuItem value={payment.status} key={payment.status}>{formatStatusLabel(payment.status)}</MenuItem>)}
-            </TextField>
+            <DashboardSelect label="Cohort" value={paymentCohortFilter} options={paymentCohortOptions} onChange={setPaymentCohortFilter} />
+            <DashboardSelect label="Status" value={paymentFilter} options={paymentStatusOptions} onChange={setPaymentFilter} />
           </div>
           <DonutChart rows={paymentChartRows} />
         </DashboardPanel>
 
-        <DashboardPanel title="Recent Registrations" eyebrow="New arrivals" href="/registrations" actionLabel="Open list">
+        <DashboardPanel title="Recent Registrations" eyebrow="New arrivals" href="/registrations" actionLabel="Open list" className="dashboard-panel-command" scroll>
           <div className="dashboard-compact-list">
-            {(data?.recentRegistrations ?? []).slice(0, 5).map((registration: AdminRow) => (
+            {(data?.recentRegistrations ?? []).slice(0, 8).map((registration: AdminRow) => (
               <button className="dashboard-compact-row is-clickable" type="button" key={registration.id} onClick={() => openRecentRegistration(registration.id)}>
+                <span className="dashboard-row-art" style={rowArtworkStyle(cohortThumbnail(registration))} aria-hidden="true" />
                 <div className="dashboard-row-main">
                   <strong>{formatProperDisplay(registration.primaryContactName)}</strong>
                   <span>{formatProperDisplay(registration.organization?.name ?? "Organization")} · {registration.cohort?.title ?? "Cohort"}</span>
@@ -352,35 +551,6 @@ export function DashboardClient() {
             ))}
           </div>
           {!loading && (data?.recentRegistrations ?? []).length === 0 && <EmptyState title="No recent registrations" description="New registrations will appear here as they arrive." />}
-        </DashboardPanel>
-
-        <DashboardPanel title="Cohorts Needing Attention" eyebrow="Pipeline" href="/cohorts" actionLabel="View cohorts">
-          <div className="dashboard-compact-list">
-            {(data?.cohortsNeedingAttention ?? []).slice(0, 5).map((cohort: AdminRow) => (
-              <div className="dashboard-compact-row" key={cohort.id}>
-                <div className="dashboard-row-main">
-                  <strong title={cohort.title}>{cohort.title}</strong>
-                  <span>{formatProperDisplay(`${cohort.presenter?.firstName ?? ""} ${cohort.presenter?.lastName ?? ""}`) || "No presenter"} · {cohort._count?.registrations ?? 0} registrations</span>
-                </div>
-                <StatusChip value={cohort.status} />
-              </div>
-            ))}
-          </div>
-          {!loading && (data?.cohortsNeedingAttention ?? []).length === 0 && <EmptyState title="No cohorts need attention" description="Draft and registration-stage cohorts will appear here." />}
-        </DashboardPanel>
-
-        <DashboardPanel title="Recent Activity" eyebrow="Audit trail" href="/settings" actionLabel="View settings">
-          <div className="dashboard-compact-list">
-            {(data?.recentActivity ?? []).slice(0, 5).map((activity: AdminRow) => (
-              <div className="dashboard-activity-row" key={activity.id}>
-                <span className="dashboard-activity-dot" />
-                <div className="dashboard-row-main">
-                  <strong>{formatHumanLabel(activity.entityType)} {formatStatusLabel(activity.action)}</strong>
-                  <span>{activity.description ?? "Activity"} · {new Date(activity.createdAt).toLocaleString()}</span>
-                </div>
-              </div>
-            ))}
-          </div>
         </DashboardPanel>
       </section>
 
@@ -393,14 +563,30 @@ export function DashboardClient() {
             <MetadataPill>{readinessCohort?.nextSession ? `Next ${shortDate(readinessCohort.nextSession.startTime)}` : "No upcoming session"}</MetadataPill>
           </div>
           <Divider />
-          <div className="dashboard-compact-list">
+          <div className="dashboard-task-list">
             {(readinessCohort?.tasks ?? []).map((task: AdminRow) => (
-              <div className="dashboard-compact-row" key={task.id}>
+              <div className="dashboard-task-row" key={task.id}>
                 <div className="dashboard-row-main">
                   <strong>{task.title}</strong>
-                  <span>{formatStatusLabel(task.category)} · {task.dueDate ? new Date(task.dueDate).toLocaleDateString() : "No due date"}</span>
+                  <span>{task.description ?? formatStatusLabel(task.category)}</span>
+                  <div className="dashboard-task-meta">
+                    <MetadataPill>{formatProperDisplay(task.registration?.organization?.name ?? "Organization")}</MetadataPill>
+                    <MetadataPill>{formatProperDisplay(task.registration?.primaryContactName ?? "POC")}</MetadataPill>
+                    <MetadataPill>{task.dueDate ? new Date(task.dueDate).toLocaleDateString() : "No due date"}</MetadataPill>
+                  </div>
                 </div>
-                <StatusChip value={task.status} />
+                <div className="dashboard-task-actions">
+                  <StatusChip value={task.status} />
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    startIcon={<SendOutlined />}
+                    disabled={!(task.registrationId ?? task.registration?.id) || Boolean(sendingTaskId)}
+                    onClick={() => sendTaskMessage(task)}
+                  >
+                    {sendingTaskId === task.id ? "Sending" : "Send POC"}
+                  </Button>
+                </div>
               </div>
             ))}
           </div>

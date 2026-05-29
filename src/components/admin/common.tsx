@@ -55,8 +55,8 @@ export type GridColDef<R extends AdminRow = AdminRow> = {
   renderCell?: (params: GridRenderCellParams<R>) => ReactNode;
 };
 
-export function PageStack({ children }: { children: ReactNode }) {
-  return <div className="page-stack">{children}</div>;
+export function PageStack({ children, className = "" }: { children: ReactNode; className?: string }) {
+  return <div className={`page-stack ${className}`.trim()}>{children}</div>;
 }
 
 export function ActionGroup({ children, justify = "flex-end" }: { children: ReactNode; justify?: "flex-start" | "flex-end" | "space-between"; sx?: object }) {
@@ -303,12 +303,17 @@ export function DonutChart({
         </div>
       </div>
       <div style={{ display: "grid", gap: 6, minWidth: 220, flex: 1 }}>
-        {rows.map((row, index) => (
+        {rows.map((row, index) => {
+          const value = Number(row[valueKey] ?? 0);
+          const percent = total > 0 ? Math.round((value / total) * 100) : 0;
+
+          return (
           <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }} key={`${row[labelKey]}-${index}`}>
             <span className="app-table-cell-content"><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 999, background: colors[index % colors.length], marginRight: 8 }} />{row[labelKey]}</span>
-            <strong>${Number(row[valueKey] ?? 0).toLocaleString()}</strong>
+            <strong>${value.toLocaleString()} · {percent}%</strong>
           </div>
-        ))}
+          );
+        })}
         {rows.length === 0 && <p>No payment data for this filter.</p>}
       </div>
     </div>

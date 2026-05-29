@@ -17,12 +17,14 @@ import {
   LogOut,
   Mail,
   Menu,
+  Moon,
   MoreHorizontal,
   Plus,
   Power,
   RefreshCw,
   Send,
   Settings,
+  Sun,
   Trash2,
   UserCircle,
   UserRoundX,
@@ -66,10 +68,12 @@ export const KeyOutlined = icon(KeyRound);
 export const LockOutlined = icon(Lock);
 export const LogoutOutlined = icon(LogOut);
 export const MenuIcon = icon(Menu);
+export const MoonOutlined = icon(Moon);
 export const MoreHorizIcon = icon(MoreHorizontal);
 export const PersonOffOutlined = icon(UserRoundX);
 export const PowerSettingsNewOutlined = icon(Power);
 export const ReplayOutlined = icon(RefreshCw);
 export const SendOutlined = icon(Send);
 export const SettingsOutlined = icon(Settings);
+export const SunOutlined = icon(Sun);
 export const VisibilityOutlined = icon(Eye);
