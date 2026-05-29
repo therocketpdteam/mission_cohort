@@ -1,4 +1,4 @@
-import { Box, Container, Grid, Stack, Typography } from "@mui/material";
+import { Box, Container, Grid, Stack, Typography } from "@/components/ui/primitives";
 import { getSharedReport } from "@/services/reportService";
 
 export default async function SharedReportPage({ params }: { params: Promise<{ token: string }> }) {

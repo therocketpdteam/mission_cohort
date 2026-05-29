@@ -1,8 +1,8 @@
 "use client";
 
-import CheckCircleOutline from "@mui/icons-material/CheckCircleOutline";
-import { Box, MenuItem, Stack, TextField } from "@mui/material";
-import { GridColDef } from "@mui/x-data-grid";
+import { CheckCircleOutline } from "@/components/ui/icons";
+import { Box, MenuItem, Stack, TextField } from "@/components/ui/primitives";
+import { GridColDef } from "./common";
 import { useEffect, useMemo, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
 import { formatProperDisplay, formatStatusLabel } from "@/lib/formatting";

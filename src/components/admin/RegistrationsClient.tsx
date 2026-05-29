@@ -1,10 +1,10 @@
 "use client";
 
-import AddIcon from "@mui/icons-material/Add";
-import CancelOutlined from "@mui/icons-material/CancelOutlined";
-import CheckCircleOutline from "@mui/icons-material/CheckCircleOutline";
-import DeleteOutline from "@mui/icons-material/DeleteOutline";
-import EditOutlined from "@mui/icons-material/EditOutlined";
+import { AddIcon } from "@/components/ui/icons";
+import { CancelOutlined } from "@/components/ui/icons";
+import { CheckCircleOutline } from "@/components/ui/icons";
+import { DeleteOutline } from "@/components/ui/icons";
+import { EditOutlined } from "@/components/ui/icons";
 import {
   Alert,
   Autocomplete,
@@ -23,8 +23,8 @@ import {
   Stack,
   TextField,
   Typography
-} from "@mui/material";
-import { GridColDef, GridRowParams, GridRowSelectionModel } from "@mui/x-data-grid";
+} from "@/components/ui/primitives";
+import { GridColDef, GridRowParams, GridRowSelectionModel } from "./common";
 import { useEffect, useMemo, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
 import { formatProperDisplay, formatRegistrationSource, formatStatusLabel } from "@/lib/formatting";

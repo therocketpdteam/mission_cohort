@@ -1,6 +1,6 @@
 "use client";
 
-import { Grid, List, ListItem, ListItemText, Typography } from "@mui/material";
+import { Grid, List, ListItem, ListItemText, Typography } from "@/components/ui/primitives";
 import { useEffect, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
 import { AdminRow, PageHeader, PageStack, SectionCard, StatusChip, useNotifier } from "./common";

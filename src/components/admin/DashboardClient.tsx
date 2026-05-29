@@ -1,6 +1,6 @@
 "use client";
 
-import AddIcon from "@mui/icons-material/Add";
+import { AddIcon } from "@/components/ui/icons";
 import {
   Box,
   Button,
@@ -19,7 +19,7 @@ import {
   Stack,
   TextField,
   Typography
-} from "@mui/material";
+} from "@/components/ui/primitives";
 import Link from "next/link";
 import type { Route } from "next";
 import type { ReactNode } from "react";

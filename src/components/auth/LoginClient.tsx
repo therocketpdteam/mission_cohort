@@ -1,6 +1,6 @@
 "use client";
 
-import LockOutlined from "@mui/icons-material/LockOutlined";
+import { LockOutlined } from "@/components/ui/icons";
 import {
   Alert,
   Box,
@@ -10,7 +10,7 @@ import {
   Stack,
   TextField,
   Typography
-} from "@mui/material";
+} from "@/components/ui/primitives";
 import type { Route } from "next";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, useState } from "react";

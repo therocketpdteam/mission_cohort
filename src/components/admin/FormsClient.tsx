@@ -1,9 +1,9 @@
 "use client";
 
-import ContentCopyOutlined from "@mui/icons-material/ContentCopyOutlined";
-import EditOutlined from "@mui/icons-material/EditOutlined";
-import { Box, MenuItem, Stack, TextField, Typography } from "@mui/material";
-import { GridColDef } from "@mui/x-data-grid";
+import { ContentCopyOutlined } from "@/components/ui/icons";
+import { EditOutlined } from "@/components/ui/icons";
+import { Box, MenuItem, Stack, TextField, Typography } from "@/components/ui/primitives";
+import { GridColDef } from "./common";
 import { useEffect, useMemo, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
 import {

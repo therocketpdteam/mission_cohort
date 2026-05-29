@@ -1,13 +1,13 @@
 "use client";
 
-import AddIcon from "@mui/icons-material/Add";
-import ContentCopyOutlined from "@mui/icons-material/ContentCopyOutlined";
-import EditOutlined from "@mui/icons-material/EditOutlined";
-import ExpandLessOutlined from "@mui/icons-material/ExpandLessOutlined";
-import ExpandMoreOutlined from "@mui/icons-material/ExpandMoreOutlined";
-import KeyOutlined from "@mui/icons-material/KeyOutlined";
-import PowerSettingsNewOutlined from "@mui/icons-material/PowerSettingsNewOutlined";
-import ReplayOutlined from "@mui/icons-material/ReplayOutlined";
+import { AddIcon } from "@/components/ui/icons";
+import { ContentCopyOutlined } from "@/components/ui/icons";
+import { EditOutlined } from "@/components/ui/icons";
+import { ExpandLessOutlined } from "@/components/ui/icons";
+import { ExpandMoreOutlined } from "@/components/ui/icons";
+import { KeyOutlined } from "@/components/ui/icons";
+import { PowerSettingsNewOutlined } from "@/components/ui/icons";
+import { ReplayOutlined } from "@/components/ui/icons";
 import {
   Accordion,
   AccordionDetails,
@@ -32,8 +32,8 @@ import {
   Tabs,
   TextField,
   Typography
-} from "@mui/material";
-import { GridColDef } from "@mui/x-data-grid";
+} from "@/components/ui/primitives";
+import { GridColDef } from "./common";
 import { useEffect, useMemo, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
 import { formatCurrency, formatHumanLabel, formatProperDisplay, formatStatusLabel } from "@/lib/formatting";

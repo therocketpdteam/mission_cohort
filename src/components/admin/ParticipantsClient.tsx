@@ -1,9 +1,9 @@
 "use client";
 
-import DeleteOutline from "@mui/icons-material/DeleteOutline";
-import DoneAllOutlined from "@mui/icons-material/DoneAllOutlined";
-import EditOutlined from "@mui/icons-material/EditOutlined";
-import SendOutlined from "@mui/icons-material/SendOutlined";
+import { DeleteOutline } from "@/components/ui/icons";
+import { DoneAllOutlined } from "@/components/ui/icons";
+import { EditOutlined } from "@/components/ui/icons";
+import { SendOutlined } from "@/components/ui/icons";
 import {
   Autocomplete,
   Box,
@@ -17,8 +17,8 @@ import {
   Stack,
   TextField,
   Typography
-} from "@mui/material";
-import { GridColDef, GridRowParams } from "@mui/x-data-grid";
+} from "@/components/ui/primitives";
+import { GridColDef, GridRowParams } from "./common";
 import { useEffect, useMemo, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
 import { formatProperDisplay, formatStatusLabel } from "@/lib/formatting";

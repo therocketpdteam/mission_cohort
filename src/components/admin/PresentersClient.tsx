@@ -1,9 +1,9 @@
 "use client";
 
-import EditOutlined from "@mui/icons-material/EditOutlined";
-import PersonOffOutlined from "@mui/icons-material/PersonOffOutlined";
-import { Box, TextField } from "@mui/material";
-import { GridColDef } from "@mui/x-data-grid";
+import { EditOutlined } from "@/components/ui/icons";
+import { PersonOffOutlined } from "@/components/ui/icons";
+import { Box, TextField } from "@/components/ui/primitives";
+import { GridColDef } from "./common";
 import { useEffect, useMemo, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
 import { formatProperDisplay } from "@/lib/formatting";

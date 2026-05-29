@@ -1,8 +1,8 @@
 "use client";
 
-import AddIcon from "@mui/icons-material/Add";
-import CalendarMonthOutlined from "@mui/icons-material/CalendarMonthOutlined";
-import EditOutlined from "@mui/icons-material/EditOutlined";
+import { AddIcon } from "@/components/ui/icons";
+import { CalendarMonthOutlined } from "@/components/ui/icons";
+import { EditOutlined } from "@/components/ui/icons";
 import {
   Box,
   Button,
@@ -22,8 +22,8 @@ import {
   Tabs,
   TextField,
   Typography
-} from "@mui/material";
-import { GridColDef } from "@mui/x-data-grid";
+} from "@/components/ui/primitives";
+import { GridColDef } from "./common";
 import { useEffect, useMemo, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
 import { formatProperDisplay, formatStatusLabel } from "@/lib/formatting";

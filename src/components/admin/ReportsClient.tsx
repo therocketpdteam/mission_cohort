@@ -1,9 +1,9 @@
 "use client";
 
-import AddLinkOutlined from "@mui/icons-material/AddLinkOutlined";
-import BlockOutlined from "@mui/icons-material/BlockOutlined";
-import { Box, Button, Grid, MenuItem, Stack, TextField, Typography } from "@mui/material";
-import { GridColDef } from "@mui/x-data-grid";
+import { AddLinkOutlined } from "@/components/ui/icons";
+import { BlockOutlined } from "@/components/ui/icons";
+import { Box, Button, Grid, MenuItem, Stack, TextField, Typography } from "@/components/ui/primitives";
+import { GridColDef } from "./common";
 import { useEffect, useMemo, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
 import { AdminRow, AppDataGrid, EmptyState, PageHeader, PageStack, RowActionMenu, SectionCard, StatusChip, TableShell, useNotifier } from "./common";

@@ -1,9 +1,9 @@
 "use client";
 
-import AddIcon from "@mui/icons-material/Add";
-import ArchiveOutlined from "@mui/icons-material/ArchiveOutlined";
-import EditOutlined from "@mui/icons-material/EditOutlined";
-import VisibilityOutlined from "@mui/icons-material/VisibilityOutlined";
+import { AddIcon } from "@/components/ui/icons";
+import { ArchiveOutlined } from "@/components/ui/icons";
+import { EditOutlined } from "@/components/ui/icons";
+import { VisibilityOutlined } from "@/components/ui/icons";
 import {
   Alert,
   Autocomplete,
@@ -22,8 +22,8 @@ import {
   Stepper,
   TextField,
   Typography
-} from "@mui/material";
-import { GridColDef } from "@mui/x-data-grid";
+} from "@/components/ui/primitives";
+import { GridColDef } from "./common";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { adminApi } from "@/lib/adminApi";

@@ -9,37 +9,16 @@ import {
   GroupsOutlined,
   InsightsOutlined,
   LogoutOutlined,
-  Menu as MenuIcon,
+  MenuIcon,
   SettingsOutlined
-} from "@mui/icons-material";
-import {
-  AppBar,
-  Avatar,
-  Box,
-  Breadcrumbs,
-  Button,
-  Divider,
-  Drawer,
-  IconButton,
-  List,
-  ListItemButton,
-  ListItemIcon,
-  ListItemText,
-  Menu,
-  MenuItem,
-  Stack,
-  Toolbar,
-  Typography,
-  useMediaQuery
-} from "@mui/material";
+} from "@/components/ui/icons";
+import { Button, IconButton } from "@/components/ui/primitives";
 import type { Route } from "next";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ReactNode, useEffect, useMemo, useState } from "react";
-import { useTheme } from "@mui/material/styles";
+import type { ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
-
-const drawerWidth = 268;
 
 const navItems: ReadonlyArray<{
   label: string;
@@ -66,20 +45,16 @@ function breadcrumbsFor(pathname: string) {
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const theme = useTheme();
-  const isDesktop = useMediaQuery(theme.breakpoints.up("lg"));
   const pathname = usePathname();
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [user, setUser] = useState<{ firstName?: string; lastName?: string; email?: string; role?: string } | null>(null);
   const title = titleFromPath(pathname);
   const crumbs = useMemo(() => breadcrumbsFor(pathname), [pathname]);
 
   useEffect(() => {
-    if (pathname === "/login" || pathname.startsWith("/reports/share/")) {
-      return;
-    }
+    if (pathname === "/login" || pathname.startsWith("/reports/share/")) return;
 
     adminApi<{ firstName?: string; lastName?: string; email?: string; role?: string }>("/api/auth/me")
       .then(setUser)
@@ -88,159 +63,74 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   async function logout() {
     await adminApi("/api/auth/logout", { method: "POST" }).catch(() => undefined);
-    setMenuAnchor(null);
+    setMenuOpen(false);
     setUser(null);
     router.replace("/login");
     router.refresh();
   }
 
   if (pathname === "/login" || pathname.startsWith("/reports/share/")) {
-    return <Box sx={{ minHeight: "100vh", bgcolor: "background.default" }}>{children}</Box>;
+    return <main>{children}</main>;
   }
 
-  const drawer = (
-    <Stack sx={{ height: "100%", bgcolor: "#071D33", color: "#F8FAFC" }}>
-      <Box sx={{ px: 2.5, py: 2.5 }}>
-        <Typography variant="h3" sx={{ color: "white" }}>
-          RocketPD
-        </Typography>
-        <Typography variant="body2" sx={{ color: "#BDE6F8", mt: 0.5 }}>
-          Mission Control
-        </Typography>
-      </Box>
-      <Divider sx={{ borderColor: "rgba(255,255,255,0.12)" }} />
-      <List sx={{ px: 1.25, py: 1.5 }}>
-        {navItems.map((item) => {
-          const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
-
-          return (
-            <ListItemButton
-              component={Link}
-              href={item.href}
-              key={item.href}
-              selected={active}
-              onClick={() => setMobileOpen(false)}
-              sx={{
-                borderRadius: 2,
-                mb: 0.75,
-                minHeight: 50,
-                color: active ? "#FFFFFF" : "#DDE7F0",
-                columnGap: 1,
-                "&.Mui-selected": {
-                  bgcolor: "rgba(30,155,222,0.18)",
-                  borderLeft: "3px solid #20C7D9",
-                  color: "#FFFFFF"
-                },
-                "&.Mui-selected:hover": {
-                  bgcolor: "rgba(30,155,222,0.24)"
-                },
-                "&:hover": {
-                  bgcolor: "rgba(255,255,255,0.1)",
-                  color: "#FFFFFF"
-                },
-                "& .MuiListItemIcon-root": {
-                  color: "inherit"
-                },
-                "& .MuiListItemText-primary": {
-                  color: "inherit",
-                  opacity: active ? 1 : 0.92
-                }
-              }}
-            >
-              <ListItemIcon sx={{ minWidth: 38 }}>{item.icon}</ListItemIcon>
-              <ListItemText primary={item.label} primaryTypographyProps={{ fontSize: 14, fontWeight: 700 }} />
-            </ListItemButton>
-          );
-        })}
-      </List>
-    </Stack>
-  );
-
   return (
-    <Box sx={{ display: "flex", minHeight: "100vh", bgcolor: "background.default" }}>
-      <AppBar
-        position="fixed"
-        color="inherit"
-        elevation={0}
-        sx={{
-          borderBottom: 1,
-          borderColor: "divider",
-          width: { lg: `calc(100% - ${drawerWidth}px)` },
-          ml: { lg: `${drawerWidth}px` }
-        }}
-      >
-        <Toolbar sx={{ gap: 2 }}>
-          <IconButton
-            color="inherit"
-            edge="start"
-            onClick={() => setMobileOpen(true)}
-            sx={{ display: { lg: "none" } }}
-            aria-label="Open navigation"
-          >
+    <div className="app-shell">
+      <aside className={`app-sidebar ${mobileOpen ? "is-open" : ""}`}>
+        <div className="app-brand">
+          <p className="app-brand-title">RocketPD</p>
+          <p className="app-brand-subtitle">Mission Control</p>
+        </div>
+        <nav className="app-nav" aria-label="Admin navigation">
+          {navItems.map((item) => {
+            const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+
+            return (
+              <Link className={`app-nav-item ${active ? "is-active" : ""}`} href={item.href} key={item.href} onClick={() => setMobileOpen(false)}>
+                {item.icon}
+                <span>{item.label}</span>
+              </Link>
+            );
+          })}
+        </nav>
+      </aside>
+
+      <div className="app-main">
+        <header className="app-topbar">
+          <IconButton type="button" className="mobile-menu-button" onClick={() => setMobileOpen(true)} aria-label="Open navigation">
             <MenuIcon />
           </IconButton>
-          <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-            <Typography variant="h2" noWrap>
-              {title}
-            </Typography>
-            <Breadcrumbs maxItems={3} sx={{ fontSize: 12, color: "text.secondary" }}>
-              {crumbs.map((crumb) => (
-                <Typography key={crumb} variant="caption" sx={{ textTransform: "capitalize" }}>
-                  {crumb}
-                </Typography>
+          <div className="app-topbar-title">
+            <h1>{title}</h1>
+            <div className="app-breadcrumbs">
+              {crumbs.map((crumb, index) => (
+                <span key={`${crumb}-${index}`}>{index > 0 ? `/ ${crumb}` : crumb}</span>
               ))}
-            </Breadcrumbs>
-          </Box>
-          <Button variant="outlined" startIcon={<AccountCircle />} onClick={(event) => setMenuAnchor(event.currentTarget)}>
-            {user?.firstName ?? "Admin"}
-          </Button>
-          <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={() => setMenuAnchor(null)}>
-            <MenuItem disabled>
-              <Avatar sx={{ width: 24, height: 24, mr: 1 }}>{user?.firstName?.[0] ?? "A"}</Avatar>
-              <Box>
-                <Typography variant="body2">{[user?.firstName, user?.lastName].filter(Boolean).join(" ") || "Internal Admin"}</Typography>
-                <Typography variant="caption" color="text.secondary">{user?.role ?? "ADMIN"}</Typography>
-              </Box>
-            </MenuItem>
-            <Divider />
-            <MenuItem onClick={logout}>
-              <LogoutOutlined fontSize="small" sx={{ mr: 1 }} />
-              Logout
-            </MenuItem>
-          </Menu>
-        </Toolbar>
-      </AppBar>
-
-      <Box component="nav" sx={{ width: { lg: drawerWidth }, flexShrink: { lg: 0 } }}>
-        <Drawer
-          variant={isDesktop ? "permanent" : "temporary"}
-          open={isDesktop || mobileOpen}
-          onClose={() => setMobileOpen(false)}
-          ModalProps={{ keepMounted: true }}
-          sx={{
-            "& .MuiDrawer-paper": {
-              width: drawerWidth,
-              boxSizing: "border-box",
-              borderRight: 0
-            }
-          }}
-        >
-          {drawer}
-        </Drawer>
-      </Box>
-
-      <Box
-        component="main"
-        sx={{
-          flexGrow: 1,
-          width: { lg: `calc(100% - ${drawerWidth}px)` },
-          pt: 11,
-          px: { xs: 2, md: 3 },
-          pb: 4
-        }}
-      >
-        {children}
-      </Box>
-    </Box>
+            </div>
+          </div>
+          <div className="user-menu">
+            <Button type="button" variant="outlined" startIcon={<AccountCircle />} onClick={() => setMenuOpen((current) => !current)}>
+              {user?.firstName ?? "Admin"}
+            </Button>
+            {menuOpen && (
+              <div className="user-popover">
+                <div className="ui-menu-item" style={{ cursor: "default" }}>
+                  <span className="ui-avatar">{user?.firstName?.[0] ?? "A"}</span>
+                  <span>
+                    <strong>{[user?.firstName, user?.lastName].filter(Boolean).join(" ") || "Internal Admin"}</strong>
+                    <br />
+                    <small>{user?.role ?? "ADMIN"}</small>
+                  </span>
+                </div>
+                <button type="button" className="ui-menu-item" onClick={logout}>
+                  <LogoutOutlined fontSize="small" />
+                  <span>Logout</span>
+                </button>
+              </div>
+            )}
+          </div>
+        </header>
+        <main className="app-content">{children}</main>
+      </div>
+    </div>
   );
 }
