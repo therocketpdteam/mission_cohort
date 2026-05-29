@@ -1,24 +1,25 @@
 "use client";
 
-import { AddIcon } from "@/components/ui/icons";
 import {
-  Box,
+  AddIcon,
+  ArticleOutlined,
+  CalendarMonthOutlined,
+  CheckCircleOutline,
+  DashboardOutlined,
+  EmailOutlined,
+  GroupsOutlined,
+  InsightsOutlined
+} from "@/components/ui/icons";
+import {
   Button,
-  Card,
-  CardContent,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
   Divider,
   Grid,
-  List,
-  ListItem,
-  ListItemText,
   MenuItem,
-  Stack,
-  TextField,
-  Typography
+  TextField
 } from "@/components/ui/primitives";
 import Link from "next/link";
 import type { Route } from "next";
@@ -26,16 +27,35 @@ import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
 import { formatHumanLabel, formatProperDisplay, formatStatusLabel } from "@/lib/formatting";
-import { AdminRow, DateBadge, DetailField, DonutChart, EmptyState, LoadingState, MetadataPill, PageHeader, PageStack, SectionCard, SourcePill, StatusChip, useNotifier } from "./common";
+import {
+  AdminRow,
+  DateBadge,
+  DetailField,
+  DonutChart,
+  EmptyState,
+  LoadingState,
+  MetadataPill,
+  PageStack,
+  StatusChip,
+  useNotifier
+} from "./common";
 
-const metricLabels: ReadonlyArray<[string, string, Route]> = [
-  ["activeCohorts", "Active Cohorts", "/cohorts"],
-  ["upcomingSessions", "Upcoming Sessions", "/cohorts"],
-  ["openRegistrations", "Open Registrations", "/registrations"],
-  ["totalParticipants", "Total Participants", "/participants"],
-  ["pendingPayments", "Pending Payments", "/registrations"],
-  ["scheduledCommunications", "Scheduled Communications", "/communications"],
-  ["openOperationsTasks", "Open Operations Tasks", "/cohorts"]
+type MetricConfig = {
+  key: string;
+  label: string;
+  href: Route;
+  helper: string;
+  icon: ReactNode;
+};
+
+const metrics: ReadonlyArray<MetricConfig> = [
+  { key: "activeCohorts", label: "Active cohorts", href: "/cohorts", helper: "Published or running now", icon: <DashboardOutlined /> },
+  { key: "upcomingSessions", label: "Upcoming sessions", href: "/cohorts", helper: "Scheduled from today forward", icon: <CalendarMonthOutlined /> },
+  { key: "openRegistrations", label: "Open registrations", href: "/registrations", helper: "New or confirmed records", icon: <ArticleOutlined /> },
+  { key: "totalParticipants", label: "Participants", href: "/participants", helper: "Total rostered learners", icon: <GroupsOutlined /> },
+  { key: "pendingPayments", label: "Payments to watch", href: "/registrations", helper: "Pending, invoiced, or partial", icon: <InsightsOutlined /> },
+  { key: "scheduledCommunications", label: "Scheduled emails", href: "/communications", helper: "Queued cohort messages", icon: <EmailOutlined /> },
+  { key: "openOperationsTasks", label: "Open operations", href: "/cohorts", helper: "Manual tasks needing work", icon: <CheckCircleOutline /> }
 ];
 
 const quickActions: ReadonlyArray<[string, Route]> = [
@@ -43,21 +63,6 @@ const quickActions: ReadonlyArray<[string, Route]> = [
   ["Add Registration", "/registrations"],
   ["Create Email Template", "/communications"]
 ];
-
-function DashboardPanel({ title, href, actionLabel, children }: { title: string; href: Route; actionLabel: string; children: ReactNode }) {
-  return (
-    <SectionCard
-      title={title}
-      action={<Button component={Link} href={href} size="small" variant="outlined">{actionLabel}</Button>}
-      sx={{ height: "100%" }}
-      contentSx={{ height: "100%", display: "flex", flexDirection: "column" }}
-    >
-      <Box sx={{ flex: 1, minHeight: 0 }}>
-        {children}
-      </Box>
-    </SectionCard>
-  );
-}
 
 function shortDate(value?: string) {
   if (!value) {
@@ -75,12 +80,155 @@ function timeText(value?: string) {
   return new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" }).format(new Date(value));
 }
 
+function DashboardPanel({
+  title,
+  eyebrow,
+  href,
+  actionLabel,
+  children,
+  className = ""
+}: {
+  title: string;
+  eyebrow?: string;
+  href?: Route;
+  actionLabel?: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <section className={`dashboard-panel ${className}`}>
+      <div className="dashboard-panel-header">
+        <div>
+          {eyebrow && <p className="dashboard-eyebrow">{eyebrow}</p>}
+          <h2>{title}</h2>
+        </div>
+        {href && actionLabel && (
+          <Button component={Link} href={href} size="small" variant="outlined">
+            {actionLabel}
+          </Button>
+        )}
+      </div>
+      <div className="dashboard-panel-body">{children}</div>
+    </section>
+  );
+}
+
+function DashboardHero({
+  data,
+  readinessCount
+}: {
+  data: AdminRow | null;
+  readinessCount: number;
+}) {
+  const activeCohorts = Number(data?.metrics?.activeCohorts ?? 0);
+  const upcomingSessions = Number(data?.metrics?.upcomingSessions ?? 0);
+  const pendingPayments = Number(data?.metrics?.pendingPayments ?? 0);
+  const openTasks = Number(data?.metrics?.openOperationsTasks ?? 0);
+  const needsAttention = readinessCount > 0 || pendingPayments > 0 || openTasks > 0;
+
+  return (
+    <section className="dashboard-hero">
+      <div className="dashboard-hero-copy">
+        <p className="dashboard-eyebrow">Mission Control</p>
+        <h1>{needsAttention ? "Today needs a focused pass." : "Everything is tracking cleanly."}</h1>
+        <p>
+          {activeCohorts} active cohort{activeCohorts === 1 ? "" : "s"}, {upcomingSessions} upcoming session{upcomingSessions === 1 ? "" : "s"}, {pendingPayments} payment item{pendingPayments === 1 ? "" : "s"} to watch, and {openTasks} open operation{openTasks === 1 ? "" : "s"}.
+        </p>
+        <div className="dashboard-hero-actions">
+          {quickActions.map(([label, href]) => (
+            <Button component={Link} href={href} startIcon={<AddIcon />} variant={label === "Create Cohort" ? "contained" : "outlined"} key={label}>
+              {label}
+            </Button>
+          ))}
+        </div>
+      </div>
+      <div className="dashboard-hero-status">
+        <span className={`dashboard-status-orb ${needsAttention ? "is-warning" : "is-success"}`} />
+        <p className="dashboard-eyebrow">Operational state</p>
+        <strong>{needsAttention ? "Needs attention" : "On track"}</strong>
+        <span>{readinessCount} readiness queue{readinessCount === 1 ? "" : "s"}</span>
+      </div>
+    </section>
+  );
+}
+
+function MetricGrid({ data }: { data: AdminRow | null }) {
+  return (
+    <section className="dashboard-metric-grid" aria-label="Dashboard metrics">
+      {metrics.map((metric) => (
+        <Link href={metric.href} className="dashboard-metric-card" key={metric.key}>
+          <span className="dashboard-metric-icon">{metric.icon}</span>
+          <span className="dashboard-metric-label">{metric.label}</span>
+          <strong>{data?.metrics?.[metric.key] ?? "-"}</strong>
+          <span className="dashboard-metric-helper">{metric.helper}</span>
+        </Link>
+      ))}
+    </section>
+  );
+}
+
+function PriorityPanel({
+  loading,
+  rows,
+  onOpen
+}: {
+  loading: boolean;
+  rows: AdminRow[];
+  onOpen: (row: AdminRow) => void;
+}) {
+  return (
+    <DashboardPanel title="Priority Work" eyebrow="Cohort readiness" href="/cohorts" actionLabel="View cohorts" className="dashboard-panel-priority">
+      <div className="dashboard-priority-list">
+        {rows.map((row) => (
+          <div className="dashboard-priority-row" key={row.cohort.id}>
+            <DateBadge value={row.nextSession?.startTime} />
+            <div className="dashboard-row-main">
+              <strong title={row.cohort.title}>{row.cohort.title}</strong>
+              <span>
+                {row.tasks.length} open task{row.tasks.length === 1 ? "" : "s"} · {row.registrationCount} registrations · {row.nextSession ? `Next ${shortDate(row.nextSession.startTime)}` : "No upcoming session"}
+              </span>
+            </div>
+            <StatusChip value={row.tasks.length ? "Needs Attention" : "On Track"} />
+            <Button size="small" variant="outlined" onClick={() => onOpen(row)}>
+              Details
+            </Button>
+          </div>
+        ))}
+      </div>
+      {!loading && rows.length === 0 && (
+        <EmptyState title="No readiness items" description="Calendar invite tasks are handled automatically; actionable cohort work will appear here." />
+      )}
+    </DashboardPanel>
+  );
+}
+
+function TodayPanel({ loading, sessions }: { loading: boolean; sessions: AdminRow[] }) {
+  return (
+    <DashboardPanel title="Upcoming Sessions" eyebrow="Agenda" href="/cohorts" actionLabel="View cohorts">
+      <div className="dashboard-agenda-list">
+        {sessions.slice(0, 6).map((session) => (
+          <div className="dashboard-agenda-row" key={session.id}>
+            <div className="dashboard-agenda-date">
+              <strong>{shortDate(session.startTime)}</strong>
+              <span>{timeText(session.startTime)}</span>
+            </div>
+            <div className="dashboard-row-main">
+              <strong title={session.title}>{session.title}</strong>
+              <span>{session.cohort?.title ?? "Cohort"}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+      {!loading && sessions.length === 0 && <EmptyState title="No upcoming sessions" description="Upcoming cohort sessions will appear here." />}
+    </DashboardPanel>
+  );
+}
+
 export function DashboardClient() {
   const [data, setData] = useState<AdminRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [readinessCohort, setReadinessCohort] = useState<AdminRow | null>(null);
   const [recentRegistration, setRecentRegistration] = useState<AdminRow | null>(null);
-  const [sessionView, setSessionView] = useState("list");
   const [paymentFilter, setPaymentFilter] = useState("ALL");
   const [paymentCohortFilter, setPaymentCohortFilter] = useState("ALL");
   const { notifyError, snackbar } = useNotifier();
@@ -137,6 +285,7 @@ export function DashboardClient() {
     () => Array.from(new Map((data?.paymentRecordsSnapshot ?? []).map((payment: AdminRow) => [payment.cohortId, payment.cohort?.title ?? "Cohort"])).entries()),
     [data]
   );
+
   const paymentChartRows = useMemo(() => {
     const filtered = (data?.paymentRecordsSnapshot ?? []).filter((payment: AdminRow) => {
       const matchesStatus = paymentFilter === "ALL" || payment.status === paymentFilter;
@@ -166,229 +315,102 @@ export function DashboardClient() {
 
   return (
     <PageStack>
-      <PageHeader
-        title="Dashboard"
-        description="Operational snapshot for cohorts, registrations, sessions, payments, and communications."
-      />
-
-      <Box
-        sx={{
-          display: "grid",
-          gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))", lg: "repeat(7, minmax(0, 1fr))" },
-          gap: 2,
-          alignItems: "stretch"
-        }}
-      >
-        {metricLabels.map(([key, label, href]) => (
-          <Box key={key} sx={{ minWidth: 0 }}>
-            <Link href={href}>
-              <Card
-                sx={{
-                  display: "flex",
-                  height: "100%",
-                  transition: "border-color 120ms ease, transform 120ms ease",
-                  "&:hover": { borderColor: "primary.main", transform: "translateY(-1px)" }
-                }}
-              >
-                <CardContent sx={{ width: "100%", display: "flex", flexDirection: "column", justifyContent: "space-between", minHeight: 132 }}>
-                  <Typography variant="body2" color="text.secondary">
-                    {label}
-                  </Typography>
-                  <Typography variant="h1" sx={{ mt: 1 }}>
-                    {data?.metrics?.[key] ?? "-"}
-                  </Typography>
-                </CardContent>
-              </Card>
-            </Link>
-          </Box>
-        ))}
-      </Box>
-
+      <DashboardHero data={data} readinessCount={readinessRows.length} />
+      <MetricGrid data={data} />
       {loading && <LoadingState label="Loading dashboard" />}
 
-      <SectionCard title="Quick Actions">
-        <Stack direction="row" flexWrap="wrap" gap={1}>
-          {quickActions.map(([label, href]) => (
-            <Button component={Link} href={href} startIcon={<AddIcon />} key={label}>
-              {label}
-            </Button>
-          ))}
-        </Stack>
-      </SectionCard>
+      <section className="dashboard-command-grid">
+        <PriorityPanel loading={loading} rows={readinessRows} onOpen={setReadinessCohort} />
+        <TodayPanel loading={loading} sessions={data?.upcomingSessions ?? []} />
+      </section>
 
-      <Grid container spacing={2}>
-        <Grid size={{ xs: 12, lg: 6 }}>
-          <DashboardPanel title="Open Operations Tasks" href="/cohorts" actionLabel="View cohorts">
-            <Stack spacing={1}>
-              {readinessRows.map((row: AdminRow) => (
-                <Box
-                  key={row.cohort.id}
-                  sx={{
-                    display: "grid",
-                    gridTemplateColumns: { xs: "1fr", sm: "64px minmax(0, 1fr) auto auto" },
-                    gap: 1.5,
-                    alignItems: "center",
-                    borderBottom: 1,
-                    borderColor: "divider",
-                    py: 1.15
-                  }}
-                >
-                  <DateBadge value={row.nextSession?.startTime} />
-                  <Box sx={{ minWidth: 0 }}>
-                    <Typography fontWeight={900} noWrap>{row.cohort.title}</Typography>
-                    <Typography color="text.secondary" variant="body2" noWrap>
-                      {row.tasks.length} open task{row.tasks.length === 1 ? "" : "s"} • {row.registrationCount} registrations • {row.nextSession ? `Next ${shortDate(row.nextSession.startTime)}` : "No upcoming session"}
-                    </Typography>
-                  </Box>
-                  <StatusChip value={row.tasks.length ? "Needs Attention" : "On Track"} />
-                  <Button size="small" variant="outlined" onClick={() => setReadinessCohort(row)}>Details</Button>
-                </Box>
-              ))}
-            </Stack>
-            {!loading && readinessRows.length === 0 && (
-              <EmptyState title="No cohort readiness items" description="Calendar invite tasks are handled automatically; actionable cohort work will appear here." />
-            )}
-          </DashboardPanel>
-        </Grid>
-        <Grid size={{ xs: 12, lg: 6 }}>
-          <DashboardPanel title="Upcoming Sessions" href="/cohorts" actionLabel="View cohorts">
-            <Stack direction="row" spacing={1} sx={{ mb: 1 }}>
-              {["list", "calendar"].map((view) => (
-                <Button key={view} size="small" variant={sessionView === view ? "contained" : "outlined"} onClick={() => setSessionView(view)}>
-                  {formatStatusLabel(view)}
-                </Button>
-              ))}
-            </Stack>
-            {sessionView === "list" ? (
-              <List dense>
-                {(data?.upcomingSessions ?? []).slice(0, 5).map((session: AdminRow) => (
-                  <ListItem key={session.id} divider>
-                    <Box sx={{ mr: 1.5 }}>
-                      <DateBadge value={session.startTime} />
-                      <Typography variant="caption" color="text.secondary">{timeText(session.startTime)}</Typography>
-                    </Box>
-                    <ListItemText
-                      primary={session.title}
-                      secondary={session.cohort?.title ?? "Cohort"}
-                    />
-                  </ListItem>
-                ))}
-              </List>
-            ) : (
-              <Grid container spacing={1}>
-                {(data?.upcomingSessions ?? []).slice(0, 6).map((session: AdminRow) => (
-                  <Grid size={{ xs: 12, sm: 6 }} key={session.id}>
-                    <Box sx={{ border: 1, borderColor: "divider", borderRadius: 2, p: 1.25, minHeight: 96 }}>
-                      <Typography variant="h4" color="primary.main">{shortDate(session.startTime)}</Typography>
-                      <Typography fontWeight={800}>{session.title}</Typography>
-                      <Typography variant="caption" color="text.secondary">{timeText(session.startTime)} • {session.cohort?.title ?? "Cohort"}</Typography>
-                    </Box>
-                  </Grid>
-                ))}
-              </Grid>
-            )}
-            {!loading && (data?.upcomingSessions ?? []).length === 0 && (
-              <EmptyState title="No upcoming sessions" description="Upcoming cohort sessions will appear here." />
-            )}
-          </DashboardPanel>
-        </Grid>
-        <Grid size={{ xs: 12, lg: 6 }}>
-          <DashboardPanel title="Recent Registrations" href="/registrations" actionLabel="View registrations">
-            <List dense>
-              {(data?.recentRegistrations ?? []).slice(0, 5).map((registration: AdminRow) => (
-                <ListItem key={registration.id} divider onClick={() => openRecentRegistration(registration.id)} sx={{ cursor: "pointer", borderRadius: 1, "&:hover": { bgcolor: "background.default" } }}>
-                  <ListItemText
-                    primary={formatProperDisplay(registration.primaryContactName)}
-                    secondary={
-                      <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap sx={{ mt: 0.5 }}>
-                        <MetadataPill>{formatProperDisplay(registration.organization?.name ?? "Organization")}</MetadataPill>
-                        <MetadataPill>{registration.cohort?.title ?? "Cohort"}</MetadataPill>
-                        <SourcePill row={registration} />
-                      </Stack>
-                    }
-                  />
-                  <StatusChip value={registration.status} />
-                </ListItem>
-              ))}
-            </List>
-            {!loading && (data?.recentRegistrations ?? []).length === 0 && (
-              <EmptyState title="No recent registrations" description="New registrations will appear here as they arrive." />
-            )}
-          </DashboardPanel>
-        </Grid>
-        <Grid size={{ xs: 12, lg: 6 }}>
-          <DashboardPanel title="Cohorts Needing Attention" href="/cohorts" actionLabel="View cohorts">
-            <List dense>
-              {(data?.cohortsNeedingAttention ?? []).slice(0, 5).map((cohort: AdminRow) => (
-                <ListItem key={cohort.id} divider>
-                  <ListItemText
-                    primary={cohort.title}
-                    secondary={`${formatProperDisplay(`${cohort.presenter?.firstName ?? ""} ${cohort.presenter?.lastName ?? ""}`)} • ${cohort._count?.registrations ?? 0} registrations`}
-                  />
-                  <StatusChip value={cohort.status} />
-                </ListItem>
-              ))}
-            </List>
-            {!loading && (data?.cohortsNeedingAttention ?? []).length === 0 && (
-              <EmptyState title="No cohorts need attention" description="Draft and registration-stage cohorts will appear here." />
-            )}
-          </DashboardPanel>
-        </Grid>
-        <Grid size={{ xs: 12, lg: 6 }}>
-          <DashboardPanel title="Payment Status Snapshot" href="/registrations" actionLabel="View registrations">
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ mb: 2 }}>
-              <TextField select label="Cohort" value={paymentCohortFilter} onChange={(event) => setPaymentCohortFilter(event.target.value)} sx={{ minWidth: 190 }}>
-                <MenuItem value="ALL">All cohorts</MenuItem>
-                {paymentCohorts.map(([id, title]) => <MenuItem value={String(id)} key={String(id)}>{String(title)}</MenuItem>)}
-              </TextField>
-              <TextField select label="Status" value={paymentFilter} onChange={(event) => setPaymentFilter(event.target.value)} sx={{ minWidth: 170 }}>
-                <MenuItem value="ALL">All statuses</MenuItem>
-                {(data?.paymentStatusSnapshot ?? []).map((payment: AdminRow) => <MenuItem value={payment.status} key={payment.status}>{formatStatusLabel(payment.status)}</MenuItem>)}
-              </TextField>
-            </Stack>
-            <DonutChart rows={paymentChartRows} />
-          </DashboardPanel>
-        </Grid>
-        <Grid size={{ xs: 12 }}>
-          <SectionCard title="Recent Activity" action={<Button component={Link} href="/settings" size="small" variant="outlined">View settings</Button>}>
-            <List dense>
-              {(data?.recentActivity ?? []).slice(0, 5).map((activity: AdminRow) => (
-                <ListItem key={activity.id} divider>
-                  <ListItemText
-                    primary={`${formatHumanLabel(activity.entityType)} ${formatStatusLabel(activity.action)}`}
-                    secondary={`${activity.description ?? "Activity"} • ${new Date(activity.createdAt).toLocaleString()}`}
-                  />
-                </ListItem>
-              ))}
-            </List>
-          </SectionCard>
-        </Grid>
-      </Grid>
+      <section className="dashboard-insights-grid">
+        <DashboardPanel title="Payment Snapshot" eyebrow="Revenue watch" href="/registrations" actionLabel="View registrations">
+          <div className="dashboard-filter-row">
+            <TextField select label="Cohort" value={paymentCohortFilter} onChange={(event) => setPaymentCohortFilter(event.target.value)}>
+              <MenuItem value="ALL">All cohorts</MenuItem>
+              {paymentCohorts.map(([id, title]) => <MenuItem value={String(id)} key={String(id)}>{String(title)}</MenuItem>)}
+            </TextField>
+            <TextField select label="Status" value={paymentFilter} onChange={(event) => setPaymentFilter(event.target.value)}>
+              <MenuItem value="ALL">All statuses</MenuItem>
+              {(data?.paymentStatusSnapshot ?? []).map((payment: AdminRow) => <MenuItem value={payment.status} key={payment.status}>{formatStatusLabel(payment.status)}</MenuItem>)}
+            </TextField>
+          </div>
+          <DonutChart rows={paymentChartRows} />
+        </DashboardPanel>
+
+        <DashboardPanel title="Recent Registrations" eyebrow="New arrivals" href="/registrations" actionLabel="Open list">
+          <div className="dashboard-compact-list">
+            {(data?.recentRegistrations ?? []).slice(0, 5).map((registration: AdminRow) => (
+              <button className="dashboard-compact-row is-clickable" type="button" key={registration.id} onClick={() => openRecentRegistration(registration.id)}>
+                <div className="dashboard-row-main">
+                  <strong>{formatProperDisplay(registration.primaryContactName)}</strong>
+                  <span>{formatProperDisplay(registration.organization?.name ?? "Organization")} · {registration.cohort?.title ?? "Cohort"}</span>
+                </div>
+                <StatusChip value={registration.status} />
+              </button>
+            ))}
+          </div>
+          {!loading && (data?.recentRegistrations ?? []).length === 0 && <EmptyState title="No recent registrations" description="New registrations will appear here as they arrive." />}
+        </DashboardPanel>
+
+        <DashboardPanel title="Cohorts Needing Attention" eyebrow="Pipeline" href="/cohorts" actionLabel="View cohorts">
+          <div className="dashboard-compact-list">
+            {(data?.cohortsNeedingAttention ?? []).slice(0, 5).map((cohort: AdminRow) => (
+              <div className="dashboard-compact-row" key={cohort.id}>
+                <div className="dashboard-row-main">
+                  <strong title={cohort.title}>{cohort.title}</strong>
+                  <span>{formatProperDisplay(`${cohort.presenter?.firstName ?? ""} ${cohort.presenter?.lastName ?? ""}`) || "No presenter"} · {cohort._count?.registrations ?? 0} registrations</span>
+                </div>
+                <StatusChip value={cohort.status} />
+              </div>
+            ))}
+          </div>
+          {!loading && (data?.cohortsNeedingAttention ?? []).length === 0 && <EmptyState title="No cohorts need attention" description="Draft and registration-stage cohorts will appear here." />}
+        </DashboardPanel>
+
+        <DashboardPanel title="Recent Activity" eyebrow="Audit trail" href="/settings" actionLabel="View settings">
+          <div className="dashboard-compact-list">
+            {(data?.recentActivity ?? []).slice(0, 5).map((activity: AdminRow) => (
+              <div className="dashboard-activity-row" key={activity.id}>
+                <span className="dashboard-activity-dot" />
+                <div className="dashboard-row-main">
+                  <strong>{formatHumanLabel(activity.entityType)} {formatStatusLabel(activity.action)}</strong>
+                  <span>{activity.description ?? "Activity"} · {new Date(activity.createdAt).toLocaleString()}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </DashboardPanel>
+      </section>
+
       <Dialog open={Boolean(readinessCohort)} onClose={() => setReadinessCohort(null)} fullWidth maxWidth="md">
         <DialogTitle>{readinessCohort?.cohort?.title ?? "Cohort Readiness"}</DialogTitle>
         <DialogContent>
-          <Stack spacing={2}>
-            <Grid container spacing={1.5}>
-              <Grid size={{ xs: 12, sm: 4 }}><MetadataPill>{readinessCohort?.registrationCount ?? 0} registrations</MetadataPill></Grid>
-              <Grid size={{ xs: 12, sm: 4 }}><MetadataPill>{readinessCohort?.participantCount ?? 0} participants</MetadataPill></Grid>
-              <Grid size={{ xs: 12, sm: 4 }}><MetadataPill>{readinessCohort?.nextSession ? `Next ${shortDate(readinessCohort.nextSession.startTime)}` : "No upcoming session"}</MetadataPill></Grid>
-            </Grid>
-            <Divider />
-            <List dense>
-              {(readinessCohort?.tasks ?? []).map((task: AdminRow) => (
-                <ListItem key={task.id} divider>
-                  <ListItemText primary={task.title} secondary={`${formatStatusLabel(task.category)} • ${task.dueDate ? new Date(task.dueDate).toLocaleDateString() : "No due date"}`} />
-                  <StatusChip value={task.status} />
-                </ListItem>
-              ))}
-            </List>
-            {(readinessCohort?.tasks ?? []).length === 0 && <EmptyState title="No manual readiness tasks" description="Calendar invite work is handled automatically or no action is needed right now." />}
-          </Stack>
+          <div className="dashboard-modal-summary">
+            <MetadataPill>{readinessCohort?.registrationCount ?? 0} registrations</MetadataPill>
+            <MetadataPill>{readinessCohort?.participantCount ?? 0} participants</MetadataPill>
+            <MetadataPill>{readinessCohort?.nextSession ? `Next ${shortDate(readinessCohort.nextSession.startTime)}` : "No upcoming session"}</MetadataPill>
+          </div>
+          <Divider />
+          <div className="dashboard-compact-list">
+            {(readinessCohort?.tasks ?? []).map((task: AdminRow) => (
+              <div className="dashboard-compact-row" key={task.id}>
+                <div className="dashboard-row-main">
+                  <strong>{task.title}</strong>
+                  <span>{formatStatusLabel(task.category)} · {task.dueDate ? new Date(task.dueDate).toLocaleDateString() : "No due date"}</span>
+                </div>
+                <StatusChip value={task.status} />
+              </div>
+            ))}
+          </div>
+          {(readinessCohort?.tasks ?? []).length === 0 && <EmptyState title="No manual readiness tasks" description="Calendar invite work is handled automatically or no action is needed right now." />}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setReadinessCohort(null)}>Close</Button>
         </DialogActions>
       </Dialog>
+
       <Dialog open={Boolean(recentRegistration)} onClose={() => setRecentRegistration(null)} fullWidth maxWidth="md">
         <DialogTitle>Registration Detail</DialogTitle>
         <DialogContent>

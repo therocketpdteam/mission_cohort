@@ -14,14 +14,14 @@ Before making UI changes:
 4. Check desktop and wrapped/mobile layout.
 5. Verify no overlapping buttons, badges, text, filters, cards, or controls.
 6. Verify no more than one primary action per section.
-7. Reuse existing shared components and MUI theme variants where possible.
+7. Reuse existing shared Mission Control components and app-native UI primitives where possible.
 
 When editing existing screens:
 
 - Do not only update colors. Also update spacing, button hierarchy, card structure, and responsive behavior.
 - If a screen has overlapping buttons, refactor the container layout instead of shrinking text or hiding buttons.
 - Replace duplicate/custom button styles with the shared button variants.
-- Treat MUI as the underlying engine, not the visible design system. Admin pages should use Mission Control wrappers instead of raw MUI controls when a wrapper exists.
+- Treat the app-native primitives as the underlying engine, not the visible design system. Admin pages should use Mission Control wrappers instead of raw primitives when a wrapper exists.
 - Do not add raw `DataGrid`, ad hoc status text, one-off chips, or custom row action groups to screens. Use `AppDataGrid`, `StatusChip`/`StatusBadge`, `RowActionMenu`, `PageHeader`, `SectionCard`, and shared formatting helpers.
 - Remove one-off colors unless they map to the approved tokens.
 - Do not introduce raw technical payloads into admin-facing workflows.
@@ -120,7 +120,7 @@ Background rules:
 
 ## Button System
 
-Use the shared MUI button theme as the source for these variants.
+Use the shared Mission Control button system as the source for these variants.
 
 Primary Button:
 
@@ -263,7 +263,7 @@ Rules:
 - Table headers should be subtle, not heavy.
 - Row hover background: `#F8FAFC`.
 - Status badges should use token colors.
-- Use `AppDataGrid` for admin data tables. Do not import MUI `DataGrid` directly into pages.
+- Use `AppDataGrid` for admin data tables. Do not import low-level table/grid primitives directly into pages when a shared wrapper exists.
 - Row height must be tall enough for all visible content. Do not stack multiple badges/text lines inside a short row.
 - Row actions should not crowd the row.
 - If more than 2 row actions exist, use a dropdown.
@@ -302,7 +302,7 @@ Navigation should feel branded:
 - Avoid plain gray-only navigation.
 - Icons should be consistent size.
 - Active state must be obvious.
-- Sidebar labels and icons must always be readable on navy. Explicitly set child text/icon colors; do not rely on inherited MUI color alone.
+- Sidebar labels and icons must always be readable on navy. Explicitly set child text/icon colors; do not rely on inherited component color alone.
 - The RocketPD/Mission Control brand block should feel intentional and not like placeholder text.
 
 ## Text And Formatting
@@ -327,13 +327,17 @@ Navigation should feel branded:
 
 ## Dashboard
 
-- Dashboard should prioritize cohort readiness over raw task lists.
-- Group operations tasks by cohort and open details in a modal.
+- Dashboard is the command center. It should answer three questions in the first viewport: what is healthy, what needs attention, and what is coming next.
+- Start with a strong operational hero/status band, not a generic page header followed by equal-weight cards. The hero may summarize active cohorts, upcoming sessions, pending payments, and open tasks using existing dashboard data.
+- KPI cards must be compact, stable, and scannable. Use a responsive 4/3/2/1 grid with equal-height tiles; never squeeze seven metric cards into one desktop row.
+- Distinguish snapshots from work queues. Snapshot cards show one focused number/chart and a short helper line. Work queues use structured rows with reserved zones for date/icon, content, status, and action.
+- Prioritize cohort readiness/open operations above secondary activity. Group operations tasks by cohort and open details in a modal.
 - Sort cohort readiness by nearest upcoming session before open-task count.
-- Emphasize upcoming session dates and times visually.
+- Emphasize upcoming session dates and times visually, and render sessions as an agenda by default. Avoid mode toggles unless both modes are equally polished and useful.
 - Use lightweight inline charts for snapshots when they help scanning; donut charts are preferred for payment status summaries.
-- Primary dashboard rows must reserve separate space for content, status, and actions so text never overlaps buttons.
-- Dashboard panels in the same row should use equal height where practical.
+- Dashboard panel content must never overflow the card. Clamp long titles, truncate long pills with a tooltip where available, and keep row actions/statuses in fixed-width areas.
+- Dashboard panels in the same row should use equal height where practical, but high-priority panels may intentionally span more width than secondary insight panels.
+- Quick actions belong in the hero/header action area as compact secondary controls; they should not consume a full dashboard row.
 
 ## Source And UTM Display
 
