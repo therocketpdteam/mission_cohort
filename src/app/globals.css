@@ -2214,16 +2214,21 @@ a {
 
 @media (max-width: 620px) {
   .app-topbar {
+    display: grid;
+    grid-template-columns: 42px minmax(0, 1fr);
     gap: 10px;
+    align-items: start;
     padding: 10px 12px;
   }
 
   .app-topbar-title {
-    flex-basis: calc(100% - 48px);
+    grid-column: 2;
+    min-width: 0;
   }
 
   .app-view-controls,
   .user-menu {
+    grid-column: 1 / -1;
     width: 100%;
   }
 
@@ -2254,6 +2259,48 @@ a {
 
   .table-pager .ui-field {
     min-width: 0;
+  }
+
+  .dashboard-panel,
+  .cohort-revenue-card,
+  .section-card {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .dashboard-panel-body-scroll {
+    padding-right: 18px;
+  }
+
+  .dashboard-priority-row {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-priority-row .status-chip,
+  .dashboard-priority-row .ui-button {
+    justify-self: start;
+  }
+
+  .cohort-revenue-card {
+    overflow: hidden;
+  }
+
+  .cohort-revenue-values {
+    min-width: 0;
+  }
+
+  .session-check-row {
+    grid-template-columns: 58px minmax(0, 1fr) 42px;
+    gap: 8px;
+    padding: 8px;
+  }
+
+  .session-check-row > span:nth-child(n+3):nth-child(-n+8) {
+    display: none;
+  }
+
+  .session-check-row .row-action-wrap {
+    justify-self: end;
   }
 
   .dashboard-hero h1 {

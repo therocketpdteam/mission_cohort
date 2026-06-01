@@ -181,6 +181,12 @@ async function collectLayoutFindings(page: Page, route: string, viewport: string
           if (first.element.contains(second.element) || second.element.contains(first.element)) {
             continue;
           }
+          if (
+            first.element.closest(".ui-select-menu, .row-action-menu, .user-popover") ||
+            second.element.closest(".ui-select-menu, .row-action-menu, .user-popover")
+          ) {
+            continue;
+          }
 
           const x = Math.max(0, Math.min(first.box.right, second.box.right) - Math.max(first.box.left, second.box.left));
           const y = Math.max(0, Math.min(first.box.bottom, second.box.bottom) - Math.max(first.box.top, second.box.top));
