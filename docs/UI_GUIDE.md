@@ -398,7 +398,8 @@ Visual QA must verify:
 - Table action controls use compact menus and never overlap row text.
 - Names and organizations display in proper case everywhere user-facing.
 - Primary workflows avoid horizontal scrolling on a desktop viewport.
-- Playwright should cover the public login shell on every run and authenticated admin layouts when `E2E_ADMIN_EMAIL` and `E2E_ADMIN_PASSWORD` are available.
+- Playwright should cover the public login shell on every run and authenticated admin layouts when `E2E_ADMIN_EMAIL`/`E2E_ADMIN_PASSWORD` or `E2E_STORAGE_STATE` are available.
+- For local visual audits, prefer a saved Playwright storage state in `playwright/.auth/admin.json`; it avoids sharing admin passwords and keeps the audit repeatable.
 - Playwright UI checks should assert no horizontal page overflow, no native browser selects, stable section/filter/table surfaces, compact/night mode readability, app-styled dropdown menus, and cohort detail checklist/drawer behavior.
 - `pnpm test:e2e:audit` should collect all route findings into the Playwright report before failing so UI cleanup can be batched by route and severity.
 

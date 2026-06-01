@@ -1,6 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? `http://127.0.0.1:${process.env.PORT ?? "3000"}`;
+const storageState = process.env.E2E_STORAGE_STATE || process.env.PLAYWRIGHT_STORAGE_STATE;
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -14,6 +15,7 @@ export default defineConfig({
   reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : [["list"], ["html", { open: "never" }]],
   use: {
     baseURL,
+    storageState: storageState || undefined,
     trace: "on-first-retry",
     screenshot: "only-on-failure",
     video: "retain-on-failure"

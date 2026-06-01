@@ -14,7 +14,9 @@ type AuditFinding = {
 
 const adminEmail = process.env.E2E_ADMIN_EMAIL;
 const adminPassword = process.env.E2E_ADMIN_PASSWORD;
+const storageStatePath = process.env.E2E_STORAGE_STATE || process.env.PLAYWRIGHT_STORAGE_STATE;
 const hasAdminCredentials = Boolean(adminEmail && adminPassword);
+const hasStoredSession = Boolean(storageStatePath);
 
 const staticRoutes = ["/dashboard", "/cohorts", "/registrations", "/participants", "/payments", "/reports", "/settings"];
 
@@ -52,7 +54,16 @@ async function writeAuditReport(testInfo: TestInfo, findings: AuditFinding[]) {
 }
 
 async function login(page: Page) {
-  test.skip(!hasAdminCredentials, "Set E2E_ADMIN_EMAIL and E2E_ADMIN_PASSWORD to run authenticated UI audits.");
+  if (hasStoredSession && !hasAdminCredentials) {
+    await page.goto("/dashboard");
+    await expect(page.locator(".app-shell")).toBeVisible();
+    return;
+  }
+
+  test.skip(
+    !hasAdminCredentials,
+    "Set E2E_ADMIN_EMAIL/E2E_ADMIN_PASSWORD or E2E_STORAGE_STATE to run authenticated UI audits."
+  );
 
   await page.goto("/login");
   await page.getByLabel("Email").fill(adminEmail!);
@@ -259,11 +270,15 @@ test.describe("Playwright UI audit", () => {
       }
 
       if (route === "/cohorts" && await page.locator(".ui-select-trigger").count()) {
-        await page.locator(".ui-select-trigger").first().click();
-        if (await page.locator(".ui-select-menu").first().isVisible()) {
-          findings.push(...await collectLayoutFindings(page, `${route} dropdown`, viewport));
-        } else {
-          findings.push(finding(route, viewport, "medium", "dropdown", "App dropdown trigger did not open a visible menu."));
+        try {
+          await page.locator(".ui-select-trigger").first().click({ timeout: 3_000 });
+          if (await page.locator(".ui-select-menu").first().isVisible()) {
+            findings.push(...await collectLayoutFindings(page, `${route} dropdown`, viewport));
+          } else {
+            findings.push(finding(route, viewport, "medium", "dropdown", "App dropdown trigger did not open a visible menu."));
+          }
+        } catch (error) {
+          findings.push(finding(route, viewport, "medium", "dropdown", error instanceof Error ? error.message : String(error)));
         }
       }
 

@@ -2,7 +2,9 @@ import { expect, test, type Page } from "@playwright/test";
 
 const adminEmail = process.env.E2E_ADMIN_EMAIL;
 const adminPassword = process.env.E2E_ADMIN_PASSWORD;
+const storageStatePath = process.env.E2E_STORAGE_STATE || process.env.PLAYWRIGHT_STORAGE_STATE;
 const hasAdminCredentials = Boolean(adminEmail && adminPassword);
+const hasStoredSession = Boolean(storageStatePath);
 const primaryRoutes = ["/dashboard", "/cohorts", "/registrations", "/participants", "/payments", "/reports", "/settings"];
 
 async function expectNoHorizontalOverflow(page: Page) {
@@ -50,7 +52,16 @@ async function expectNoNativeSelects(page: Page) {
 }
 
 async function login(page: Page) {
-  test.skip(!hasAdminCredentials, "Set E2E_ADMIN_EMAIL and E2E_ADMIN_PASSWORD to run authenticated UI checks.");
+  if (hasStoredSession && !hasAdminCredentials) {
+    await page.goto("/dashboard");
+    await expect(page.locator(".app-shell")).toBeVisible();
+    return;
+  }
+
+  test.skip(
+    !hasAdminCredentials,
+    "Set E2E_ADMIN_EMAIL/E2E_ADMIN_PASSWORD or E2E_STORAGE_STATE to run authenticated UI checks."
+  );
 
   await page.goto("/login");
   await page.getByLabel("Email").fill(adminEmail!);

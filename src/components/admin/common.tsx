@@ -207,7 +207,9 @@ export function StatusChip({ value }: { value?: unknown }) {
 
   return (
     <Tooltip title={text}>
-      <span className={`status-chip status-${tone}`}>{text}</span>
+      <span className={`status-chip status-${tone}`}>
+        <span>{text}</span>
+      </span>
     </Tooltip>
   );
 }
@@ -239,7 +241,9 @@ export function FieldValuePill({ label, value, secondary }: { label: string; val
   const display = value == null || value === "" ? "No response" : String(value);
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-      <span className="metadata-pill" style={{ maxWidth: 180 }}>{label}</span>
+      <span className="metadata-pill" style={{ maxWidth: 180 }}>
+        <span>{label}</span>
+      </span>
       <div style={{ minWidth: 0 }}>
         <div className="app-table-cell-content" title={display}>{display}</div>
         {secondary && <small className="app-table-cell-content" title={secondary}>{secondary}</small>}
@@ -249,7 +253,11 @@ export function FieldValuePill({ label, value, secondary }: { label: string; val
 }
 
 export function MetadataPill({ children, maxWidth = "100%" }: { children: ReactNode; maxWidth?: number | string }) {
-  return <span className="metadata-pill" style={{ maxWidth }}>{children}</span>;
+  return (
+    <span className="metadata-pill" style={{ maxWidth }}>
+      <span>{children}</span>
+    </span>
+  );
 }
 
 export function SourcePill({ row }: { row: AdminRow }) {
@@ -269,7 +277,7 @@ export function DateBadge({ value, emptyLabel = "No date" }: { value?: string | 
 
   return (
     <span className="metadata-pill" style={{ minWidth: 58, justifyContent: "center" }}>
-      {valid ? `${month} ${day}` : emptyLabel}
+      <span>{valid ? `${month} ${day}` : emptyLabel}</span>
     </span>
   );
 }

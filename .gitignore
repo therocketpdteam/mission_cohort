@@ -9,3 +9,5 @@ dist
 *.tsbuildinfo
 prisma/dev.db
 .vercel
+.env*
+playwright/.auth/

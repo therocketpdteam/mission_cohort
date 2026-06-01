@@ -183,7 +183,7 @@ pnpm test:e2e
 pnpm test:e2e:audit
 ```
 
-The public checks always run. Authenticated admin UI checks run when these are set:
+The public checks always run. Authenticated admin UI checks can run with email/password credentials:
 
 ```bash
 E2E_ADMIN_EMAIL=admin@example.com \
@@ -191,10 +191,21 @@ E2E_ADMIN_PASSWORD='your-admin-password' \
 pnpm test:e2e
 ```
 
+For local audits, the safer option is to save a one-time authenticated browser session and reuse it:
+
+```bash
+mkdir -p playwright/.auth
+pnpm dev
+pnpm exec playwright codegen --save-storage=playwright/.auth/admin.json http://127.0.0.1:3000/login
+E2E_STORAGE_STATE=playwright/.auth/admin.json pnpm test:e2e:audit
+```
+
+Log in through the Playwright browser window, then close it so the storage file is written. `playwright/.auth/` is ignored by git.
+
 To include Playwright in the full pre-push QA flow:
 
 ```bash
-RUN_E2E=1 E2E_ADMIN_EMAIL=admin@example.com E2E_ADMIN_PASSWORD='your-admin-password' pnpm qa:prepush
+RUN_E2E=1 E2E_STORAGE_STATE=playwright/.auth/admin.json pnpm qa:prepush
 ```
 
 The audit command writes a grouped `ui-audit.md` attachment in Playwright's test output. It is designed to collect all visible route findings before failing, so a UI pass can fix the full list instead of chasing one failure at a time.
