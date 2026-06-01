@@ -2341,6 +2341,16 @@ a {
   .dashboard-panel-header {
     flex-direction: column;
     align-items: stretch;
+    padding-bottom: 12px;
+  }
+
+  .app-shell.is-compact .dashboard-page .dashboard-panel-header {
+    padding-bottom: 10px;
+  }
+
+  .dashboard-panel-header .ui-button {
+    align-self: flex-start;
+    width: auto;
   }
 
   .image-field {
