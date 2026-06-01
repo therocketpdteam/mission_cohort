@@ -20,6 +20,7 @@
     "qa:smoke": "tsx scripts/final-smoke.ts",
     "qa:prepush": "bash scripts/pre-push-qa.sh",
     "test:e2e": "playwright test",
+    "test:e2e:audit": "playwright test tests/e2e/ui-audit.spec.ts",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:report": "playwright show-report",
     "readiness": "node scripts/readiness-check.mjs",

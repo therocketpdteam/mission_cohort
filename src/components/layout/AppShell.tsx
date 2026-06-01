@@ -4,6 +4,7 @@ import {
   AccountCircle,
   ArticleOutlined,
   CalendarMonthOutlined,
+  CheckCircleOutline,
   DashboardOutlined,
   EmailOutlined,
   GroupsOutlined,
@@ -31,6 +32,7 @@ const navItems: ReadonlyArray<{
   { label: "Cohorts", href: "/cohorts", icon: <CalendarMonthOutlined /> },
   { label: "Registrations", href: "/registrations", icon: <ArticleOutlined /> },
   { label: "Participants", href: "/participants", icon: <GroupsOutlined /> },
+  { label: "Payments", href: "/payments", icon: <CheckCircleOutline /> },
   { label: "Communications", href: "/communications", icon: <EmailOutlined /> },
   { label: "Reports", href: "/reports", icon: <InsightsOutlined /> },
   { label: "Settings", href: "/settings", icon: <SettingsOutlined /> }

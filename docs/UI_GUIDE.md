@@ -400,5 +400,6 @@ Visual QA must verify:
 - Primary workflows avoid horizontal scrolling on a desktop viewport.
 - Playwright should cover the public login shell on every run and authenticated admin layouts when `E2E_ADMIN_EMAIL` and `E2E_ADMIN_PASSWORD` are available.
 - Playwright UI checks should assert no horizontal page overflow, no native browser selects, stable section/filter/table surfaces, compact/night mode readability, app-styled dropdown menus, and cohort detail checklist/drawer behavior.
+- `pnpm test:e2e:audit` should collect all route findings into the Playwright report before failing so UI cleanup can be batched by route and severity.
 
 Do not invent a totally new design system. Use this RocketPD-inspired admin system consistently.

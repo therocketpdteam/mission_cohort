@@ -180,6 +180,7 @@ Playwright UI checks are available for visual/layout smoke testing:
 ```bash
 pnpm exec playwright install chromium
 pnpm test:e2e
+pnpm test:e2e:audit
 ```
 
 The public checks always run. Authenticated admin UI checks run when these are set:
@@ -195,6 +196,8 @@ To include Playwright in the full pre-push QA flow:
 ```bash
 RUN_E2E=1 E2E_ADMIN_EMAIL=admin@example.com E2E_ADMIN_PASSWORD='your-admin-password' pnpm qa:prepush
 ```
+
+The audit command writes a grouped `ui-audit.md` attachment in Playwright's test output. It is designed to collect all visible route findings before failing, so a UI pass can fix the full list instead of chasing one failure at a time.
 
 ## Integrations
 

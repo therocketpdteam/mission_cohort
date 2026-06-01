@@ -3,7 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 const adminEmail = process.env.E2E_ADMIN_EMAIL;
 const adminPassword = process.env.E2E_ADMIN_PASSWORD;
 const hasAdminCredentials = Boolean(adminEmail && adminPassword);
-const primaryRoutes = ["/dashboard", "/cohorts", "/registrations", "/participants"];
+const primaryRoutes = ["/dashboard", "/cohorts", "/registrations", "/participants", "/payments", "/reports", "/settings"];
 
 async function expectNoHorizontalOverflow(page: Page) {
   const overflow = await page.evaluate(() => {
