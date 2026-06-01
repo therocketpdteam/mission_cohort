@@ -1,12 +1,12 @@
 "use client";
 
 import { CheckCircleOutline } from "@/components/ui/icons";
-import { Box, MenuItem, Stack, TextField } from "@/components/ui/primitives";
+import { Box, MenuItem, TextField } from "@/components/ui/primitives";
 import { GridColDef } from "./common";
 import { useEffect, useMemo, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
 import { formatProperDisplay, formatStatusLabel } from "@/lib/formatting";
-import { AdminRow, AppDataGrid, EmptyState, PageHeader, PageStack, RowActionMenu, SectionCard, StatusChip, TableShell, useNotifier } from "./common";
+import { AdminRow, AppDataGrid, CompactFilterBar, EmptyState, PageHeader, PageStack, RowActionMenu, SectionCard, StatusChip, TableShell, useNotifier } from "./common";
 
 const paymentStatuses = ["PENDING", "INVOICED", "PARTIALLY_PAID", "PAID", "REFUNDED", "CANCELLED"];
 
@@ -71,14 +71,12 @@ export function PaymentsClient() {
   return (
     <PageStack>
       <PageHeader title="Payments" description="Track invoices, payment methods, payment status, and payment dates." />
-      <SectionCard title="Filters">
-        <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
-          <TextField select label="Payment status" value={status} onChange={(event) => setStatus(event.target.value)} sx={{ minWidth: 220 }}>
-            <MenuItem value="">All statuses</MenuItem>
-            {paymentStatuses.map((value) => <MenuItem key={value} value={value}>{formatStatusLabel(value)}</MenuItem>)}
-          </TextField>
-        </Stack>
-      </SectionCard>
+      <CompactFilterBar resultCount={filteredRows.length}>
+        <TextField select label="Payment status" value={status} onChange={(event) => setStatus(event.target.value)} sx={{ minWidth: 220 }}>
+          <MenuItem value="">All statuses</MenuItem>
+          {paymentStatuses.map((value) => <MenuItem key={value} value={value}>{formatStatusLabel(value)}</MenuItem>)}
+        </TextField>
+      </CompactFilterBar>
       <SectionCard title="Payment Records">
         <TableShell>
           <AppDataGrid rows={filteredRows} columns={columns} loading={loading} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} />

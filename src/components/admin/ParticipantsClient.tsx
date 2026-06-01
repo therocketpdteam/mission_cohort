@@ -25,6 +25,7 @@ import { formatProperDisplay, formatStatusLabel } from "@/lib/formatting";
 import {
   AdminRow,
   AppDataGrid,
+  CompactFilterBar,
   EmptyState,
   PageHeader,
   PageStack,
@@ -378,32 +379,36 @@ export function ParticipantsClient() {
         description="Global participant roster across all cohorts, registrations, and organizations."
         action={<ToolbarButton onClick={() => setDialogOpen(true)}>Add Participant</ToolbarButton>}
       />
-      <SectionCard title="Filters">
-        <Stack direction={{ xs: "column", md: "row" }} flexWrap="wrap" gap={2}>
-          <TextField label="Search" value={search} onChange={(event) => setSearch(event.target.value)} />
-          <TextField select label="Status" value={status} onChange={(event) => setStatus(event.target.value)} sx={{ minWidth: 180 }}>
-            <MenuItem value="">All statuses</MenuItem>
-            {participantStatuses.map((value) => <MenuItem value={value} key={value}>{formatStatusLabel(value)}</MenuItem>)}
-          </TextField>
-          <TextField select label="Certificate" value={certificateIssued} onChange={(event) => setCertificateIssued(event.target.value)} sx={{ minWidth: 180 }}>
-            <MenuItem value="">All certificates</MenuItem>
-            <MenuItem value="true">Issued</MenuItem>
-            <MenuItem value="false">Not issued</MenuItem>
-          </TextField>
-          <TextField select label="Cohort" value={cohortId} onChange={(event) => setCohortId(event.target.value)} sx={{ minWidth: 220 }}>
-            <MenuItem value="">All cohorts</MenuItem>
-            {cohortOptions.map(([id, label]) => <MenuItem value={id} key={id}>{label}</MenuItem>)}
-          </TextField>
-          <TextField select label="Organization" value={organizationId} onChange={(event) => setOrganizationId(event.target.value)} sx={{ minWidth: 220 }}>
-            <MenuItem value="">All organizations</MenuItem>
-            {organizationOptions.map(([id, label]) => <MenuItem value={id} key={id}>{formatProperDisplay(label)}</MenuItem>)}
-          </TextField>
-          <TextField select label="Registration POC" value={registrationPoc} onChange={(event) => setRegistrationPoc(event.target.value)} sx={{ minWidth: 220 }}>
-            <MenuItem value="">All POCs</MenuItem>
-            {pocOptions.map((value) => <MenuItem value={value} key={value}>{formatProperDisplay(value)}</MenuItem>)}
-          </TextField>
-        </Stack>
-      </SectionCard>
+      <CompactFilterBar
+        resultCount={filteredRows.length}
+        advanced={
+          <>
+            <TextField select label="Cohort" value={cohortId} onChange={(event) => setCohortId(event.target.value)} sx={{ minWidth: 220 }}>
+              <MenuItem value="">All cohorts</MenuItem>
+              {cohortOptions.map(([id, label]) => <MenuItem value={id} key={id}>{label}</MenuItem>)}
+            </TextField>
+            <TextField select label="Organization" value={organizationId} onChange={(event) => setOrganizationId(event.target.value)} sx={{ minWidth: 220 }}>
+              <MenuItem value="">All organizations</MenuItem>
+              {organizationOptions.map(([id, label]) => <MenuItem value={id} key={id}>{formatProperDisplay(label)}</MenuItem>)}
+            </TextField>
+            <TextField select label="Registration POC" value={registrationPoc} onChange={(event) => setRegistrationPoc(event.target.value)} sx={{ minWidth: 220 }}>
+              <MenuItem value="">All POCs</MenuItem>
+              {pocOptions.map((value) => <MenuItem value={value} key={value}>{formatProperDisplay(value)}</MenuItem>)}
+            </TextField>
+          </>
+        }
+      >
+        <TextField label="Search" value={search} onChange={(event) => setSearch(event.target.value)} />
+        <TextField select label="Status" value={status} onChange={(event) => setStatus(event.target.value)} sx={{ minWidth: 180 }}>
+          <MenuItem value="">All statuses</MenuItem>
+          {participantStatuses.map((value) => <MenuItem value={value} key={value}>{formatStatusLabel(value)}</MenuItem>)}
+        </TextField>
+        <TextField select label="Certificate" value={certificateIssued} onChange={(event) => setCertificateIssued(event.target.value)} sx={{ minWidth: 180 }}>
+          <MenuItem value="">All certificates</MenuItem>
+          <MenuItem value="true">Issued</MenuItem>
+          <MenuItem value="false">Not issued</MenuItem>
+        </TextField>
+      </CompactFilterBar>
       <SectionCard title="Participant Roster">
         <TableShell>
           <AppDataGrid

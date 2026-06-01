@@ -31,6 +31,7 @@ import { formatProperDisplay, formatRegistrationSource, formatStatusLabel } from
 import {
   AdminRow,
   AppDataGrid,
+  CompactFilterBar,
   EmptyState,
   PageHeader,
   PageStack,
@@ -645,19 +646,17 @@ export function RegistrationsClient() {
         description="The POC-first operations hub for team registrations, payment status, supporting documents, and participant rosters."
         action={<ToolbarButton onClick={() => setDialogOpen(true)}>Add Registration</ToolbarButton>}
       />
-      <SectionCard title="Filters">
-        <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
-          <TextField label="Search" value={search} onChange={(event) => setSearch(event.target.value)} />
-          <TextField select label="Payment status" value={paymentStatus} onChange={(event) => setPaymentStatus(event.target.value)} sx={{ minWidth: 220 }}>
-            <MenuItem value="">All payment statuses</MenuItem>
-            {paymentStatuses.map((value) => <MenuItem value={value} key={value}>{formatStatusLabel(value)}</MenuItem>)}
-          </TextField>
-          <TextField select label="Source" value={source} onChange={(event) => setSource(event.target.value)} sx={{ minWidth: 180 }}>
-            <MenuItem value="">All sources</MenuItem>
-            {sourceOptions.map((value) => <MenuItem value={value} key={value}>{value}</MenuItem>)}
-          </TextField>
-        </Stack>
-      </SectionCard>
+      <CompactFilterBar resultCount={filteredRows.length}>
+        <TextField label="Search" value={search} onChange={(event) => setSearch(event.target.value)} />
+        <TextField select label="Payment status" value={paymentStatus} onChange={(event) => setPaymentStatus(event.target.value)} sx={{ minWidth: 220 }}>
+          <MenuItem value="">All payment statuses</MenuItem>
+          {paymentStatuses.map((value) => <MenuItem value={value} key={value}>{formatStatusLabel(value)}</MenuItem>)}
+        </TextField>
+        <TextField select label="Source" value={source} onChange={(event) => setSource(event.target.value)} sx={{ minWidth: 180 }}>
+          <MenuItem value="">All sources</MenuItem>
+          {sourceOptions.map((value) => <MenuItem value={value} key={value}>{value}</MenuItem>)}
+        </TextField>
+      </CompactFilterBar>
       <SectionCard title="Registration Management">
         {selectedIds.length > 0 && (
           <Stack direction={{ xs: "column", lg: "row" }} flexWrap="wrap" useFlexGap gap={1.5} alignItems={{ xs: "stretch", lg: "center" }} sx={{ mb: 2 }}>

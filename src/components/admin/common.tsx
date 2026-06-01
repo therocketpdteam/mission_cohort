@@ -11,6 +11,7 @@ import {
   DialogTitle,
   FormControlLabel,
   IconButton,
+  MenuItem,
   Snackbar,
   Switch,
   TextField,
@@ -99,6 +100,66 @@ export function SectionCard({
 
 export function FilterBar({ children }: { children: ReactNode }) {
   return <div className="filter-bar">{children}</div>;
+}
+
+export function CompactFilterBar({
+  children,
+  advanced,
+  resultCount
+}: {
+  children: ReactNode;
+  advanced?: ReactNode;
+  resultCount?: number;
+}) {
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+
+  return (
+    <section className="compact-filter-bar">
+      <div className="compact-filter-row">
+        {children}
+        {advanced && (
+          <Button type="button" variant="outlined" size="small" onClick={() => setAdvancedOpen((current) => !current)}>
+            {advancedOpen ? "Hide filters" : "More filters"}
+          </Button>
+        )}
+        {typeof resultCount === "number" && <span className="compact-filter-count">{resultCount} records</span>}
+      </div>
+      {advancedOpen && <div className="compact-filter-row is-advanced">{advanced}</div>}
+    </section>
+  );
+}
+
+export function QuickViewDrawer({
+  title,
+  open,
+  onClose,
+  children,
+  actions
+}: {
+  title: string;
+  open: boolean;
+  onClose: () => void;
+  children: ReactNode;
+  actions?: ReactNode;
+}) {
+  if (!open) {
+    return null;
+  }
+
+  return (
+    <div className="quick-view-backdrop" role="presentation" onClick={onClose}>
+      <aside className="quick-view-drawer" role="dialog" aria-modal="true" aria-label={title} onClick={(event) => event.stopPropagation()}>
+        <header className="quick-view-header">
+          <h2>{title}</h2>
+          <IconButton type="button" onClick={onClose} aria-label="Close drawer">
+            <CloseIcon />
+          </IconButton>
+        </header>
+        <div className="quick-view-body">{children}</div>
+        {actions && <footer className="quick-view-footer">{actions}</footer>}
+      </aside>
+    </div>
+  );
 }
 
 export function LoadingState({ label = "Loading" }: { label?: string }) {
@@ -463,12 +524,9 @@ export function AppDataGrid<R extends AdminRow = AdminRow>({
           {rows.length === 0 ? "No rows" : `${page * pageSize + 1}-${Math.min(rows.length, (page + 1) * pageSize)} of ${rows.length}`}
         </span>
         <div className="table-pager">
-          <label className="ui-field" style={{ minWidth: 110 }}>
-            <span className="ui-label">Rows</span>
-            <select className="ui-input" value={pageSize} onChange={(event) => setPageSize(Number(event.target.value))}>
-              {normalizedOptions.map((option) => <option value={option} key={option}>{option}</option>)}
-            </select>
-          </label>
+          <TextField select label="Rows" value={String(pageSize)} onChange={(event) => setPageSize(Number(event.target.value))} style={{ minWidth: 110 }}>
+            {normalizedOptions.map((option) => <MenuItem value={option} key={option}>{option}</MenuItem>)}
+          </TextField>
           <Button type="button" variant="outlined" size="small" disabled={page === 0} onClick={() => setPage((current) => Math.max(0, current - 1))}>Previous</Button>
           <span>Page {page + 1} of {pageCount}</span>
           <Button type="button" variant="outlined" size="small" disabled={page >= pageCount - 1} onClick={() => setPage((current) => Math.min(pageCount - 1, current + 1))}>Next</Button>

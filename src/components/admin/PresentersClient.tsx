@@ -10,6 +10,7 @@ import { formatProperDisplay } from "@/lib/formatting";
 import {
   AdminRow,
   AppDataGrid,
+  CompactFilterBar,
   EmptyState,
   FieldConfig,
   MutationDialog,
@@ -118,9 +119,9 @@ export function PresentersClient() {
         description="Manage presenters and thought leaders attached to cohort delivery."
         action={<ToolbarButton onClick={() => setDialogOpen(true)}>Create Presenter</ToolbarButton>}
       />
-      <SectionCard title="Filters">
+      <CompactFilterBar resultCount={filteredRows.length}>
         <TextField label="Search" value={search} onChange={(event) => setSearch(event.target.value)} />
-      </SectionCard>
+      </CompactFilterBar>
       <SectionCard title="Presenter Directory">
         <TableShell>
           <AppDataGrid rows={filteredRows} columns={columns} loading={loading} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} />

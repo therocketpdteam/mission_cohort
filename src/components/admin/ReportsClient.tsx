@@ -6,7 +6,7 @@ import { Box, Button, Grid, MenuItem, Stack, TextField, Typography } from "@/com
 import { GridColDef } from "./common";
 import { useEffect, useMemo, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
-import { AdminRow, AppDataGrid, EmptyState, PageHeader, PageStack, RowActionMenu, SectionCard, StatusChip, TableShell, useNotifier } from "./common";
+import { AdminRow, AppDataGrid, CompactFilterBar, EmptyState, PageHeader, PageStack, RowActionMenu, SectionCard, StatusChip, TableShell, useNotifier } from "./common";
 import { formatStatusLabel } from "@/lib/formatting";
 
 export function ReportsClient() {
@@ -109,7 +109,7 @@ export function ReportsClient() {
         description="No-PII cohort reporting and secure thought leader share links."
         action={<Button startIcon={<AddLinkOutlined />} onClick={createShareLink}>Create Share Link</Button>}
       />
-      <SectionCard title="Report Filters">
+      <CompactFilterBar resultCount={reports.length}>
         <TextField
           select
           label="Cohort"
@@ -122,7 +122,7 @@ export function ReportsClient() {
             <MenuItem value={cohort.id} key={cohort.id}>{cohort.title}</MenuItem>
           ))}
         </TextField>
-      </SectionCard>
+      </CompactFilterBar>
       <Grid container spacing={2}>
         {metrics.map(([label, value]) => (
           <Grid size={{ xs: 12, sm: 6, lg: 2.4 }} key={String(label)}>

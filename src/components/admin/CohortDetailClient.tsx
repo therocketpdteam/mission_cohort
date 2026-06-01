@@ -1,7 +1,8 @@
 "use client";
 
 import { AddIcon } from "@/components/ui/icons";
-import { CalendarMonthOutlined } from "@/components/ui/icons";
+import { CalendarMonthOutlined, GroupsOutlined, InsightsOutlined } from "@/components/ui/icons";
+import { CancelOutlined, CheckCircleOutline, SendOutlined } from "@/components/ui/icons";
 import { EditOutlined } from "@/components/ui/icons";
 import {
   Box,
@@ -30,11 +31,17 @@ import { formatProperDisplay, formatStatusLabel } from "@/lib/formatting";
 import {
   AdminRow,
   AppDataGrid,
+  CompactFilterBar,
+  DateBadge,
+  DetailField,
+  DonutChart,
   EmptyState,
   FieldConfig,
+  GridRowSelectionModel,
   MutationDialog,
   PageHeader,
   PageStack,
+  QuickViewDrawer,
   RowActionMenu,
   SectionCard,
   StatusChip,
@@ -110,53 +117,71 @@ const sessionEmailTypes = [
 ];
 
 const paymentStatuses = ["PENDING", "INVOICED", "PARTIALLY_PAID", "PAID", "REFUNDED", "CANCELLED"];
+const participantStatuses = ["REGISTERED", "CANCELLED", "COMPLETED", "NO_SHOW"];
 
 function money(value: unknown) {
   return `$${Number(value ?? 0).toLocaleString()}`;
 }
 
-function RegistrationEvolutionChart({ rows, mode }: { rows: AdminRow[]; mode: "count" | "amount" }) {
-  const points = useMemo(() => {
-    const sorted = [...rows].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-    let cumulative = 0;
-    return sorted.map((registration) => {
-      cumulative += mode === "count" ? Number(registration.participantCount ?? 0) : Number(registration.totalAmount ?? 0);
-      return { label: new Date(registration.createdAt).toLocaleDateString(), value: cumulative };
-    });
-  }, [mode, rows]);
-  const max = Math.max(...points.map((point) => point.value), 1);
+function registrationTrendPoints(rows: AdminRow[], mode: "count" | "amount") {
+  const sorted = [...rows].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  let cumulative = 0;
+  return sorted.map((registration) => {
+    cumulative += mode === "count" ? Number(registration.participantCount ?? 0) : Number(registration.totalAmount ?? 0);
+    return { label: new Date(registration.createdAt).toLocaleDateString(), value: cumulative };
+  });
+}
+
+function RegistrationEvolutionChart({
+  rows,
+  compareRows,
+  compareLabel,
+  mode
+}: {
+  rows: AdminRow[];
+  compareRows: AdminRow[];
+  compareLabel?: string;
+  mode: "count" | "amount";
+}) {
+  const points = useMemo(() => registrationTrendPoints(rows, mode), [mode, rows]);
+  const comparisonPoints = useMemo(() => registrationTrendPoints(compareRows, mode), [compareRows, mode]);
+  const max = Math.max(...points.map((point) => point.value), ...comparisonPoints.map((point) => point.value), 1);
   const width = 720;
-  const height = 220;
+  const height = 180;
   const innerWidth = width - 64;
   const innerHeight = height - 48;
-  const path = points
-    .map((point, index) => {
-      const x = 40 + (points.length <= 1 ? innerWidth : (index / (points.length - 1)) * innerWidth);
+
+  function pathFor(nextPoints: Array<{ label: string; value: number }>) {
+    return nextPoints.map((point, index) => {
+      const x = 40 + (nextPoints.length <= 1 ? innerWidth : (index / (nextPoints.length - 1)) * innerWidth);
       const y = 16 + innerHeight - (point.value / max) * innerHeight;
       return `${index === 0 ? "M" : "L"} ${x} ${y}`;
     })
     .join(" ");
+  }
 
   if (points.length === 0) {
     return <EmptyState title="No registration trend yet" description="Registrations will draw the cohort evolution chart here." />;
   }
 
   return (
-    <Box sx={{ width: "100%", overflowX: "auto" }}>
-      <Box component="svg" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Registration evolution chart" sx={{ width: "100%", minWidth: 520 }}>
-        <line x1="40" y1={height - 32} x2={width - 24} y2={height - 32} stroke="#D7DEE8" />
-        <line x1="40" y1="16" x2="40" y2={height - 32} stroke="#D7DEE8" />
-        <path d={path} fill="none" stroke="#057C8E" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+    <div className="cohort-evolution-chart">
+      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Registration evolution chart">
+        <line x1="40" y1={height - 32} x2={width - 24} y2={height - 32} stroke="var(--color-slate-200)" />
+        <line x1="40" y1="16" x2="40" y2={height - 32} stroke="var(--color-slate-200)" />
+        {comparisonPoints.length > 0 && <path d={pathFor(comparisonPoints)} fill="none" stroke="var(--color-slate-300)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="8 8" />}
+        <path d={pathFor(points)} fill="none" stroke="var(--color-blue-600)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
         {points.map((point, index) => {
           const x = 40 + (points.length <= 1 ? innerWidth : (index / (points.length - 1)) * innerWidth);
           const y = 16 + innerHeight - (point.value / max) * innerHeight;
-          return <circle key={`${point.label}-${index}`} cx={x} cy={y} r="5" fill="#D99A2B" />;
+          return <circle key={`${point.label}-${index}`} cx={x} cy={y} r="4" fill="var(--color-orange-500)" />;
         })}
-        <text x="40" y="14" fill="#4A5568" fontSize="13">{mode === "count" ? `${max} seats` : money(max)}</text>
-        <text x="40" y={height - 8} fill="#4A5568" fontSize="13">{points[0]?.label}</text>
-        <text x={width - 150} y={height - 8} fill="#4A5568" fontSize="13">{points.at(-1)?.label}</text>
-      </Box>
-    </Box>
+        <text x="40" y="14" fill="var(--color-slate-500)" fontSize="12">{mode === "count" ? `${max} seats` : money(max)}</text>
+        <text x="40" y={height - 8} fill="var(--color-slate-500)" fontSize="12">{points[0]?.label}</text>
+        <text x={width - 150} y={height - 8} fill="var(--color-slate-500)" fontSize="12">{points.at(-1)?.label}</text>
+      </svg>
+      {comparisonPoints.length > 0 && <span>Comparing against {compareLabel}</span>}
+    </div>
   );
 }
 
@@ -302,8 +327,11 @@ export function CohortDetailClient({ id }: { id: string }) {
   const [tab, setTab] = useState(0);
   const [loading, setLoading] = useState(true);
   const [cohort, setCohort] = useState<AdminRow | null>(null);
+  const [allCohorts, setAllCohorts] = useState<AdminRow[]>([]);
+  const [allParticipants, setAllParticipants] = useState<AdminRow[]>([]);
   const [sessions, setSessions] = useState<AdminRow[]>([]);
   const [registrations, setRegistrations] = useState<AdminRow[]>([]);
+  const [compareRegistrations, setCompareRegistrations] = useState<AdminRow[]>([]);
   const [participants, setParticipants] = useState<AdminRow[]>([]);
   const [communications, setCommunications] = useState<AdminRow[]>([]);
   const [templates, setTemplates] = useState<AdminRow[]>([]);
@@ -316,16 +344,23 @@ export function CohortDetailClient({ id }: { id: string }) {
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
   const [resourceDialogOpen, setResourceDialogOpen] = useState(false);
   const [chartMode, setChartMode] = useState<"count" | "amount">("count");
+  const [compareCohortId, setCompareCohortId] = useState("");
   const [paymentDetail, setPaymentDetail] = useState<AdminRow | null>(null);
+  const [registrationDetail, setRegistrationDetail] = useState<AdminRow | null>(null);
+  const [participantDetail, setParticipantDetail] = useState<AdminRow | null>(null);
+  const [participantSelection, setParticipantSelection] = useState<GridRowSelectionModel>({ type: "include", ids: new Set() });
+  const [bulkParticipantStatus, setBulkParticipantStatus] = useState("REGISTERED");
   const { notifySuccess, notifyError, snackbar } = useNotifier();
 
   async function load() {
-    const [cohortData, sessionRows, registrationRows, participantRows, communicationRows, templateRows, paymentRows, taskRows, resourceRows, activityRows] =
+    const [cohortData, cohortRows, sessionRows, registrationRows, participantRows, allParticipantRows, communicationRows, templateRows, paymentRows, taskRows, resourceRows, activityRows] =
       await Promise.all([
         adminApi<AdminRow>(`/api/cohorts/${id}`),
+        adminApi<AdminRow[]>("/api/cohorts").catch(() => []),
         adminApi<AdminRow[]>(`/api/cohorts/${id}/sessions`),
         adminApi<AdminRow[]>(`/api/cohorts/${id}/registrations`),
         adminApi<AdminRow[]>(`/api/cohorts/${id}/participants`),
+        adminApi<AdminRow[]>("/api/participants").catch(() => []),
         adminApi<AdminRow[]>(`/api/communications?cohortId=${id}`).catch(() => []),
         adminApi<AdminRow[]>("/api/communications/templates").catch(() => []),
         adminApi<AdminRow[]>("/api/payments").catch(() => []),
@@ -335,9 +370,11 @@ export function CohortDetailClient({ id }: { id: string }) {
       ]);
 
     setCohort(cohortData);
+    setAllCohorts(cohortRows);
     setSessions(sessionRows);
     setRegistrations(registrationRows);
     setParticipants(participantRows);
+    setAllParticipants(allParticipantRows);
     setCommunications(communicationRows);
     setTemplates(templateRows);
     setPayments(paymentRows.filter((payment) => payment.cohortId === id));
@@ -354,6 +391,17 @@ export function CohortDetailClient({ id }: { id: string }) {
     });
   }, [id, notifyError]);
 
+  useEffect(() => {
+    if (!compareCohortId) {
+      setCompareRegistrations([]);
+      return;
+    }
+
+    adminApi<AdminRow[]>(`/api/cohorts/${compareCohortId}/registrations`)
+      .then(setCompareRegistrations)
+      .catch((error) => notifyError(error.message));
+  }, [compareCohortId, notifyError]);
+
   const totals = useMemo(() => {
     const totalAmount = registrations.reduce((sum, registration) => sum + Number(registration.totalAmount ?? 0), 0);
     const paidAmount = payments
@@ -369,6 +417,41 @@ export function CohortDetailClient({ id }: { id: string }) {
 
     return { totalAmount, paidAmount, pendingAmount, participantSeats, rosterComplete, openPaymentFollowUps, upcomingSessions };
   }, [registrations, payments, sessions, tasks]);
+
+  const revenueRows = useMemo(() => {
+    const openAmount = Math.max(totals.totalAmount - totals.paidAmount - totals.pendingAmount, 0);
+    return [
+      { label: "Paid", amount: totals.paidAmount },
+      { label: "Pending", amount: totals.pendingAmount },
+      { label: "Open", amount: openAmount }
+    ].filter((row) => row.amount > 0);
+  }, [totals.paidAmount, totals.pendingAmount, totals.totalAmount]);
+
+  const compareCohort = allCohorts.find((item) => item.id === compareCohortId);
+
+  const sessionDefaults = useMemo(() => {
+    const entries = [
+      ["Meeting URL", sessions.map((session) => session.meetingUrl).filter(Boolean)],
+      ["Location", sessions.map((session) => session.location).filter(Boolean)],
+      ["Timezone", sessions.map((session) => session.timezone).filter(Boolean)]
+    ] as Array<[string, unknown[]]>;
+
+    return entries
+      .map(([label, values]) => {
+        const unique = Array.from(new Set(values.map(String)));
+        return unique.length === 1 ? { label, value: unique[0] } : null;
+      })
+      .filter(Boolean) as Array<{ label: string; value: string }>;
+  }, [sessions]);
+
+  const participantHistory = useMemo(() => {
+    if (!participantDetail?.email) {
+      return [];
+    }
+
+    const email = String(participantDetail.email).toLowerCase();
+    return allParticipants.filter((participant) => String(participant.email ?? "").toLowerCase() === email && participant.id !== participantDetail.id);
+  }, [allParticipants, participantDetail]);
 
   function sessionEmailStatus(sessionId: string, type: string) {
     const communication = communications.find((item) => item.sessionId === sessionId && item.template?.type === type);
@@ -388,17 +471,60 @@ export function CohortDetailClient({ id }: { id: string }) {
     }
   }
 
+  async function sendParticipantMessage(participant: AdminRow) {
+    const template = templates.find((item) => item.active && item.type === "FOLLOW_UP") ?? templates.find((item) => item.active);
+
+    if (!template) {
+      notifyError("No active communication template is available.");
+      return;
+    }
+
+    try {
+      await adminApi("/api/communications", {
+        method: "PATCH",
+        body: { action: "sendTemplateToParticipant", participantId: participant.id, templateId: template.id }
+      });
+      notifySuccess(`Message sent to ${formatProperDisplay(`${participant.firstName} ${participant.lastName}`)}`);
+      await load();
+    } catch (error) {
+      notifyError((error as Error).message);
+    }
+  }
+
+  async function bulkUpdateParticipants() {
+    const ids = Array.from(participantSelection.ids).map(String);
+
+    if (ids.length === 0) {
+      notifyError("Select participants first.");
+      return;
+    }
+
+    try {
+      await Promise.all(ids.map((participantId) => adminApi("/api/participants", { method: "PATCH", body: { id: participantId, status: bulkParticipantStatus } })));
+      notifySuccess(`${ids.length} participants updated`);
+      setParticipantSelection({ type: "include", ids: new Set() });
+      await load();
+    } catch (error) {
+      notifyError((error as Error).message);
+    }
+  }
+
   function renderSessionEmailCell(type: string, sessionId: string) {
     const communication = communications.find((item) => item.sessionId === sessionId && item.template?.type === type);
+    const scheduled = Boolean(communication);
     return (
-      <Stack direction="row" spacing={0.75} alignItems="center">
-        <StatusChip value={communication?.status ?? "NOT_SCHEDULED"} />
-        {!communication && (
-          <Button size="small" variant="text" onClick={() => createSessionEmailSchedule(sessionId)}>
-            Create
-          </Button>
-        )}
-      </Stack>
+      <button
+        type="button"
+        className={`session-check ${scheduled ? "is-done" : "is-missing"}`}
+        onClick={(event) => {
+          event.stopPropagation();
+          if (!scheduled) void createSessionEmailSchedule(sessionId);
+        }}
+        title={scheduled ? formatStatusLabel(communication?.status) : "Create scheduled communication"}
+      >
+        {scheduled ? <CheckCircleOutline /> : <CancelOutlined />}
+        <span>{scheduled ? "Ready" : "Missing"}</span>
+      </button>
     );
   }
 
@@ -466,17 +592,53 @@ export function CohortDetailClient({ id }: { id: string }) {
     { field: "participantCount", headerName: "Participants", width: 120 },
     { field: "participantListStatus", headerName: "Roster", width: 150, renderCell: (params) => <StatusChip value={params.value} /> },
     { field: "paymentStatus", headerName: "Payment", width: 150, renderCell: (params) => <StatusChip value={params.value} /> },
-    { field: "supportingDocumentStatus", headerName: "Docs", width: 140, renderCell: (params) => <StatusChip value={params.value} /> },
-    { field: "invoiceNumber", headerName: "Invoice", width: 140 },
-    { field: "purchaseOrderNumber", headerName: "PO", width: 130 },
-    { field: "quickBooksInvoiceRef", headerName: "QB invoice", width: 150 }
+    { field: "invoiceNumber", headerName: "Invoice", width: 130 },
+    { field: "purchaseOrderNumber", headerName: "PO", width: 120 },
+    {
+      field: "actions",
+      headerName: "Actions",
+      width: 84,
+      sortable: false,
+      renderCell: (params) => (
+        <Box onClick={(event) => event.stopPropagation()}>
+          <RowActionMenu actions={[{ label: "Quick view", onClick: () => setRegistrationDetail(params.row) }]} />
+        </Box>
+      )
+    }
   ];
 
   const participantColumns: GridColDef[] = [
     { field: "name", headerName: "Name", flex: 1, minWidth: 180, valueGetter: (_value, row) => formatProperDisplay(`${row.firstName} ${row.lastName}`) },
     { field: "email", headerName: "Email", flex: 1, minWidth: 220 },
     { field: "organization", headerName: "Organization", flex: 1, minWidth: 200, valueGetter: (_value, row) => formatProperDisplay(row.organization?.name ?? "") },
-    { field: "attendanceStatus", headerName: "Attendance", width: 150, renderCell: (params) => <StatusChip value={params.value} /> }
+    { field: "status", headerName: "Status", width: 130, renderCell: (params) => <StatusChip value={params.value} /> },
+    {
+      field: "message",
+      headerName: "Message",
+      width: 118,
+      sortable: false,
+      renderCell: (params) => (
+        <Button size="small" variant="outlined" startIcon={<SendOutlined />} onClick={(event) => { event.stopPropagation(); void sendParticipantMessage(params.row); }}>
+          Send
+        </Button>
+      )
+    },
+    {
+      field: "actions",
+      headerName: "Actions",
+      width: 84,
+      sortable: false,
+      renderCell: (params) => (
+        <Box onClick={(event) => event.stopPropagation()}>
+          <RowActionMenu
+            actions={[
+              { label: "Quick view", onClick: () => setParticipantDetail(params.row) },
+              { label: "Send message", icon: <SendOutlined fontSize="small" />, onClick: () => void sendParticipantMessage(params.row) }
+            ]}
+          />
+        </Box>
+      )
+    }
   ];
 
   const paymentColumns: GridColDef[] = [
@@ -592,37 +754,51 @@ export function CohortDetailClient({ id }: { id: string }) {
 
       {tab === 0 && (
         <Stack spacing={2}>
-          <Grid container spacing={2}>
+          <div className="cohort-overview-grid">
             {[
-              ["Registrations", registrations.length],
-              ["Participant Seats", totals.participantSeats],
-              ["Roster Completion", `${totals.rosterComplete}/${registrations.length}`],
-              ["Total Revenue", money(totals.totalAmount)],
-              ["Paid Amount", money(totals.paidAmount)],
-              ["Pending Amount", money(totals.pendingAmount)],
-              ["Payment Follow-Ups", totals.openPaymentFollowUps],
-              ["Upcoming Sessions", totals.upcomingSessions]
-            ].map(([label, value]) => (
-              <Grid size={{ xs: 12, sm: 6, md: 3, xl: 1.5 }} key={String(label)}>
-                <Card sx={{ height: "100%" }}>
-                  <CardContent>
-                    <Typography color="text.secondary" variant="body2">{label}</Typography>
-                    <Typography variant="h4" sx={{ mt: 1 }}>{value}</Typography>
-                  </CardContent>
-                </Card>
-              </Grid>
+              { label: "Registrations", value: registrations.length, helper: "Organizations enrolled", icon: <InsightsOutlined /> },
+              { label: "Participant Seats", value: totals.participantSeats, helper: "Confirmed roster capacity", icon: <GroupsOutlined /> },
+              { label: "Roster Completion", value: `${totals.rosterComplete}/${registrations.length}`, helper: "Participant lists collected", icon: <CheckCircleOutline /> },
+              { label: "Upcoming Sessions", value: totals.upcomingSessions, helper: "Scheduled from today forward", icon: <CalendarMonthOutlined /> }
+            ].map((metric) => (
+              <article className="cohort-metric-card" key={metric.label}>
+                <span className="cohort-metric-icon">{metric.icon}</span>
+                <span className="cohort-metric-label">{metric.label}</span>
+                <strong>{metric.value}</strong>
+                <span className="cohort-metric-helper">{metric.helper}</span>
+              </article>
             ))}
-          </Grid>
+            <article className="cohort-revenue-card">
+              <div className="cohort-revenue-copy">
+                <span className="cohort-metric-label">Revenue Snapshot</span>
+                <strong>{money(totals.totalAmount)}</strong>
+                <div className="cohort-revenue-values">
+                  <DetailField label="Paid" value={money(totals.paidAmount)} />
+                  <DetailField label="Pending" value={money(totals.pendingAmount)} />
+                  <DetailField label="Open" value={money(Math.max(totals.totalAmount - totals.paidAmount - totals.pendingAmount, 0))} />
+                </div>
+              </div>
+              <DonutChart rows={revenueRows} valueKey="amount" labelKey="label" size={132} />
+            </article>
+          </div>
           <SectionCard
             title="Registration Evolution"
             action={
-              <Stack direction="row" flexWrap="wrap" useFlexGap gap={1}>
-                <Button size="small" variant={chartMode === "count" ? "contained" : "outlined"} onClick={() => setChartMode("count")}>Registrants #</Button>
-                <Button size="small" variant={chartMode === "amount" ? "contained" : "outlined"} onClick={() => setChartMode("amount")}>$$</Button>
-              </Stack>
+              <CompactFilterBar>
+                <TextField select label="Metric" value={chartMode} onChange={(event) => setChartMode(event.target.value as "count" | "amount")}>
+                  <MenuItem value="count">Registrants</MenuItem>
+                  <MenuItem value="amount">Revenue</MenuItem>
+                </TextField>
+                <TextField select label="Compare" value={compareCohortId} onChange={(event) => setCompareCohortId(event.target.value)}>
+                  <MenuItem value="">Current cohort only</MenuItem>
+                  {allCohorts.filter((item) => item.id !== id).map((item) => (
+                    <MenuItem value={item.id} key={item.id}>{item.title}</MenuItem>
+                  ))}
+                </TextField>
+              </CompactFilterBar>
             }
           >
-            <RegistrationEvolutionChart rows={registrations} mode={chartMode} />
+            <RegistrationEvolutionChart rows={registrations} compareRows={compareRegistrations} compareLabel={compareCohort?.title} mode={chartMode} />
           </SectionCard>
           <SectionCard title="Cohort Snapshot">
             <Grid container spacing={2}>
@@ -653,9 +829,68 @@ export function CohortDetailClient({ id }: { id: string }) {
 
       {tab === 2 && (
         <SectionCard title="Sessions" action={<Button startIcon={<AddIcon />} onClick={() => setSessionDialogOpen(true)}>Add Session</Button>}>
-          <TableShell>
-            <AppDataGrid rows={sessions} columns={sessionColumns} loading={loading} pageSizeOptions={[10, 25]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} />
-          </TableShell>
+          {sessionDefaults.length > 0 && (
+            <div className="session-defaults-card">
+              <span>Session defaults</span>
+              <div>
+                {sessionDefaults.map((item) => (
+                  <DetailField key={item.label} label={item.label} value={item.value} />
+                ))}
+              </div>
+            </div>
+          )}
+          <div className="session-checklist" role="table" aria-label="Session checklist">
+            <div className="session-check-row session-check-header" role="row">
+              <span>Date</span>
+              <span>Session</span>
+              <span>Calendar</span>
+              {sessionEmailTypes.map((template) => <span key={template.type}>{template.label}</span>)}
+              <span>Actions</span>
+            </div>
+            {sessions.map((session) => (
+              <div className="session-check-row" role="row" key={session.id}>
+                <DateBadge value={session.startTime} />
+                <div className="session-title-cell">
+                  <strong title={session.title}>{session.sessionNumber}. {session.title}</strong>
+                  <span title={session.description}>{session.startTime ? new Date(session.startTime).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "No time"} - {session.endTime ? new Date(session.endTime).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "No end"}</span>
+                </div>
+                <StatusChip value={session.calendarInviteStatus} />
+                {sessionEmailTypes.map((template) => (
+                  <span key={`${session.id}-${template.type}`}>{renderSessionEmailCell(template.type, session.id)}</span>
+                ))}
+                <RowActionMenu
+                  actions={[
+                    { label: "Edit session", icon: <EditOutlined fontSize="small" />, onClick: () => { setEditingSession(session); setSessionDialogOpen(true); } },
+                    {
+                      label: "Generate ICS",
+                      icon: <CalendarMonthOutlined fontSize="small" />,
+                      onClick: async () => {
+                        try {
+                          await adminApi("/api/calendar", { method: "POST", body: { sessionId: session.id, mode: "ics" } });
+                          notifySuccess("ICS invite generated");
+                        } catch (error) {
+                          notifyError((error as Error).message);
+                        }
+                      }
+                    },
+                    {
+                      label: "Sync Google Calendar",
+                      icon: <CalendarMonthOutlined fontSize="small" />,
+                      onClick: async () => {
+                        try {
+                          await adminApi("/api/calendar", { method: "POST", body: { sessionId: session.id, mode: "google" } });
+                          notifySuccess("Google Calendar invite synced");
+                          await load();
+                        } catch (error) {
+                          notifyError((error as Error).message);
+                        }
+                      }
+                    }
+                  ]}
+                />
+              </div>
+            ))}
+          </div>
           {!loading && sessions.length === 0 && <EmptyState title="No sessions yet" description="Add sessions to build the cohort schedule." />}
         </SectionCard>
       )}
@@ -663,7 +898,14 @@ export function CohortDetailClient({ id }: { id: string }) {
       {tab === 3 && (
         <SectionCard title="Registrations" action={<Button href="/registrations" startIcon={<AddIcon />}>Add/Edit Registration</Button>}>
           <TableShell>
-            <AppDataGrid rows={registrations} columns={registrationColumns} loading={loading} pageSizeOptions={[10, 25]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} />
+            <AppDataGrid
+              rows={registrations}
+              columns={registrationColumns}
+              loading={loading}
+              pageSizeOptions={[10, 25]}
+              initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
+              onRowClick={(params) => setRegistrationDetail(params.row)}
+            />
           </TableShell>
           {!loading && registrations.length === 0 && <EmptyState title="No registrations yet" description="Registrations for this cohort will appear here." />}
         </SectionCard>
@@ -671,8 +913,37 @@ export function CohortDetailClient({ id }: { id: string }) {
 
       {tab === 4 && (
         <SectionCard title="Participants" action={<Button href="/participants" startIcon={<AddIcon />}>Add/Edit Participant</Button>}>
+          <div className="participant-bulk-bar">
+            <span>{participantSelection.ids.size} selected</span>
+            <TextField select label="Bulk status" value={bulkParticipantStatus} onChange={(event) => setBulkParticipantStatus(event.target.value)}>
+              {participantStatuses.map((value) => <MenuItem value={value} key={value}>{formatStatusLabel(value)}</MenuItem>)}
+            </TextField>
+            <Button type="button" variant="outlined" onClick={bulkUpdateParticipants}>Apply Status</Button>
+            <Button
+              type="button"
+              variant="outlined"
+              startIcon={<SendOutlined />}
+              disabled={participantSelection.ids.size === 0}
+              onClick={() => {
+                const selected = participants.filter((participant) => participantSelection.ids.has(participant.id));
+                void Promise.all(selected.map((participant) => sendParticipantMessage(participant)));
+              }}
+            >
+              Message Selected
+            </Button>
+          </div>
           <TableShell>
-            <AppDataGrid rows={participants} columns={participantColumns} loading={loading} pageSizeOptions={[10, 25]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} />
+            <AppDataGrid
+              rows={participants}
+              columns={participantColumns}
+              loading={loading}
+              checkboxSelection
+              rowSelectionModel={participantSelection}
+              onRowSelectionModelChange={setParticipantSelection}
+              onRowClick={(params) => setParticipantDetail(params.row)}
+              pageSizeOptions={[10, 25]}
+              initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
+            />
           </TableShell>
           {!loading && participants.length === 0 && <EmptyState title="No participants yet" description="Participants attached to this cohort will appear here." />}
         </SectionCard>
@@ -770,6 +1041,76 @@ export function CohortDetailClient({ id }: { id: string }) {
         }}
         onError={notifyError}
       />
+      <QuickViewDrawer
+        title="Registration Detail"
+        open={Boolean(registrationDetail)}
+        onClose={() => setRegistrationDetail(null)}
+        actions={<Button href="/registrations" variant="outlined">Open Registrations</Button>}
+      >
+        {registrationDetail && (
+          <>
+            <div className="quick-view-grid">
+              <DetailField label="Contact" value={registrationDetail.primaryContactName} proper />
+              <DetailField label="Email" value={registrationDetail.primaryContactEmail} />
+              <DetailField label="Phone" value={registrationDetail.primaryContactPhone} />
+              <DetailField label="Organization" value={registrationDetail.organization?.name} proper />
+              <DetailField label="Participants" value={registrationDetail.participantCount} />
+              <DetailField label="Total" value={money(registrationDetail.totalAmount)} />
+              <DetailField label="Payment" value={formatStatusLabel(registrationDetail.paymentStatus)} />
+              <DetailField label="Roster" value={formatStatusLabel(registrationDetail.participantListStatus)} />
+              <DetailField label="Supporting Docs" value={formatStatusLabel(registrationDetail.supportingDocumentStatus)} />
+              <DetailField label="Invoice" value={registrationDetail.invoiceNumber} />
+              <DetailField label="PO" value={registrationDetail.purchaseOrderNumber} />
+              <DetailField label="Source" value={registrationDetail.source} />
+            </div>
+            <SectionCard title="Notes">
+              <Typography color="text.secondary">{registrationDetail.notes ?? "No notes captured yet."}</Typography>
+            </SectionCard>
+          </>
+        )}
+      </QuickViewDrawer>
+      <QuickViewDrawer
+        title="Participant Detail"
+        open={Boolean(participantDetail)}
+        onClose={() => setParticipantDetail(null)}
+        actions={participantDetail && <Button startIcon={<SendOutlined />} onClick={() => void sendParticipantMessage(participantDetail)}>Send Message</Button>}
+      >
+        {participantDetail && (
+          <>
+            <div className="quick-view-grid">
+              <DetailField label="Participant" value={`${participantDetail.firstName ?? ""} ${participantDetail.lastName ?? ""}`} proper />
+              <DetailField label="Email" value={participantDetail.email} />
+              <DetailField label="Phone" value={participantDetail.phone} />
+              <DetailField label="Title" value={participantDetail.title} />
+              <DetailField label="Status" value={formatStatusLabel(participantDetail.status)} />
+              <DetailField label="Certificate" value={participantDetail.certificateIssued ? "Issued" : "Not issued"} />
+              <DetailField label="Organization" value={participantDetail.organization?.name} proper />
+              <DetailField label="Registration POC" value={participantDetail.registration?.primaryContactName} proper />
+              <DetailField label="Payment" value={formatStatusLabel(participantDetail.registration?.paymentStatus)} />
+              <DetailField label="Amount" value={money(participantDetail.registration?.totalAmount)} />
+              <DetailField label="Last Email" value={participantDetail.emailSummary?.lastEmailEvent ?? "-"} />
+              <DetailField label="Last Email Sent" value={participantDetail.emailSummary?.lastEmailEventAt ? new Date(participantDetail.emailSummary.lastEmailEventAt).toLocaleString() : "-"} />
+            </div>
+            <SectionCard title="Participation History">
+              {participantHistory.length > 0 ? (
+                <div className="quick-view-list">
+                  {participantHistory.map((participant) => (
+                    <div className="quick-view-list-row" key={participant.id}>
+                      <div>
+                        <strong>{participant.cohort?.title ?? "Cohort"}</strong>
+                        <span>{participant.organization?.name ?? "Organization"} · {formatStatusLabel(participant.status)}</span>
+                      </div>
+                      <DateBadge value={participant.createdAt} />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <Typography color="text.secondary">No other cohort history found for this email.</Typography>
+              )}
+            </SectionCard>
+          </>
+        )}
+      </QuickViewDrawer>
       <Box>{snackbar}</Box>
     </PageStack>
   );

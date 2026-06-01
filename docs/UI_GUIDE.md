@@ -271,6 +271,27 @@ Rules:
 - Avoid horizontal scrolling in primary workflows. Prefer fewer columns, detail modals, row expansion, or action menus.
 - Use proper-case formatting for people, POCs, organizations, and presenters.
 - Long pills, sources, URLs, and labels must truncate with a tooltip or move into a detail modal; they must not stretch the table.
+- Primary table rows should open the most useful quick view/edit surface when a detail target exists. Keep secondary data, supporting docs, long notes, and audit context out of the primary table and inside the drawer/modal.
+- Primary tables should use a small set of high-value columns. If a column repeats the same value on every row, move it into a compact defaults/info panel above the list.
+
+## Filters And Dropdowns
+
+- Filters are controls, not the page content. Use `CompactFilterBar` for normal admin screens instead of a bulky standalone `Filters` card.
+- The first row should hold search first, then the highest-value filters. Lower-frequency filters belong behind the subtle `More filters` disclosure.
+- Desktop filters should fit in one row whenever practical and wrap only when needed. Do not give filters more vertical weight than the list they control.
+- Show an understated result count in the filter bar when available.
+- All dropdowns, selects, autocomplete controls, table page-size controls, modal selects, bulk action selects, dashboard controls, and settings controls must use the app-styled select/menu UI. Do not use browser/system select styling in Mission Control screens.
+- Dropdown labels and options must be human-readable, proper-case where appropriate, and never raw enum/status strings.
+
+## Cohort Detail Pattern
+
+- The breadcrumb must read like a product path: `Mission Control / Cohorts / {Cohort title}`. Never expose raw cohort IDs in the visible path.
+- The overview should start with compact icon metric tiles and one larger revenue snapshot. Total revenue, paid amount, pending amount, and open amount belong together with a donut chart and percentages.
+- Registration evolution charts should be quiet and lightweight. They need metric filters (`Registrants`, `Revenue`) and an optional comparison cohort, defaulting to the current cohort only.
+- Sessions should render as a checklist, not a wide status spreadsheet. Use green check/red X affordances for reminder/template readiness and keep per-session actions in a row menu.
+- Repeated session defaults such as meeting URL, location, and timezone should live in a small defaults card above the checklist.
+- Registrations should remove unclear primary-table columns such as `Docs`; supporting document status belongs in quick view/edit.
+- Participants should prioritize contact, organization, status, send-message action, bulk status/message controls, and a quick-view drawer with contact, payment, email activity, and participation history matched by email.
 
 ## Badges / Status Pills
 

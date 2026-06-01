@@ -10,6 +10,7 @@ import { formatProperDisplay, formatStatusLabel } from "@/lib/formatting";
 import {
   AdminRow,
   AppDataGrid,
+  CompactFilterBar,
   EmptyState,
   FieldConfig,
   MutationDialog,
@@ -117,9 +118,9 @@ export function OrganizationsClient() {
         description="Manage districts, schools, companies, partner organizations, and operational notes."
         action={<ToolbarButton onClick={() => setDialogOpen(true)}>Add Organization</ToolbarButton>}
       />
-      <SectionCard title="Filters">
+      <CompactFilterBar resultCount={filteredRows.length}>
         <TextField label="Search" value={search} onChange={(event) => setSearch(event.target.value)} />
-      </SectionCard>
+      </CompactFilterBar>
       <SectionCard title="Organization Directory">
         <TableShell>
           <AppDataGrid rows={filteredRows} columns={columns} loading={loading} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} />

@@ -10,7 +10,7 @@ import type {
   SelectHTMLAttributes,
   TextareaHTMLAttributes
 } from "react";
-import { cloneElement, isValidElement, useMemo } from "react";
+import { Children, cloneElement, isValidElement, useEffect, useMemo, useRef, useState } from "react";
 
 function clsx(...values: Array<string | false | null | undefined>) {
   return values.filter(Boolean).join(" ");
@@ -290,13 +290,68 @@ export function TextField({
   [key: string]: any;
 }) {
   const id = props.id ?? (label ? String(label).toLowerCase().replace(/\W+/g, "-") : undefined);
+  const selectValue = props.value == null ? "" : String(props.value);
+  const selectOptions = Children.toArray(children)
+    .filter(isValidElement)
+    .map((child: any) => ({
+      value: child.props.value == null ? "" : String(child.props.value),
+      label: child.props.children,
+      disabled: child.props.disabled
+    }));
+  const selectedOption = selectOptions.find((option) => option.value === selectValue) ?? selectOptions[0];
+  const [selectOpen, setSelectOpen] = useState(false);
+  const selectRef = useRef<HTMLLabelElement>(null);
+
+  useEffect(() => {
+    function close(event: MouseEvent) {
+      if (!selectRef.current?.contains(event.target as Node)) {
+        setSelectOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, []);
+
+  function selectOption(value: string) {
+    const event = { target: { value }, currentTarget: { value } };
+    props.onChange?.(event);
+    setSelectOpen(false);
+  }
+
   return (
-    <label className={clsx("ui-field", fullWidth && "ui-field-full", className)} style={sxToStyle(sx)}>
+    <label className={clsx("ui-field", fullWidth && "ui-field-full", className)} style={sxToStyle(sx)} ref={select ? selectRef : undefined}>
       {label && <span className="ui-label">{label}</span>}
       {select ? (
-        <select id={id} className="ui-input" {...(props as SelectHTMLAttributes<HTMLSelectElement>)}>
-          {children}
-        </select>
+        <span className="ui-select">
+          <button
+            type="button"
+            id={id}
+            className="ui-input ui-select-trigger"
+            disabled={props.disabled}
+            aria-expanded={selectOpen}
+            onClick={() => setSelectOpen((current) => !current)}
+          >
+            <span>{selectedOption?.label ?? "Select"}</span>
+            <span aria-hidden="true">⌄</span>
+          </button>
+          <input type="hidden" name={props.name} value={selectValue} required={props.required} />
+          {selectOpen && (
+            <span className="ui-select-menu">
+              {selectOptions.map((option) => (
+                <button
+                  type="button"
+                  className={clsx("ui-select-option", option.value === selectValue && "is-selected")}
+                  key={option.value}
+                  disabled={option.disabled}
+                  onClick={() => selectOption(option.value)}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </span>
+          )}
+        </span>
       ) : multiline ? (
         <textarea id={id} className="ui-input ui-textarea" rows={minRows} {...(props as TextareaHTMLAttributes<HTMLTextAreaElement>)} />
       ) : (
@@ -426,7 +481,7 @@ export function Autocomplete<T>({
   getOptionLabel,
   renderInput,
   isOptionEqualToValue: _isOptionEqualToValue,
-  onInputChange: _onInputChange,
+  onInputChange,
   inputValue: _inputValue,
   sx: _sx
 }: {
@@ -444,18 +499,53 @@ export function Autocomplete<T>({
   const label = isValidElement(labelElement) ? (labelElement.props as any).label : undefined;
   const labels = useMemo(() => options.map((option) => getOptionLabel?.(option) ?? String(option)), [getOptionLabel, options]);
   const currentIndex = value ? options.findIndex((option) => option === value || (getOptionLabel?.(option) ?? String(option)) === (getOptionLabel?.(value) ?? String(value))) : -1;
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLLabelElement>(null);
+
+  useEffect(() => {
+    function close(event: MouseEvent) {
+      if (!ref.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, []);
+
+  function choose(index: number) {
+    const nextValue = options[index] ?? null;
+    onChange?.({ target: { value: String(index) } }, nextValue);
+    onInputChange?.(null, nextValue ? labels[index] : "", "selectOption");
+    setOpen(false);
+  }
 
   return (
-    <label className="ui-field ui-field-full">
+    <label className="ui-field ui-field-full" ref={ref}>
       {label && <span className="ui-label">{label}</span>}
-      <select className="ui-input" value={currentIndex >= 0 ? String(currentIndex) : ""} onChange={(event) => onChange?.(event, options[Number(event.target.value)] ?? null)}>
-        <option value="">Select</option>
-        {labels.map((optionLabel, index) => (
-          <option key={`${optionLabel}-${index}`} value={index}>
-            {optionLabel}
-          </option>
-        ))}
-      </select>
+      <span className="ui-select">
+        <button type="button" className="ui-input ui-select-trigger" aria-expanded={open} onClick={() => setOpen((current) => !current)}>
+          <span>{currentIndex >= 0 ? labels[currentIndex] : "Select"}</span>
+          <span aria-hidden="true">⌄</span>
+        </button>
+        {open && (
+          <span className="ui-select-menu">
+            <button type="button" className={clsx("ui-select-option", currentIndex < 0 && "is-selected")} onClick={() => choose(-1)}>
+              Select
+            </button>
+            {labels.map((optionLabel, index) => (
+              <button
+                type="button"
+                className={clsx("ui-select-option", currentIndex === index && "is-selected")}
+                key={`${optionLabel}-${index}`}
+                onClick={() => choose(index)}
+              >
+                {optionLabel}
+              </button>
+            ))}
+          </span>
+        )}
+      </span>
     </label>
   );
 }

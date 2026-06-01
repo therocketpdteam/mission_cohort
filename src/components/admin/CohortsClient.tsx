@@ -31,6 +31,7 @@ import { formatProperDisplay, formatStatusLabel } from "@/lib/formatting";
 import {
   AdminRow,
   AppDataGrid,
+  CompactFilterBar,
   EmptyState,
   FieldConfig,
   MetadataPill,
@@ -503,7 +504,6 @@ export function CohortsClient() {
   const router = useRouter();
   const [rows, setRows] = useState<AdminRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [payments, setPayments] = useState<AdminRow[]>([]);
   const [presenters, setPresenters] = useState<AdminRow[]>([]);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [editing, setEditing] = useState<AdminRow | null>(null);
@@ -514,14 +514,12 @@ export function CohortsClient() {
   const { notifySuccess, notifyError, snackbar } = useNotifier();
 
   async function load() {
-    const [cohorts, presenterRows, paymentRows] = await Promise.all([
+    const [cohorts, presenterRows] = await Promise.all([
       adminApi<AdminRow[]>("/api/cohorts"),
-      adminApi<AdminRow[]>("/api/presenters"),
-      adminApi<AdminRow[]>("/api/payments").catch(() => [])
+      adminApi<AdminRow[]>("/api/presenters")
     ]);
     setRows(cohorts);
     setPresenters(presenterRows);
-    setPayments(paymentRows);
     setLoading(false);
   }
 
@@ -570,17 +568,21 @@ export function CohortsClient() {
       valueGetter: (_value, row) => formatProperDisplay(`${row.presenter?.firstName ?? ""} ${row.presenter?.lastName ?? ""}`)
     },
     { field: "status", headerName: "Status", width: 170, renderCell: (params) => <StatusChip value={params.value} /> },
-    { field: "startDate", headerName: "First session", width: 140, valueFormatter: (value) => formatDate(value) },
-    { field: "endDate", headerName: "Last session", width: 140, valueFormatter: (value) => formatDate(value) },
-    { field: "sessions", headerName: "Sessions", width: 110, valueGetter: (_value, row) => row._count?.sessions ?? row.sessions?.length ?? 0 },
-    { field: "registrations", headerName: "Registrations", width: 130, valueGetter: (_value, row) => row._count?.registrations ?? 0 },
-    { field: "participants", headerName: "Participants", width: 130, valueGetter: (_value, row) => row._count?.participants ?? 0 },
     {
-      field: "pendingPayments",
-      headerName: "Pending payments",
-      width: 150,
-      valueGetter: (_value, row) =>
-        payments.filter((payment) => payment.cohortId === row.id && ["PENDING", "INVOICED", "PARTIALLY_PAID"].includes(payment.status)).length
+      field: "dates",
+      headerName: "Dates",
+      width: 170,
+      valueGetter: (_value, row) => `${formatDate(row.startDate)} - ${formatDate(row.endDate)}`
+    },
+    {
+      field: "counts",
+      headerName: "Counts",
+      width: 180,
+      renderCell: (params) => (
+        <span title={`${params.row._count?.sessions ?? 0} sessions, ${params.row._count?.registrations ?? 0} registrations, ${params.row._count?.participants ?? 0} participants`}>
+          {params.row._count?.sessions ?? 0} sessions · {params.row._count?.registrations ?? 0} regs · {params.row._count?.participants ?? 0} people
+        </span>
+      )
     },
     {
       field: "actions",
@@ -656,17 +658,9 @@ export function CohortsClient() {
         description="Create cohorts, sessions, presenters, and delivery timelines from one operations workspace."
         action={<ToolbarButton onClick={() => setWizardOpen(true)}>Create Cohort</ToolbarButton>}
       />
-      <SectionCard title="Filters">
-        <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
-          <TextField label="Search" value={search} onChange={(event) => setSearch(event.target.value)} />
-          <TextField select label="Status" value={status} onChange={(event) => setStatus(event.target.value)} sx={{ minWidth: 220 }}>
-            <MenuItem value="">All statuses</MenuItem>
-            {["DRAFT", "PUBLISHED", "REGISTRATION_OPEN", "REGISTRATION_CLOSED", "ACTIVE", "COMPLETED", "CANCELLED", "ARCHIVED"].map((value) => (
-              <MenuItem value={value} key={value}>
-                {formatStatusLabel(value)}
-              </MenuItem>
-            ))}
-          </TextField>
+      <CompactFilterBar
+        resultCount={filteredRows.length}
+        advanced={
           <TextField select label="Presenter" value={presenterId} onChange={(event) => setPresenterId(event.target.value)} sx={{ minWidth: 220 }}>
             <MenuItem value="">All presenters</MenuItem>
             {presenters.map((presenter) => (
@@ -675,9 +669,19 @@ export function CohortsClient() {
               </MenuItem>
             ))}
           </TextField>
-        </Stack>
-      </SectionCard>
-      <SectionCard title="Cohort Operations">
+        }
+      >
+        <TextField label="Search" value={search} onChange={(event) => setSearch(event.target.value)} />
+          <TextField select label="Status" value={status} onChange={(event) => setStatus(event.target.value)} sx={{ minWidth: 220 }}>
+            <MenuItem value="">All statuses</MenuItem>
+            {["DRAFT", "PUBLISHED", "REGISTRATION_OPEN", "REGISTRATION_CLOSED", "ACTIVE", "COMPLETED", "CANCELLED", "ARCHIVED"].map((value) => (
+              <MenuItem value={value} key={value}>
+                {formatStatusLabel(value)}
+              </MenuItem>
+            ))}
+          </TextField>
+      </CompactFilterBar>
+      <SectionCard title="Cohort List">
         <TableShell>
           <AppDataGrid
             rows={filteredRows}

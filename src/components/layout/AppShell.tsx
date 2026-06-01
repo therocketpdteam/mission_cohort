@@ -41,9 +41,12 @@ function titleFromPath(pathname: string) {
   return current?.label ?? "Mission Control";
 }
 
-function breadcrumbsFor(pathname: string) {
+function breadcrumbsFor(pathname: string, labels: Record<string, string> = {}) {
   const parts = pathname.split("/").filter(Boolean);
-  return ["Mission Control", ...parts.map((part) => part.replace(/-/g, " "))];
+  return ["Mission Control", ...parts.map((part, index) => {
+    const key = `/${parts.slice(0, index + 1).join("/")}`;
+    return labels[key] ?? part.replace(/-/g, " ");
+  })];
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -54,8 +57,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [density, setDensity] = useState<"standard" | "compact">("standard");
   const [themeMode, setThemeMode] = useState<"normal" | "night">("normal");
   const [user, setUser] = useState<{ firstName?: string; lastName?: string; email?: string; role?: string } | null>(null);
+  const [breadcrumbLabels, setBreadcrumbLabels] = useState<Record<string, string>>({});
   const title = titleFromPath(pathname);
-  const crumbs = useMemo(() => breadcrumbsFor(pathname), [pathname]);
+  const crumbs = useMemo(() => breadcrumbsFor(pathname, breadcrumbLabels), [breadcrumbLabels, pathname]);
 
   useEffect(() => {
     if (pathname === "/login" || pathname.startsWith("/reports/share/")) return;
@@ -63,6 +67,23 @@ export function AppShell({ children }: { children: ReactNode }) {
     adminApi<{ firstName?: string; lastName?: string; email?: string; role?: string }>("/api/auth/me")
       .then(setUser)
       .catch(() => setUser(null));
+  }, [pathname]);
+
+  useEffect(() => {
+    const match = pathname.match(/^\/cohorts\/([^/]+)$/);
+    if (!match) return;
+
+    const cohortId = match[1];
+    if (!cohortId) return;
+
+    const cohortPath = `/cohorts/${cohortId}`;
+    adminApi<{ title?: string }>(`/api/cohorts/${cohortId}`)
+      .then((cohort) => {
+        const cohortTitle = cohort?.title;
+        if (!cohortTitle) return;
+        setBreadcrumbLabels((current) => ({ ...current, "/cohorts": "Cohorts", [cohortPath]: cohortTitle }));
+      })
+      .catch(() => undefined);
   }, [pathname]);
 
   useEffect(() => {
