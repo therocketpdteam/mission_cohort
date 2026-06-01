@@ -19,6 +19,9 @@
     "smoke": "tsx scripts/smoke.ts",
     "qa:smoke": "tsx scripts/final-smoke.ts",
     "qa:prepush": "bash scripts/pre-push-qa.sh",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:report": "playwright show-report",
     "readiness": "node scripts/readiness-check.mjs",
     "auth:create-admin": "tsx scripts/create-admin-user.ts"
   },
@@ -33,6 +36,7 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
     "@types/node": "^22.13.10",
     "@types/react": "^19.0.10",
     "@types/react-dom": "^19.0.4",

@@ -30,10 +30,20 @@ if command -v pnpm >/dev/null 2>&1; then
   pnpm prisma:generate
   pnpm typecheck
   pnpm build
+  if [ "${RUN_E2E:-0}" = "1" ]; then
+    pnpm test:e2e
+  else
+    echo "Playwright e2e skipped (set RUN_E2E=1 to include UI checks)."
+  fi
 elif command -v npm >/dev/null 2>&1; then
   npm run prisma:generate
   npm run typecheck
   npm run build
+  if [ "${RUN_E2E:-0}" = "1" ]; then
+    npm run test:e2e
+  else
+    echo "Playwright e2e skipped (set RUN_E2E=1 to include UI checks)."
+  fi
 else
   echo "Node package manager not found; install Node/pnpm before pushing."
   exit 1

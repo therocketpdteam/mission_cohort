@@ -398,5 +398,7 @@ Visual QA must verify:
 - Table action controls use compact menus and never overlap row text.
 - Names and organizations display in proper case everywhere user-facing.
 - Primary workflows avoid horizontal scrolling on a desktop viewport.
+- Playwright should cover the public login shell on every run and authenticated admin layouts when `E2E_ADMIN_EMAIL` and `E2E_ADMIN_PASSWORD` are available.
+- Playwright UI checks should assert no horizontal page overflow, no native browser selects, stable section/filter/table surfaces, compact/night mode readability, app-styled dropdown menus, and cohort detail checklist/drawer behavior.
 
 Do not invent a totally new design system. Use this RocketPD-inspired admin system consistently.

@@ -16,12 +16,13 @@ When a registration arrives, Mission Control stores the organization, registrati
 
 - Next.js App Router
 - TypeScript
-- Material UI
+- App-owned React/CSS UI primitives
 - Prisma
 - Supabase Postgres
 - Supabase Auth
 - Zod validation
 - Service-layer architecture
+- Playwright UI checks
 
 ## Project Guides
 
@@ -172,6 +173,27 @@ Pre-push QA now requires Prisma client generation, TypeScript, and production bu
 
 ```bash
 pnpm qa:prepush
+```
+
+Playwright UI checks are available for visual/layout smoke testing:
+
+```bash
+pnpm exec playwright install chromium
+pnpm test:e2e
+```
+
+The public checks always run. Authenticated admin UI checks run when these are set:
+
+```bash
+E2E_ADMIN_EMAIL=admin@example.com \
+E2E_ADMIN_PASSWORD='your-admin-password' \
+pnpm test:e2e
+```
+
+To include Playwright in the full pre-push QA flow:
+
+```bash
+RUN_E2E=1 E2E_ADMIN_EMAIL=admin@example.com E2E_ADMIN_PASSWORD='your-admin-password' pnpm qa:prepush
 ```
 
 ## Integrations
