@@ -22,6 +22,36 @@ const maxBytes: Record<UploadPurpose, number> = {
   "email-attachment": 20 * 1024 * 1024
 };
 
+function isMissingBucket(error: unknown) {
+  const message = String((error as { message?: string } | null)?.message ?? error ?? "").toLowerCase();
+  return message.includes("bucket not found") || message.includes("not found");
+}
+
+async function ensureBucket(input: {
+  supabase: ReturnType<typeof createSupabaseAdminClient>;
+  bucket: string;
+  isPublic: boolean;
+}) {
+  const existing = await input.supabase.storage.getBucket(input.bucket);
+
+  if (!existing.error) {
+    return;
+  }
+
+  if (!isMissingBucket(existing.error)) {
+    throw Object.assign(new Error(existing.error.message), { code: "BAD_REQUEST", status: 400 });
+  }
+
+  const created = await input.supabase.storage.createBucket(input.bucket, {
+    public: input.isPublic,
+    fileSizeLimit: "250MB"
+  });
+
+  if (created.error && !isMissingBucket(created.error) && !created.error.message.toLowerCase().includes("already exists")) {
+    throw Object.assign(new Error(created.error.message), { code: "BAD_REQUEST", status: 400 });
+  }
+}
+
 export async function uploadAppFile(input: {
   purpose: UploadPurpose;
   fileName: string;
@@ -46,6 +76,8 @@ export async function uploadAppFile(input: {
     : env.SUPABASE_PRIVATE_BUCKET ?? "mission-control-private";
   const cleanName = input.fileName.replace(/[^a-z0-9_.-]+/gi, "-").replace(/^-+|-+$/g, "") || "upload";
   const fileKey = `${input.purpose}/${new Date().toISOString().slice(0, 10)}/${randomUUID()}-${cleanName}`;
+
+  await ensureBucket({ supabase, bucket, isPublic });
 
   const { error } = await supabase.storage.from(bucket).upload(fileKey, input.bytes, {
     contentType: input.contentType,
