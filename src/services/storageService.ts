@@ -22,6 +22,11 @@ const maxBytes: Record<UploadPurpose, number> = {
   "email-attachment": 20 * 1024 * 1024
 };
 
+const bucketLimits = {
+  public: maxBytes["cohort-thumbnail"],
+  private: maxBytes.material
+};
+
 function isMissingBucket(error: unknown) {
   const message = String((error as { message?: string } | null)?.message ?? error ?? "").toLowerCase();
   return message.includes("bucket not found") || message.includes("not found");
@@ -32,9 +37,19 @@ async function ensureBucket(input: {
   bucket: string;
   isPublic: boolean;
 }) {
+  const fileSizeLimit = input.isPublic ? bucketLimits.public : bucketLimits.private;
   const existing = await input.supabase.storage.getBucket(input.bucket);
 
   if (!existing.error) {
+    const updated = await input.supabase.storage.updateBucket(input.bucket, {
+      public: input.isPublic,
+      fileSizeLimit
+    });
+
+    if (updated.error) {
+      throw Object.assign(new Error(updated.error.message), { code: "BAD_REQUEST", status: 400 });
+    }
+
     return;
   }
 
@@ -44,7 +59,7 @@ async function ensureBucket(input: {
 
   const created = await input.supabase.storage.createBucket(input.bucket, {
     public: input.isPublic,
-    fileSizeLimit: "250MB"
+    fileSizeLimit
   });
 
   if (created.error && !isMissingBucket(created.error) && !created.error.message.toLowerCase().includes("already exists")) {
