@@ -1,4 +1,4 @@
-import { CohortStatus, CommunicationStatus, OperationsTaskStatus, PaymentStatus, RegistrationStatus } from "@prisma/client";
+import { CohortStatus, CommunicationStatus, EmailEventType, OperationsTaskStatus, PaymentStatus, RegistrationStatus } from "@prisma/client";
 import { ok } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 
@@ -17,6 +17,7 @@ export async function GET() {
     registrations,
     cohorts,
     tasks,
+    communicationIssues,
     paymentSnapshot,
     paymentRecords,
     activity
@@ -56,6 +57,12 @@ export async function GET() {
       take: 8,
       include: { cohort: true, registration: { include: { organization: true } }, session: true }
     }),
+    prisma.emailEvent.findMany({
+      where: { eventType: { in: [EmailEventType.BOUNCED, EmailEventType.FAILED, EmailEventType.UNSUBSCRIBED] } },
+      orderBy: { createdAt: "desc" },
+      take: 8,
+      include: { communication: { include: { cohort: true, session: true } } }
+    }),
     prisma.paymentRecord.groupBy({
       by: ["status"],
       _count: { status: true },
@@ -84,12 +91,14 @@ export async function GET() {
       totalParticipants,
       pendingPayments,
       scheduledCommunications,
-      openOperationsTasks
+      openOperationsTasks,
+      communicationIssues: communicationIssues.length
     },
     upcomingSessions: sessions,
     recentRegistrations: registrations,
     cohortsNeedingAttention: cohorts,
     openOperationsTasks: tasks,
+    communicationIssues,
     paymentStatusSnapshot: paymentSnapshot,
     paymentRecordsSnapshot: paymentRecords,
     recentActivity: activity

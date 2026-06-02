@@ -31,7 +31,9 @@ const envSchema = z.object({
   AUTH_BOOTSTRAP_SECRET: optionalString,
   WEBHOOK_SECRET: optionalString,
   CRON_SECRET: optionalString,
-  APP_BASE_URL: optionalString
+  APP_BASE_URL: optionalString,
+  SUPABASE_PUBLIC_BUCKET: optionalString,
+  SUPABASE_PRIVATE_BUCKET: optionalString
 });
 
 export const env = envSchema.parse(process.env);
@@ -63,7 +65,8 @@ export function getEnvPresence() {
     authBootstrapConfigured: Boolean(env.AUTH_BOOTSTRAP_SECRET),
     webhookSecretConfigured: Boolean(env.WEBHOOK_SECRET),
     cronSecretConfigured: Boolean(env.CRON_SECRET),
-    appBaseUrlConfigured: Boolean(env.APP_BASE_URL)
+    appBaseUrlConfigured: Boolean(env.APP_BASE_URL),
+    supabaseStorageConfigured: Boolean(env.NEXT_PUBLIC_SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY)
   };
 }
 

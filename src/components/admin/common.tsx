@@ -20,6 +20,7 @@ import {
 import type { FormEvent, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatProperDisplay, formatRegistrationSource, formatStatusLabel } from "@/lib/formatting";
+import { uploadAdminFile } from "@/lib/adminApi";
 
 export type AdminRow = Record<string, any>;
 
@@ -571,14 +572,24 @@ export function MutationDialog({
     setValues((current) => ({ ...current, [name]: value }));
   }
 
-  function uploadImage(name: string, file?: File) {
+  async function uploadImage(name: string, file?: File) {
     if (!file) {
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => setValue(name, reader.result);
-    reader.readAsDataURL(file);
+    setSaving(true);
+    setSubmitError(null);
+    try {
+      const uploaded = await uploadAdminFile<{ url?: string }>(file, "cohort-thumbnail");
+      if (!uploaded.url) {
+        throw new Error("Image upload did not return a URL");
+      }
+      setValue(name, uploaded.url);
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : "Unable to upload image");
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function submit(event?: FormEvent) {
@@ -639,7 +650,7 @@ export function MutationDialog({
                       />
                       <label className="ui-button ui-button-outlined">
                         <span>Upload image</span>
-                        <input type="file" accept="image/*" onChange={(event) => uploadImage(field.name, event.currentTarget.files?.[0])} hidden />
+                        <input type="file" accept="image/*" onChange={(event) => void uploadImage(field.name, event.currentTarget.files?.[0])} hidden />
                       </label>
                     </div>
                   </div>

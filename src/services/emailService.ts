@@ -12,9 +12,17 @@ export async function sendEmail(input: {
   bodyHtml: string;
   bodyText?: string;
   context?: MergeFieldContext;
+  attachments?: Array<{ fileName: string; url?: string | null }>;
 }) {
-  const html = renderTemplate(input.bodyHtml, input.context ?? {}).output;
-  const text = input.bodyText ? renderTemplate(input.bodyText, input.context ?? {}).output : undefined;
+  const renderedHtml = renderTemplate(input.bodyHtml, input.context ?? {}).output;
+  const renderedText = input.bodyText ? renderTemplate(input.bodyText, input.context ?? {}).output : undefined;
+  const attachmentLinks = (input.attachments ?? []).filter((attachment) => attachment.url);
+  const html = attachmentLinks.length > 0
+    ? `${renderedHtml}<hr><p><strong>Attachments</strong></p><ul>${attachmentLinks.map((attachment) => `<li><a href="${attachment.url}">${attachment.fileName}</a></li>`).join("")}</ul>`
+    : renderedHtml;
+  const text = attachmentLinks.length > 0
+    ? `${renderedText ?? renderedHtml.replace(/<[^>]+>/g, " ")}\n\nAttachments:\n${attachmentLinks.map((attachment) => `${attachment.fileName}: ${attachment.url}`).join("\n")}`
+    : renderedText;
 
   return sendWithSendGrid({
     to: input.to,

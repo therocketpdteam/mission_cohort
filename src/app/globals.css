@@ -10,10 +10,13 @@
   --color-orange-500: #f59e0b;
   --color-orange-100: #fff3d6;
   --color-success-600: #16a34a;
+  --color-success-700: #15803d;
   --color-success-100: #dcfce7;
   --color-warning-600: #d97706;
+  --color-warning-700: #b45309;
   --color-warning-100: #fef3c7;
   --color-danger-600: #dc2626;
+  --color-danger-700: #b91c1c;
   --color-danger-100: #fee2e2;
   --color-white: #ffffff;
   --color-slate-50: #f8fafc;
@@ -41,6 +44,7 @@ body {
   background: var(--color-slate-50);
   color: var(--color-slate-900);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 14px;
 }
 
 button,
@@ -1181,6 +1185,14 @@ a {
   gap: 14px;
 }
 
+.cohort-basics-grid,
+.distribution-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
+  gap: 14px;
+  align-items: stretch;
+}
+
 .cohort-metric-card,
 .cohort-revenue-card,
 .session-defaults-card {
@@ -1195,7 +1207,7 @@ a {
   display: grid;
   grid-template-rows: auto auto 1fr auto;
   min-height: 134px;
-  padding: 16px;
+  padding: 14px;
 }
 
 .cohort-metric-icon {
@@ -1211,14 +1223,14 @@ a {
 .cohort-metric-label {
   margin-top: 10px;
   color: var(--color-slate-500);
-  font-size: 0.78rem;
+  font-size: 0.74rem;
   font-weight: 850;
 }
 
 .cohort-metric-card strong,
 .cohort-revenue-card strong {
   color: var(--color-primary-900);
-  font-size: 1.8rem;
+  font-size: 1.58rem;
   font-weight: 950;
   line-height: 1;
 }
@@ -1263,8 +1275,35 @@ a {
 
 .cohort-evolution-chart svg {
   width: 100%;
+  max-height: 210px;
   height: auto;
   display: block;
+}
+
+.cohort-thumbnail-editor {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.cohort-thumbnail-preview {
+  display: grid;
+  min-height: 148px;
+  overflow: hidden;
+  place-items: center;
+  border: 1px dashed var(--color-slate-300);
+  border-radius: 10px;
+  background: var(--color-slate-50);
+  color: var(--color-slate-500);
+  font-size: 0.82rem;
+  font-weight: 850;
+}
+
+.cohort-thumbnail-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .cohort-evolution-chart span {
@@ -1300,8 +1339,9 @@ a {
 }
 
 .session-check-row {
+  position: relative;
   display: grid;
-  grid-template-columns: 72px minmax(180px, 1.15fr) 112px repeat(5, minmax(78px, 0.7fr)) 54px;
+  grid-template-columns: 72px minmax(180px, 1.15fr) 44px repeat(5, 44px) 54px;
   gap: 10px;
   align-items: center;
   min-width: 0;
@@ -1309,6 +1349,25 @@ a {
   border-radius: 10px;
   background: var(--color-slate-50);
   padding: 10px;
+}
+
+.session-check-row-art::before {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  background:
+    linear-gradient(90deg, var(--color-slate-50) 0%, var(--color-slate-50) 48%, rgba(248, 250, 252, 0.18) 100%),
+    var(--row-art);
+  background-position: center right;
+  background-size: cover;
+  opacity: 0.5;
+  content: "";
+}
+
+.session-check-row > * {
+  position: relative;
+  z-index: 1;
 }
 
 .session-check-header {
@@ -1341,7 +1400,7 @@ a {
   align-items: center;
   justify-content: center;
   gap: 5px;
-  width: 100%;
+  width: 34px;
   min-height: 30px;
   border: 1px solid var(--color-slate-200);
   border-radius: 8px;
@@ -1350,6 +1409,15 @@ a {
   cursor: pointer;
   font-size: 0.74rem;
   font-weight: 850;
+}
+
+.session-check svg {
+  width: 17px;
+  height: 17px;
+}
+
+.session-check-icon {
+  justify-self: center;
 }
 
 .session-check.is-done {
@@ -1385,6 +1453,25 @@ a {
 
 .participant-bulk-bar .ui-field {
   min-width: 180px;
+}
+
+.cohort-finance-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+  border: 1px solid var(--color-slate-200);
+  border-radius: 10px;
+  background: var(--color-slate-50);
+  padding: 12px;
+}
+
+.distribution-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.distribution-card-main {
+  grid-column: span 3;
 }
 
 .quick-view-grid {
@@ -1429,14 +1516,22 @@ a {
 .app-shell.is-night .cohort-metric-card,
 .app-shell.is-night .cohort-revenue-card,
 .app-shell.is-night .session-defaults-card,
+.app-shell.is-night .cohort-thumbnail-preview,
 .app-shell.is-night .session-check,
 .app-shell.is-night .participant-bulk-bar,
+.app-shell.is-night .cohort-finance-strip,
 .app-shell.is-night .quick-view-list-row {
   background: #0c1725;
 }
 
 .app-shell.is-night .session-check-row {
   background: #101d2e;
+}
+
+.app-shell.is-night .session-check-row-art::before {
+  background:
+    linear-gradient(90deg, #101d2e 0%, #101d2e 52%, rgba(16, 29, 46, 0.18) 100%),
+    var(--row-art);
 }
 
 .login-page {
@@ -2098,12 +2193,21 @@ a {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .cohort-basics-grid,
+  .distribution-grid {
+    grid-template-columns: 1fr;
+  }
+
   .cohort-revenue-card {
     grid-column: span 2;
   }
 
+  .distribution-card-main {
+    grid-column: auto;
+  }
+
   .session-check-row {
-    grid-template-columns: 68px minmax(180px, 1fr) repeat(3, minmax(74px, 0.8fr)) 54px;
+    grid-template-columns: 68px minmax(180px, 1fr) repeat(3, 44px) 54px;
   }
 
   .session-check-row > span:nth-child(6),
@@ -2192,6 +2296,7 @@ a {
   }
 
   .cohort-revenue-card,
+  .cohort-thumbnail-editor,
   .session-defaults-card > div {
     grid-template-columns: 1fr;
   }
@@ -2201,7 +2306,7 @@ a {
   }
 
   .session-check-row {
-    grid-template-columns: 62px minmax(0, 1fr) 112px 48px;
+    grid-template-columns: 62px minmax(0, 1fr) 44px 48px;
   }
 
   .session-check-row > span:nth-child(n+4):nth-child(-n+8) {
@@ -2288,6 +2393,10 @@ a {
 
   .cohort-revenue-values {
     min-width: 0;
+  }
+
+  .cohort-finance-strip {
+    grid-template-columns: 1fr;
   }
 
   .session-check-row {

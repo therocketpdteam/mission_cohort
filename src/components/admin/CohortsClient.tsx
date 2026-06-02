@@ -26,7 +26,7 @@ import {
 import { GridColDef } from "./common";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { adminApi } from "@/lib/adminApi";
+import { adminApi, uploadAdminFile } from "@/lib/adminApi";
 import { formatProperDisplay, formatStatusLabel } from "@/lib/formatting";
 import {
   AdminRow,
@@ -105,16 +105,6 @@ function formatDate(value?: string) {
   return value ? new Date(value).toLocaleDateString() : "";
 }
 
-function readThumbnail(file?: File, onLoad?: (value: string) => void) {
-  if (!file || !onLoad) {
-    return;
-  }
-
-  const reader = new FileReader();
-  reader.onload = () => onLoad(String(reader.result ?? ""));
-  reader.readAsDataURL(file);
-}
-
 function CreateCohortWizard({
   open,
   presenters,
@@ -146,6 +136,7 @@ function CreateCohortWizard({
   const [manuallyEditedSessionIndexes, setManuallyEditedSessionIndexes] = useState<Set<number>>(new Set());
   const [saving, setSaving] = useState(false);
   const [creatingPresenter, setCreatingPresenter] = useState(false);
+  const [thumbnailUploading, setThumbnailUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -227,6 +218,24 @@ function CreateCohortWizard({
 
     if (index > 0 && ["date", "startTime", "endTime", "timezone"].includes(field)) {
       setManuallyEditedSessionIndexes((current) => new Set(current).add(index));
+    }
+  }
+
+  async function uploadThumbnail(file?: File) {
+    if (!file) return;
+
+    setThumbnailUploading(true);
+    setError(null);
+    try {
+      const uploaded = await uploadAdminFile<{ url?: string }>(file, "cohort-thumbnail");
+      if (!uploaded.url) {
+        throw new Error("Thumbnail upload did not return a public URL.");
+      }
+      setThumbnailUrl(uploaded.url);
+    } catch (uploadError) {
+      setError((uploadError as Error).message);
+    } finally {
+      setThumbnailUploading(false);
     }
   }
 
@@ -379,8 +388,8 @@ function CreateCohortWizard({
                 <div className="image-field-controls">
                   <TextField fullWidth label="Cohort thumbnail URL" value={thumbnailUrl} onChange={(event) => setThumbnailUrl(event.target.value)} />
                   <label className="ui-button ui-button-outlined">
-                    <span>Upload image</span>
-                    <input type="file" accept="image/*" onChange={(event) => readThumbnail(event.currentTarget.files?.[0], setThumbnailUrl)} hidden />
+                    <span>{thumbnailUploading ? "Uploading" : "Upload image"}</span>
+                    <input type="file" accept="image/*" onChange={(event) => void uploadThumbnail(event.currentTarget.files?.[0])} hidden />
                   </label>
                 </div>
               </div>

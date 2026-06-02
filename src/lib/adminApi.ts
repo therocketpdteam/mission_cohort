@@ -55,3 +55,21 @@ export async function adminApi<T>(path: string, options: RequestOptions = {}) {
 
   return payload.data;
 }
+
+export async function uploadAdminFile<T>(file: File, purpose: string) {
+  const body = new FormData();
+  body.append("purpose", purpose);
+  body.append("file", file);
+
+  const response = await fetch("/api/uploads", {
+    method: "POST",
+    body
+  });
+  const payload = await response.json() as ApiEnvelope<T>;
+
+  if (!payload.success) {
+    throw new Error(payload.error?.message ?? "Upload failed");
+  }
+
+  return payload.data;
+}

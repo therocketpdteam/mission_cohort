@@ -1,5 +1,6 @@
 import { fail, handleApiError, ok } from "@/lib/api";
 import {
+  addCommunicationAttachment,
   createCommunicationDraft,
   createDefaultSessionCommunications,
   createPlannedSessionReminders,
@@ -36,6 +37,10 @@ export async function POST(request: Request) {
 export async function PATCH(request: Request) {
   try {
     const body = await request.json();
+
+    if (body.action === "attachFile") {
+      return ok(await addCommunicationAttachment(body));
+    }
 
     if (body.action === "schedule") {
       return ok(await scheduleCommunicationPlaceholder(body));

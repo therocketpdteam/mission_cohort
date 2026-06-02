@@ -196,6 +196,21 @@ enum QuickBooksInvoiceStatus {
   CANCELLED
 }
 
+enum InvoiceDraftStatus {
+  DRAFT
+  SENT
+  PAID
+  VOIDED
+  CANCELLED
+}
+
+enum DistributionPayoutStatus {
+  PLANNED
+  PARTIAL
+  PAID
+  CANCELLED
+}
+
 enum CrmSyncEventStatus {
   QUEUED
   SENDING
@@ -283,6 +298,7 @@ model Organization {
   registrations  Registration[]
   participants   Participant[]
   paymentRecords PaymentRecord[]
+  invoiceDrafts  InvoiceDraft[]
   crmSyncEvents   CrmSyncEvent[]
 
   @@index([type])
@@ -336,6 +352,8 @@ model Cohort {
   communications            CohortCommunication[]
   calendarEvents            CalendarEvent[]
   paymentRecords            PaymentRecord[]
+  invoiceDrafts             InvoiceDraft[]
+  distribution              CohortDistribution?
   operationsTasks           OperationsTask[]
   jotformFormMappings       JotformFormMapping[]
   reportShareLinks          ReportShareLink[]
@@ -440,6 +458,7 @@ model Registration {
   form                  RegistrationForm?  @relation(fields: [formId], references: [id])
   participants          Participant[]
   paymentRecords        PaymentRecord[]
+  invoiceDrafts         InvoiceDraft[]
   operationsTasks       OperationsTask[]
   crmSyncEvents         CrmSyncEvent[]
 
@@ -536,6 +555,7 @@ model CommunicationTemplate {
   createdAt      DateTime              @default(now())
   updatedAt      DateTime              @updatedAt
   communications CohortCommunication[]
+  attachments    CommunicationAttachment[]
 
   @@index([type])
   @@index([active])
@@ -564,6 +584,7 @@ model CohortCommunication {
   template       CommunicationTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
   createdBy      User                @relation(fields: [createdById], references: [id])
   emailEvents    EmailEvent[]
+  attachments    CommunicationAttachment[]
 
   @@index([cohortId])
   @@index([sessionId])
@@ -587,6 +608,25 @@ model EmailEvent {
   @@index([communicationId])
   @@index([recipientEmail])
   @@index([eventType])
+}
+
+model CommunicationAttachment {
+  id               String                 @id @default(cuid())
+  communicationId  String?
+  templateId       String?
+  fileName         String
+  contentType      String?
+  fileSize         Int?
+  provider         String                 @default("supabase")
+  fileKey          String
+  url              String?
+  createdAt        DateTime               @default(now())
+  communication    CohortCommunication?   @relation(fields: [communicationId], references: [id], onDelete: Cascade)
+  template         CommunicationTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+
+  @@index([communicationId])
+  @@index([templateId])
+  @@index([fileKey])
 }
 
 model CalendarEvent {
@@ -650,6 +690,7 @@ model PaymentRecord {
   registration   Registration  @relation(fields: [registrationId], references: [id], onDelete: Cascade)
   cohort         Cohort        @relation(fields: [cohortId], references: [id])
   organization   Organization  @relation(fields: [organizationId], references: [id])
+  distributionPayouts DistributionPayout[]
 
   @@index([registrationId])
   @@index([cohortId])
@@ -658,6 +699,91 @@ model PaymentRecord {
   @@index([invoiceNumber])
   @@index([quickBooksInvoiceRef])
   @@index([quickBooksPaymentRef])
+}
+
+model InvoiceDraft {
+  id                      String                  @id @default(cuid())
+  cohortId                String
+  registrationId          String?
+  organizationId          String?
+  invoiceNumber           String?
+  purchaseOrderNumber     String?
+  issueDate               DateTime                @default(now())
+  dueDate                 DateTime?
+  status                  InvoiceDraftStatus      @default(DRAFT)
+  subtotalAmount          Decimal                 @default(0) @db.Decimal(10, 2)
+  taxAmount               Decimal                 @default(0) @db.Decimal(10, 2)
+  totalAmount             Decimal                 @default(0) @db.Decimal(10, 2)
+  paidAmount              Decimal                 @default(0) @db.Decimal(10, 2)
+  pdfFileKey              String?
+  pdfUrl                  String?
+  receiptFileKey          String?
+  receiptUrl              String?
+  quickBooksCustomerRef   String?
+  quickBooksInvoiceRef    String?
+  quickBooksRealmId       String?
+  quickBooksInvoiceStatus QuickBooksInvoiceStatus @default(UNKNOWN)
+  quickBooksSyncStatus    SyncStatus              @default(NOT_SYNCED)
+  notes                   String?
+  createdAt               DateTime                @default(now())
+  updatedAt               DateTime                @updatedAt
+  cohort                  Cohort                  @relation(fields: [cohortId], references: [id], onDelete: Cascade)
+  registration            Registration?           @relation(fields: [registrationId], references: [id], onDelete: SetNull)
+  organization            Organization?           @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  lineItems               InvoiceLineItem[]
+
+  @@index([cohortId])
+  @@index([registrationId])
+  @@index([organizationId])
+  @@index([status])
+  @@index([invoiceNumber])
+}
+
+model InvoiceLineItem {
+  id             String       @id @default(cuid())
+  invoiceDraftId String
+  description    String
+  quantity        Int          @default(1)
+  unitAmount      Decimal      @default(0) @db.Decimal(10, 2)
+  totalAmount     Decimal      @default(0) @db.Decimal(10, 2)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  invoiceDraft    InvoiceDraft @relation(fields: [invoiceDraftId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceDraftId])
+}
+
+model CohortDistribution {
+  id                String               @id @default(cuid())
+  cohortId          String               @unique
+  commissionPercent Decimal              @default(30) @db.Decimal(5, 2)
+  tlName            String?
+  tlSharePercent    Decimal              @default(70) @db.Decimal(5, 2)
+  notes             String?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  cohort            Cohort               @relation(fields: [cohortId], references: [id], onDelete: Cascade)
+  payouts           DistributionPayout[]
+}
+
+model DistributionPayout {
+  id                String                   @id @default(cuid())
+  distributionId    String
+  paymentRecordId   String?
+  amount            Decimal                  @db.Decimal(10, 2)
+  status            DistributionPayoutStatus @default(PLANNED)
+  paymentDate       DateTime?
+  attachmentFileKey String?
+  attachmentUrl     String?
+  notes             String?
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+  distribution      CohortDistribution       @relation(fields: [distributionId], references: [id], onDelete: Cascade)
+  paymentRecord     PaymentRecord?           @relation(fields: [paymentRecordId], references: [id], onDelete: SetNull)
+
+  @@index([distributionId])
+  @@index([paymentRecordId])
+  @@index([status])
 }
 
 model IntegrationConnection {

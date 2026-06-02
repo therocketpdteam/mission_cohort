@@ -256,6 +256,8 @@ function RegistrationDetailDialog({
   onChanged: () => Promise<void>;
 }) {
   const [participant, setParticipant] = useState({ firstName: "", lastName: "", email: "", title: "", phone: "" });
+  const [thread, setThread] = useState<AdminRow[]>([]);
+  const [threadLoading, setThreadLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -264,6 +266,19 @@ function RegistrationDetailDialog({
       setError(null);
     }
   }, [open]);
+
+  useEffect(() => {
+    if (!open || !registration?.primaryContactEmail) {
+      setThread([]);
+      return;
+    }
+
+    setThreadLoading(true);
+    adminApi<AdminRow[]>(`/api/communications/thread?email=${encodeURIComponent(registration.primaryContactEmail)}`)
+      .then(setThread)
+      .catch((loadError) => setError((loadError as Error).message))
+      .finally(() => setThreadLoading(false));
+  }, [open, registration?.primaryContactEmail]);
 
   async function addParticipant() {
     if (!registration || !participant.firstName || !participant.lastName || !participant.email) {
@@ -375,6 +390,27 @@ function RegistrationDetailDialog({
             </Stack>
             <Divider />
             <Stack spacing={1}>
+              <Typography variant="h3">POC Communication History</Typography>
+              {threadLoading ? (
+                <Typography color="text.secondary">Loading communication history...</Typography>
+              ) : thread.length > 0 ? (
+                <List dense>
+                  {thread.map((communication) => (
+                    <ListItem key={communication.id} divider>
+                      <ListItemText
+                        primary={communication.subject ?? "Email event"}
+                        secondary={`${communication.cohort?.title ?? "Mission Control"} · ${formatStatusLabel(communication.status)}${communication.emailSummary?.lastEmailEvent ? ` · ${formatStatusLabel(communication.emailSummary.lastEmailEvent)}` : ""}`}
+                      />
+                      <Typography variant="caption" color="text.secondary">{communication.sentAt || communication.createdAt ? new Date(communication.sentAt ?? communication.createdAt).toLocaleDateString() : ""}</Typography>
+                    </ListItem>
+                  ))}
+                </List>
+              ) : (
+                <EmptyState title="No POC emails yet" description="Manual and automatic outbound emails to this POC will appear here with delivery and open signals." />
+              )}
+            </Stack>
+            <Divider />
+            <Stack spacing={1}>
               <Typography variant="h3">Team Participants</Typography>
               <List dense>
                 {(registration.participants ?? []).map((row: AdminRow) => (
@@ -442,6 +478,7 @@ export function RegistrationsClient() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [paymentStatus, setPaymentStatus] = useState("");
+  const [rosterStatus, setRosterStatus] = useState("");
   const [source, setSource] = useState("");
   const { notifySuccess, notifyError, snackbar } = useNotifier();
 
@@ -494,11 +531,12 @@ export function RegistrationsClient() {
           .toLowerCase()
           .includes(search.toLowerCase());
         const matchPayment = paymentStatus ? row.paymentStatus === paymentStatus : true;
+        const matchRoster = rosterStatus ? row.participantListStatus === rosterStatus : true;
         const sourceLabel = formatRegistrationSource(row);
         const matchSource = source ? sourceLabel === source : true;
-        return matchSearch && matchPayment && matchSource;
+        return matchSearch && matchPayment && matchRoster && matchSource;
       }),
-    [rows, search, paymentStatus, source]
+    [rows, search, paymentStatus, rosterStatus, source]
   );
 
   const sourceOptions = useMemo(
@@ -651,6 +689,10 @@ export function RegistrationsClient() {
         <TextField select label="Payment status" value={paymentStatus} onChange={(event) => setPaymentStatus(event.target.value)} sx={{ minWidth: 220 }}>
           <MenuItem value="">All payment statuses</MenuItem>
           {paymentStatuses.map((value) => <MenuItem value={value} key={value}>{formatStatusLabel(value)}</MenuItem>)}
+        </TextField>
+        <TextField select label="Roster" value={rosterStatus} onChange={(event) => setRosterStatus(event.target.value)} sx={{ minWidth: 180 }}>
+          <MenuItem value="">All rosters</MenuItem>
+          {rosterStatuses.map((value) => <MenuItem value={value} key={value}>{formatStatusLabel(value)}</MenuItem>)}
         </TextField>
         <TextField select label="Source" value={source} onChange={(event) => setSource(event.target.value)} sx={{ minWidth: 180 }}>
           <MenuItem value="">All sources</MenuItem>

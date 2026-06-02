@@ -54,6 +54,7 @@ const metrics: ReadonlyArray<MetricConfig> = [
   { key: "totalParticipants", label: "Participants", href: "/participants", helper: "Total rostered learners", icon: <GroupsOutlined /> },
   { key: "pendingPayments", label: "Payments to watch", href: "/registrations", helper: "Pending, invoiced, or partial", icon: <InsightsOutlined /> },
   { key: "scheduledCommunications", label: "Scheduled emails", href: "/communications", helper: "Queued cohort messages", icon: <EmailOutlined /> },
+  { key: "communicationIssues", label: "Email issues", href: "/communications", helper: "Bounces, failures, unsubscribes", icon: <EmailOutlined /> },
   { key: "openOperationsTasks", label: "Open operations", href: "/cohorts", helper: "Manual tasks needing work", icon: <CheckCircleOutline /> }
 ];
 

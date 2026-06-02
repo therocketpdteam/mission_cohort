@@ -153,6 +153,28 @@ export async function createCommunicationDraft(input: z.input<typeof communicati
   return prisma.cohortCommunication.create({ data });
 }
 
+export async function addCommunicationAttachment(input: {
+  communicationId?: string;
+  templateId?: string;
+  fileName: string;
+  contentType?: string;
+  fileSize?: number;
+  fileKey: string;
+  url?: string;
+}) {
+  return prisma.communicationAttachment.create({
+    data: {
+      communicationId: input.communicationId,
+      templateId: input.templateId,
+      fileName: input.fileName,
+      contentType: input.contentType,
+      fileSize: input.fileSize,
+      fileKey: input.fileKey,
+      url: input.url
+    }
+  });
+}
+
 export async function scheduleCommunicationPlaceholder(input: z.input<typeof communicationScheduleSchema>) {
   const data = communicationScheduleSchema.parse(input);
   const communication = await prisma.cohortCommunication.update({
@@ -176,7 +198,7 @@ export async function listCommunicationsByCohort(cohortId: string) {
   const communications = await prisma.cohortCommunication.findMany({
     where: { cohortId },
     orderBy: { createdAt: "desc" },
-    include: { template: true, session: true, createdBy: true, emailEvents: true }
+    include: { template: true, session: true, createdBy: true, emailEvents: true, attachments: true }
   });
 
   return communications.map((communication) => ({
@@ -233,7 +255,7 @@ export async function sendCommunication(id: string, options?: { recipients?: str
 
   const communication = await prisma.cohortCommunication.findUnique({
     where: { id },
-    include: { cohort: { include: { presenter: true } }, session: true, template: true, createdBy: true }
+    include: { cohort: { include: { presenter: true } }, session: true, template: true, createdBy: true, attachments: true }
   });
 
   if (!communication) {
@@ -260,6 +282,7 @@ export async function sendCommunication(id: string, options?: { recipients?: str
       subject: communication.subject,
       bodyHtml: communication.bodyHtml,
       bodyText: communication.bodyText ?? undefined,
+      attachments: communication.attachments,
       context: options?.context ?? {
         cohort: {
           title: communication.cohort.title,
@@ -466,6 +489,69 @@ export async function getRecipientCommunicationSummary(emails: string[]) {
   }
 
   return Object.fromEntries(normalizedEmails.map((email) => [email, emailEventSummary(grouped.get(email) ?? [])]));
+}
+
+export async function getRecipientCommunicationThread(email: string) {
+  const normalized = email.trim().toLowerCase();
+
+  if (!normalized) {
+    return [];
+  }
+
+  const [events, communications] = await Promise.all([
+    prisma.emailEvent.findMany({
+      where: { recipientEmail: { equals: normalized, mode: "insensitive" } },
+      orderBy: { createdAt: "desc" },
+      include: { communication: { include: { cohort: true, session: true, template: true, attachments: true } } }
+    }),
+    prisma.cohortCommunication.findMany({
+      where: {
+        OR: [
+          { recipientEmails: { array_contains: [email] } },
+          { recipientEmails: { array_contains: [normalized] } }
+        ]
+      },
+      orderBy: { createdAt: "desc" },
+      include: { cohort: true, session: true, template: true, emailEvents: true, attachments: true }
+    })
+  ]);
+
+  const byCommunication = new Map<string, any>();
+
+  for (const communication of communications) {
+    byCommunication.set(communication.id, {
+      ...communication,
+      recipientEmail: normalized,
+      events: communication.emailEvents.filter((event) => event.recipientEmail.toLowerCase() === normalized),
+      emailSummary: emailEventSummary(communication.emailEvents.filter((event) => event.recipientEmail.toLowerCase() === normalized))
+    });
+  }
+
+  for (const event of events) {
+    if (event.communication) {
+      const existing = byCommunication.get(event.communication.id);
+      const nextEvents = [...(existing?.events ?? []), event];
+      byCommunication.set(event.communication.id, {
+        ...event.communication,
+        recipientEmail: normalized,
+        events: nextEvents,
+        emailSummary: emailEventSummary(nextEvents)
+      });
+    } else {
+      byCommunication.set(event.id, {
+        id: event.id,
+        subject: "Provider event",
+        status: event.eventType,
+        recipientEmail: normalized,
+        createdAt: event.createdAt,
+        events: [event],
+        attachments: [],
+        emailSummary: emailEventSummary([event])
+      });
+    }
+  }
+
+  return Array.from(byCommunication.values()).sort((a, b) => new Date(b.sentAt ?? b.createdAt).getTime() - new Date(a.sentAt ?? a.createdAt).getTime());
 }
 
 export async function processScheduledCommunications(limit = 25) {
