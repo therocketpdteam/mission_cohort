@@ -183,21 +183,35 @@ pnpm test:e2e
 pnpm test:e2e:audit
 ```
 
+`pnpm test:e2e:audit` targets the deployed app by default. It uses `PLAYWRIGHT_BASE_URL` when provided, otherwise it reads `APP_BASE_URL` from the environment files. It does not start a local Next.js server unless no deployed base URL is configured. To force a local audit:
+
+```bash
+PLAYWRIGHT_BASE_URL=http://127.0.0.1:3000 pnpm test:e2e:audit
+```
+
 The public checks always run. Authenticated admin UI checks can run with email/password credentials:
 
 ```bash
 E2E_ADMIN_EMAIL=admin@example.com \
 E2E_ADMIN_PASSWORD='your-admin-password' \
-pnpm test:e2e
+pnpm test:e2e:audit
 ```
 
-For local audits, the safer option is to save a one-time authenticated browser session and reuse it:
+For repeatable production audits, save a one-time authenticated browser session and reuse it:
+
+```bash
+mkdir -p playwright/.auth
+pnpm exec playwright codegen --save-storage=playwright/.auth/prod-admin.json https://mission-cohort-six.vercel.app/login
+E2E_STORAGE_STATE=playwright/.auth/prod-admin.json pnpm test:e2e:audit
+```
+
+For local audits, save a separate local session because browser storage is domain-specific:
 
 ```bash
 mkdir -p playwright/.auth
 pnpm dev
 pnpm exec playwright codegen --save-storage=playwright/.auth/admin.json http://127.0.0.1:3000/login
-E2E_STORAGE_STATE=playwright/.auth/admin.json pnpm test:e2e:audit
+PLAYWRIGHT_BASE_URL=http://127.0.0.1:3000 E2E_STORAGE_STATE=playwright/.auth/admin.json pnpm test:e2e:audit
 ```
 
 Log in through the Playwright browser window, then close it so the storage file is written. `playwright/.auth/` is ignored by git.

@@ -1,6 +1,25 @@
 import { defineConfig, devices } from "@playwright/test";
+import { existsSync, readFileSync } from "node:fs";
 
-const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? `http://127.0.0.1:${process.env.PORT ?? "3000"}`;
+function readEnvValue(key: string) {
+  for (const file of [".env.local", ".env.vercel.local", ".env"]) {
+    if (!existsSync(file)) {
+      continue;
+    }
+
+    const match = readFileSync(file, "utf8").match(new RegExp(`^${key}=(.*)$`, "m"));
+    if (match?.[1]) {
+      return match[1].trim().replace(/^['"]|['"]$/g, "");
+    }
+  }
+
+  return undefined;
+}
+
+const isUiAudit = process.argv.some((arg) => arg.includes("ui-audit.spec"));
+const auditBaseURL = process.env.APP_BASE_URL ?? readEnvValue("APP_BASE_URL");
+const configuredBaseURL = process.env.PLAYWRIGHT_BASE_URL ?? (isUiAudit ? auditBaseURL : undefined);
+const baseURL = configuredBaseURL ?? `http://127.0.0.1:${process.env.PORT ?? "3000"}`;
 const storageState = process.env.E2E_STORAGE_STATE || process.env.PLAYWRIGHT_STORAGE_STATE;
 
 export default defineConfig({
@@ -20,7 +39,7 @@ export default defineConfig({
     screenshot: "only-on-failure",
     video: "retain-on-failure"
   },
-  webServer: process.env.PLAYWRIGHT_BASE_URL
+  webServer: configuredBaseURL
     ? undefined
     : {
         command: "pnpm dev",
