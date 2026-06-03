@@ -54,17 +54,25 @@ export async function listJotformIntakeEvents() {
     prisma.webhookEvent.findMany({
       where: { source: "jotform" },
       orderBy: { createdAt: "desc" },
-      take: 100
+      take: 250,
+      select: {
+        id: true,
+        source: true,
+        eventType: true,
+        payload: true,
+        processedAt: true,
+        status: true,
+        errorMessage: true,
+        createdAt: true
+      }
     }),
     listActiveJotformFormMappings()
   ]);
 
   return events.map((event) => {
     const preview = previewJotformRegistrationPayload(event.payload as Record<string, unknown>, mappings);
-    const normalizedSummary = event.normalizedSummary && typeof event.normalizedSummary === "object" && !Array.isArray(event.normalizedSummary)
-      ? event.normalizedSummary as Record<string, unknown>
-      : {};
-    const revisionNumber = Number(event.revisionNumber ?? normalizedSummary.revisionNumber ?? 0);
+    const normalizedSummary: Record<string, unknown> = {};
+    const revisionNumber = Number(normalizedSummary.revisionNumber ?? 0);
     const isRevision = revisionNumber > 1 || Boolean(normalizedSummary.updatedExistingRegistration);
     const needsMapping = Boolean(preview.formId) && !preview.hasMapping;
     const missingRequiredFields = [
@@ -112,8 +120,8 @@ export async function listJotformIntakeEvents() {
         recommendedAction
       },
       revision: {
-        registrationId: event.registrationId,
-        externalSubmissionId: event.externalSubmissionId ?? preview.submissionId,
+        registrationId: null,
+        externalSubmissionId: preview.submissionId,
         revisionNumber: revisionNumber || null,
         isRevision,
         processedAt: event.processedAt,
