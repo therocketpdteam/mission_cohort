@@ -24,6 +24,7 @@ import {
   Typography
 } from "@/components/ui/primitives";
 import { GridColDef } from "./common";
+import type { CSSProperties } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { adminApi, uploadAdminFile } from "@/lib/adminApi";
@@ -34,7 +35,6 @@ import {
   CompactFilterBar,
   EmptyState,
   FieldConfig,
-  MetadataPill,
   MutationDialog,
   PageHeader,
   PageStack,
@@ -102,6 +102,20 @@ function defaultSession(index: number, timezone = "America/New_York") {
 
 function formatDate(value?: string) {
   return value ? new Date(value).toLocaleDateString() : "";
+}
+
+function cohortFinanceSummary(row: AdminRow) {
+  const totalSales = (row.registrations ?? []).reduce((sum: number, registration: AdminRow) => sum + Number(registration.totalAmount ?? 0), 0);
+  const paidAmount = (row.paymentRecords ?? [])
+    .filter((payment: AdminRow) => payment.status === "PAID")
+    .reduce((sum: number, payment: AdminRow) => sum + Number(payment.amount ?? 0), 0);
+  const paidPercent = totalSales > 0 ? Math.round((paidAmount / totalSales) * 100) : 0;
+
+  return { totalSales, paidAmount, paidPercent };
+}
+
+function money(value: unknown) {
+  return `$${Number(value ?? 0).toLocaleString()}`;
 }
 
 function CreateCohortWizard({
@@ -548,14 +562,13 @@ export function CohortsClient() {
     {
       field: "title",
       headerName: "Cohort",
-      flex: 2.2,
-      minWidth: 320,
+      flex: 3.4,
+      minWidth: 420,
       renderCell: (params) => (
         <div className="cohort-cell">
           {params.row.thumbnailUrl && <img className="cohort-cell-thumb" src={params.row.thumbnailUrl} alt="" />}
           <Stack spacing={0.5} sx={{ minWidth: 0, flex: 1 }}>
             <Typography className="cohort-cell-title" fontWeight={850}>{params.row.title}</Typography>
-            {params.row.shortName && <MetadataPill maxWidth={160}>{params.row.shortName}</MetadataPill>}
           </Stack>
         </div>
       )
@@ -563,28 +576,38 @@ export function CohortsClient() {
     {
       field: "presenter",
       headerName: "Presenter",
-      flex: 0.75,
-      minWidth: 140,
+      flex: 0.65,
+      minWidth: 128,
       valueGetter: (_value, row) => formatProperDisplay(`${row.presenter?.firstName ?? ""} ${row.presenter?.lastName ?? ""}`)
     },
-    { field: "status", headerName: "Status", width: 136, renderCell: (params) => <StatusChip value={params.value} /> },
+    { field: "status", headerName: "Status", width: 128, renderCell: (params) => <StatusChip value={params.value} /> },
     {
       field: "dates",
       headerName: "Dates",
-      width: 154,
+      width: 144,
       valueGetter: (_value, row) => `${formatDate(row.startDate)} - ${formatDate(row.endDate)}`
     },
     {
       field: "counts",
-      headerName: "Counts",
-      width: 172,
-      renderCell: (params) => (
-        <div className="cohort-counts" title={`${params.row._count?.sessions ?? 0} sessions, ${params.row._count?.registrations ?? 0} registrations, ${params.row._count?.participants ?? 0} participants`}>
-          <span><CalendarMonthOutlined fontSize="small" />{params.row._count?.sessions ?? 0}</span>
-          <span><InsightsOutlined fontSize="small" />{params.row._count?.registrations ?? 0}</span>
-          <span><GroupsOutlined fontSize="small" />{params.row._count?.participants ?? 0}</span>
+      headerName: "Quick View",
+      width: 230,
+      renderCell: (params) => {
+        const finance = cohortFinanceSummary(params.row);
+        return (
+        <div className="cohort-quick-view" title={`${params.row._count?.sessions ?? 0} sessions, ${params.row._count?.registrations ?? 0} registrations, ${params.row._count?.participants ?? 0} participants, ${finance.paidPercent}% paid, ${money(finance.totalSales)} total sales`}>
+          <div className="cohort-counts">
+            <span><CalendarMonthOutlined fontSize="small" />{params.row._count?.sessions ?? 0}</span>
+            <span><InsightsOutlined fontSize="small" />{params.row._count?.registrations ?? 0}</span>
+            <span><GroupsOutlined fontSize="small" />{params.row._count?.participants ?? 0}</span>
+          </div>
+          <div className="cohort-row-finance" style={{ "--paid": `${finance.paidPercent}%` } as CSSProperties}>
+            <span>{finance.paidPercent}% paid</span>
+            <strong>{money(finance.totalSales)} sales</strong>
+            <i aria-hidden="true"><b /></i>
+          </div>
         </div>
-      )
+      );
+      }
     },
     {
       field: "actions",

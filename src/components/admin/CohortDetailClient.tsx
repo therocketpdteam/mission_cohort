@@ -84,9 +84,19 @@ const taskFields: FieldConfig[] = [
   { name: "ownerName", label: "Owner" }
 ];
 
-const resourceFields: FieldConfig[] = [
+function resourceFieldsForSessions(sessions: AdminRow[]): FieldConfig[] {
+  return [
   { name: "title", label: "Title", required: true },
   { name: "description", label: "Description", type: "textarea" },
+  {
+    name: "sessionId",
+    label: "Session",
+    type: "select",
+    options: [
+      { label: "Cohort-level material", value: "" },
+      ...sessions.map((session) => ({ label: `${session.sessionNumber}. ${session.title}`, value: session.id }))
+    ]
+  },
   {
     name: "type",
     label: "Type",
@@ -104,7 +114,8 @@ const resourceFields: FieldConfig[] = [
     options: ["ADMIN_ONLY", "PARTICIPANTS", "PUBLIC_LINK"].map((value) => ({ label: formatStatusLabel(value), value })),
     required: true
   }
-];
+  ];
+}
 
 const sessionEmailTypes = [
   { type: "REGISTRATION_CONFIRMATION", label: "Registration Confirmation" },
@@ -120,6 +131,18 @@ const rosterStatuses = ["NOT_REQUESTED", "NEEDED", "PARTIAL", "COMPLETE"];
 
 function money(value: unknown) {
   return `$${Number(value ?? 0).toLocaleString()}`;
+}
+
+function resourceHref(resource: AdminRow) {
+  if (resource.url) {
+    return resource.url;
+  }
+
+  if (resource.muxPlaybackId) {
+    return `https://stream.mux.com/${resource.muxPlaybackId}`;
+  }
+
+  return "";
 }
 
 function registrationTrendPoints(rows: AdminRow[], mode: "count" | "amount") {
@@ -593,21 +616,6 @@ export function CohortDetailClient({ id }: { id: string }) {
     return paymentMatch && rosterMatch;
   }), [registrationPaymentFilter, registrationRosterFilter, registrations]);
 
-  const sessionDefaults = useMemo(() => {
-    const entries = [
-      ["Meeting URL", sessions.map((session) => session.meetingUrl).filter(Boolean)],
-      ["Location", sessions.map((session) => session.location).filter(Boolean)],
-      ["Timezone", sessions.map((session) => session.timezone).filter(Boolean)]
-    ] as Array<[string, unknown[]]>;
-
-    return entries
-      .map(([label, values]) => {
-        const unique = Array.from(new Set(values.map(String)));
-        return unique.length === 1 ? { label, value: unique[0] } : null;
-      })
-      .filter(Boolean) as Array<{ label: string; value: string }>;
-  }, [sessions]);
-
   const participantHistory = useMemo(() => {
     if (!participantDetail?.email) {
       return [];
@@ -953,6 +961,7 @@ export function CohortDetailClient({ id }: { id: string }) {
         body: {
           ...values,
           cohortId: id,
+          sessionId: values.sessionId || undefined,
           provider: values.muxPlaybackId ? "mux" : undefined
         }
       });
@@ -999,27 +1008,8 @@ export function CohortDetailClient({ id }: { id: string }) {
               projectReturn={distribution?.totals?.projectReturn}
             />
           </div>
-          <SectionCard
-            title="Registration Evolution"
-            action={
-              <CompactFilterBar>
-                <TextField select label="Metric" value={chartMode} onChange={(event) => setChartMode(event.target.value as "count" | "amount")}>
-                  <MenuItem value="count">Registrants</MenuItem>
-                  <MenuItem value="amount">Revenue</MenuItem>
-                </TextField>
-                <TextField select label="Compare" value={compareCohortId} onChange={(event) => setCompareCohortId(event.target.value)}>
-                  <MenuItem value="">Current cohort only</MenuItem>
-                  {allCohorts.filter((item) => item.id !== id).map((item) => (
-                    <MenuItem value={item.id} key={item.id}>{item.title}</MenuItem>
-                  ))}
-                </TextField>
-              </CompactFilterBar>
-            }
-          >
-            <RegistrationEvolutionChart rows={registrations} compareRows={compareRegistrations} compareLabel={compareCohort?.title} mode={chartMode} />
-          </SectionCard>
           <div className="cohort-basics-grid">
-            <SectionCard title="Cohort Basics">
+            <SectionCard title="Overview">
               <div className="cohort-thumbnail-editor">
                 <div className="cohort-thumbnail-preview">
                   {cohort?.thumbnailUrl ? <img src={cohort.thumbnailUrl} alt="" /> : <span>No thumbnail</span>}
@@ -1059,27 +1049,54 @@ export function CohortDetailClient({ id }: { id: string }) {
                     </div>
                   ))}
                 </div>
+                <div className="readiness-task-strip">
+                  <span>{tasks.filter((task) => task.status !== "COMPLETED").length} open manual tasks</span>
+                  <Button variant="outlined" size="small" onClick={() => setTaskDialogOpen(true)}>Add Task</Button>
+                </div>
                 {tasks.length > 0 && (
-                  <div className="readiness-task-strip">
-                    <span>{tasks.filter((task) => task.status !== "COMPLETED").length} open manual tasks</span>
-                    <Button variant="outlined" size="small" onClick={() => setTaskDialogOpen(true)}>Add Task</Button>
+                  <div className="readiness-task-list" aria-label="Manual readiness tasks">
+                    {tasks.map((task: AdminRow) => (
+                      <div className="readiness-manual-task" key={task.id}>
+                        <div>
+                          <strong title={task.title}>{task.title}</strong>
+                          <span>{formatStatusLabel(task.category)} · {task.dueDate ? new Date(task.dueDate).toLocaleDateString() : "No due date"}</span>
+                        </div>
+                        <StatusChip value={task.status} />
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
             </SectionCard>
           </div>
-          <SectionCard title="Session Defaults">
-            {sessionDefaults.length > 0 ? (
-              <div className="quick-view-grid">
-                {sessionDefaults.map((item) => (
-                  <DetailField key={item.label} label={item.label} value={item.value} />
-                ))}
+          <SectionCard
+            title="Registration Evolution"
+            action={
+              <div className="chart-filter-row">
+                <TextField select label="Metric" value={chartMode} onChange={(event) => setChartMode(event.target.value as "count" | "amount")}>
+                  <MenuItem value="count">Registrants</MenuItem>
+                  <MenuItem value="amount">Revenue</MenuItem>
+                </TextField>
+                <TextField select label="Compare" value={compareCohortId} onChange={(event) => setCompareCohortId(event.target.value)}>
+                  <MenuItem value="">Current cohort only</MenuItem>
+                  {allCohorts.filter((item) => item.id !== id).map((item) => (
+                    <MenuItem value={item.id} key={item.id}>{item.title}</MenuItem>
+                  ))}
+                </TextField>
               </div>
-            ) : (
-              <EmptyState title="No shared defaults" description="Meeting links, locations, or timezones that repeat across sessions will appear here." />
-            )}
+            }
+          >
+            <RegistrationEvolutionChart rows={registrations} compareRows={compareRegistrations} compareLabel={compareCohort?.title} mode={chartMode} />
           </SectionCard>
-          <SectionCard title="Sessions" action={<Button startIcon={<AddIcon />} onClick={() => setSessionDialogOpen(true)}>Add Session</Button>}>
+          <SectionCard
+            title="Sessions"
+            action={
+              <div className="action-group">
+                <Button variant="outlined" startIcon={<AddIcon />} onClick={() => setResourceDialogOpen(true)}>Add Material</Button>
+                <Button startIcon={<AddIcon />} onClick={() => setSessionDialogOpen(true)}>Add Session</Button>
+              </div>
+            }
+          >
             <div className="session-checklist" role="table" aria-label="Session checklist">
               <div className="session-check-row session-check-header" role="row">
                 <span>Date</span>
@@ -1088,12 +1105,30 @@ export function CohortDetailClient({ id }: { id: string }) {
                 {sessionEmailTypes.map((template) => <span key={template.type} title={template.label}>{template.label}</span>)}
                 <span>Actions</span>
               </div>
-              {sessions.map((session) => (
-                <div className="session-check-row session-check-row-art" role="row" key={session.id} style={{ "--row-art": cohort?.thumbnailUrl ? `url(${cohort.thumbnailUrl})` : undefined } as any}>
+              {sessions.map((session) => {
+                const sessionMaterials = resources.filter((resource) => resource.sessionId === session.id);
+
+                return (
+                <div className="session-check-row" role="row" key={session.id}>
                   <DateBadge value={session.startTime} />
                   <div className="session-title-cell">
                     <strong title={session.title}>{session.sessionNumber}. {session.title}</strong>
                     <span title={session.description}>{session.startTime ? new Date(session.startTime).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "No time"} - {session.endTime ? new Date(session.endTime).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "No end"}</span>
+                    {sessionMaterials.length > 0 && (
+                      <div className="session-material-links">
+                        {sessionMaterials.slice(0, 3).map((resource: AdminRow) => {
+                          const href = resourceHref(resource);
+                          return href ? (
+                            <a href={href} target="_blank" rel="noreferrer" key={resource.id} title={resource.title}>
+                              {resource.title}
+                            </a>
+                          ) : (
+                            <span key={resource.id} title={resource.title}>{resource.title}</span>
+                          );
+                        })}
+                        {sessionMaterials.length > 3 && <span>+{sessionMaterials.length - 3}</span>}
+                      </div>
+                    )}
                   </div>
                   {renderReadinessIcon(session.calendarInviteStatus === "CREATED" || session.calendarInviteStatus === "UPDATED", formatStatusLabel(session.calendarInviteStatus), async () => {
                     try {
@@ -1138,15 +1173,10 @@ export function CohortDetailClient({ id }: { id: string }) {
                     ]}
                   />
                 </div>
-              ))}
+                );
+              })}
             </div>
             {!loading && sessions.length === 0 && <EmptyState title="No sessions yet" description="Add sessions to build the cohort schedule." />}
-          </SectionCard>
-          <SectionCard title="Materials" action={<Button startIcon={<AddIcon />} onClick={() => setResourceDialogOpen(true)}>Add Material</Button>}>
-            <TableShell>
-              <AppDataGrid rows={resources} columns={resourceColumns} loading={loading} pageSizeOptions={[10, 25]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} />
-            </TableShell>
-            {!loading && resources.length === 0 && <EmptyState title="No materials yet" description="Attach recordings, slides, documents, and links that can support sessions and future emails." />}
           </SectionCard>
         </Stack>
       )}
@@ -1309,7 +1339,7 @@ export function CohortDetailClient({ id }: { id: string }) {
       <MutationDialog
         title="Add Material"
         open={resourceDialogOpen}
-        fields={resourceFields}
+        fields={resourceFieldsForSessions(sessions)}
         initialValues={{ type: "LINK", visibility: "ADMIN_ONLY" }}
         onClose={() => setResourceDialogOpen(false)}
         onSubmit={saveResource}

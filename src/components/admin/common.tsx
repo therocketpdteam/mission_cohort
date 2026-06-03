@@ -121,12 +121,22 @@ export function CompactFilterBar({
         {children}
         {advanced && (
           <Button type="button" variant="outlined" size="small" onClick={() => setAdvancedOpen((current) => !current)}>
-            {advancedOpen ? "Hide filters" : "More filters"}
+            More filters
           </Button>
         )}
         {typeof resultCount === "number" && <span className="compact-filter-count">{resultCount} records</span>}
       </div>
-      {advancedOpen && <div className="compact-filter-row is-advanced">{advanced}</div>}
+      {advanced && (
+        <Dialog open={advancedOpen} onClose={() => setAdvancedOpen(false)} maxWidth="sm" fullWidth>
+          <DialogTitle>More filters</DialogTitle>
+          <DialogContent>
+            <div className="compact-filter-modal">{advanced}</div>
+          </DialogContent>
+          <DialogActions>
+            <Button variant="outlined" onClick={() => setAdvancedOpen(false)}>Done</Button>
+          </DialogActions>
+        </Dialog>
+      )}
     </section>
   );
 }

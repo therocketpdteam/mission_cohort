@@ -1005,6 +1005,16 @@ a {
   border-top: 1px solid var(--color-slate-200);
 }
 
+.compact-filter-modal {
+  display: grid;
+  gap: 12px;
+}
+
+.compact-filter-modal .ui-field {
+  width: 100%;
+  min-width: 0;
+}
+
 .compact-filter-count {
   margin-left: auto;
   color: var(--color-slate-500);
@@ -1219,6 +1229,52 @@ a {
 
 .cohort-counts svg {
   color: var(--color-blue-600);
+}
+
+.cohort-quick-view {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  width: 100%;
+}
+
+.cohort-row-finance {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 3px 8px;
+  min-width: 0;
+}
+
+.cohort-row-finance span,
+.cohort-row-finance strong {
+  overflow: hidden;
+  color: var(--color-slate-500);
+  font-size: 0.74rem;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cohort-row-finance strong {
+  color: var(--color-primary-900);
+  text-align: right;
+}
+
+.cohort-row-finance i {
+  grid-column: 1 / -1;
+  display: block;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--color-slate-200);
+}
+
+.cohort-row-finance b {
+  display: block;
+  width: var(--paid);
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--color-blue-600), var(--color-cyan-500));
 }
 
 .cohort-overview-grid {
@@ -1490,6 +1546,19 @@ a {
   font-weight: 750;
 }
 
+.chart-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+.chart-filter-row .ui-field {
+  width: 190px;
+  min-width: 190px;
+}
+
 .session-defaults-card {
   display: grid;
   gap: 10px;
@@ -1571,6 +1640,29 @@ a {
 .session-title-cell span {
   color: var(--color-slate-500);
   font-size: 0.8rem;
+}
+
+.session-material-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-width: 0;
+  margin-top: 4px;
+}
+
+.session-material-links a,
+.session-material-links span {
+  max-width: 140px;
+  overflow: hidden;
+  border: 1px solid var(--color-slate-200);
+  border-radius: 999px;
+  background: var(--color-white);
+  color: var(--color-primary-700);
+  padding: 2px 7px;
+  font-size: 0.72rem;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .session-check {
@@ -1670,6 +1762,51 @@ a {
   justify-content: space-between;
   border-top: 1px solid var(--color-slate-200);
   padding-top: 10px;
+}
+
+.readiness-task-list {
+  display: grid;
+  gap: 8px;
+  max-height: 238px;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.readiness-manual-task {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  border: 1px solid var(--color-slate-200);
+  border-radius: 10px;
+  background: var(--color-white);
+  padding: 9px;
+}
+
+.readiness-manual-task > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.readiness-manual-task strong,
+.readiness-manual-task span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.readiness-manual-task strong {
+  color: var(--color-primary-900);
+  font-size: 0.86rem;
+}
+
+.readiness-manual-task span {
+  color: var(--color-slate-500);
+  font-size: 0.76rem;
+  font-weight: 750;
 }
 
 .distribution-ledger {
@@ -1782,13 +1919,14 @@ a {
 .app-shell.is-night .cohort-metric-card,
 .app-shell.is-night .cohort-revenue-card,
 .app-shell.is-night .cohort-finance-wow-card,
-.app-shell.is-night .session-defaults-card,
 .app-shell.is-night .cohort-thumbnail-preview,
 .app-shell.is-night .session-check,
+.app-shell.is-night .session-material-links a,
 .app-shell.is-night .participant-bulk-bar,
 .app-shell.is-night .cohort-finance-strip,
 .app-shell.is-night .readiness-summary,
 .app-shell.is-night .readiness-row,
+.app-shell.is-night .readiness-manual-task,
 .app-shell.is-night .distribution-ledger-row,
 .app-shell.is-night .quick-view-list-row {
   background: #0c1725;

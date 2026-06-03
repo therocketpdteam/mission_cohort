@@ -128,6 +128,8 @@ export async function listCohorts() {
         orderBy: { sessionNumber: "asc" },
         include: { communications: { include: { template: true } } }
       },
+      registrations: { select: { totalAmount: true } },
+      paymentRecords: { select: { amount: true, status: true } },
       _count: { select: { registrations: true, participants: true, sessions: true } }
     }
   });
