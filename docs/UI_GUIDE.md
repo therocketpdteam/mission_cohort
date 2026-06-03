@@ -282,6 +282,9 @@ Rules:
 - Show an understated result count in the filter bar when available.
 - All dropdowns, selects, autocomplete controls, table page-size controls, modal selects, bulk action selects, dashboard controls, and settings controls must use the app-styled select/menu UI. Do not use browser/system select styling in Mission Control screens.
 - Dropdown labels and options must be human-readable, proper-case where appropriate, and never raw enum/status strings.
+- Dropdown triggers and menus must use stable widths in filter rows and dashboard panels. Selected text and options truncate with a tooltip/title instead of resizing the control.
+- Long selected values must never push adjacent dropdowns, buttons, or status controls underneath each other. Use fixed widths such as compact status selects, medium preset selects, and wider entity selects rather than content-driven sizing.
+- Dropdown menus should align to the trigger width unless a deliberately wider searchable picker is being used; menus must not bleed into neighboring controls.
 
 ## Cohort Detail Pattern
 
@@ -365,6 +368,8 @@ Navigation should feel branded:
 - Sort cohort readiness by nearest upcoming session before open-task count.
 - Emphasize upcoming session dates and times visually, and render sessions as an agenda by default. Avoid mode toggles unless both modes are equally polished and useful.
 - Use lightweight inline charts for snapshots when they help scanning; donut charts are preferred for payment status summaries and should show both amount/count and percentage context.
+- Dashboard date filters control the snapshot layer only: hero counts, KPI snippets, and revenue/payment snapshots. Readiness queues, agenda rows, and recent work panels remain current so operational work does not disappear when a date range is selected.
+- Dashboard date presets should persist locally in the browser when the preference is only about the current workstation. Custom date inputs use inclusive visible dates while API requests use inclusive start and exclusive end timestamps.
 - Dashboard panel content must never overflow the card. Clamp long titles, truncate long pills with a tooltip where available, and keep row actions/statuses in fixed-width areas.
 - Dashboard panels in the same row should use equal height where practical. Priority and agenda panels should be at least four-row panels with independent vertical scrolling so the page itself stays calm.
 - Quick actions belong in a sticky dashboard toolbar at the top of the content area. Standard/Compact density controls and normal/night mode icon toggles belong in the global top bar so every admin page follows the same view state.

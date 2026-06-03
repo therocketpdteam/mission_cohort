@@ -556,7 +556,7 @@ a {
 .ui-field {
   display: grid;
   gap: 6px;
-  min-width: 180px;
+  min-width: min(180px, 100%);
 }
 
 .ui-field-full {
@@ -598,7 +598,9 @@ a {
 .ui-select {
   position: relative;
   display: block;
+  min-width: 0;
   width: 100%;
+  max-width: 100%;
 }
 
 .ui-select-trigger {
@@ -625,6 +627,8 @@ a {
   right: 0;
   z-index: 65;
   display: grid;
+  width: 100%;
+  min-width: 0;
   max-height: 260px;
   overflow-y: auto;
   border: 1px solid var(--color-slate-200);
@@ -637,6 +641,7 @@ a {
 .ui-select-option {
   width: 100%;
   min-height: 34px;
+  overflow: hidden;
   border: 0;
   border-radius: 8px;
   background: transparent;
@@ -644,6 +649,8 @@ a {
   cursor: pointer;
   padding: 8px 10px;
   text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .ui-select-option:hover,
@@ -1823,9 +1830,10 @@ a {
 
 .dashboard-page {
   --dashboard-command-height: 424px;
-  --dashboard-row-height: 74px;
-  --dashboard-art-fade-strong: rgba(248, 250, 252, 0.94);
-  --dashboard-art-fade-soft: rgba(248, 250, 252, 0.24);
+  --dashboard-row-height: 86px;
+  --dashboard-art-cover: rgba(248, 250, 252, 1);
+  --dashboard-art-glass: rgba(248, 250, 252, 0.5);
+  --dashboard-art-clear: rgba(248, 250, 252, 0.5);
 }
 
 .app-shell.is-night .dashboard-page {
@@ -1842,8 +1850,9 @@ a {
   --color-success-100: rgba(22, 163, 74, 0.18);
   --color-warning-100: rgba(217, 119, 6, 0.18);
   --color-danger-100: rgba(220, 38, 38, 0.18);
-  --dashboard-art-fade-strong: rgba(16, 29, 46, 0.95);
-  --dashboard-art-fade-soft: rgba(16, 29, 46, 0.26);
+  --dashboard-art-cover: rgba(16, 29, 46, 1);
+  --dashboard-art-glass: rgba(16, 29, 46, 0.52);
+  --dashboard-art-clear: rgba(16, 29, 46, 0.5);
 }
 
 .app-shell.is-night .dashboard-page .dashboard-toolbar,
@@ -1863,7 +1872,7 @@ a {
 
 .app-shell.is-compact .dashboard-page {
   --dashboard-command-height: 318px;
-  --dashboard-row-height: 54px;
+  --dashboard-row-height: 62px;
 }
 
 .dashboard-toolbar {
@@ -1883,6 +1892,28 @@ a {
   backdrop-filter: blur(14px);
 }
 
+.dashboard-date-filter {
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+.dashboard-date-custom {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+.dashboard-date-custom .ui-field {
+  width: 146px;
+  min-width: 128px;
+}
+
 .dashboard-toolbar-actions,
 .dashboard-toolbar-controls,
 .dashboard-segmented,
@@ -1895,7 +1926,8 @@ a {
 }
 
 .dashboard-toolbar-actions {
-  flex: 1;
+  flex: 1 1 auto;
+  justify-content: flex-end;
 }
 
 .dashboard-segmented {
@@ -2027,7 +2059,7 @@ a {
 
 .dashboard-metric-grid {
   display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 14px;
 }
 
@@ -2176,10 +2208,9 @@ a {
   position: absolute;
   inset: 0 0 0 auto;
   z-index: 0;
-  width: min(46%, 300px);
-  background-position: center;
+  width: min(54%, 360px);
+  background-position: center right;
   background-size: cover;
-  opacity: 0.9;
   pointer-events: none;
 }
 
@@ -2278,9 +2309,11 @@ a {
 }
 
 .dashboard-filter-row {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
   gap: 10px;
+  min-width: 0;
 }
 
 .dashboard-select {
@@ -2288,6 +2321,20 @@ a {
   display: grid;
   gap: 6px;
   min-width: 0;
+  width: min(100%, 220px);
+  max-width: 100%;
+}
+
+.dashboard-select-range {
+  width: 178px;
+}
+
+.dashboard-select-wide {
+  width: 260px;
+}
+
+.dashboard-select-status {
+  width: 176px;
 }
 
 .dashboard-select-label {
@@ -2313,6 +2360,7 @@ a {
 }
 
 .dashboard-select-trigger span:first-child {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2324,6 +2372,8 @@ a {
   left: 0;
   right: 0;
   z-index: 40;
+  width: 100%;
+  min-width: 0;
   max-height: 260px;
   overflow-y: auto;
   border: 1px solid var(--color-slate-200);
@@ -2337,6 +2387,7 @@ a {
   display: block;
   width: 100%;
   min-height: 34px;
+  overflow: hidden;
   border: 0;
   border-radius: 8px;
   background: transparent;
@@ -2344,6 +2395,8 @@ a {
   cursor: pointer;
   padding: 8px 10px;
   text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .dashboard-select-option:hover,
@@ -2727,9 +2780,16 @@ a {
   .dashboard-metric-grid,
   .cohort-overview-grid,
   .cohort-revenue-values,
-  .finance-wow-values,
-  .dashboard-filter-row {
+  .finance-wow-values {
     grid-template-columns: 1fr;
+  }
+
+  .dashboard-date-filter,
+  .dashboard-date-custom,
+  .dashboard-filter-row,
+  .dashboard-select,
+  .dashboard-date-custom .ui-field {
+    width: 100%;
   }
 
   .cohort-revenue-card,
