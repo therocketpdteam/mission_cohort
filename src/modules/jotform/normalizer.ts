@@ -52,10 +52,7 @@ export const jotformTargetFields: JotformTargetField[] = [
   { target: "utmTerm", label: "UTM term", category: "Source", aliases: ["utm_term", "utmTerm", "UTM Term"] },
   { target: "landingPageUrl", label: "Landing page URL", category: "Source", aliases: ["landingPageUrl", "landing_page_url", "Get Page URL", "lead_source", "q25_leadSource", "q59_typeA59"] },
   { target: "referrerUrl", label: "Referrer URL", category: "Source", aliases: ["referrerUrl", "referrer", "Referrer"] },
-  { target: "participantText", label: "Participant names/emails text box", category: "Participants", aliases: ["participantCsv", "participantsCsv", "participantText", "participantNamesEmails", "participantNamesAndEmails", "teamParticipants", "TeamParticipants", "namesAndEmails", "NamesEmails", "Please enter the names and email addresses of all participants, one per line, in the following format: Full Name, Email"] },
-  { target: "w9Url", label: "W-9 URL", category: "Documents", aliases: ["w9Url", "w9", "w9Link"] },
-  { target: "invoiceUrl", label: "Invoice URL", category: "Documents", aliases: ["invoiceUrl", "invoiceLink"] },
-  { target: "confirmationDocsSentAt", label: "Confirmation docs sent date", category: "Documents", aliases: ["confirmationDocsSentAt"] }
+  { target: "participantText", label: "Participant names/emails text box", category: "Participants", aliases: ["participantCsv", "participantsCsv", "participantText", "participantNamesEmails", "participantNamesAndEmails", "teamParticipants", "TeamParticipants", "namesAndEmails", "NamesEmails", "Please enter the names and email addresses of all participants, one per line, in the following format: Full Name, Email"] }
 ];
 
 function normalizeKey(value: string): string {
@@ -163,6 +160,36 @@ function readPaymentMethod(value: unknown): PaymentMethod {
   return readEnumValue(PaymentMethod, value, PaymentMethod.UNKNOWN);
 }
 
+function readPaymentStatus(value: unknown, fallback: PaymentStatus) {
+  const normalized = normalizeKey(readString(value));
+
+  if (["paid", "paymentcomplete", "completed", "complete", "success", "successful", "charged", "captured"].includes(normalized)) {
+    return PaymentStatus.PAID;
+  }
+
+  if (["partial", "partiallypaid", "deposit"].includes(normalized)) {
+    return PaymentStatus.PARTIALLY_PAID;
+  }
+
+  if (["invoice", "invoiced", "invoicepending", "po", "purchaseorder"].includes(normalized)) {
+    return PaymentStatus.INVOICED;
+  }
+
+  if (["cancelled", "canceled", "void", "voided"].includes(normalized)) {
+    return PaymentStatus.CANCELLED;
+  }
+
+  if (["refunded", "refund"].includes(normalized)) {
+    return PaymentStatus.REFUNDED;
+  }
+
+  if (["pending", "awaitingpayment", "unpaid", "open"].includes(normalized)) {
+    return PaymentStatus.PENDING;
+  }
+
+  return readEnumValue(PaymentStatus, value, fallback);
+}
+
 function readEnumValue<T extends Record<string, string>>(enumValues: T, value: unknown, fallback: T[keyof T]): T[keyof T] {
   const normalized = normalizeKey(readString(value));
   const match = Object.values(enumValues).find((item) => normalizeKey(item) === normalized);
@@ -262,7 +289,14 @@ function landingPageMatchesPattern(landingPageUrl: string, pattern: string) {
 }
 
 function resolveLandingPageRoute(mapping: JotformFormMapping | undefined, landingPageUrl: string) {
-  return readLandingPageRoutes(mapping).find((route) => landingPageMatchesPattern(landingPageUrl, route.pattern));
+  const routes = readLandingPageRoutes(mapping);
+  const matchedRoute = routes.find((route) => landingPageMatchesPattern(landingPageUrl, route.pattern));
+
+  if (matchedRoute) {
+    return matchedRoute;
+  }
+
+  return routes.length === 1 ? routes[0] : undefined;
 }
 
 function mappedFirstValue(flat: UnknownRecord, source: UnknownRecord, fieldMap: FieldMap, target: string, fallbackKeys: string[]): unknown {
@@ -662,8 +696,7 @@ export function normalizeJotformRegistrationPayload(payload: UnknownRecord, mapp
       billingContactEmail: readString(firstValue(registration, ["billingContactEmail", "billingEmail"])),
       billingAddress: readString(mappedFirstValue(flat, registration, fieldMap, "organizationAddress", ["billingAddress", "address"])),
       paymentMethod: readPaymentMethod(mappedFirstValue(flat, payment, fieldMap, "paymentMethod", ["paymentMethod", "q46_preferredMethod", "method", "Preferred method of payment?"])),
-      paymentStatus: readEnumValue(
-        PaymentStatus,
+      paymentStatus: readPaymentStatus(
         mappedFirstValue(flat, payment, fieldMap, "paymentStatus", ["paymentStatus", "status"]),
         readPaymentMethod(mappedFirstValue(flat, payment, fieldMap, "paymentMethod", ["paymentMethod", "q46_preferredMethod", "method", "Preferred method of payment?"])) === PaymentMethod.CREDIT_CARD ? PaymentStatus.PAID : PaymentStatus.PENDING
       ),
@@ -697,8 +730,7 @@ export function normalizeJotformRegistrationPayload(payload: UnknownRecord, mapp
     payment: {
       amount: readNumber(mappedFirstValue(flat, payment, fieldMap, "totalAmount", ["paymentAmount", "q56_totalCost56", "amount", "totalAmount", "total", "CC - Total", "Total Cost"])),
       method: readPaymentMethod(mappedFirstValue(flat, payment, fieldMap, "paymentMethod", ["paymentMethod", "q46_preferredMethod", "method", "Preferred method of payment?"])),
-      status: readEnumValue(
-        PaymentStatus,
+      status: readPaymentStatus(
         mappedFirstValue(flat, payment, fieldMap, "paymentStatus", ["paymentStatus", "status"]),
         readPaymentMethod(mappedFirstValue(flat, payment, fieldMap, "paymentMethod", ["paymentMethod", "q46_preferredMethod", "method", "Preferred method of payment?"])) === PaymentMethod.CREDIT_CARD ? PaymentStatus.PAID : PaymentStatus.PENDING
       ),

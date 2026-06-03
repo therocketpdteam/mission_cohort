@@ -61,6 +61,11 @@ export async function listJotformIntakeEvents() {
 
   return events.map((event) => {
     const preview = previewJotformRegistrationPayload(event.payload as Record<string, unknown>, mappings);
+    const normalizedSummary = event.normalizedSummary && typeof event.normalizedSummary === "object" && !Array.isArray(event.normalizedSummary)
+      ? event.normalizedSummary as Record<string, unknown>
+      : {};
+    const revisionNumber = Number(event.revisionNumber ?? normalizedSummary.revisionNumber ?? 0);
+    const isRevision = revisionNumber > 1 || Boolean(normalizedSummary.updatedExistingRegistration);
     const needsMapping = Boolean(preview.formId) && !preview.hasMapping;
     const missingRequiredFields = [
       !preview.formId ? "Jotform form ID" : "",
@@ -83,7 +88,9 @@ export async function listJotformIntakeEvents() {
             ? "FAILED"
             : "REVIEW_REQUIRED";
     const recommendedAction = isProcessed
-      ? "Already imported into Mission Control."
+      ? isRevision
+        ? "Updated the existing registration and logged a Jotform revision."
+        : "Already imported into Mission Control."
       : needsMapping
         ? "Review this submission, confirm the form mapping, then replay it."
         : hasParticipantErrors
@@ -103,6 +110,15 @@ export async function listJotformIntakeEvents() {
         hasParticipantErrors,
         missingRequiredFields,
         recommendedAction
+      },
+      revision: {
+        registrationId: event.registrationId,
+        externalSubmissionId: event.externalSubmissionId ?? preview.submissionId,
+        revisionNumber: revisionNumber || null,
+        isRevision,
+        processedAt: event.processedAt,
+        updatedExistingRegistration: Boolean(normalizedSummary.updatedExistingRegistration),
+        summary: normalizedSummary
       }
     };
   });

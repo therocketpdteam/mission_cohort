@@ -345,6 +345,14 @@ function RegistrationDetailDialog({
     }
   }
 
+  function revisionSummary(event: AdminRow) {
+    const summary = event.normalizedSummary && typeof event.normalizedSummary === "object" ? event.normalizedSummary : {};
+    const amount = Number(summary.totalAmount ?? 0);
+    const participantText = `${summary.parsedParticipantCount ?? 0}${summary.participantCount ? ` / ${summary.participantCount}` : ""} participants`;
+    const paymentText = [formatStatusLabel(String(summary.paymentStatus ?? "")), amount ? money(amount) : ""].filter(Boolean).join(" · ");
+    return [participantText, paymentText].filter(Boolean).join(" · ");
+  }
+
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="lg">
       <DialogTitle>Registration Detail</DialogTitle>
@@ -387,6 +395,24 @@ function RegistrationDetailDialog({
               <Button variant="outlined" onClick={syncQuickBooks}>Sync QuickBooks</Button>
               <Button variant="outlined" color="warning" onClick={voidQuickBooksInvoice}>Void QB Invoice</Button>
               {registration.quickBooksSyncError && <Typography color="error.main">{registration.quickBooksSyncError}</Typography>}
+            </Stack>
+            <Divider />
+            <Stack spacing={1}>
+              <Typography variant="h3">Jotform Revision Timeline</Typography>
+              {(registration.webhookEvents ?? []).length > 0 ? (
+                <List dense>
+                  {(registration.webhookEvents ?? []).map((event: AdminRow) => (
+                    <ListItem key={event.id} divider>
+                      <ListItemText
+                        primary={`Revision ${event.revisionNumber ?? "-"} · ${formatStatusLabel(event.status)}`}
+                        secondary={`${event.processedAt || event.createdAt ? new Date(event.processedAt ?? event.createdAt).toLocaleString() : ""}${revisionSummary(event) ? ` · ${revisionSummary(event)}` : ""}${event.errorMessage ? ` · ${event.errorMessage}` : ""}`}
+                      />
+                    </ListItem>
+                  ))}
+                </List>
+              ) : (
+                <EmptyState title="No Jotform revisions yet" description="Jotform imports and resubmissions linked to this registration will appear here." />
+              )}
             </Stack>
             <Divider />
             <Stack spacing={1}>

@@ -123,6 +123,16 @@ export async function listRegistrations(cohortId?: string) {
 export async function getRegistrationById(id: string) {
   return prisma.registration.findUnique({
     where: { id },
-    include: { cohort: true, organization: true, participants: true, paymentRecords: true }
+    include: {
+      cohort: true,
+      organization: true,
+      participants: true,
+      paymentRecords: true,
+      webhookEvents: {
+        where: { source: "jotform" },
+        orderBy: { createdAt: "desc" },
+        take: 12
+      }
+    }
   });
 }

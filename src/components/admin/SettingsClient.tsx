@@ -134,13 +134,14 @@ function TabPanel({ active, index, children }: { active: number; index: number; 
 }
 
 function InfoTile({ label, value }: { label: string; value: unknown }) {
+  const display = cleanJotformDisplay(value);
   return (
     <Box sx={{ border: 1, borderColor: "divider", borderRadius: 1, p: 1.25, minHeight: 62 }}>
       <Typography variant="caption" color="text.secondary">
         {label}
       </Typography>
       <Typography fontWeight={800} sx={{ mt: 0.25, overflowWrap: "anywhere", lineHeight: 1.25 }}>
-        {value == null || value === "" ? "-" : String(value)}
+        {display || "-"}
       </Typography>
     </Box>
   );
@@ -244,8 +245,131 @@ function fieldMapWithLandingPageRoutes(fieldMap: AdminRow, routes: LandingPageRo
   return clean;
 }
 
+function normalizeUrlForMatch(value: string) {
+  return value.trim().toLowerCase().replace(/\/+$/, "");
+}
+
+function landingPageMatchesPattern(landingPageUrl: string, pattern: string) {
+  const normalizedUrl = normalizeUrlForMatch(landingPageUrl);
+  const normalizedPattern = normalizeUrlForMatch(pattern);
+
+  if (!normalizedUrl || !normalizedPattern) {
+    return false;
+  }
+
+  if (normalizedUrl === normalizedPattern || normalizedUrl.includes(normalizedPattern)) {
+    return true;
+  }
+
+  try {
+    const url = new URL(normalizedUrl);
+    const patternUrl = new URL(normalizedPattern);
+    return url.hostname === patternUrl.hostname && normalizeUrlForMatch(url.pathname) === normalizeUrlForMatch(patternUrl.pathname);
+  } catch {
+    return false;
+  }
+}
+
+function matchedLandingPageRoute(landingPageUrl: string, routes: LandingPageRoute[]) {
+  const cleanRoutes = cleanLandingPageRoutes(routes);
+  const matchedRoute = cleanRoutes.find((route) => landingPageMatchesPattern(landingPageUrl, route.pattern));
+
+  if (matchedRoute) {
+    return matchedRoute;
+  }
+
+  return cleanRoutes.length === 1 ? cleanRoutes[0] : undefined;
+}
+
 function fieldSample(fieldOptions: JotformFieldOption[], key: string) {
   return fieldOptionByKey(fieldOptions, key)?.sampleValue ?? "";
+}
+
+function cleanJotformDisplay(value: unknown) {
+  if (value == null || value === "") {
+    return "";
+  }
+
+  return String(value)
+    .replace(/<br\s*\/?>/gi, " ")
+    .replace(/<\/p>/gi, " ")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, "\"")
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function fieldOptionLabel(option?: JotformFieldOption, fallback = "") {
+  return cleanJotformDisplay(option?.label || option?.rawLabel || fallback || option?.key);
+}
+
+function fieldOptionSample(option?: JotformFieldOption) {
+  return cleanJotformDisplay(option?.sampleValue);
+}
+
+function JotformOptionContent({ option }: { option: JotformFieldOption }) {
+  return (
+    <span className="jotform-field-option">
+      <strong>{fieldOptionLabel(option, option.key)}</strong>
+      {fieldOptionSample(option) && <span>{fieldOptionSample(option)}</span>}
+    </span>
+  );
+}
+
+function JotformFieldPreview({ option }: { option: JotformFieldOption }) {
+  const label = fieldOptionLabel(option, option.key);
+  const sample = fieldOptionSample(option);
+
+  return (
+    <div className="jotform-field-preview" title={[label, sample].filter(Boolean).join(" - ")}>
+      <strong>{label}</strong>
+      <span>{sample || "No response"}</span>
+    </div>
+  );
+}
+
+function MappingDisplayRow({
+  label,
+  option,
+  sourceKey,
+  sample
+}: {
+  label: string;
+  option?: JotformFieldOption;
+  sourceKey: string;
+  sample?: unknown;
+}) {
+  const cleanLabel = cleanJotformDisplay(label);
+  const sourceLabel = fieldOptionLabel(option, sourceKey);
+  const cleanSample = cleanJotformDisplay(sample ?? option?.sampleValue);
+  const title = [cleanLabel, sourceLabel, cleanSample].filter(Boolean).join(" - ");
+
+  return (
+    <div className="jotform-mapping-row" title={title}>
+      <span className="metadata-pill jotform-mapping-target">
+        <span>{cleanLabel}</span>
+      </span>
+      <div className="jotform-mapping-copy">
+        <strong>{sourceLabel || sourceKey || "Not mapped"}</strong>
+        {cleanSample && <span>{cleanSample}</span>}
+      </div>
+    </div>
+  );
+}
+
+function PreviewTile({ label, value }: { label: string; value: unknown }) {
+  const cleanValue = cleanJotformDisplay(value);
+  return (
+    <div className="jotform-preview-tile" title={cleanValue || undefined}>
+      <span>{label}</span>
+      <strong>{cleanValue || "-"}</strong>
+    </div>
+  );
 }
 
 function JotformMappingWizard({
@@ -296,7 +420,7 @@ function JotformMappingWizard({
       const suggestedLandingPageRoute = preview.landingPageUrl ? [{ pattern: preview.landingPageUrl, cohortId: "", label: "Detected landing page" }] : [];
       const useSlug = Boolean(existingMapping?.requireCohortSlug ?? preview.cohortSlug);
       setSessionCount(detectedCount);
-      setRoutingMode(existingRoutes.length ? "url" : useSlug ? "slug" : preview.landingPageUrl ? "url" : "default");
+      setRoutingMode(existingRoutes.length ? "url" : preview.landingPageUrl ? "url" : useSlug ? "slug" : "default");
       setDefaultCohortId(existingMapping?.defaultCohortId ?? "");
       setLandingPageRoutes(existingRoutes.length ? existingRoutes : suggestedLandingPageRoute);
       setLabel(existingMapping?.label ?? `Jotform ${preview.formId || "form"} intake`);
@@ -334,6 +458,29 @@ function JotformMappingWizard({
     if (routingMode === "url" && cleanLandingPageRoutes(landingPageRoutes).length === 0) {
       setError("Add at least one landing page URL pattern and choose the cohort it should route to.");
       return;
+    }
+
+    if (replayAfterSave && routingMode === "url") {
+      const detectedUrl = cleanJotformDisplay(preview.landingPageUrl);
+      const replayRoute = detectedUrl ? matchedLandingPageRoute(detectedUrl, landingPageRoutes) : undefined;
+
+      if (!detectedUrl) {
+        setError("This submission does not include a landing page URL. Use one default cohort for this mapping or map the landing page URL field before replaying.");
+        return;
+      }
+
+      if (!replayRoute) {
+        setError("The detected landing page URL does not match any URL rule. Choose the cohort for this URL before saving and replaying.");
+        return;
+      }
+    }
+
+    if (replayAfterSave && routingMode === "slug") {
+      const mappedSlug = fieldSample(fieldOptions, getFieldMapValue(fieldMap, "cohortSlug")) || preview.cohortSlug;
+      if (!mappedSlug) {
+        setError("This submission does not include a cohort slug. Use URL routing or one default cohort before replaying.");
+        return;
+      }
     }
 
     setSaving(true);
@@ -398,9 +545,30 @@ function JotformMappingWizard({
 
     return requiredMappingTargets.includes(target.target) && !getFieldMapValue(fieldMap, target.target);
   });
+  const cleanRoutes = cleanLandingPageRoutes(landingPageRoutes);
+  const matchedRoute = routingMode === "url" ? matchedLandingPageRoute(preview.landingPageUrl ?? "", landingPageRoutes) : undefined;
+  const matchedRouteCohort = matchedRoute ? cohorts.find((cohort) => cohort.id === matchedRoute.cohortId) : undefined;
+  const readinessChecks = [
+    {
+      label: "Route",
+      ready: routingMode === "url" ? Boolean(matchedRoute) : routingMode === "slug" ? Boolean(preview.cohortSlug || getFieldMapValue(fieldMap, "cohortSlug")) : Boolean(defaultCohortId),
+      detail: routingMode === "url"
+        ? matchedRoute
+          ? `Routes to ${matchedRouteCohort?.title ?? "selected cohort"}`
+          : "No URL rule matches this submission yet"
+        : routingMode === "slug"
+          ? "Cohort slug will be required from Jotform"
+          : cohorts.find((cohort) => cohort.id === defaultCohortId)?.title ?? "Default cohort required"
+    },
+    { label: "POC", ready: Boolean(preview.primaryContactName && preview.primaryContactEmail), detail: preview.primaryContactEmail || "Name and email required" },
+    { label: "Organization", ready: Boolean(preview.organizationName), detail: preview.organizationName || "Organization name required" },
+    { label: "Participants", ready: Boolean(preview.participantCount || preview.parsedParticipantCount), detail: `${preview.parsedParticipantCount ?? 0}${preview.participantCount ? ` / ${preview.participantCount}` : ""} detected` },
+    { label: "Payment", ready: Boolean(registration.paymentStatus || registration.totalAmount || payment.status || payment.amount), detail: `${payment.status || registration.paymentStatus || "No status"} · ${payment.amount || registration.totalAmount ? formatCurrency(payment.amount ?? registration.totalAmount) : "$0"}` },
+    { label: "Source", ready: Boolean(preview.landingPageUrl || registration.utmSource || registration.utmCampaign), detail: preview.landingPageUrl || registration.utmCampaign || registration.utmSource || "No source captured" }
+  ];
 
   return (
-    <Dialog open={Boolean(event)} onClose={onClose} fullWidth maxWidth="lg" PaperProps={{ sx: { minHeight: "78vh" } }}>
+    <Dialog open={Boolean(event)} onClose={onClose} fullWidth maxWidth="xl" PaperProps={{ className: "jotform-mapping-dialog", sx: { minHeight: "82vh" } }}>
       <DialogTitle>
         <Stack direction={{ xs: "column", md: "row" }} spacing={1.5} justifyContent="space-between" alignItems={{ xs: "flex-start", md: "center" }}>
           <Box>
@@ -475,6 +643,13 @@ function JotformMappingWizard({
                         </Button>
                       </Stack>
                       <Stack spacing={1.25}>
+                        {preview.landingPageUrl && (
+                          <Alert severity={matchedRoute ? "success" : "warning"}>
+                            {matchedRoute
+                              ? `Detected URL routes to ${matchedRouteCohort?.title ?? "the selected cohort"}.`
+                              : "Detected URL does not match any saved URL rule yet."}
+                          </Alert>
+                        )}
                         {landingPageRoutes.map((route, index) => (
                           <Grid container spacing={1} alignItems="center" key={`${route.pattern}-${index}`}>
                             <Grid size={{ xs: 12, md: 5 }}>
@@ -562,8 +737,8 @@ function JotformMappingWizard({
                           >
                             <MenuItem value="">Do not map</MenuItem>
                             {fieldOptions.map((option) => (
-                              <MenuItem value={option.key} key={`${target.target}-${option.key}`} sx={{ minHeight: 46 }}>
-                                <FieldValuePill label={option.label || option.key} value={option.sampleValue} secondary={option.rawLabel && option.rawLabel !== option.label ? option.rawLabel : option.key} />
+                              <MenuItem value={option.key} label={fieldOptionLabel(option, option.key)} key={`${target.target}-${option.key}`} sx={{ minHeight: 46 }}>
+                                <JotformOptionContent option={option} />
                               </MenuItem>
                             ))}
                           </TextField>
@@ -578,11 +753,11 @@ function JotformMappingWizard({
                   <Grid container spacing={1}>
                     {confirmedSmartRows.map((row) => (
                       <Grid size={{ xs: 12, md: 6 }} key={row.target}>
-                        <Typography variant="caption" color="text.secondary">{row.label}</Typography>
-                        <FieldValuePill
-                          label={fieldOptionByKey(fieldOptions, row.sourceKey)?.label ?? row.sourceKey}
-                          value={row.sample || "-"}
-                          secondary={fieldOptionByKey(fieldOptions, row.sourceKey)?.rawLabel ?? row.sourceKey}
+                        <MappingDisplayRow
+                          label={row.label}
+                          option={fieldOptionByKey(fieldOptions, row.sourceKey)}
+                          sourceKey={row.sourceKey}
+                          sample={row.sample || "-"}
                         />
                       </Grid>
                     ))}
@@ -616,8 +791,8 @@ function JotformMappingWizard({
                                 >
                                   <MenuItem value="">Do not map</MenuItem>
                                   {fieldOptions.map((option) => (
-                                    <MenuItem value={option.key} key={`${target.target}-${option.key}`}>
-                                      <FieldValuePill label={option.label || option.key} value={option.sampleValue} secondary={option.rawLabel && option.rawLabel !== option.label ? option.rawLabel : option.key} />
+                                    <MenuItem value={option.key} label={fieldOptionLabel(option, option.key)} key={`${target.target}-${option.key}`}>
+                                      <JotformOptionContent option={option} />
                                     </MenuItem>
                                   ))}
                                 </TextField>
@@ -634,24 +809,24 @@ function JotformMappingWizard({
 
             {activeStep === 3 && (
               <Stack spacing={2}>
-                <Grid container spacing={1.5}>
-                  <Grid size={{ xs: 12, md: 4 }}><InfoTile label="Registration POC" value={`${formatProperDisplay(registration.primaryContactName) || "-"} ${registration.primaryContactEmail ? `<${registration.primaryContactEmail}>` : ""}`} /></Grid>
-                  <Grid size={{ xs: 12, md: 4 }}><InfoTile label="Organization" value={formatProperDisplay(organization.name)} /></Grid>
-                  <Grid size={{ xs: 12, md: 4 }}><InfoTile label="Cohort" value={preview.cohortSlug || registration.cohortId || "Selected by mapping"} /></Grid>
-                  <Grid size={{ xs: 12, md: 4 }}><InfoTile label="Participant roster" value={`${participants.length} parsed from submission`} /></Grid>
-                  <Grid size={{ xs: 12, md: 4 }}><InfoTile label="Payment record" value={`${payment.method || registration.paymentMethod || "Unknown"} / ${payment.status || registration.paymentStatus || "Unknown"}`} /></Grid>
-                  <Grid size={{ xs: 12, md: 4 }}><InfoTile label="Amount" value={payment.amount ? formatCurrency(payment.amount) : "$0"} /></Grid>
-                </Grid>
+                <div className="jotform-preview-grid">
+                  <PreviewTile label="Registration POC" value={[formatProperDisplay(registration.primaryContactName), registration.primaryContactEmail].filter(Boolean).join(" - ")} />
+                  <PreviewTile label="Organization" value={formatProperDisplay(organization.name)} />
+                  <PreviewTile label="Cohort route" value={preview.cohortSlug || registration.cohortId || "Selected by mapping"} />
+                  <PreviewTile label="Participant roster" value={`${participants.length} parsed from submission`} />
+                  <PreviewTile label="Payment record" value={`${payment.method || registration.paymentMethod || "Unknown"} / ${payment.status || registration.paymentStatus || "Unknown"}`} />
+                  <PreviewTile label="Amount" value={payment.amount ? formatCurrency(payment.amount) : "$0"} />
+                </div>
                 <Paper variant="outlined" sx={{ p: 1.5 }}>
                   <Typography variant="h4" sx={{ mb: 1 }}>Selected field matches</Typography>
                   <Grid container spacing={1}>
                     {mappedPreviewRows.map((row) => (
                       <Grid size={{ xs: 12, md: 6 }} key={row.target}>
-                        <Typography variant="caption" color="text.secondary">{row.label}</Typography>
-                        <FieldValuePill
-                          label={fieldOptionByKey(fieldOptions, row.sourceKey)?.label ?? row.sourceKey}
-                          value={row.sample || "-"}
-                          secondary={fieldOptionByKey(fieldOptions, row.sourceKey)?.rawLabel ?? row.sourceKey}
+                        <MappingDisplayRow
+                          label={row.label}
+                          option={fieldOptionByKey(fieldOptions, row.sourceKey)}
+                          sourceKey={row.sourceKey}
+                          sample={row.sample || "-"}
                         />
                       </Grid>
                     ))}
@@ -665,6 +840,19 @@ function JotformMappingWizard({
                 <Alert severity="info">
                   Saving stores this form mapping for future submissions. Save & Replay will immediately reprocess this held submission using the selected fields.
                 </Alert>
+                <Paper variant="outlined" sx={{ p: 1.5 }}>
+                  <Typography variant="h4" sx={{ mb: 1 }}>Import readiness checklist</Typography>
+                  <Grid container spacing={1}>
+                    {readinessChecks.map((item) => (
+                      <Grid size={{ xs: 12, md: 6 }} key={item.label}>
+                        <FieldValuePill
+                          label={`${item.ready ? "Ready" : "Needs review"} · ${item.label}`}
+                          value={item.detail}
+                        />
+                      </Grid>
+                    ))}
+                  </Grid>
+                </Paper>
                 <Grid container spacing={1.5}>
                   <Grid size={{ xs: 12, md: 4 }}><InfoTile label="Mapping" value={label} /></Grid>
                   <Grid size={{ xs: 12, md: 4 }}><InfoTile label="Session count" value={`${sessionCount} sessions`} /></Grid>
@@ -674,7 +862,7 @@ function JotformMappingWizard({
                       <Paper variant="outlined" sx={{ p: 1.5 }}>
                         <Typography variant="h4" sx={{ mb: 1 }}>URL rules that will be saved</Typography>
                         <Grid container spacing={1}>
-                          {cleanLandingPageRoutes(landingPageRoutes).map((route) => (
+                          {cleanRoutes.map((route) => (
                             <Grid size={{ xs: 12, md: 6 }} key={`${route.pattern}-${route.cohortId}`}>
                               <FieldValuePill
                                 label={route.label || "Landing page"}
@@ -726,6 +914,7 @@ function JotformSubmissionRow({
   const participants = Array.isArray(preview.normalized?.participants) ? preview.normalized.participants : [];
   const fieldOptions: JotformFieldOption[] = Array.isArray(preview.fieldOptions) ? preview.fieldOptions : [];
   const status = row.reviewStatus ?? row.status;
+  const revision = row.revision ?? {};
   const organization = formatProperDisplay(preview.organizationName) || "Unknown organization";
   const contact = formatProperDisplay(preview.primaryContactName) || preview.primaryContactEmail || "Unknown POC";
 
@@ -741,6 +930,7 @@ function JotformSubmissionRow({
         <Grid size={{ xs: 12, md: 1.4 }}><StatusChip value={status} /></Grid>
         <Grid size={{ xs: 12, md: 2.2 }}>
           <Typography fontWeight={800} sx={{ overflowWrap: "anywhere" }}>{organization}</Typography>
+          {revision.revisionNumber && <Typography variant="caption" color="text.secondary">Revision {revision.revisionNumber}{revision.isRevision ? " · update" : " · first import"}</Typography>}
         </Grid>
         <Grid size={{ xs: 12, md: 2 }}>
           <Typography sx={{ overflowWrap: "anywhere" }}>{contact}</Typography>
@@ -770,6 +960,7 @@ function JotformSubmissionRow({
           <Grid container spacing={1.5}>
             <Grid size={{ xs: 12, md: 3 }}><InfoTile label="Form ID" value={preview.formId || "Missing"} /></Grid>
             <Grid size={{ xs: 12, md: 3 }}><InfoTile label="Submission ID" value={preview.submissionId} /></Grid>
+            <Grid size={{ xs: 12, md: 3 }}><InfoTile label="Revision" value={revision.revisionNumber ? `Revision ${revision.revisionNumber}${revision.isRevision ? " update" : " first import"}` : "Not imported yet"} /></Grid>
             <Grid size={{ xs: 12, md: 3 }}><InfoTile label="Amount" value={registration.totalAmount ? formatCurrency(registration.totalAmount) : ""} /></Grid>
             <Grid size={{ xs: 12, md: 3 }}><InfoTile label="Field matches" value={`${preview.fieldOptions?.length ?? 0} incoming fields detected`} /></Grid>
           </Grid>
@@ -799,11 +990,7 @@ function JotformSubmissionRow({
               <Grid container spacing={1}>
                 {fieldOptions.slice(0, 12).map((option) => (
                   <Grid size={{ xs: 12, md: 6 }} key={option.key}>
-                    <FieldValuePill
-                      label={option.label || option.key}
-                      value={option.sampleValue}
-                      secondary={option.rawLabel && option.rawLabel !== option.label ? option.rawLabel : option.key}
-                    />
+                    <JotformFieldPreview option={option} />
                   </Grid>
                 ))}
               </Grid>
@@ -1091,7 +1278,7 @@ export function SettingsClient() {
       <TabPanel active={activeTab} index={3}>
         <Stack spacing={2}>
           <SectionCard
-            title="Jotform Intake Setup"
+            title="Connection"
             action={
               <Stack direction="row" flexWrap="wrap" useFlexGap gap={1}>
                 <Button size="small" variant="outlined" startIcon={<ContentCopyOutlined />} onClick={copyJotformWebhookUrl}>
@@ -1123,7 +1310,7 @@ export function SettingsClient() {
           <Accordion defaultExpanded>
             <AccordionSummary expandIcon={<ExpandMoreOutlined />}>
               <Box>
-                <Typography variant="h3">Test Submissions / Review Queue</Typography>
+                <Typography variant="h3">Review Queue</Typography>
                 <Typography color="text.secondary" variant="body2">
                   Review compact rows, expand only when you need details, then map and replay.
                 </Typography>
@@ -1160,7 +1347,7 @@ export function SettingsClient() {
       </TabPanel>
 
       <TabPanel active={activeTab} index={4}>
-        <SectionCard title="Manual Jotform Form Mappings" action={<Button size="small" startIcon={<AddIcon />} onClick={() => setDialogOpen(true)}>Add Mapping</Button>}>
+        <SectionCard title="Mapping Library" action={<Button size="small" startIcon={<AddIcon />} onClick={() => setDialogOpen(true)}>Add Mapping</Button>}>
           <Typography color="text.secondary" sx={{ mb: 2 }}>
             Most mapping should happen from the Jotform review wizard. Use this table only for quick enable/disable or routing edits.
           </Typography>

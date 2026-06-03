@@ -461,6 +461,7 @@ model Registration {
   invoiceDrafts         InvoiceDraft[]
   operationsTasks       OperationsTask[]
   crmSyncEvents         CrmSyncEvent[]
+  webhookEvents         WebhookEvent[]
 
   @@index([cohortId])
   @@index([organizationId])
@@ -653,18 +654,25 @@ model CalendarEvent {
 }
 
 model WebhookEvent {
-  id           String                  @id @default(cuid())
-  source       String
-  eventType    String
-  payload      Json
-  processedAt  DateTime?
-  status       WebhookProcessingStatus @default(RECEIVED)
-  errorMessage String?
-  createdAt    DateTime                @default(now())
+  id                   String                  @id @default(cuid())
+  source               String
+  eventType            String
+  payload              Json
+  registrationId       String?
+  externalSubmissionId String?
+  revisionNumber       Int?
+  normalizedSummary    Json?
+  processedAt          DateTime?
+  status               WebhookProcessingStatus @default(RECEIVED)
+  errorMessage         String?
+  createdAt            DateTime                @default(now())
+  registration         Registration?           @relation(fields: [registrationId], references: [id], onDelete: SetNull)
 
   @@index([source])
   @@index([eventType])
   @@index([status])
+  @@index([registrationId])
+  @@index([externalSubmissionId])
 }
 
 model PaymentRecord {

@@ -295,7 +295,8 @@ export function TextField({
     .filter(isValidElement)
     .map((child: any) => ({
       value: child.props.value == null ? "" : String(child.props.value),
-      label: child.props.children,
+      label: child.props.label ?? child.props.children,
+      menuLabel: child.props.children,
       disabled: child.props.disabled
     }));
   const selectedOption = selectOptions.find((option) => option.value === selectValue) ?? selectOptions[0];
@@ -346,7 +347,7 @@ export function TextField({
                   disabled={option.disabled}
                   onClick={() => selectOption(option.value)}
                 >
-                  {option.label}
+                  {option.menuLabel}
                 </button>
               ))}
             </span>
@@ -362,7 +363,7 @@ export function TextField({
   );
 }
 
-export function MenuItem({ value, children, disabled, onClick, className, sx, ...props }: HTMLAttributes<HTMLDivElement> & { value?: string | number; disabled?: boolean; sx?: SxValue | SxValue[] }) {
+export function MenuItem({ value, children, disabled, onClick, className, sx, label: _label, ...props }: HTMLAttributes<HTMLDivElement> & { value?: string | number; disabled?: boolean; sx?: SxValue | SxValue[]; label?: ReactNode }) {
   return (
     <option value={value} disabled={disabled} className={className} {...(props as any)}>
       {children}
@@ -411,11 +412,15 @@ export function Divider({ sx, className, ...props }: BaseProps) {
   return <hr className={clsx("ui-divider", className)} style={sxToStyle(sx)} {...props} />;
 }
 
-export function Dialog({ open, children, onClose, maxWidth = "md" }: { open: boolean; children: ReactNode; onClose?: () => void; fullWidth?: boolean; maxWidth?: "sm" | "md" | "lg" | string; PaperProps?: any }) {
+export function Dialog({ open, children, onClose, maxWidth = "md", PaperProps }: { open: boolean; children: ReactNode; onClose?: () => void; fullWidth?: boolean; maxWidth?: "sm" | "md" | "lg" | string; PaperProps?: any }) {
   if (!open) return null;
   return (
     <div className="ui-modal-backdrop" onMouseDown={onClose}>
-      <div className={clsx("ui-modal", `ui-modal-${maxWidth}`)} onMouseDown={(event) => event.stopPropagation()}>
+      <div
+        className={clsx("ui-modal", `ui-modal-${maxWidth}`, PaperProps?.className)}
+        style={{ ...sxToStyle(PaperProps?.sx), ...(PaperProps?.style ?? {}) }}
+        onMouseDown={(event) => event.stopPropagation()}
+      >
         {children}
       </div>
     </div>

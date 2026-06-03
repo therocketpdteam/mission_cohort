@@ -226,10 +226,13 @@ async function collectLayoutFindings(page: Page, route: string, viewport: string
 async function auditRoute(page: Page, route: string, viewport: string, findings: AuditFinding[]) {
   const consoleErrors: string[] = [];
   const requestErrors: string[] = [];
+  const responseErrors: string[] = [];
+  const assetErrors: string[] = [];
 
   const onConsole = (message: { type: () => string; text: () => string }) => {
-    if (message.type() === "error") {
-      consoleErrors.push(message.text());
+    const text = message.text();
+    if (message.type() === "error" && !text.includes("Failed to load resource")) {
+      consoleErrors.push(text);
     }
   };
   const onRequestFailed = (request: { resourceType: () => string; failure: () => { errorText: string } | null; url: () => string }) => {
@@ -239,9 +242,19 @@ async function auditRoute(page: Page, route: string, viewport: string, findings:
       requestErrors.push(`${request.url()} ${errorText}`);
     }
   };
+  const onResponse = (response: { request: () => { resourceType: () => string }; status: () => number; url: () => string }) => {
+    const resourceType = response.request().resourceType();
+    const status = response.status();
+    if (status >= 400 && ["document", "fetch", "xhr"].includes(resourceType)) {
+      responseErrors.push(`${status} ${response.url()}`);
+    } else if (status >= 400 && ["image", "font", "media"].includes(resourceType)) {
+      assetErrors.push(`${status} ${response.url()}`);
+    }
+  };
 
   page.on("console", onConsole);
   page.on("requestfailed", onRequestFailed);
+  page.on("response", onResponse);
 
   try {
     const response = await page.goto(route);
@@ -264,11 +277,20 @@ async function auditRoute(page: Page, route: string, viewport: string, findings:
     if (requestErrors.length > 0) {
       findings.push(finding(route, viewport, "high", "request", requestErrors.slice(0, 5).join(" | ")));
     }
+
+    if (responseErrors.length > 0) {
+      findings.push(finding(route, viewport, "high", "response", responseErrors.slice(0, 5).join(" | ")));
+    }
+
+    if (assetErrors.length > 0) {
+      findings.push(finding(route, viewport, "low", "asset", assetErrors.slice(0, 5).join(" | ")));
+    }
   } catch (error) {
     findings.push(finding(route, viewport, "high", "audit runtime", error instanceof Error ? error.message : String(error)));
   } finally {
     page.off("console", onConsole);
     page.off("requestfailed", onRequestFailed);
+    page.off("response", onResponse);
   }
 }
 

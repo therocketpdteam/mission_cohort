@@ -370,8 +370,25 @@ a {
 .app-shell.is-night .app-density-toggle,
 .app-shell.is-night .compact-filter-bar,
 .app-shell.is-night .quick-view-drawer,
-.app-shell.is-night .quick-view-footer {
+.app-shell.is-night .quick-view-footer,
+.app-shell.is-night .jotform-field-preview,
+.app-shell.is-night .jotform-mapping-row,
+.app-shell.is-night .jotform-preview-tile {
   background: #0c1725;
+}
+
+.app-shell.is-night .jotform-field-option strong,
+.app-shell.is-night .jotform-field-preview strong,
+.app-shell.is-night .jotform-mapping-copy strong,
+.app-shell.is-night .jotform-preview-tile strong {
+  color: #e5eef8;
+}
+
+.app-shell.is-night .jotform-field-option span,
+.app-shell.is-night .jotform-field-preview span,
+.app-shell.is-night .jotform-mapping-copy span,
+.app-shell.is-night .jotform-preview-tile span {
+  color: #9fb2c8;
 }
 
 .section-card {
@@ -739,6 +756,10 @@ a {
   width: min(100%, 1080px);
 }
 
+.ui-modal-xl {
+  width: min(100%, 1240px);
+}
+
 .ui-modal-header {
   padding: 18px 20px;
   border-bottom: 1px solid var(--color-slate-200);
@@ -930,6 +951,147 @@ a {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.jotform-mapping-dialog .ui-field,
+.jotform-mapping-dialog .ui-select,
+.jotform-mapping-dialog .ui-select-trigger {
+  width: 100%;
+}
+
+.jotform-mapping-dialog .ui-select-menu {
+  max-height: 360px;
+}
+
+.jotform-mapping-dialog .ui-select-option {
+  display: flex;
+  align-items: flex-start;
+  min-height: 48px;
+  overflow: visible;
+  white-space: normal;
+}
+
+.jotform-field-option,
+.jotform-field-preview {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  gap: 3px;
+}
+
+.jotform-field-option strong,
+.jotform-field-preview strong {
+  min-width: 0;
+  color: var(--color-slate-900);
+  font-size: 0.84rem;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.jotform-field-option span,
+.jotform-field-preview span {
+  min-width: 0;
+  color: var(--color-slate-500);
+  font-size: 0.78rem;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.jotform-field-preview {
+  min-height: 54px;
+  padding: 9px 10px;
+  border: 1px solid var(--color-slate-200);
+  border-radius: 8px;
+  background: var(--color-white);
+}
+
+.jotform-mapping-row {
+  display: grid;
+  grid-template-columns: minmax(136px, 0.42fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-slate-200);
+  border-radius: 8px;
+  background: var(--color-white);
+}
+
+.jotform-mapping-target {
+  justify-content: flex-start;
+  max-width: 100%;
+}
+
+.jotform-mapping-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.jotform-mapping-copy strong,
+.jotform-mapping-copy span {
+  min-width: 0;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.jotform-mapping-copy strong {
+  color: var(--color-slate-900);
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.jotform-mapping-copy span {
+  color: var(--color-slate-500);
+  font-size: 0.78rem;
+}
+
+.jotform-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.jotform-preview-tile {
+  display: grid;
+  align-content: start;
+  gap: 5px;
+  min-height: 78px;
+  padding: 12px;
+  border: 1px solid var(--color-slate-200);
+  border-radius: 8px;
+  background: var(--color-white);
+}
+
+.jotform-preview-tile span {
+  color: var(--color-slate-500);
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.jotform-preview-tile strong {
+  color: var(--color-slate-900);
+  font-size: 0.92rem;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 900px) {
+  .jotform-preview-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .jotform-mapping-row {
+    grid-template-columns: 1fr;
+  }
+
+  .jotform-preview-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .table-footer {

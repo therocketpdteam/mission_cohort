@@ -45,6 +45,30 @@ function badWebhookPayload(message: string) {
   });
 }
 
+function compactNormalizedSummary(normalized: Record<string, any>) {
+  const registration = normalized.registration ?? {};
+  const organization = normalized.organization ?? {};
+  const payment = normalized.payment ?? {};
+  const participants = Array.isArray(normalized.participants) ? normalized.participants : [];
+
+  return {
+    formId: stringValue(normalized.routing?.formId),
+    mappingId: stringValue(normalized.routing?.mappingId),
+    cohortId: stringValue(registration.cohortId),
+    cohortSlug: stringValue(registration.cohortSlug ?? normalized.routing?.cohortSlug),
+    primaryContactName: stringValue(registration.primaryContactName),
+    primaryContactEmail: stringValue(registration.primaryContactEmail),
+    organizationName: stringValue(organization.name),
+    participantCount: numberValue(registration.participantCount),
+    parsedParticipantCount: participants.length,
+    paymentStatus: stringValue(payment.status ?? registration.paymentStatus),
+    paymentMethod: stringValue(payment.method ?? registration.paymentMethod),
+    totalAmount: numberValue(payment.amount ?? registration.totalAmount),
+    landingPageUrl: stringValue(registration.landingPageUrl),
+    warnings: Array.isArray(normalized.participantParseErrors) ? normalized.participantParseErrors.filter(Boolean) : []
+  };
+}
+
 export async function validateWebhookSecret(request: Request) {
   const headerSecret = request.headers.get("x-webhook-secret");
   const bearerSecret = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
@@ -90,6 +114,18 @@ export async function processRegistrationWebhook(payload: Record<string, any>, o
         ? normalizeJotformRegistrationPayload(payload, mappings)
         : payload;
     const formId = stringValue(normalized.routing?.formId);
+    const externalSubmissionId = stringValue(normalized.externalSubmissionId);
+    const normalizedSummary = isJotformPayload ? compactNormalizedSummary(normalized) : undefined;
+
+    if (isJotformPayload) {
+      await prisma.webhookEvent.update({
+        where: { id: event.id },
+        data: {
+          externalSubmissionId: externalSubmissionId || undefined,
+          normalizedSummary: normalizedSummary as Prisma.InputJsonValue
+        }
+      });
+    }
 
     if (isJotformPayload && !formId) {
       throw badWebhookPayload("Jotform formID is required before processing");
@@ -116,8 +152,6 @@ export async function processRegistrationWebhook(payload: Record<string, any>, o
     const invoiceUrl = stringValue(registrationInput.invoiceUrl);
     const confirmationDocsSentAt = stringValue(registrationInput.confirmationDocsSentAt);
     const externalSource = stringValue(normalized.source, "webhook");
-    const externalSubmissionId = stringValue(normalized.externalSubmissionId);
-
     const participantParseWarnings = Array.isArray(normalized.participantParseErrors)
       ? normalized.participantParseErrors.filter(Boolean)
       : [];
@@ -291,10 +325,29 @@ export async function processRegistrationWebhook(payload: Record<string, any>, o
               }
             })
         : null;
+    const revisionNumber = isJotformPayload && externalSubmissionId
+      ? await prisma.webhookEvent.count({
+          where: {
+            source: "jotform",
+            externalSubmissionId,
+            id: { not: event.id },
+            registrationId: registration.id
+          }
+        }) + 1
+      : undefined;
 
     await prisma.webhookEvent.update({
       where: { id: event.id },
       data: {
+        registrationId: isJotformPayload ? registration.id : undefined,
+        externalSubmissionId: isJotformPayload ? externalSubmissionId || undefined : undefined,
+        revisionNumber,
+        normalizedSummary: isJotformPayload ? {
+          ...normalizedSummary,
+          cohortId: registration.cohortId,
+          revisionNumber,
+          updatedExistingRegistration: Boolean(existingRegistration)
+        } as Prisma.InputJsonValue : undefined,
         status: WebhookProcessingStatus.PROCESSED,
         processedAt: new Date(),
         errorMessage: participantParseWarnings.length

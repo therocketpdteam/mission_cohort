@@ -28,6 +28,7 @@ fi
 echo "== TypeScript/build checks =="
 if command -v pnpm >/dev/null 2>&1; then
   pnpm prisma:generate
+  pnpm test:unit
   pnpm typecheck
   pnpm build
   if [ "${RUN_E2E:-0}" = "1" ]; then
@@ -37,6 +38,7 @@ if command -v pnpm >/dev/null 2>&1; then
   fi
 elif command -v npm >/dev/null 2>&1; then
   npm run prisma:generate
+  npm run test:unit
   npm run typecheck
   npm run build
   if [ "${RUN_E2E:-0}" = "1" ]; then
