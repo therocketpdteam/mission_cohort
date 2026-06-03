@@ -18,7 +18,8 @@ import {
   Tooltip
 } from "@/components/ui/primitives";
 import type { FormEvent, ReactNode } from "react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { formatProperDisplay, formatRegistrationSource, formatStatusLabel } from "@/lib/formatting";
 import { uploadAdminFile } from "@/lib/adminApi";
 
@@ -289,30 +290,76 @@ export function RowActionMenu({
   actions: Array<{ label: string; icon?: ReactNode; onClick: () => void; color?: "primary" | "success" | "warning" | "error"; disabled?: boolean }>;
 }) {
   const [open, setOpen] = useState(false);
+  const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    function close(event: MouseEvent) {
+      const target = event.target as Node;
+      if (buttonRef.current?.contains(target) || menuRef.current?.contains(target)) {
+        return;
+      }
+      setOpen(false);
+    }
+
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [open]);
+
+  function toggleMenu() {
+    const rect = buttonRef.current?.getBoundingClientRect();
+    if (rect) {
+      const menuWidth = 212;
+      setPosition({
+        top: rect.bottom + 6,
+        left: Math.max(12, Math.min(rect.right - menuWidth, window.innerWidth - menuWidth - 12))
+      });
+    }
+    setOpen((current) => !current);
+  }
 
   return (
     <span className="row-action-wrap">
       <Tooltip title="Actions">
         <IconButton
+          ref={buttonRef}
           type="button"
           aria-label="Row actions"
+          aria-haspopup="menu"
+          aria-expanded={open}
           size="small"
           onClick={(event) => {
             event.stopPropagation();
-            setOpen((current) => !current);
+            toggleMenu();
           }}
         >
           <MoreHorizIcon fontSize="small" />
         </IconButton>
       </Tooltip>
-      {open && (
-        <div className="row-action-menu">
+      {open && position && createPortal(
+        <div className="row-action-menu" ref={menuRef} role="menu" style={{ top: position.top, left: position.left }}>
           {actions.map((action) => (
             <button
               type="button"
               className="row-action-item"
               key={action.label}
               disabled={action.disabled}
+              role="menuitem"
               onClick={(event) => {
                 event.stopPropagation();
                 setOpen(false);
@@ -323,7 +370,8 @@ export function RowActionMenu({
               <span>{action.label}</span>
             </button>
           ))}
-        </div>
+        </div>,
+        document.body
       )}
     </span>
   );

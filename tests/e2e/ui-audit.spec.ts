@@ -53,11 +53,26 @@ async function writeAuditReport(testInfo: TestInfo, findings: AuditFinding[]) {
   await testInfo.attach("ui-audit.md", { path: reportPath, contentType: "text/markdown" });
 }
 
+async function isAppShellVisible(page: Page, timeout = 3_000) {
+  try {
+    await expect(page.locator(".app-shell")).toBeVisible({ timeout });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function login(page: Page) {
-  if (hasStoredSession && !hasAdminCredentials) {
+  if (hasStoredSession) {
     await page.goto("/dashboard");
-    await expect(page.locator(".app-shell")).toBeVisible();
-    return;
+    if (await isAppShellVisible(page)) {
+      return;
+    }
+
+    test.skip(
+      !hasAdminCredentials,
+      "Stored Playwright auth state is stale. Re-run with E2E_ADMIN_EMAIL/E2E_ADMIN_PASSWORD or refresh E2E_STORAGE_STATE."
+    );
   }
 
   test.skip(
@@ -289,11 +304,23 @@ test.describe("Playwright UI audit", () => {
       }
 
       if (route === cohortDetailRoute) {
-        await page.getByRole("button", { name: "Sessions" }).click();
-        if (await page.locator(".session-checklist").count() === 0) {
-          findings.push(finding(route, viewport, "medium", "sessions", "Session checklist was not visible on cohort detail."));
+        for (const tabLabel of ["Overview", "Registrations", "Participants", "Communications", "Distribution"]) {
+          if (await page.getByRole("button", { name: tabLabel }).count() === 0) {
+            findings.push(finding(route, viewport, "medium", "cohort tabs", `${tabLabel} tab was not visible on cohort detail.`));
+          }
         }
-        findings.push(...await collectLayoutFindings(page, `${route} sessions`, viewport));
+        for (const removedTabLabel of ["Operations", "Basics", "Payments", "Activity", "Sessions"]) {
+          if (await page.getByRole("button", { name: removedTabLabel, exact: true }).count() > 0) {
+            findings.push(finding(route, viewport, "medium", "cohort tabs", `${removedTabLabel} tab should not be in the focused cohort workflow.`));
+          }
+        }
+        if (await page.locator(".session-checklist").count() === 0) {
+          findings.push(finding(route, viewport, "medium", "sessions", "Session checklist was not visible in the cohort Overview."));
+        }
+        if (await page.locator(".cohort-finance-wow-card").count() === 0) {
+          findings.push(finding(route, viewport, "medium", "finance", "Revenue snapshot card was not visible in the cohort Overview."));
+        }
+        findings.push(...await collectLayoutFindings(page, `${route} overview`, viewport));
       }
     }
 

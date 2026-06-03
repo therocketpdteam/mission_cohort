@@ -1,12 +1,13 @@
 import { CohortStatus, CommunicationStatus, EmailEventType, OperationsTaskStatus, PaymentStatus, RegistrationStatus } from "@prisma/client";
 import { ok } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
+import { deriveCohortStatus } from "@/services/cohortLifecycle";
 
 export async function GET() {
   const now = new Date();
 
   const [
-    activeCohorts,
+    lifecycleCohorts,
     upcomingSessions,
     openRegistrations,
     totalParticipants,
@@ -22,7 +23,13 @@ export async function GET() {
     paymentRecords,
     activity
   ] = await Promise.all([
-    prisma.cohort.count({ where: { status: { in: [CohortStatus.REGISTRATION_OPEN, CohortStatus.ACTIVE, CohortStatus.PUBLISHED] } } }),
+    prisma.cohort.findMany({
+      include: {
+        sessions: {
+          include: { communications: { include: { template: true } } }
+        }
+      }
+    }),
     prisma.cohortSession.count({ where: { startTime: { gte: now } } }),
     prisma.registration.count({ where: { status: { in: [RegistrationStatus.NEW, RegistrationStatus.CONFIRMED] } } }),
     prisma.participant.count(),
@@ -43,7 +50,7 @@ export async function GET() {
     prisma.cohort.findMany({
       where: {
         OR: [
-          { status: { in: [CohortStatus.DRAFT, CohortStatus.REGISTRATION_OPEN, CohortStatus.REGISTRATION_CLOSED] } },
+          { status: CohortStatus.DRAFT },
           { operationsTasks: { some: { status: { in: [OperationsTaskStatus.OPEN, OperationsTaskStatus.IN_PROGRESS] } } } }
         ]
       },
@@ -82,6 +89,8 @@ export async function GET() {
       take: 8
     })
   ]);
+  const activeCohortStatuses: CohortStatus[] = [CohortStatus.PUBLISHED, CohortStatus.ACTIVE];
+  const activeCohorts = lifecycleCohorts.filter((cohort) => activeCohortStatuses.includes(deriveCohortStatus(cohort))).length;
 
   return ok({
     metrics: {

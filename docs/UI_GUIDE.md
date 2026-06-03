@@ -111,7 +111,7 @@ Background rules:
 
 ## Typography
 
-- Use a clean system/inter-style font stack: `Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`.
+- Use DM Sans through the global `--font-app` token, with `ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif` as the fallback stack. Do not make builds depend on a live font-network fetch.
 - Headings should be dark navy and confident.
 - Body text should remain readable, compact, and calm.
 - Avoid oversized marketing-style type inside operational tools.
@@ -286,12 +286,17 @@ Rules:
 ## Cohort Detail Pattern
 
 - The breadcrumb must read like a product path: `Mission Control / Cohorts / {Cohort title}`. Never expose raw cohort IDs in the visible path.
-- The overview should start with compact icon metric tiles and one larger revenue snapshot. Total revenue, paid amount, pending amount, and open amount belong together with a donut chart and percentages.
+- Cohort status is operational, not manually decorative: `Draft` while readiness is incomplete, `Published` when systems are ready before delivery, `Active` from first session start through final session end, `Completed` after the final session, and `Cancelled` only as a manual override.
+- Cohort detail uses a focused tab set: `Overview`, `Registrations`, `Participants`, `Communications`, and `Distribution`. Do not reintroduce separate Basics, Operations, Payments, or Activity tabs into the primary workflow.
+- Overview is the command surface. It should contain compact icon metric tiles, the priority revenue snapshot, cohort basics, thumbnail editing, publish readiness, session defaults, sessions checklist, and materials.
+- Operations is a readiness concept, not a standalone page. Publish readiness must show the blocking items that keep a cohort in Draft and the action path to make it Published.
+- The revenue snapshot must be compact and premium. Total revenue, paid amount, pending amount, open amount, collected percentage, and project return context belong together in one polished finance card with a lightweight progress/ring visual, not a bulky table or oversized chart.
 - Registration evolution charts should be quiet and lightweight. They need metric filters (`Registrants`, `Revenue`) and an optional comparison cohort, defaulting to the current cohort only.
 - Sessions should render as a checklist, not a wide status spreadsheet. Use green check/red X affordances for reminder/template readiness and keep per-session actions in a row menu.
 - Repeated session defaults such as meeting URL, location, and timezone should live in a small defaults card above the checklist.
 - Registrations should remove unclear primary-table columns such as `Docs`; supporting document status belongs in quick view/edit.
 - Participants should prioritize contact, organization, status, send-message action, bulk status/message controls, and a quick-view drawer with contact, payment, email activity, and participation history matched by email.
+- Distribution is the cohort finance home. It should combine incoming payments, outgoing TL payouts, project return, pending payout, invoice drafts, and payment detail access in one ledger-style experience.
 
 ## Badges / Status Pills
 

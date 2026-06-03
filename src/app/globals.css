@@ -1,4 +1,5 @@
 :root {
+  --font-app: "DM Sans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --color-primary-900: #071d33;
   --color-primary-800: #0b2a45;
   --color-primary-700: #123c5a;
@@ -43,7 +44,7 @@ body {
   margin: 0;
   background: var(--color-slate-50);
   color: var(--color-slate-900);
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: var(--font-app), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 14px;
 }
 
@@ -811,11 +812,9 @@ a {
 }
 
 .row-action-menu {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 6px);
-  z-index: 40;
-  min-width: 200px;
+  position: fixed;
+  z-index: 90;
+  min-width: 212px;
   padding: 6px;
   border: 1px solid var(--color-slate-200);
   border-radius: 10px;
@@ -1163,6 +1162,17 @@ a {
   min-width: 0;
 }
 
+.cohort-cell-title {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--color-primary-900);
+  line-height: 1.18;
+  text-overflow: ellipsis;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+}
+
 .cohort-cell-thumb {
   width: 44px;
   min-width: 44px;
@@ -1177,6 +1187,31 @@ a {
   min-width: 34px;
   height: 26px;
   border-radius: 6px;
+}
+
+.cohort-counts {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+}
+
+.cohort-counts span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  border: 1px solid var(--color-slate-200);
+  border-radius: 999px;
+  background: var(--color-slate-50);
+  color: var(--color-slate-700);
+  padding: 4px 7px;
+  font-size: 0.78rem;
+  font-weight: 850;
+}
+
+.cohort-counts svg {
+  color: var(--color-blue-600);
 }
 
 .cohort-overview-grid {
@@ -1264,6 +1299,142 @@ a {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
   min-width: 0;
+}
+
+.cohort-finance-wow-card {
+  position: relative;
+  display: grid;
+  grid-column: span 4;
+  grid-template-columns: minmax(0, 1fr) 150px;
+  gap: 18px;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid rgba(20, 121, 201, 0.18);
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at 95% 15%, rgba(32, 199, 217, 0.18), transparent 26%),
+    linear-gradient(135deg, #ffffff 0%, #f8fbff 52%, #eef8fc 100%);
+  box-shadow: 0 18px 42px rgba(7, 29, 51, 0.08);
+  padding: 18px;
+}
+
+.cohort-finance-wow-card::after {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(110deg, transparent 0%, rgba(255, 255, 255, 0.42) 42%, transparent 62%);
+  opacity: 0.42;
+  transform: translateX(-80%);
+  animation: finance-card-sheen 5.5s ease-in-out infinite;
+  content: "";
+  pointer-events: none;
+}
+
+@keyframes finance-card-sheen {
+  0%,
+  62% {
+    transform: translateX(-82%);
+  }
+
+  100% {
+    transform: translateX(82%);
+  }
+}
+
+.finance-wow-copy,
+.finance-wow-values,
+.finance-wow-visual,
+.finance-wow-bars {
+  position: relative;
+  z-index: 1;
+}
+
+.finance-wow-copy {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.finance-wow-copy strong {
+  color: var(--color-primary-900);
+  font-size: 2.1rem;
+  font-weight: 950;
+  line-height: 0.95;
+}
+
+.finance-wow-copy p {
+  margin: 0;
+  color: var(--color-slate-500);
+  font-weight: 750;
+}
+
+.finance-wow-visual {
+  justify-self: end;
+}
+
+.finance-wow-ring {
+  display: grid;
+  width: 132px;
+  height: 132px;
+  place-items: center;
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at center, var(--color-white) 0 56%, transparent 57%),
+    conic-gradient(var(--color-blue-600) 0 var(--paid), var(--color-orange-500) var(--paid) var(--pending), var(--color-slate-200) var(--pending) 100%);
+  box-shadow: inset 0 0 0 1px rgba(20, 121, 201, 0.08), 0 12px 28px rgba(20, 121, 201, 0.12);
+}
+
+.finance-wow-ring span,
+.finance-wow-ring small {
+  grid-area: 1 / 1;
+}
+
+.finance-wow-ring span {
+  margin-top: -10px;
+  color: var(--color-primary-900);
+  font-size: 1.5rem;
+  font-weight: 950;
+}
+
+.finance-wow-ring small {
+  margin-top: 28px;
+  color: var(--color-slate-500);
+  font-size: 0.74rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.finance-wow-bars {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: var(--paid) calc(var(--pending) - var(--paid)) minmax(0, 1fr);
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--color-slate-200);
+}
+
+.finance-wow-bars span {
+  min-width: 0;
+}
+
+.finance-wow-bars .is-paid {
+  background: linear-gradient(90deg, var(--color-blue-600), var(--color-cyan-500));
+}
+
+.finance-wow-bars .is-pending {
+  background: var(--color-orange-500);
+}
+
+.finance-wow-bars .is-open {
+  background: var(--color-slate-200);
+}
+
+.finance-wow-values {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
 }
 
 .cohort-evolution-chart {
@@ -1432,6 +1603,94 @@ a {
   color: var(--color-danger-700);
 }
 
+.readiness-panel,
+.readiness-list {
+  display: grid;
+  gap: 10px;
+}
+
+.readiness-summary,
+.readiness-row,
+.readiness-task-strip,
+.distribution-ledger-row {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 10px;
+}
+
+.readiness-summary {
+  justify-content: space-between;
+  border: 1px solid var(--color-slate-200);
+  border-radius: 10px;
+  background: var(--color-slate-50);
+  padding: 10px;
+}
+
+.readiness-summary > span:last-child,
+.readiness-row span,
+.readiness-task-strip,
+.distribution-ledger-row span {
+  color: var(--color-slate-500);
+  font-size: 0.82rem;
+  font-weight: 750;
+}
+
+.readiness-row {
+  align-items: flex-start;
+  border: 1px solid var(--color-slate-200);
+  border-radius: 10px;
+  background: var(--color-white);
+  padding: 10px;
+}
+
+.readiness-row > div,
+.distribution-ledger-row > div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.readiness-row strong,
+.distribution-ledger-row strong {
+  overflow: hidden;
+  color: var(--color-primary-900);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.readiness-task-strip {
+  justify-content: space-between;
+  border-top: 1px solid var(--color-slate-200);
+  padding-top: 10px;
+}
+
+.distribution-ledger {
+  display: grid;
+  gap: 8px;
+}
+
+.distribution-ledger-row {
+  display: grid;
+  grid-template-columns: 68px minmax(0, 1fr) 130px 120px;
+  border: 1px solid var(--color-slate-200);
+  border-radius: 10px;
+  background: var(--color-slate-50);
+  padding: 10px;
+}
+
+.distribution-ledger-row > strong:last-child {
+  justify-self: end;
+}
+
+.distribution-ledger-row .is-incoming {
+  color: var(--color-success-700);
+}
+
+.distribution-ledger-row .is-outgoing {
+  color: var(--color-danger-700);
+}
+
 .participant-bulk-bar {
   display: flex;
   flex-wrap: wrap;
@@ -1515,13 +1774,30 @@ a {
 
 .app-shell.is-night .cohort-metric-card,
 .app-shell.is-night .cohort-revenue-card,
+.app-shell.is-night .cohort-finance-wow-card,
 .app-shell.is-night .session-defaults-card,
 .app-shell.is-night .cohort-thumbnail-preview,
 .app-shell.is-night .session-check,
 .app-shell.is-night .participant-bulk-bar,
 .app-shell.is-night .cohort-finance-strip,
+.app-shell.is-night .readiness-summary,
+.app-shell.is-night .readiness-row,
+.app-shell.is-night .distribution-ledger-row,
 .app-shell.is-night .quick-view-list-row {
   background: #0c1725;
+}
+
+.app-shell.is-night .cohort-finance-wow-card {
+  background:
+    radial-gradient(circle at 95% 15%, rgba(32, 199, 217, 0.16), transparent 28%),
+    linear-gradient(135deg, #0c1725 0%, #101d2e 58%, #0b2435 100%);
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.24);
+}
+
+.app-shell.is-night .finance-wow-ring {
+  background:
+    radial-gradient(circle at center, #0c1725 0 56%, transparent 57%),
+    conic-gradient(var(--color-blue-600) 0 var(--paid), var(--color-orange-500) var(--paid) var(--pending), #24344b var(--pending) 100%);
 }
 
 .app-shell.is-night .session-check-row {
@@ -2198,7 +2474,8 @@ a {
     grid-template-columns: 1fr;
   }
 
-  .cohort-revenue-card {
+  .cohort-revenue-card,
+  .cohort-finance-wow-card {
     grid-column: span 2;
   }
 
@@ -2296,13 +2573,23 @@ a {
   }
 
   .cohort-revenue-card,
+  .cohort-finance-wow-card,
   .cohort-thumbnail-editor,
   .session-defaults-card > div {
     grid-template-columns: 1fr;
   }
 
-  .cohort-revenue-card {
+  .cohort-revenue-card,
+  .cohort-finance-wow-card {
     grid-column: span 2;
+  }
+
+  .finance-wow-visual {
+    justify-self: start;
+  }
+
+  .finance-wow-values {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .session-check-row {
@@ -2369,6 +2656,7 @@ a {
 
   .dashboard-panel,
   .cohort-revenue-card,
+  .cohort-finance-wow-card,
   .section-card {
     width: 100%;
     max-width: 100%;
@@ -2387,11 +2675,13 @@ a {
     justify-self: start;
   }
 
-  .cohort-revenue-card {
+  .cohort-revenue-card,
+  .cohort-finance-wow-card {
     overflow: hidden;
   }
 
-  .cohort-revenue-values {
+  .cohort-revenue-values,
+  .finance-wow-values {
     min-width: 0;
   }
 
@@ -2413,6 +2703,14 @@ a {
     justify-self: end;
   }
 
+  .distribution-ledger-row {
+    grid-template-columns: 1fr;
+  }
+
+  .distribution-ledger-row > strong:last-child {
+    justify-self: start;
+  }
+
   .dashboard-hero h1 {
     font-size: 2.15rem;
   }
@@ -2429,11 +2727,13 @@ a {
   .dashboard-metric-grid,
   .cohort-overview-grid,
   .cohort-revenue-values,
+  .finance-wow-values,
   .dashboard-filter-row {
     grid-template-columns: 1fr;
   }
 
-  .cohort-revenue-card {
+  .cohort-revenue-card,
+  .cohort-finance-wow-card {
     grid-column: span 1;
   }
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { AddIcon } from "@/components/ui/icons";
-import { ArchiveOutlined } from "@/components/ui/icons";
+import { ArchiveOutlined, CalendarMonthOutlined, GroupsOutlined, InsightsOutlined } from "@/components/ui/icons";
 import { EditOutlined } from "@/components/ui/icons";
 import { VisibilityOutlined } from "@/components/ui/icons";
 import {
@@ -46,7 +46,7 @@ import {
   useNotifier
 } from "./common";
 
-const statusOptions = ["DRAFT", "PUBLISHED", "REGISTRATION_OPEN", "ACTIVE"];
+const statusOptions = ["DRAFT", "PUBLISHED", "ACTIVE", "COMPLETED", "CANCELLED"];
 const timezoneOptions = [
   { label: "EST", value: "America/New_York" },
   { label: "PST", value: "America/Los_Angeles" }
@@ -63,8 +63,7 @@ const editFields = (presenters: AdminRow[]): FieldConfig[] => [
     type: "select",
     options: presenters.map((presenter) => ({ label: formatProperDisplay(`${presenter.firstName} ${presenter.lastName}`), value: presenter.id })),
     required: true
-  },
-  { name: "status", label: "Status", type: "select", options: statusOptions.map((value) => ({ label: formatStatusLabel(value), value })) }
+  }
 ];
 
 function slugify(value: string) {
@@ -124,7 +123,6 @@ function CreateCohortWizard({
   const [slug, setSlug] = useState("");
   const [thumbnailUrl, setThumbnailUrl] = useState("");
   const [slugTouched, setSlugTouched] = useState(false);
-  const [status, setStatus] = useState("DRAFT");
   const [presenter, setPresenter] = useState<AdminRow | null>(null);
   const [presenterSearch, setPresenterSearch] = useState("");
   const [showCreatePresenter, setShowCreatePresenter] = useState(false);
@@ -153,7 +151,6 @@ function CreateCohortWizard({
       setSlug("");
       setThumbnailUrl("");
       setSlugTouched(false);
-      setStatus("DRAFT");
       setPresenter(null);
       setPresenterSearch("");
       setShowCreatePresenter(false);
@@ -324,7 +321,6 @@ function CreateCohortWizard({
           title,
           shortName,
           slug,
-          status,
           presenterId: presenter?.id,
           startDate: combineDateTime(firstSession.date, firstSession.startTime),
           endDate: combineDateTime(lastSession.date, lastSession.endTime),
@@ -393,11 +389,6 @@ function CreateCohortWizard({
                   </label>
                 </div>
               </div>
-            </Grid>
-            <Grid size={{ xs: 12, md: 6 }}>
-              <TextField select fullWidth label="Status" value={status} onChange={(event) => setStatus(event.target.value)}>
-                {statusOptions.map((value) => <MenuItem value={value} key={value}>{formatStatusLabel(value)}</MenuItem>)}
-              </TextField>
             </Grid>
             <Grid size={{ xs: 12, md: 6 }}>
               <Autocomplete
@@ -546,7 +537,7 @@ export function CohortsClient() {
           .join(" ")
           .toLowerCase()
           .includes(search.toLowerCase());
-        const matchesStatus = status ? row.status === status : row.status !== "ARCHIVED";
+        const matchesStatus = status ? row.status === status : true;
         const matchesPresenter = presenterId ? row.presenterId === presenterId : true;
         return matchesSearch && matchesStatus && matchesPresenter;
       }),
@@ -557,13 +548,13 @@ export function CohortsClient() {
     {
       field: "title",
       headerName: "Cohort",
-      flex: 1.4,
-      minWidth: 220,
+      flex: 2.2,
+      minWidth: 320,
       renderCell: (params) => (
         <div className="cohort-cell">
           {params.row.thumbnailUrl && <img className="cohort-cell-thumb" src={params.row.thumbnailUrl} alt="" />}
-          <Stack spacing={0.5} sx={{ minWidth: 0 }}>
-            <Typography fontWeight={900} noWrap>{params.row.title}</Typography>
+          <Stack spacing={0.5} sx={{ minWidth: 0, flex: 1 }}>
+            <Typography className="cohort-cell-title" fontWeight={850}>{params.row.title}</Typography>
             {params.row.shortName && <MetadataPill maxWidth={160}>{params.row.shortName}</MetadataPill>}
           </Stack>
         </div>
@@ -572,25 +563,27 @@ export function CohortsClient() {
     {
       field: "presenter",
       headerName: "Presenter",
-      flex: 1,
-      minWidth: 160,
+      flex: 0.75,
+      minWidth: 140,
       valueGetter: (_value, row) => formatProperDisplay(`${row.presenter?.firstName ?? ""} ${row.presenter?.lastName ?? ""}`)
     },
-    { field: "status", headerName: "Status", width: 170, renderCell: (params) => <StatusChip value={params.value} /> },
+    { field: "status", headerName: "Status", width: 136, renderCell: (params) => <StatusChip value={params.value} /> },
     {
       field: "dates",
       headerName: "Dates",
-      width: 170,
+      width: 154,
       valueGetter: (_value, row) => `${formatDate(row.startDate)} - ${formatDate(row.endDate)}`
     },
     {
       field: "counts",
       headerName: "Counts",
-      width: 180,
+      width: 172,
       renderCell: (params) => (
-        <span title={`${params.row._count?.sessions ?? 0} sessions, ${params.row._count?.registrations ?? 0} registrations, ${params.row._count?.participants ?? 0} participants`}>
-          {params.row._count?.sessions ?? 0} sessions · {params.row._count?.registrations ?? 0} regs · {params.row._count?.participants ?? 0} people
-        </span>
+        <div className="cohort-counts" title={`${params.row._count?.sessions ?? 0} sessions, ${params.row._count?.registrations ?? 0} registrations, ${params.row._count?.participants ?? 0} participants`}>
+          <span><CalendarMonthOutlined fontSize="small" />{params.row._count?.sessions ?? 0}</span>
+          <span><InsightsOutlined fontSize="small" />{params.row._count?.registrations ?? 0}</span>
+          <span><GroupsOutlined fontSize="small" />{params.row._count?.participants ?? 0}</span>
+        </div>
       )
     },
     {
@@ -605,16 +598,16 @@ export function CohortsClient() {
               { label: "View cohort", icon: <VisibilityOutlined fontSize="small" />, onClick: () => window.location.assign(`/cohorts/${params.row.id}`) },
               { label: "Edit cohort", icon: <EditOutlined fontSize="small" />, onClick: () => setEditing(params.row) },
               {
-                label: params.row.status === "ARCHIVED" ? "Restore cohort" : "Archive cohort",
+                label: params.row.status === "CANCELLED" ? "Restore cohort" : "Cancel cohort",
                 icon: <ArchiveOutlined fontSize="small" />,
                 color: "warning",
                 onClick: async () => {
-                  const nextStatus = params.row.status === "ARCHIVED" ? "DRAFT" : "ARCHIVED";
-                  const previousStatus = params.row.status;
+                  const nextStatus = params.row.status === "CANCELLED" ? "DRAFT" : "CANCELLED";
+                  const previousStatus = params.row.storedStatus ?? params.row.status;
 
                   try {
                     await adminApi(`/api/cohorts/${params.row.id}`, { method: "PATCH", body: { status: nextStatus } });
-                    if (nextStatus === "ARCHIVED") {
+                    if (nextStatus === "CANCELLED") {
                       setArchiveUndo({ id: params.row.id, title: params.row.title, previousStatus });
                     } else {
                       notifySuccess("Cohort restored");
@@ -683,7 +676,7 @@ export function CohortsClient() {
         <TextField label="Search" value={search} onChange={(event) => setSearch(event.target.value)} />
           <TextField select label="Status" value={status} onChange={(event) => setStatus(event.target.value)} sx={{ minWidth: 220 }}>
             <MenuItem value="">All statuses</MenuItem>
-            {["DRAFT", "PUBLISHED", "REGISTRATION_OPEN", "REGISTRATION_CLOSED", "ACTIVE", "COMPLETED", "CANCELLED", "ARCHIVED"].map((value) => (
+            {statusOptions.map((value) => (
               <MenuItem value={value} key={value}>
                 {formatStatusLabel(value)}
               </MenuItem>
@@ -728,7 +721,7 @@ export function CohortsClient() {
         open={Boolean(archiveUndo)}
         autoHideDuration={30000}
         onClose={() => setArchiveUndo(null)}
-        message={archiveUndo ? `${archiveUndo.title} archived` : ""}
+        message={archiveUndo ? `${archiveUndo.title} cancelled` : ""}
         action={<Button color="secondary" size="small" onClick={undoArchive}>Undo</Button>}
       />
     </PageStack>

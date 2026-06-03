@@ -10,7 +10,7 @@ import type {
   SelectHTMLAttributes,
   TextareaHTMLAttributes
 } from "react";
-import { Children, cloneElement, isValidElement, useEffect, useMemo, useRef, useState } from "react";
+import { Children, cloneElement, forwardRef, isValidElement, useEffect, useMemo, useRef, useState } from "react";
 
 function clsx(...values: Array<string | false | null | undefined>) {
   return values.filter(Boolean).join(" ");
@@ -247,20 +247,20 @@ export function Button({
   );
 }
 
-export function IconButton({
+export const IconButton = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLButtonElement> & { size?: "small" | "medium"; color?: string; sx?: SxValue | SxValue[] }>(function IconButton({
   size,
   color: tone,
   className,
   sx,
   children,
   ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & { size?: "small" | "medium"; color?: string; sx?: SxValue | SxValue[] }) {
+}, ref) {
   return (
-    <button className={clsx("ui-icon-button", size === "small" && "ui-icon-button-small", tone && `ui-icon-${tone}`, className)} style={sxToStyle(sx)} {...props}>
+    <button ref={ref} className={clsx("ui-icon-button", size === "small" && "ui-icon-button-small", tone && `ui-icon-${tone}`, className)} style={sxToStyle(sx)} {...props}>
       {children}
     </button>
   );
-}
+});
 
 export function TextField({
   label,

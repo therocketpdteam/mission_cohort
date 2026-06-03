@@ -7,8 +7,6 @@ import { EditOutlined } from "@/components/ui/icons";
 import {
   Box,
   Button,
-  Card,
-  CardContent,
   Dialog,
   DialogActions,
   DialogContent,
@@ -25,6 +23,7 @@ import {
   Typography
 } from "@/components/ui/primitives";
 import { GridColDef } from "./common";
+import type { CSSProperties } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { adminApi, uploadAdminFile } from "@/lib/adminApi";
 import { formatProperDisplay, formatStatusLabel } from "@/lib/formatting";
@@ -34,7 +33,6 @@ import {
   CompactFilterBar,
   DateBadge,
   DetailField,
-  DonutChart,
   EmptyState,
   FieldConfig,
   GridRowSelectionModel,
@@ -183,6 +181,96 @@ function RegistrationEvolutionChart({
       </svg>
       {comparisonPoints.length > 0 && <span>Comparing against {compareLabel}</span>}
     </div>
+  );
+}
+
+function FinanceSnapshotCard({
+  totalAmount,
+  paidAmount,
+  pendingAmount,
+  projectReturn
+}: {
+  totalAmount: number;
+  paidAmount: number;
+  pendingAmount: number;
+  projectReturn?: number;
+}) {
+  const openAmount = Math.max(totalAmount - paidAmount - pendingAmount, 0);
+  const collectedPercent = totalAmount > 0 ? Math.round((paidAmount / totalAmount) * 100) : 0;
+  const pendingPercent = totalAmount > 0 ? Math.round((pendingAmount / totalAmount) * 100) : 0;
+  const openPercent = Math.max(0, 100 - collectedPercent - pendingPercent);
+
+  return (
+    <article
+      className="cohort-finance-wow-card"
+      style={{
+        "--paid": `${collectedPercent}%`,
+        "--pending": `${collectedPercent + pendingPercent}%`
+      } as CSSProperties}
+    >
+      <div className="finance-wow-copy">
+        <span className="cohort-metric-label">Revenue Snapshot</span>
+        <strong>{money(totalAmount)}</strong>
+        <p>
+          {collectedPercent}% collected
+          {typeof projectReturn === "number" ? ` · ${money(projectReturn)} project return` : ""}
+        </p>
+      </div>
+      <div className="finance-wow-visual" aria-label={`${collectedPercent}% collected`}>
+        <div className="finance-wow-ring">
+          <span>{collectedPercent}%</span>
+          <small>paid</small>
+        </div>
+      </div>
+      <div className="finance-wow-bars" aria-hidden="true">
+        <span className="is-paid" />
+        <span className="is-pending" />
+        <span className="is-open" />
+      </div>
+      <div className="finance-wow-values">
+        <DetailField label="Paid" value={money(paidAmount)} />
+        <DetailField label="Pending" value={money(pendingAmount)} />
+        <DetailField label="Open" value={money(openAmount)} />
+        <DetailField label="Open %" value={`${openPercent}%`} />
+      </div>
+    </article>
+  );
+}
+
+function ProjectReturnCard({ distribution }: { distribution: AdminRow }) {
+  const paidRatio = Math.round(Number(distribution.totals?.paymentRatio ?? 0) * 100);
+
+  return (
+    <article
+      className="cohort-finance-wow-card distribution-card-main"
+      style={{
+        "--paid": `${paidRatio}%`,
+        "--pending": `${Math.min(100, paidRatio + Math.round(Number(distribution.distribution?.commissionPercent ?? 30)))}%`
+      } as CSSProperties}
+    >
+      <div className="finance-wow-copy">
+        <span className="cohort-metric-label">Project Return</span>
+        <strong>{money(distribution.totals?.projectReturn)}</strong>
+        <p>{paidRatio}% paid in · {money(distribution.totals?.pendingPayout)} pending TL payout</p>
+      </div>
+      <div className="finance-wow-visual">
+        <div className="finance-wow-ring">
+          <span>{distribution.totals?.returnPercent ?? 0}%</span>
+          <small>return</small>
+        </div>
+      </div>
+      <div className="finance-wow-bars" aria-hidden="true">
+        <span className="is-paid" />
+        <span className="is-pending" />
+        <span className="is-open" />
+      </div>
+      <div className="finance-wow-values">
+        <DetailField label="Sold" value={money(distribution.totals?.soldAmount)} />
+        <DetailField label="Paid In" value={money(distribution.totals?.paidAmount)} />
+        <DetailField label="RPD Share" value={money(distribution.totals?.commissionAmount)} />
+        <DetailField label="TL Share" value={money(distribution.totals?.tlShareAmount)} />
+      </div>
+    </article>
   );
 }
 
@@ -496,16 +584,9 @@ export function CohortDetailClient({ id }: { id: string }) {
     return { totalAmount, paidAmount, pendingAmount, participantSeats, rosterComplete, openPaymentFollowUps, upcomingSessions };
   }, [registrations, payments, sessions, tasks]);
 
-  const revenueRows = useMemo(() => {
-    const openAmount = Math.max(totals.totalAmount - totals.paidAmount - totals.pendingAmount, 0);
-    return [
-      { label: "Paid", amount: totals.paidAmount },
-      { label: "Pending", amount: totals.pendingAmount },
-      { label: "Open", amount: openAmount }
-    ].filter((row) => row.amount > 0);
-  }, [totals.paidAmount, totals.pendingAmount, totals.totalAmount]);
-
   const compareCohort = allCohorts.find((item) => item.id === compareCohortId);
+  const detailTabs = ["Overview", "Registrations", "Participants", "Communications", "Distribution"];
+  const readinessItems = cohort?.readiness?.items ?? [];
   const filteredRegistrations = useMemo(() => registrations.filter((registration) => {
     const paymentMatch = !registrationPaymentFilter || registration.paymentStatus === registrationPaymentFilter;
     const rosterMatch = !registrationRosterFilter || registration.participantListStatus === registrationRosterFilter;
@@ -535,6 +616,27 @@ export function CohortDetailClient({ id }: { id: string }) {
     const email = String(participantDetail.email).toLowerCase();
     return allParticipants.filter((participant) => String(participant.email ?? "").toLowerCase() === email && participant.id !== participantDetail.id);
   }, [allParticipants, participantDetail]);
+
+  const distributionLedgerRows = useMemo(() => {
+    const incoming = payments.map((payment) => ({
+      id: `payment-${payment.id}`,
+      date: payment.paymentDate ?? payment.createdAt,
+      label: payment.organization?.name ?? payment.registration?.organization?.name ?? "Incoming payment",
+      helper: `Incoming · ${formatStatusLabel(payment.status)}`,
+      amount: Number(payment.amount ?? 0),
+      status: payment.status
+    }));
+    const payouts = (distribution?.distribution?.payouts ?? []).map((payout: AdminRow) => ({
+      id: `payout-${payout.id}`,
+      date: payout.paymentDate ?? payout.createdAt,
+      label: distribution?.distribution?.tlName ?? "TL payout",
+      helper: `Outgoing · ${formatStatusLabel(payout.status)}`,
+      amount: -Number(payout.amount ?? 0),
+      status: payout.status
+    }));
+
+    return [...incoming, ...payouts].sort((a, b) => new Date(b.date ?? 0).getTime() - new Date(a.date ?? 0).getTime());
+  }, [distribution, payments]);
 
   function sessionEmailStatus(sessionId: string, type: string) {
     const communication = communications.find((item) => item.sessionId === sessionId && item.template?.type === type);
@@ -759,17 +861,22 @@ export function CohortDetailClient({ id }: { id: string }) {
   ];
 
   const paymentColumns: GridColDef[] = [
-    { field: "organization", headerName: "Organization", flex: 1, minWidth: 220, valueGetter: (_value, row) => formatProperDisplay(row.organization?.name ?? row.registration?.organization?.name ?? "") },
-    { field: "billingName", headerName: "Billing / POC Name", width: 190, valueGetter: (_value, row) => formatProperDisplay(row.registration?.billingContactName ?? row.registration?.primaryContactName ?? "") },
-    { field: "phone", headerName: "Phone", width: 150, valueGetter: (_value, row) => row.registration?.primaryContactPhone ?? row.organization?.phone ?? "" },
-    { field: "address", headerName: "Address", flex: 1, minWidth: 220, valueGetter: (_value, row) => row.registration?.billingAddress ?? row.organization?.addressLine1 ?? "" },
-    { field: "method", headerName: "Method", width: 150, valueFormatter: (value) => formatStatusLabel(String(value ?? "")) },
-    { field: "status", headerName: "Status", width: 140, renderCell: (params) => <StatusChip value={params.value} /> },
-    { field: "amount", headerName: "Amount", width: 120, valueFormatter: (value) => money(value) },
-    { field: "invoiceNumber", headerName: "Invoice", width: 140 },
-    { field: "po", headerName: "PO Number", width: 140, valueGetter: (_value, row) => row.registration?.purchaseOrderNumber ?? "" },
-    { field: "lastTouch", headerName: "Last Touch Sent", width: 170, valueGetter: (_value, row) => row.emailSummary?.lastEmailEventAt ?? "", valueFormatter: (value) => value ? new Date(value).toLocaleString() : "" },
-    { field: "quickBooksSyncStatus", headerName: "QuickBooks Sync", width: 150, renderCell: (params) => <StatusChip value={params.value ?? "NOT_SYNCED"} /> }
+    { field: "organization", headerName: "Organization", flex: 1.4, minWidth: 240, valueGetter: (_value, row) => formatProperDisplay(row.organization?.name ?? row.registration?.organization?.name ?? "") },
+    { field: "status", headerName: "Status", width: 132, renderCell: (params) => <StatusChip value={params.value} /> },
+    { field: "amount", headerName: "Amount", width: 124, valueFormatter: (value) => money(value) },
+    { field: "invoiceNumber", headerName: "Invoice", width: 130 },
+    { field: "po", headerName: "PO", width: 110, valueGetter: (_value, row) => row.registration?.purchaseOrderNumber ?? "" },
+    {
+      field: "actions",
+      headerName: "Actions",
+      width: 84,
+      sortable: false,
+      renderCell: (params) => (
+        <Box onClick={(event) => event.stopPropagation()}>
+          <RowActionMenu actions={[{ label: "Payment detail", onClick: () => setPaymentDetail(params.row) }]} />
+        </Box>
+      )
+    }
   ];
 
   const taskColumns: GridColDef[] = [
@@ -861,10 +968,10 @@ export function CohortDetailClient({ id }: { id: string }) {
     <PageStack>
       <PageHeader
         title={cohort?.title ?? "Cohort Detail"}
-        description="Cohort operations workspace for sessions, registrations, participants, communications, payments, and activity."
+        description="Cohort command center for readiness, delivery, registration, communication, and distribution."
       />
       <Tabs value={tab} onChange={(_event, value) => setTab(value)} variant="scrollable" scrollButtons="auto">
-        {["Overview", "Operations", "Basics", "Registrations", "Participants", "Communications", "Payments", "Distribution", "Activity"].map((label) => (
+        {detailTabs.map((label) => (
           <Tab label={label} key={label} />
         ))}
       </Tabs>
@@ -885,18 +992,12 @@ export function CohortDetailClient({ id }: { id: string }) {
                 <span className="cohort-metric-helper">{metric.helper}</span>
               </article>
             ))}
-            <article className="cohort-revenue-card">
-              <div className="cohort-revenue-copy">
-                <span className="cohort-metric-label">Revenue Snapshot</span>
-                <strong>{money(totals.totalAmount)}</strong>
-                <div className="cohort-revenue-values">
-                  <DetailField label="Paid" value={money(totals.paidAmount)} />
-                  <DetailField label="Pending" value={money(totals.pendingAmount)} />
-                  <DetailField label="Open" value={money(Math.max(totals.totalAmount - totals.paidAmount - totals.pendingAmount, 0))} />
-                </div>
-              </div>
-              <DonutChart rows={revenueRows} valueKey="amount" labelKey="label" size={132} />
-            </article>
+            <FinanceSnapshotCard
+              totalAmount={totals.totalAmount}
+              paidAmount={totals.paidAmount}
+              pendingAmount={totals.pendingAmount}
+              projectReturn={distribution?.totals?.projectReturn}
+            />
           </div>
           <SectionCard
             title="Registration Evolution"
@@ -917,20 +1018,6 @@ export function CohortDetailClient({ id }: { id: string }) {
           >
             <RegistrationEvolutionChart rows={registrations} compareRows={compareRegistrations} compareLabel={compareCohort?.title} mode={chartMode} />
           </SectionCard>
-        </Stack>
-      )}
-
-      {tab === 1 && (
-        <SectionCard title="Operations Checklist" action={<Button startIcon={<AddIcon />} onClick={() => setTaskDialogOpen(true)}>Add Task</Button>}>
-          <TableShell>
-            <AppDataGrid rows={tasks} columns={taskColumns} loading={loading} pageSizeOptions={[10, 25]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} />
-          </TableShell>
-          {!loading && tasks.length === 0 && <EmptyState title="No operations tasks" description="Checklist items for participant lists, reminders, resources, recordings, and follow-up will appear here." />}
-        </SectionCard>
-      )}
-
-      {tab === 2 && (
-        <Stack spacing={2}>
           <div className="cohort-basics-grid">
             <SectionCard title="Cohort Basics">
               <div className="cohort-thumbnail-editor">
@@ -953,18 +1040,45 @@ export function CohortDetailClient({ id }: { id: string }) {
                 </div>
               </div>
             </SectionCard>
-            <SectionCard title="Session Defaults">
-              {sessionDefaults.length > 0 ? (
-                <div className="quick-view-grid">
-                  {sessionDefaults.map((item) => (
-                    <DetailField key={item.label} label={item.label} value={item.value} />
+            <SectionCard title="Publish Readiness">
+              <div className="readiness-panel">
+                <div className="readiness-summary">
+                  <StatusChip value={cohort?.status} />
+                  <span>{cohort?.readiness?.ready ? "All systems are ready for publication." : "Complete these systems before this cohort can become Published."}</span>
+                </div>
+                <div className="readiness-list">
+                  {readinessItems.map((item: AdminRow) => (
+                    <div className="readiness-row" key={item.key}>
+                      <span className={`session-check session-check-icon ${item.ready ? "is-done" : "is-missing"}`}>
+                        {item.ready ? <CheckCircleOutline /> : <CancelOutlined />}
+                      </span>
+                      <div>
+                        <strong>{item.label}</strong>
+                        <span>{item.detail}</span>
+                      </div>
+                    </div>
                   ))}
                 </div>
-              ) : (
-                <EmptyState title="No shared defaults" description="Meeting links, locations, or timezones that repeat across sessions will appear here." />
-              )}
+                {tasks.length > 0 && (
+                  <div className="readiness-task-strip">
+                    <span>{tasks.filter((task) => task.status !== "COMPLETED").length} open manual tasks</span>
+                    <Button variant="outlined" size="small" onClick={() => setTaskDialogOpen(true)}>Add Task</Button>
+                  </div>
+                )}
+              </div>
             </SectionCard>
           </div>
+          <SectionCard title="Session Defaults">
+            {sessionDefaults.length > 0 ? (
+              <div className="quick-view-grid">
+                {sessionDefaults.map((item) => (
+                  <DetailField key={item.label} label={item.label} value={item.value} />
+                ))}
+              </div>
+            ) : (
+              <EmptyState title="No shared defaults" description="Meeting links, locations, or timezones that repeat across sessions will appear here." />
+            )}
+          </SectionCard>
           <SectionCard title="Sessions" action={<Button startIcon={<AddIcon />} onClick={() => setSessionDialogOpen(true)}>Add Session</Button>}>
             <div className="session-checklist" role="table" aria-label="Session checklist">
               <div className="session-check-row session-check-header" role="row">
@@ -1037,7 +1151,7 @@ export function CohortDetailClient({ id }: { id: string }) {
         </Stack>
       )}
 
-      {tab === 3 && (
+      {tab === 1 && (
         <SectionCard title="Registrations" action={<Button href="/registrations" startIcon={<AddIcon />}>Add/Edit Registration</Button>}>
           <CompactFilterBar resultCount={filteredRegistrations.length}>
             <TextField select label="Payment" value={registrationPaymentFilter} onChange={(event) => setRegistrationPaymentFilter(event.target.value)}>
@@ -1063,7 +1177,7 @@ export function CohortDetailClient({ id }: { id: string }) {
         </SectionCard>
       )}
 
-      {tab === 4 && (
+      {tab === 2 && (
         <SectionCard title="Participants" action={<Button href="/participants" startIcon={<AddIcon />}>Add/Edit Participant</Button>}>
           <div className="participant-bulk-bar">
             <span>{participantSelection.ids.size} selected</span>
@@ -1101,7 +1215,7 @@ export function CohortDetailClient({ id }: { id: string }) {
         </SectionCard>
       )}
 
-      {tab === 5 && (
+      {tab === 3 && (
         <SectionCard title="Communications">
           <List dense>
             {communications.map((communication) => (
@@ -1115,47 +1229,12 @@ export function CohortDetailClient({ id }: { id: string }) {
         </SectionCard>
       )}
 
-      {tab === 6 && (
-        <SectionCard title="Payments">
-          <div className="cohort-finance-strip">
-            <DetailField label="Invoice Drafts" value={invoiceDrafts.length} />
-            <DetailField label="Paid" value={money(totals.paidAmount)} />
-            <DetailField label="Pending" value={money(totals.pendingAmount)} />
-          </div>
-          <TableShell>
-            <AppDataGrid
-              rows={payments}
-              columns={paymentColumns}
-              loading={loading}
-              pageSizeOptions={[10, 25]}
-              initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
-              onRowClick={(params) => setPaymentDetail(params.row)}
-            />
-          </TableShell>
-          {!loading && payments.length === 0 && <EmptyState title="No payments yet" description="Payment records tied to this cohort will appear here." />}
-        </SectionCard>
-      )}
-
-      {tab === 7 && (
+      {tab === 4 && (
         <Stack spacing={2}>
           <SectionCard title="Distribution Snapshot">
             {distribution ? (
               <div className="distribution-grid">
-                <article className="cohort-revenue-card distribution-card-main">
-                  <div className="cohort-revenue-copy">
-                    <span className="cohort-metric-label">Project Return</span>
-                    <strong>{money(distribution.totals?.projectReturn)}</strong>
-                    <div className="cohort-revenue-values">
-                      <DetailField label="Sold" value={money(distribution.totals?.soldAmount)} />
-                      <DetailField label="Paid In" value={money(distribution.totals?.paidAmount)} />
-                      <DetailField label="Return %" value={`${distribution.totals?.returnPercent ?? 0}%`} />
-                    </div>
-                  </div>
-                  <DonutChart rows={[
-                    { label: "RPD", amount: distribution.totals?.commissionAmount ?? 0 },
-                    { label: "TL", amount: distribution.totals?.tlShareAmount ?? 0 }
-                  ]} valueKey="amount" labelKey="label" size={132} />
-                </article>
+                <ProjectReturnCard distribution={distribution} />
                 {[
                   ["RPD Commission", `${distribution.distribution?.commissionPercent ?? 30}% · ${money(distribution.totals?.commissionAmount)}`],
                   ["TL Share", `${distribution.distribution?.tlSharePercent ?? 70}% · ${money(distribution.totals?.tlShareAmount)}`],
@@ -1174,20 +1253,41 @@ export function CohortDetailClient({ id }: { id: string }) {
               <EmptyState title="Distribution unavailable" description="Distribution data will appear when this cohort can be loaded." />
             )}
           </SectionCard>
+          <SectionCard title="Distribution Ledger">
+            <div className="distribution-ledger">
+              {distributionLedgerRows.map((row) => (
+                <div className="distribution-ledger-row" key={row.id}>
+                  <DateBadge value={row.date} />
+                  <div>
+                    <strong>{formatProperDisplay(row.label)}</strong>
+                    <span>{row.helper}</span>
+                  </div>
+                  <StatusChip value={row.status} />
+                  <strong className={row.amount < 0 ? "is-outgoing" : "is-incoming"}>{row.amount < 0 ? "-" : "+"}{money(Math.abs(row.amount))}</strong>
+                </div>
+              ))}
+              {distributionLedgerRows.length === 0 && <EmptyState title="No ledger activity yet" description="Incoming payments and outgoing TL payouts will appear here." />}
+            </div>
+          </SectionCard>
+          <SectionCard title="Payment Records">
+            <div className="cohort-finance-strip">
+              <DetailField label="Invoice Drafts" value={invoiceDrafts.length} />
+              <DetailField label="Paid" value={money(totals.paidAmount)} />
+              <DetailField label="Pending" value={money(totals.pendingAmount)} />
+            </div>
+            <TableShell>
+              <AppDataGrid
+                rows={payments}
+                columns={paymentColumns}
+                loading={loading}
+                pageSizeOptions={[10, 25]}
+                initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
+                onRowClick={(params) => setPaymentDetail(params.row)}
+              />
+            </TableShell>
+            {!loading && payments.length === 0 && <EmptyState title="No payments yet" description="Payment records tied to this cohort will appear here." />}
+          </SectionCard>
         </Stack>
-      )}
-
-      {tab === 8 && (
-        <SectionCard title="Activity">
-          <List dense>
-            {activity.map((event) => (
-              <ListItem key={event.id} divider>
-                <ListItemText primary={`${event.action} ${event.entityType}`} secondary={`${event.description ?? ""} ${new Date(event.createdAt).toLocaleString()}`} />
-              </ListItem>
-            ))}
-          </List>
-          {!loading && activity.length === 0 && <EmptyState title="No activity yet" description="Audit events for this cohort will appear here." />}
-        </SectionCard>
       )}
 
       <MutationDialog

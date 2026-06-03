@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { cohortCreateSchema, cohortUpdateSchema } from "@/validators/cohort";
 import { logAuditEventAsync } from "./auditService";
 import { createDefaultSessionOperationsTasks } from "./operationsTaskService";
+import { withCohortLifecycle } from "./cohortLifecycle";
 
 const nestedSessionCreateSchema = z.object({
   title: z.string().min(1),
@@ -102,25 +103,36 @@ export async function updateCohort(id: string, input: z.input<typeof cohortUpdat
 }
 
 export async function getCohortById(id: string) {
-  return prisma.cohort.findUnique({
+  const cohort = await prisma.cohort.findUnique({
     where: { id },
     include: {
       presenter: true,
-      sessions: { orderBy: { sessionNumber: "asc" } },
+      sessions: {
+        orderBy: { sessionNumber: "asc" },
+        include: { communications: { include: { template: true } } }
+      },
       registrationForms: true,
       _count: { select: { registrations: true, participants: true, communications: true } }
     }
   });
+
+  return cohort ? withCohortLifecycle(cohort) : null;
 }
 
 export async function listCohorts() {
-  return prisma.cohort.findMany({
+  const cohorts = await prisma.cohort.findMany({
     orderBy: { startDate: "desc" },
     include: {
       presenter: true,
+      sessions: {
+        orderBy: { sessionNumber: "asc" },
+        include: { communications: { include: { template: true } } }
+      },
       _count: { select: { registrations: true, participants: true, sessions: true } }
     }
   });
+
+  return cohorts.map(withCohortLifecycle);
 }
 
 export async function publishCohort(id: string) {
@@ -128,7 +140,7 @@ export async function publishCohort(id: string) {
 }
 
 export async function archiveCohort(id: string) {
-  return updateCohort(id, { status: CohortStatus.ARCHIVED });
+  return updateCohort(id, { status: CohortStatus.CANCELLED });
 }
 
 export async function getCohortOperationalSummary(id: string) {
