@@ -2,6 +2,7 @@ import { CommunicationStatus, EmailEventType, Prisma, RecipientScope, Role, Temp
 import { z } from "zod";
 import { env } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
+import { isMissingEmailReviewColumn } from "@/lib/prismaCompatibility";
 import {
   communicationDraftCreateSchema,
   communicationScheduleSchema,
@@ -130,6 +131,13 @@ type EventSummaryInput = {
   reviewedAt?: Date | null;
   reviewedById?: string | null;
   reviewNote?: string | null;
+};
+
+type LegacyEmailEventRow = EventSummaryInput & {
+  communicationId: string | null;
+  provider: string;
+  providerMessageId: string | null;
+  eventPayload: Prisma.JsonValue | null;
 };
 
 function normalizeEmail(email: string) {
@@ -361,21 +369,77 @@ async function enrichCommunications(communications: Array<any>) {
   });
 }
 
-export async function listCommunications(input: { cohortId?: string | null; limit?: number; issueOnly?: boolean } = {}) {
+async function legacyEmailEventsForCommunicationIds(communicationIds: string[]) {
+  if (communicationIds.length === 0) {
+    return [];
+  }
+
+  return prisma.$queryRaw<LegacyEmailEventRow[]>`
+    SELECT id, "communicationId", "recipientEmail", provider, "providerMessageId", "eventType", "eventPayload", "createdAt"
+    FROM "EmailEvent"
+    WHERE "communicationId" IN (${Prisma.join(communicationIds)})
+    ORDER BY "createdAt" DESC
+  `;
+}
+
+async function legacyEmailEventsForRecipient(email: string) {
+  return prisma.$queryRaw<LegacyEmailEventRow[]>`
+    SELECT id, "communicationId", "recipientEmail", provider, "providerMessageId", "eventType", "eventPayload", "createdAt"
+    FROM "EmailEvent"
+    WHERE lower("recipientEmail") = lower(${email})
+    ORDER BY "createdAt" DESC
+  `;
+}
+
+async function listCommunicationsLegacy(input: { cohortId?: string | null; limit?: number; issueOnly?: boolean } = {}) {
   const take = Math.min(Math.max(Number(input.limit ?? 100), 1), 250);
   const communications = await prisma.cohortCommunication.findMany({
-    where: {
-      ...(input.cohortId ? { cohortId: input.cohortId } : {}),
-      ...(input.issueOnly
-        ? { emailEvents: { some: { eventType: { in: [EmailEventType.BOUNCED, EmailEventType.FAILED] }, reviewedAt: null } } }
-        : {})
-    },
+    where: input.cohortId ? { cohortId: input.cohortId } : {},
     orderBy: { createdAt: "desc" },
     take,
-    include: { cohort: true, template: true, session: true, createdBy: true, emailEvents: { include: { reviewedBy: true }, orderBy: { createdAt: "desc" } }, attachments: true }
+    include: { cohort: true, template: true, session: true, createdBy: true, attachments: true }
   });
+  const events = await legacyEmailEventsForCommunicationIds(communications.map((communication) => communication.id));
+  const eventsByCommunication = new Map<string, LegacyEmailEventRow[]>();
 
-  return enrichCommunications(communications);
+  for (const event of events) {
+    if (!event.communicationId) {
+      continue;
+    }
+    eventsByCommunication.set(event.communicationId, [...(eventsByCommunication.get(event.communicationId) ?? []), event]);
+  }
+
+  const enriched = await enrichCommunications(communications.map((communication) => ({
+    ...communication,
+    emailEvents: eventsByCommunication.get(communication.id) ?? []
+  })));
+
+  return input.issueOnly ? enriched.filter((communication) => communication.issueRows.length > 0) : enriched;
+}
+
+export async function listCommunications(input: { cohortId?: string | null; limit?: number; issueOnly?: boolean } = {}) {
+  const take = Math.min(Math.max(Number(input.limit ?? 100), 1), 250);
+  try {
+    const communications = await prisma.cohortCommunication.findMany({
+      where: {
+        ...(input.cohortId ? { cohortId: input.cohortId } : {}),
+        ...(input.issueOnly
+          ? { emailEvents: { some: { eventType: { in: [EmailEventType.BOUNCED, EmailEventType.FAILED] }, reviewedAt: null } } }
+          : {})
+      },
+      orderBy: { createdAt: "desc" },
+      take,
+      include: { cohort: true, template: true, session: true, createdBy: true, emailEvents: { include: { reviewedBy: true }, orderBy: { createdAt: "desc" } }, attachments: true }
+    });
+
+    return enrichCommunications(communications);
+  } catch (error) {
+    if (!isMissingEmailReviewColumn(error)) {
+      throw error;
+    }
+
+    return listCommunicationsLegacy(input);
+  }
 }
 
 export async function listCommunicationsByCohort(cohortId: string) {
@@ -712,23 +776,53 @@ export async function getRecipientCommunicationThread(email: string) {
     return [];
   }
 
-  const [events, communications] = await Promise.all([
-    prisma.emailEvent.findMany({
-      where: { recipientEmail: { equals: normalized, mode: "insensitive" } },
-      orderBy: { createdAt: "desc" },
-      include: { reviewedBy: true, communication: { include: { cohort: true, session: true, template: true, attachments: true } } }
-    }),
-    prisma.cohortCommunication.findMany({
+  let events: any[];
+  let communications: any[];
+
+  try {
+    [events, communications] = await Promise.all([
+      prisma.emailEvent.findMany({
+        where: { recipientEmail: { equals: normalized, mode: "insensitive" } },
+        orderBy: { createdAt: "desc" },
+        include: { reviewedBy: true, communication: { include: { cohort: true, session: true, template: true, attachments: true } } }
+      }),
+      prisma.cohortCommunication.findMany({
+        where: {
+          OR: [
+            { recipientEmails: { array_contains: [email] } },
+            { recipientEmails: { array_contains: [normalized] } }
+          ]
+        },
+        orderBy: { createdAt: "desc" },
+        include: { cohort: true, session: true, template: true, emailEvents: { include: { reviewedBy: true } }, attachments: true }
+      })
+    ]);
+  } catch (error) {
+    if (!isMissingEmailReviewColumn(error)) {
+      throw error;
+    }
+
+    const legacyEvents = await legacyEmailEventsForRecipient(normalized);
+    communications = await prisma.cohortCommunication.findMany({
       where: {
         OR: [
           { recipientEmails: { array_contains: [email] } },
-          { recipientEmails: { array_contains: [normalized] } }
+          { recipientEmails: { array_contains: [normalized] } },
+          { id: { in: legacyEvents.map((event) => event.communicationId).filter((id): id is string => Boolean(id)) } }
         ]
       },
       orderBy: { createdAt: "desc" },
-      include: { cohort: true, session: true, template: true, emailEvents: { include: { reviewedBy: true } }, attachments: true }
-    })
-  ]);
+      include: { cohort: true, session: true, template: true, attachments: true }
+    });
+    events = legacyEvents.map((event) => ({
+      ...event,
+      communication: communications.find((communication) => communication.id === event.communicationId) ?? null
+    }));
+    communications = communications.map((communication) => ({
+      ...communication,
+      emailEvents: legacyEvents.filter((event) => event.communicationId === communication.id)
+    }));
+  }
 
   const byCommunication = new Map<string, any>();
 
@@ -736,8 +830,8 @@ export async function getRecipientCommunicationThread(email: string) {
     byCommunication.set(communication.id, {
       ...communication,
       recipientEmail: normalized,
-      events: communication.emailEvents.filter((event) => event.recipientEmail.toLowerCase() === normalized),
-      emailSummary: emailEventSummary(communication.emailEvents.filter((event) => event.recipientEmail.toLowerCase() === normalized))
+      events: communication.emailEvents.filter((event: EventSummaryInput) => normalizeEmail(event.recipientEmail ?? "") === normalized),
+      emailSummary: emailEventSummary(communication.emailEvents.filter((event: EventSummaryInput) => normalizeEmail(event.recipientEmail ?? "") === normalized))
     });
   }
 
@@ -752,8 +846,9 @@ export async function getRecipientCommunicationThread(email: string) {
         emailSummary: emailEventSummary(nextEvents)
       });
     } else {
-      byCommunication.set(event.id, {
-        id: event.id,
+      const eventId = event.id ?? `${normalized}-${event.createdAt?.toISOString?.() ?? "event"}`;
+      byCommunication.set(eventId, {
+        id: eventId,
         subject: "Provider event",
         status: event.eventType,
         recipientEmail: normalized,

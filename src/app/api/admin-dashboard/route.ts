@@ -1,6 +1,7 @@
 import { CohortStatus, CommunicationStatus, EmailEventType, OperationsTaskStatus, PaymentStatus, RegistrationStatus } from "@prisma/client";
 import { ok } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
+import { isMissingEmailReviewColumn } from "@/lib/prismaCompatibility";
 import { deriveCohortStatus } from "@/services/cohortLifecycle";
 
 function parseDashboardRange(request: Request) {
@@ -64,6 +65,23 @@ function cohortOverlapsRange(cohort: { startDate: Date; endDate: Date; sessions?
   const cohortDatesOverlap = cohort.startDate < range.end && cohort.endDate >= range.start;
   const sessionDatesOverlap = cohort.sessions?.some((session) => session.startTime >= range.start && session.startTime < range.end) ?? false;
   return cohortDatesOverlap || sessionDatesOverlap;
+}
+
+async function dashboardCommunicationIssues(where: Record<string, unknown>) {
+  try {
+    return await prisma.emailEvent.findMany({
+      where: { eventType: { in: [EmailEventType.BOUNCED, EmailEventType.FAILED] }, ...where },
+      orderBy: { createdAt: "desc" },
+      take: 8,
+      include: { communication: { include: { cohort: true, session: true } } }
+    });
+  } catch (error) {
+    if (!isMissingEmailReviewColumn(error)) {
+      throw error;
+    }
+
+    return [];
+  }
 }
 
 export async function GET(request: Request) {
@@ -137,12 +155,7 @@ export async function GET(request: Request) {
       take: 8,
       include: { cohort: true, registration: { include: { organization: true } }, session: true }
     }),
-    prisma.emailEvent.findMany({
-      where: { eventType: { in: [EmailEventType.BOUNCED, EmailEventType.FAILED] }, ...communicationIssueWhere },
-      orderBy: { createdAt: "desc" },
-      take: 8,
-      include: { communication: { include: { cohort: true, session: true } } }
-    }),
+    dashboardCommunicationIssues(communicationIssueWhere),
     prisma.paymentRecord.groupBy({
       by: ["status"],
       where: paymentSnapshotWhere,
