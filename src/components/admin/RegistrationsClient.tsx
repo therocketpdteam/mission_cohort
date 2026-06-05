@@ -53,6 +53,17 @@ function money(value: unknown) {
   return `$${Number(value ?? 0).toLocaleString()}`;
 }
 
+function communicationIssueLabel(communication: AdminRow) {
+  const summary = communication.emailSummary ?? {};
+  if (Number(summary.unreviewedIssueCount ?? 0) > 0) {
+    return "Open issue";
+  }
+  if (Number(summary.reviewedIssueCount ?? 0) > 0) {
+    return "Reviewed issue";
+  }
+  return null;
+}
+
 function emptyRegistration() {
   return {
     primaryContactName: "",
@@ -416,7 +427,14 @@ function RegistrationDetailDialog({
             </Stack>
             <Divider />
             <Stack spacing={1}>
-              <Typography variant="h3">POC Communication History</Typography>
+              <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={1}>
+                <Typography variant="h3">POC Communication History</Typography>
+                {registration.primaryContactEmail ? (
+                  <Button href={`/communications?search=${encodeURIComponent(registration.primaryContactEmail)}`} variant="outlined" size="small">
+                    Open in Communications
+                  </Button>
+                ) : null}
+              </Stack>
               {threadLoading ? (
                 <Typography color="text.secondary">Loading communication history...</Typography>
               ) : thread.length > 0 ? (
@@ -425,7 +443,7 @@ function RegistrationDetailDialog({
                     <ListItem key={communication.id} divider>
                       <ListItemText
                         primary={communication.subject ?? "Email event"}
-                        secondary={`${communication.cohort?.title ?? "Mission Control"} · ${formatStatusLabel(communication.status)}${communication.emailSummary?.lastEmailEvent ? ` · ${formatStatusLabel(communication.emailSummary.lastEmailEvent)}` : ""}`}
+                        secondary={`${communication.cohort?.title ?? "Mission Control"} · ${formatStatusLabel(communication.status)}${communication.emailSummary?.lastEmailEvent ? ` · ${formatStatusLabel(communication.emailSummary.lastEmailEvent)}` : ""}${communicationIssueLabel(communication) ? ` · ${communicationIssueLabel(communication)}` : ""}${communication.attachments?.length ? ` · ${communication.attachments.length} attachment${communication.attachments.length === 1 ? "" : "s"}` : ""}`}
                       />
                       <Typography variant="caption" color="text.secondary">{communication.sentAt || communication.createdAt ? new Date(communication.sentAt ?? communication.createdAt).toLocaleDateString() : ""}</Typography>
                     </ListItem>

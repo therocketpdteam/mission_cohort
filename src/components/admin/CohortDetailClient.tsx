@@ -133,6 +133,17 @@ function money(value: unknown) {
   return `$${Number(value ?? 0).toLocaleString()}`;
 }
 
+function communicationIssueLabel(communication: AdminRow) {
+  const summary = communication.emailSummary ?? {};
+  if (Number(summary.unreviewedIssueCount ?? 0) > 0) {
+    return "Open issue";
+  }
+  if (Number(summary.reviewedIssueCount ?? 0) > 0) {
+    return "Reviewed issue";
+  }
+  return null;
+}
+
 function resourceHref(resource: AdminRow) {
   if (resource.url) {
     return resource.url;
@@ -1381,7 +1392,14 @@ export function CohortDetailClient({ id }: { id: string }) {
             <SectionCard title="Notes">
               <Typography color="text.secondary">{registrationDetail.notes ?? "No notes captured yet."}</Typography>
             </SectionCard>
-            <SectionCard title="POC Communication History">
+            <SectionCard
+              title="POC Communication History"
+              action={registrationDetail.primaryContactEmail ? (
+                <Button href={`/communications?search=${encodeURIComponent(registrationDetail.primaryContactEmail)}`} variant="outlined" size="small">
+                  Open in Communications
+                </Button>
+              ) : null}
+            >
               {registrationThreadLoading ? (
                 <Typography color="text.secondary">Loading communication history...</Typography>
               ) : registrationThread.length > 0 ? (
@@ -1393,6 +1411,7 @@ export function CohortDetailClient({ id }: { id: string }) {
                         <span>
                           {communication.cohort?.title ?? communication.communication?.cohort?.title ?? "Mission Control"} · {formatStatusLabel(communication.status)}
                           {communication.emailSummary?.lastEmailEvent ? ` · ${formatStatusLabel(communication.emailSummary.lastEmailEvent)}` : ""}
+                          {communicationIssueLabel(communication) ? ` · ${communicationIssueLabel(communication)}` : ""}
                         </span>
                         {communication.attachments?.length > 0 && <span>{communication.attachments.length} attachment{communication.attachments.length === 1 ? "" : "s"}</span>}
                       </div>

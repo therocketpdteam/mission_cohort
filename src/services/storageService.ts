@@ -113,3 +113,15 @@ export async function uploadAppFile(input: {
     url: isPublic ? data.publicUrl : signed?.data?.signedUrl
   };
 }
+
+export async function deletePrivateAppFile(fileKey: string) {
+  const supabase = createSupabaseAdminClient();
+  const bucket = env.SUPABASE_PRIVATE_BUCKET ?? "mission-control-private";
+  const { error } = await supabase.storage.from(bucket).remove([fileKey]);
+
+  if (error && !isMissingBucket(error)) {
+    throw Object.assign(new Error(error.message), { code: "BAD_REQUEST", status: 400 });
+  }
+
+  return { deleted: true };
+}

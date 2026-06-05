@@ -73,7 +73,7 @@ export async function GET(request: Request) {
   const sessionMetricWhere = rangeDateWhere ? { startTime: rangeDateWhere } : { startTime: { gte: now } };
   const registrationMetricWhere = rangeDateWhere ? { createdAt: rangeDateWhere } : {};
   const participantMetricWhere = rangeDateWhere ? { createdAt: rangeDateWhere } : {};
-  const communicationIssueWhere = rangeDateWhere ? { createdAt: rangeDateWhere } : {};
+  const communicationIssueWhere = rangeDateWhere ? { createdAt: rangeDateWhere, reviewedAt: null } : { reviewedAt: null };
   const scheduledCommunicationWhere = rangeDateWhere ? { scheduledFor: rangeDateWhere } : {};
   const paymentSnapshotWhere = paymentRangeWhere(range);
   const openTaskSnapshotWhere = taskRangeWhere(range);
@@ -138,7 +138,7 @@ export async function GET(request: Request) {
       include: { cohort: true, registration: { include: { organization: true } }, session: true }
     }),
     prisma.emailEvent.findMany({
-      where: { eventType: { in: [EmailEventType.BOUNCED, EmailEventType.FAILED, EmailEventType.UNSUBSCRIBED] }, ...communicationIssueWhere },
+      where: { eventType: { in: [EmailEventType.BOUNCED, EmailEventType.FAILED] }, ...communicationIssueWhere },
       orderBy: { createdAt: "desc" },
       take: 8,
       include: { communication: { include: { cohort: true, session: true } } }

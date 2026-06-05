@@ -11,6 +11,7 @@ import {
 import { logAuditEventAsync } from "./auditService";
 import { generateSessionReminderSchedule } from "@/modules/email";
 import { sendEmail } from "@/services/emailService";
+import { deletePrivateAppFile } from "@/services/storageService";
 
 const defaultTemplates: Array<{
   type: TemplateType;
@@ -119,12 +120,30 @@ export async function ensureDefaultCommunicationTemplates() {
   return templates;
 }
 
-function emailEventSummary(events: Array<{ eventType: EmailEventType; createdAt: Date }>) {
+const recipientIssueTypes = new Set<EmailEventType>([EmailEventType.BOUNCED, EmailEventType.FAILED]);
+
+type EventSummaryInput = {
+  id?: string;
+  eventType: EmailEventType;
+  recipientEmail?: string;
+  createdAt: Date;
+  reviewedAt?: Date | null;
+  reviewedById?: string | null;
+  reviewNote?: string | null;
+};
+
+function normalizeEmail(email: string) {
+  return email.trim().toLowerCase();
+}
+
+export function emailEventSummary(events: EventSummaryInput[]) {
   const counts = events.reduce<Record<string, number>>((acc, event) => {
     acc[event.eventType] = (acc[event.eventType] ?? 0) + 1;
     return acc;
   }, {});
   const latest = [...events].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
+  const issueEvents = events.filter((event) => recipientIssueTypes.has(event.eventType));
+  const unreviewedIssueEvents = issueEvents.filter((event) => !event.reviewedAt);
 
   return {
     lastEmailEvent: latest?.eventType ?? null,
@@ -132,10 +151,51 @@ function emailEventSummary(events: Array<{ eventType: EmailEventType; createdAt:
     sentCount: counts.SENT ?? 0,
     deliveredCount: counts.DELIVERED ?? 0,
     openedCount: counts.OPENED ?? 0,
+    clickedCount: counts.CLICKED ?? 0,
     bouncedCount: counts.BOUNCED ?? 0,
     failedCount: counts.FAILED ?? 0,
-    unsubscribedCount: counts.UNSUBSCRIBED ?? 0
+    unsubscribedCount: counts.UNSUBSCRIBED ?? 0,
+    issueCount: issueEvents.length,
+    unreviewedIssueCount: unreviewedIssueEvents.length,
+    reviewedIssueCount: issueEvents.length - unreviewedIssueEvents.length
   };
+}
+
+export function buildRecipientDeliveryRows(events: EventSummaryInput[], relatedByEmail: Map<string, unknown> = new Map()) {
+  const grouped = new Map<string, EventSummaryInput[]>();
+
+  for (const event of events) {
+    const key = normalizeEmail(event.recipientEmail ?? "");
+    if (!key) {
+      continue;
+    }
+    grouped.set(key, [...(grouped.get(key) ?? []), event]);
+  }
+
+  return Array.from(grouped.entries())
+    .map(([email, recipientEvents]) => {
+      const sortedEvents = [...recipientEvents].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      const issueEvents = sortedEvents.filter((event) => recipientIssueTypes.has(event.eventType));
+      const unreviewedIssueEvents = issueEvents.filter((event) => !event.reviewedAt);
+      return {
+        id: email,
+        recipientEmail: email,
+        events: sortedEvents,
+        latestEvent: sortedEvents[0]?.eventType ?? null,
+        latestEventAt: sortedEvents[0]?.createdAt ?? null,
+        issueEvents,
+        unreviewedIssueEvents,
+        needsReview: unreviewedIssueEvents.length > 0,
+        emailSummary: emailEventSummary(sortedEvents),
+        related: relatedByEmail.get(email) ?? null
+      };
+    })
+    .sort((a, b) => {
+      if (a.needsReview !== b.needsReview) {
+        return a.needsReview ? -1 : 1;
+      }
+      return new Date(b.latestEventAt ?? 0).getTime() - new Date(a.latestEventAt ?? 0).getTime();
+    });
 }
 
 export async function createTemplate(input: z.input<typeof communicationTemplateCreateSchema>) {
@@ -175,6 +235,20 @@ export async function addCommunicationAttachment(input: {
   });
 }
 
+export async function removeCommunicationAttachment(id: string) {
+  const attachment = await prisma.communicationAttachment.findUnique({ where: { id } });
+
+  if (!attachment) {
+    throw Object.assign(new Error("Attachment not found"), { code: "NOT_FOUND", status: 404 });
+  }
+
+  if (attachment.fileKey) {
+    await deletePrivateAppFile(attachment.fileKey).catch(() => null);
+  }
+
+  return prisma.communicationAttachment.delete({ where: { id } });
+}
+
 export async function scheduleCommunicationPlaceholder(input: z.input<typeof communicationScheduleSchema>) {
   const data = communicationScheduleSchema.parse(input);
   const communication = await prisma.cohortCommunication.update({
@@ -194,17 +268,123 @@ export async function scheduleCommunicationPlaceholder(input: z.input<typeof com
   return communication;
 }
 
-export async function listCommunicationsByCohort(cohortId: string) {
+async function buildRelatedRecipientMap(emails: string[]) {
+  const normalizedEmails = Array.from(new Set(emails.map(normalizeEmail).filter(Boolean)));
+  const map = new Map<string, unknown>();
+
+  if (normalizedEmails.length === 0) {
+    return map;
+  }
+
+  const emailOr = normalizedEmails.map((email) => ({ email: { equals: email, mode: "insensitive" as const } }));
+  const registrationOr = normalizedEmails.flatMap((email) => [
+    { primaryContactEmail: { equals: email, mode: "insensitive" as const } },
+    { billingContactEmail: { equals: email, mode: "insensitive" as const } }
+  ]);
+
+  const [participants, registrations] = await Promise.all([
+    prisma.participant.findMany({
+      where: { OR: emailOr },
+      include: { cohort: true, organization: true, registration: true }
+    }),
+    prisma.registration.findMany({
+      where: { OR: registrationOr },
+      include: { cohort: true, organization: true }
+    })
+  ]);
+
+  for (const registration of registrations) {
+    for (const email of [registration.primaryContactEmail, registration.billingContactEmail].map((value) => normalizeEmail(value ?? ""))) {
+      if (!email || map.has(email)) {
+        continue;
+      }
+      map.set(email, {
+        kind: "registration",
+        registrationId: registration.id,
+        registrationHref: `/registrations?search=${encodeURIComponent(email)}`,
+        participantHref: null,
+        displayName: registration.primaryContactName,
+        organizationName: registration.organization?.name,
+        cohortTitle: registration.cohort?.title
+      });
+    }
+  }
+
+  for (const participant of participants) {
+    const email = normalizeEmail(participant.email);
+    map.set(email, {
+      kind: "participant",
+      participantId: participant.id,
+      registrationId: participant.registrationId,
+      participantHref: `/participants?search=${encodeURIComponent(email)}`,
+      registrationHref: `/registrations?search=${encodeURIComponent(email)}`,
+      displayName: `${participant.firstName} ${participant.lastName}`.trim(),
+      organizationName: participant.organization?.name,
+      cohortTitle: participant.cohort?.title
+    });
+  }
+
+  return map;
+}
+
+async function enrichCommunications(communications: Array<any>) {
+  const emails = communications.flatMap((communication) => communication.emailEvents.map((event: EventSummaryInput) => event.recipientEmail ?? ""));
+  const relatedByEmail = await buildRelatedRecipientMap(emails);
+
+  return communications.map((communication) => {
+    const recipientRows = buildRecipientDeliveryRows(communication.emailEvents, relatedByEmail);
+    const issueRows = recipientRows
+      .filter((recipient) => recipient.needsReview)
+      .map((recipient) => ({
+        id: `${communication.id}:${recipient.recipientEmail}`,
+        communicationId: communication.id,
+        subject: communication.subject,
+        status: communication.status,
+        cohort: communication.cohort,
+        session: communication.session,
+        template: communication.template,
+        attachments: communication.attachments,
+        recipientEmail: recipient.recipientEmail,
+        latestEvent: recipient.latestEvent,
+        latestEventAt: recipient.latestEventAt,
+        issueEvents: recipient.unreviewedIssueEvents,
+        emailSummary: recipient.emailSummary,
+        related: recipient.related
+      }));
+
+    return {
+      ...communication,
+      recipientRows,
+      issueRows,
+      emailSummary: emailEventSummary(communication.emailEvents)
+    };
+  });
+}
+
+export async function listCommunications(input: { cohortId?: string | null; limit?: number; issueOnly?: boolean } = {}) {
+  const take = Math.min(Math.max(Number(input.limit ?? 100), 1), 250);
   const communications = await prisma.cohortCommunication.findMany({
-    where: { cohortId },
+    where: {
+      ...(input.cohortId ? { cohortId: input.cohortId } : {}),
+      ...(input.issueOnly
+        ? { emailEvents: { some: { eventType: { in: [EmailEventType.BOUNCED, EmailEventType.FAILED] }, reviewedAt: null } } }
+        : {})
+    },
     orderBy: { createdAt: "desc" },
-    include: { template: true, session: true, createdBy: true, emailEvents: true, attachments: true }
+    take,
+    include: { cohort: true, template: true, session: true, createdBy: true, emailEvents: { include: { reviewedBy: true }, orderBy: { createdAt: "desc" } }, attachments: true }
   });
 
-  return communications.map((communication) => ({
-    ...communication,
-    emailSummary: emailEventSummary(communication.emailEvents)
-  }));
+  return enrichCommunications(communications);
+}
+
+export async function listCommunicationsByCohort(cohortId: string) {
+  return listCommunications({ cohortId });
+}
+
+export async function listUnreviewedCommunicationIssues(input: { cohortId?: string | null; limit?: number } = {}) {
+  const communications = await listCommunications({ ...input, issueOnly: true });
+  return communications.flatMap((communication) => communication.issueRows).slice(0, input.limit ?? 100);
 }
 
 function emailValues(values: Array<string | null | undefined>) {
@@ -322,6 +502,40 @@ export async function sendCommunication(id: string, options?: { recipients?: str
     });
     throw error;
   }
+}
+
+export async function sendCommunicationToRecipient(input: { communicationId: string; recipientEmail: string }) {
+  const recipientEmail = input.recipientEmail.trim();
+
+  if (!recipientEmail) {
+    throw Object.assign(new Error("recipientEmail is required"), { code: "BAD_REQUEST", status: 400 });
+  }
+
+  return sendCommunication(input.communicationId, { recipients: [recipientEmail] });
+}
+
+export async function reviewRecipientIssue(input: { communicationId: string; recipientEmail: string; reviewedById: string; reviewNote?: string }) {
+  const recipientEmail = input.recipientEmail.trim();
+
+  if (!recipientEmail) {
+    throw Object.assign(new Error("recipientEmail is required"), { code: "BAD_REQUEST", status: 400 });
+  }
+
+  const updated = await prisma.emailEvent.updateMany({
+    where: {
+      communicationId: input.communicationId,
+      recipientEmail: { equals: recipientEmail, mode: "insensitive" },
+      eventType: { in: [EmailEventType.BOUNCED, EmailEventType.FAILED] },
+      reviewedAt: null
+    },
+    data: {
+      reviewedAt: new Date(),
+      reviewedById: input.reviewedById,
+      reviewNote: input.reviewNote
+    }
+  });
+
+  return { reviewed: updated.count };
 }
 
 async function createCommunicationFromTemplate(input: {
@@ -502,7 +716,7 @@ export async function getRecipientCommunicationThread(email: string) {
     prisma.emailEvent.findMany({
       where: { recipientEmail: { equals: normalized, mode: "insensitive" } },
       orderBy: { createdAt: "desc" },
-      include: { communication: { include: { cohort: true, session: true, template: true, attachments: true } } }
+      include: { reviewedBy: true, communication: { include: { cohort: true, session: true, template: true, attachments: true } } }
     }),
     prisma.cohortCommunication.findMany({
       where: {
@@ -512,7 +726,7 @@ export async function getRecipientCommunicationThread(email: string) {
         ]
       },
       orderBy: { createdAt: "desc" },
-      include: { cohort: true, session: true, template: true, emailEvents: true, attachments: true }
+      include: { cohort: true, session: true, template: true, emailEvents: { include: { reviewedBy: true } }, attachments: true }
     })
   ]);
 

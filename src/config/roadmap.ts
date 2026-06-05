@@ -129,13 +129,13 @@ export const roadmapCards: RoadmapCard[] = [
     title: "Communications",
     summary: "Email templates, scheduled/manual sends, delivery telemetry, and message issue visibility.",
     ownerArea: "Communications",
-    nextAction: "Connect outbound attachments and add recipient-level detail to the new Communications workspace.",
+    nextAction: "QA recipient-level issue review and plan future inbound reply sync once outbound operations are stable.",
     items: [
       { title: "Templates", status: "done", note: "Template management exists.", priority: "high" },
-      { title: "Scheduled/manual emails", status: "in_progress", note: "Outbox workspace exists; scheduling and manual send flows need deeper recipient actions.", priority: "high" },
-      { title: "SendGrid delivery/open/error telemetry", status: "in_progress", note: "Delivery, open, bounce, and failure counts are surfaced in the Communications workspace.", priority: "high" },
-      { title: "Dashboard issue surfacing", status: "in_progress", note: "Failed/bounced items appear in operational attention areas.", priority: "medium" },
-      { title: "Outbound attachments", status: "planned", note: "Storage support exists; email attachment flow is next.", priority: "high" },
+      { title: "Scheduled/manual emails", status: "in_progress", note: "All-cohort outbox exists with message and recipient-level resend actions.", priority: "high" },
+      { title: "SendGrid delivery/open/error telemetry", status: "done", note: "Recipient timelines expose sent, delivered, open, click, bounce, and failure events.", priority: "high" },
+      { title: "Dashboard issue surfacing", status: "done", note: "Dashboard issue counts now track unreviewed failed/bounced recipients.", priority: "medium" },
+      { title: "Outbound attachments", status: "in_progress", note: "Per-message attachments can be uploaded, removed, and included in send/resend.", priority: "high" },
       { title: "Future inbound reply sync", status: "planned", note: "Explicitly future scope.", priority: "low" }
     ]
   },

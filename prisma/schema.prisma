@@ -275,6 +275,7 @@ model User {
   createdAt             DateTime              @default(now())
   updatedAt             DateTime              @updatedAt
   createdCommunications CohortCommunication[]
+  reviewedEmailEvents   EmailEvent[]          @relation("EmailEventReviewedBy")
   auditLogs             AuditLog[]
 
   @@index([role])
@@ -603,12 +604,18 @@ model EmailEvent {
   providerMessageId String?
   eventType         EmailEventType
   eventPayload      Json?
+  reviewedAt        DateTime?
+  reviewedById      String?
+  reviewNote        String?
   createdAt         DateTime              @default(now())
   communication     CohortCommunication?  @relation(fields: [communicationId], references: [id], onDelete: SetNull)
+  reviewedBy        User?                 @relation("EmailEventReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
 
   @@index([communicationId])
   @@index([recipientEmail])
   @@index([eventType])
+  @@index([reviewedAt])
+  @@index([reviewedById])
 }
 
 model CommunicationAttachment {
