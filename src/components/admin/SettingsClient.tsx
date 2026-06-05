@@ -36,6 +36,7 @@ import {
 import { GridColDef } from "./common";
 import { useEffect, useMemo, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
+import { buildRoadmapSummary, type RoadmapCardSummary, type RoadmapStatus } from "@/config/roadmap";
 import { formatCurrency, formatHumanLabel, formatProperDisplay, formatStatusLabel } from "@/lib/formatting";
 import {
   AdminRow,
@@ -53,8 +54,20 @@ import {
   useNotifier
 } from "./common";
 
-const settingsTabs = ["System Health", "Admin Users", "Connected Tools", "Jotform Intake", "Advanced Setup"];
+const settingsTabs = ["System Health", "Admin Users", "Connected Tools", "Jotform Intake", "Road Map", "Advanced Setup"];
 const wizardSteps = ["Summary", "Routing", "Field Mapping", "Preview", "Save"];
+const roadmapStatusOrder: RoadmapStatus[] = ["done", "in_progress", "blocked", "planned"];
+const roadmapStatusLabels: Record<RoadmapStatus, string> = {
+  done: "Done",
+  in_progress: "In progress",
+  planned: "Planned",
+  blocked: "Blocked"
+};
+const roadmapVisualLabels: Record<RoadmapCardSummary["visualStatus"], string> = {
+  green: "Healthy",
+  yellow: "Active",
+  red: "Needs attention"
+};
 const smartMappingTargets = [
   "formId",
   "submissionId",
@@ -1006,6 +1019,170 @@ function JotformSubmissionRow({
   );
 }
 
+function RoadmapProgressBar({ value, tone }: { value: number; tone: RoadmapCardSummary["visualStatus"] }) {
+  return (
+    <div className="roadmap-progress" aria-label={`${value}% complete`}>
+      <span className={`roadmap-progress-fill is-${tone}`} style={{ width: `${value}%` }} />
+    </div>
+  );
+}
+
+function RoadmapSummaryTile({ label, value, helper }: { label: string; value: string | number; helper: string }) {
+  return (
+    <div className="roadmap-summary-tile">
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <p>{helper}</p>
+    </div>
+  );
+}
+
+function RoadmapItemRow({ item }: { item: RoadmapCardSummary["items"][number] }) {
+  return (
+    <li className="roadmap-item">
+      <span className={`roadmap-item-status is-${item.status}`}>{roadmapStatusLabels[item.status]}</span>
+      <div>
+        <strong>{item.title}</strong>
+        {item.note ? <p>{item.note}</p> : null}
+      </div>
+      {item.priority ? <span className="roadmap-priority">{formatStatusLabel(item.priority)}</span> : null}
+    </li>
+  );
+}
+
+function RoadmapCardView({
+  card,
+  expanded,
+  onToggle
+}: {
+  card: RoadmapCardSummary;
+  expanded: boolean;
+  onToggle: (id: string) => void;
+}) {
+  const groupedItems = roadmapStatusOrder
+    .map((status) => ({
+      status,
+      items: card.items.filter((item) => item.status === status)
+    }))
+    .filter((group) => group.items.length > 0);
+
+  return (
+    <article className={`roadmap-card is-${card.visualStatus}`}>
+      <div className="roadmap-card-header">
+        <div className="roadmap-card-title">
+          <span>{card.ownerArea}</span>
+          <h3>{card.title}</h3>
+          <p>{card.summary}</p>
+        </div>
+        <span className={`roadmap-status-badge is-${card.visualStatus}`}>{roadmapVisualLabels[card.visualStatus]}</span>
+      </div>
+
+      <div className="roadmap-card-meter">
+        <strong>{card.completion}%</strong>
+        <RoadmapProgressBar value={card.completion} tone={card.visualStatus} />
+      </div>
+
+      <div className="roadmap-counts" aria-label={`${card.title} roadmap item counts`}>
+        {roadmapStatusOrder.map((status) => (
+          <span className={`roadmap-count-pill is-${status}`} key={status}>
+            <b>{card.counts[status]}</b>
+            {roadmapStatusLabels[status]}
+          </span>
+        ))}
+      </div>
+
+      <Button
+        size="small"
+        variant="outlined"
+        endIcon={expanded ? <ExpandLessOutlined /> : <ExpandMoreOutlined />}
+        onClick={() => onToggle(card.id)}
+      >
+        {expanded ? "Hide details" : "View details"}
+      </Button>
+
+      {expanded ? (
+        <div className="roadmap-card-body">
+          {groupedItems.map((group) => (
+            <section className="roadmap-item-group" key={group.status}>
+              <h4>{roadmapStatusLabels[group.status]}</h4>
+              <ul className="roadmap-item-list">
+                {group.items.map((item) => (
+                  <RoadmapItemRow item={item} key={`${group.status}-${item.title}`} />
+                ))}
+              </ul>
+            </section>
+          ))}
+          <div className="roadmap-next-action">
+            <span>Next</span>
+            <p>{card.nextAction}</p>
+          </div>
+        </div>
+      ) : null}
+    </article>
+  );
+}
+
+function RoadmapPanel() {
+  const roadmap = useMemo(() => buildRoadmapSummary(), []);
+  const [expandedRoadmapCards, setExpandedRoadmapCards] = useState<Set<string>>(
+    () => new Set(["jotform-intake", "finance-distribution", "platform-qa-deployment"])
+  );
+  const overallTone: RoadmapCardSummary["visualStatus"] =
+    roadmap.overallCompletion >= 80 ? "green" : roadmap.overallCompletion >= 35 ? "yellow" : "red";
+
+  function toggleRoadmapCard(id: string) {
+    setExpandedRoadmapCards((current) => {
+      const next = new Set(current);
+
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+
+      return next;
+    });
+  }
+
+  return (
+    <SectionCard title="Road Map" action={<StatusChip value="CODE OWNED" />}>
+      <div className="roadmap-intro">
+        <div>
+          <h2>Mission Control north star</h2>
+          <p>
+            A curated product and operations plan for what is working, what is active, what is blocked, and what is scheduled next.
+            This v1 is read-only in the app and updated through normal GitHub deployments.
+          </p>
+        </div>
+        <div className="roadmap-overall">
+          <strong>{roadmap.overallCompletion}%</strong>
+          <span>overall completion</span>
+          <RoadmapProgressBar value={roadmap.overallCompletion} tone={overallTone} />
+        </div>
+      </div>
+
+      <div className="roadmap-summary-grid">
+        <RoadmapSummaryTile label="Completed" value={roadmap.counts.done} helper="Items already working or materially shipped" />
+        <RoadmapSummaryTile label="In progress" value={roadmap.counts.in_progress} helper="Active build or polish work" />
+        <RoadmapSummaryTile label="Blocked" value={roadmap.counts.blocked} helper="Needs migration, access, or decision" />
+        <RoadmapSummaryTile label="Planned" value={roadmap.counts.planned} helper="Queued future development" />
+        <RoadmapSummaryTile label="Total scope" value={roadmap.totalItems} helper="Current roadmap checklist items" />
+      </div>
+
+      <div className="roadmap-layout">
+        {roadmap.cards.map((card) => (
+          <RoadmapCardView
+            card={card}
+            expanded={expandedRoadmapCards.has(card.id)}
+            key={card.id}
+            onToggle={toggleRoadmapCard}
+          />
+        ))}
+      </div>
+    </SectionCard>
+  );
+}
+
 export function SettingsClient() {
   const [activeTab, setActiveTab] = useState(0);
   const [health, setHealth] = useState<AdminRow | null>(null);
@@ -1347,6 +1524,10 @@ export function SettingsClient() {
       </TabPanel>
 
       <TabPanel active={activeTab} index={4}>
+        <RoadmapPanel />
+      </TabPanel>
+
+      <TabPanel active={activeTab} index={5}>
         <SectionCard title="Mapping Library" action={<Button size="small" startIcon={<AddIcon />} onClick={() => setDialogOpen(true)}>Add Mapping</Button>}>
           <Typography color="text.secondary" sx={{ mb: 2 }}>
             Most mapping should happen from the Jotform review wizard. Use this table only for quick enable/disable or routing edits.
