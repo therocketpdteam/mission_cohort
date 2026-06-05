@@ -263,7 +263,11 @@ export function CommunicationsClient() {
 
   async function reviewIssue(communicationId: string, recipientEmail: string) {
     try {
-      await adminApi("/api/communications", { method: "PATCH", body: { action: "reviewRecipientIssue", communicationId, recipientEmail } });
+      const result = await adminApi<AdminRow>("/api/communications", { method: "PATCH", body: { action: "reviewRecipientIssue", communicationId, recipientEmail } });
+      if (result?.migrationRequired) {
+        notifyError(result.message ?? "Production migration is required before issues can be reviewed.");
+        return;
+      }
       notifySuccess("Issue marked reviewed");
       await refreshAfterMutation(null);
     } catch (error) {

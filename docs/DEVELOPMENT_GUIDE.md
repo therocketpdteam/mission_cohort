@@ -40,3 +40,60 @@ pnpm prisma:generate
 ```
 
 Production schema changes require applying the Prisma schema to Supabase before the deployed code can depend on new columns.
+
+## Production Migration And Deployment Runbook
+
+Use this flow for any feature that adds Prisma tables/columns, storage files, integrations, or production-only behavior.
+
+1. Check local readiness:
+
+```bash
+pnpm prisma:generate
+pnpm typecheck
+pnpm build
+pnpm qa:prepush
+```
+
+2. Review migration status before deploying:
+
+```bash
+pnpm prisma migrate status
+```
+
+3. Apply production migrations with the production `DATABASE_URL` from the deployment environment. Do this outside the app UI; Mission Control reports readiness but does not run migrations.
+
+```bash
+pnpm prisma migrate deploy
+```
+
+4. Verify storage readiness in Supabase:
+
+- public bucket: `mission-control-public` unless `SUPABASE_PUBLIC_BUCKET` overrides it
+- private bucket: `mission-control-private` unless `SUPABASE_PRIVATE_BUCKET` overrides it
+- private bucket supports invoices, receipts, materials, and email attachments
+
+5. Deploy/push to `main`, then smoke test:
+
+```bash
+curl -sS https://mission-cohort-six.vercel.app/api/health
+```
+
+Also open these routes as an admin:
+
+- `/dashboard`
+- `/settings`
+- `/communications`
+- `/api/system-health`
+- first cohort detail page
+
+6. In **Settings > System Health**, confirm:
+
+- Database is connected.
+- Communications issue review is ready.
+- Jotform revision history is ready.
+- Invoice drafts are ready.
+- Distribution ledger is ready.
+- Public/private storage buckets are ready.
+- SendGrid, Jotform, Supabase, and scheduled jobs show the expected status.
+
+If a feature shows `Blocked`, keep the UI compatibility fallback in place and do not mark the roadmap item done until production reports ready.

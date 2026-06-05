@@ -1641,6 +1641,202 @@ a {
   min-height: 86px;
 }
 
+.system-health-intro {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 220px;
+  gap: 16px;
+  align-items: stretch;
+  margin-bottom: 16px;
+}
+
+.system-health-intro h2 {
+  margin: 0;
+  color: var(--color-primary-900);
+  font-size: 1.2rem;
+  font-weight: 950;
+  line-height: 1.15;
+}
+
+.system-health-intro p {
+  max-width: 760px;
+  margin: 6px 0 0;
+  color: var(--color-slate-500);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.system-health-generated,
+.system-health-card,
+.system-health-check {
+  min-width: 0;
+  border: 1px solid var(--color-slate-200);
+  border-radius: 10px;
+  background: var(--color-white);
+}
+
+.system-health-generated {
+  display: grid;
+  align-content: center;
+  gap: 6px;
+  padding: 14px;
+}
+
+.system-health-generated span,
+.system-health-card-header span,
+.system-health-card-meter span {
+  color: var(--color-slate-500);
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.system-health-generated strong {
+  color: var(--color-primary-900);
+  font-size: 0.92rem;
+  font-weight: 900;
+  line-height: 1.25;
+}
+
+.system-health-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.system-health-card {
+  position: relative;
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  overflow: hidden;
+  padding: 14px;
+}
+
+.system-health-card::before {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  content: "";
+}
+
+.system-health-card.is-green::before {
+  background: linear-gradient(180deg, #16a34a, #22c55e);
+}
+
+.system-health-card.is-yellow::before {
+  background: linear-gradient(180deg, #d97706, #f59e0b);
+}
+
+.system-health-card.is-red::before {
+  background: linear-gradient(180deg, #dc2626, #ef4444);
+}
+
+.system-health-card-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+}
+
+.system-health-card-header h3 {
+  margin: 3px 0 0;
+  color: var(--color-primary-900);
+  font-size: 1rem;
+  font-weight: 950;
+  line-height: 1.18;
+}
+
+.system-health-card-meter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: baseline;
+}
+
+.system-health-card-meter strong {
+  color: var(--color-primary-900);
+  font-size: 1.35rem;
+  font-weight: 950;
+  line-height: 1;
+}
+
+.system-health-checks {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.system-health-check {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+  padding: 10px;
+  background: var(--color-slate-50);
+}
+
+.system-health-check strong {
+  display: block;
+  color: var(--color-primary-900);
+  font-size: 0.84rem;
+  font-weight: 900;
+  line-height: 1.25;
+}
+
+.system-health-check p,
+.system-health-check em {
+  display: block;
+  margin: 3px 0 0;
+  color: var(--color-slate-500);
+  font-size: 0.78rem;
+  font-style: normal;
+  line-height: 1.32;
+}
+
+.system-health-check em {
+  color: var(--color-primary-700);
+  font-weight: 800;
+}
+
+.app-shell.is-night .system-health-generated,
+.app-shell.is-night .system-health-card,
+.app-shell.is-night .system-health-check {
+  border-color: rgba(148, 163, 184, 0.22);
+  background: #0c1725;
+}
+
+.app-shell.is-night .system-health-check {
+  background: #101d2e;
+}
+
+.app-shell.is-night .system-health-intro h2,
+.app-shell.is-night .system-health-generated strong,
+.app-shell.is-night .system-health-card-header h3,
+.app-shell.is-night .system-health-card-meter strong,
+.app-shell.is-night .system-health-check strong {
+  color: #e5eef8;
+}
+
+.app-shell.is-night .system-health-intro p,
+.app-shell.is-night .system-health-generated span,
+.app-shell.is-night .system-health-card-header span,
+.app-shell.is-night .system-health-card-meter span,
+.app-shell.is-night .system-health-check p {
+  color: #9fb2c8;
+}
+
+.app-shell.is-night .system-health-check em {
+  color: #93c5fd;
+}
+
+.app-shell.is-compact .system-health-card,
+.app-shell.is-compact .system-health-generated,
+.app-shell.is-compact .system-health-check {
+  padding: 10px;
+}
+
 .quick-view-backdrop {
   position: fixed;
   inset: 0;
@@ -3743,7 +3939,9 @@ a {
   }
 
   .roadmap-intro,
-  .roadmap-layout {
+  .roadmap-layout,
+  .system-health-intro,
+  .system-health-grid {
     grid-template-columns: 1fr;
   }
 

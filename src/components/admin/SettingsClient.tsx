@@ -68,6 +68,16 @@ const roadmapVisualLabels: Record<RoadmapCardSummary["visualStatus"], string> = 
   yellow: "Active",
   red: "Needs attention"
 };
+const healthToneLabels: Record<string, string> = {
+  healthy: "Ready",
+  warning: "Needs setup",
+  blocked: "Blocked"
+};
+const healthToneClass: Record<string, string> = {
+  healthy: "green",
+  warning: "yellow",
+  blocked: "red"
+};
 const smartMappingTargets = [
   "formId",
   "submissionId",
@@ -1183,9 +1193,96 @@ function RoadmapPanel() {
   );
 }
 
+function HealthBadge({ status }: { status?: string }) {
+  const normalized = String(status ?? "warning");
+  return <span className={`roadmap-status-badge is-${healthToneClass[normalized] ?? "yellow"}`}>{healthToneLabels[normalized] ?? formatStatusLabel(normalized)}</span>;
+}
+
+function SystemHealthPanel({ systemHealth, legacyHealth }: { systemHealth: AdminRow | null; legacyHealth: AdminRow | null }) {
+  const groups = (systemHealth?.groups ?? []) as AdminRow[];
+  const generatedAt = systemHealth?.generatedAt ? new Date(systemHealth.generatedAt).toLocaleString() : null;
+
+  if (!systemHealth) {
+    const env = legacyHealth?.env ?? {};
+
+    return (
+      <SectionCard title="System Health" action={<StatusChip value={legacyHealth?.database ? "CONNECTED" : "UNAVAILABLE"} />}>
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          Full deployment readiness is unavailable. Showing the legacy environment check instead.
+        </Alert>
+        <Grid container spacing={1.5}>
+          <Grid size={{ xs: 12, md: 4 }}><InfoTile label="Database" value={legacyHealth?.database ? "Connected" : "Unavailable"} /></Grid>
+          {Object.entries(env).map(([key, value]) => (
+            <Grid size={{ xs: 12, md: 4 }} key={key}>
+              <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ border: 1, borderColor: "divider", borderRadius: 1, p: 1.25, minHeight: 54 }}>
+                <Typography>{envLabel(key)}</Typography>
+                <StatusChip value={Boolean(value)} />
+              </Stack>
+            </Grid>
+          ))}
+        </Grid>
+      </SectionCard>
+    );
+  }
+
+  return (
+    <SectionCard title="System Health" action={<HealthBadge status={systemHealth.status} />}>
+      <div className="system-health-intro">
+        <div>
+          <h2>Deployment readiness</h2>
+          <p>
+            Checks the production-critical schema, storage, and integration setup needed to keep Mission Control from crashing when new features ship.
+          </p>
+        </div>
+        <div className="system-health-generated">
+          <span>Last checked</span>
+          <strong>{generatedAt ?? "-"}</strong>
+        </div>
+      </div>
+
+      <div className="system-health-grid">
+        {groups.map((group) => {
+          const checks = (group.checks ?? []) as AdminRow[];
+          const ready = checks.filter((check) => check.status === "healthy").length;
+          const blocked = checks.filter((check) => check.status === "blocked").length;
+
+          return (
+            <article className={`system-health-card is-${healthToneClass[String(group.status)] ?? "yellow"}`} key={group.key}>
+              <div className="system-health-card-header">
+                <div>
+                  <span>{group.summary}</span>
+                  <h3>{group.title}</h3>
+                </div>
+                <HealthBadge status={String(group.status)} />
+              </div>
+              <div className="system-health-card-meter">
+                <strong>{ready}/{checks.length}</strong>
+                <span>ready checks · {blocked} blocked</span>
+              </div>
+              <ul className="system-health-checks">
+                {checks.map((check) => (
+                  <li className={`system-health-check is-${healthToneClass[String(check.status)] ?? "yellow"}`} key={check.key}>
+                    <div>
+                      <strong>{check.label}</strong>
+                      <p>{check.detail}</p>
+                      {check.nextAction ? <em>{check.nextAction}</em> : null}
+                    </div>
+                    <HealthBadge status={String(check.status)} />
+                  </li>
+                ))}
+              </ul>
+            </article>
+          );
+        })}
+      </div>
+    </SectionCard>
+  );
+}
+
 export function SettingsClient() {
   const [activeTab, setActiveTab] = useState(0);
   const [health, setHealth] = useState<AdminRow | null>(null);
+  const [systemHealth, setSystemHealth] = useState<AdminRow | null>(null);
   const [users, setUsers] = useState<AdminRow[]>([]);
   const [mappings, setMappings] = useState<AdminRow[]>([]);
   const [cohorts, setCohorts] = useState<AdminRow[]>([]);
@@ -1200,8 +1297,9 @@ export function SettingsClient() {
   const { notifySuccess, notifyError, snackbar } = useNotifier();
 
   async function load() {
-    const [healthData, userRows, mappingRows, cohortRows, integrationRows, intakeData] = await Promise.all([
+    const [healthData, systemHealthData, userRows, mappingRows, cohortRows, integrationRows, intakeData] = await Promise.all([
       adminApi<AdminRow>("/api/health"),
+      adminApi<AdminRow>("/api/system-health").catch(() => null),
       adminApi<AdminRow[]>("/api/users").catch(() => []),
       adminApi<AdminRow[]>("/api/jotform/mappings").catch(() => []),
       adminApi<AdminRow[]>("/api/cohorts").catch(() => []),
@@ -1209,6 +1307,7 @@ export function SettingsClient() {
       adminApi<AdminRow>("/api/jotform/intake").catch(() => ({ setup: null, events: [] }))
     ]);
     setHealth(healthData);
+    setSystemHealth(systemHealthData);
     setUsers(userRows);
     setMappings(mappingRows);
     setCohorts(cohortRows);
@@ -1405,19 +1504,7 @@ export function SettingsClient() {
       </Paper>
 
       <TabPanel active={activeTab} index={0}>
-        <SectionCard title="System Health">
-          <Grid container spacing={1.5}>
-            <Grid size={{ xs: 12, md: 4 }}><InfoTile label="Database" value={health?.database ? "Connected" : "Unavailable"} /></Grid>
-            {Object.entries(env).map(([key, value]) => (
-              <Grid size={{ xs: 12, md: 4 }} key={key}>
-                <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ border: 1, borderColor: "divider", borderRadius: 1, p: 1.25, minHeight: 54 }}>
-                  <Typography>{envLabel(key)}</Typography>
-                  <StatusChip value={Boolean(value)} />
-                </Stack>
-              </Grid>
-            ))}
-          </Grid>
-        </SectionCard>
+        <SystemHealthPanel systemHealth={systemHealth} legacyHealth={health} />
       </TabPanel>
 
       <TabPanel active={activeTab} index={1}>

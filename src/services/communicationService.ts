@@ -2,7 +2,7 @@ import { CommunicationStatus, EmailEventType, Prisma, RecipientScope, Role, Temp
 import { z } from "zod";
 import { env } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
-import { isMissingEmailReviewColumn } from "@/lib/prismaCompatibility";
+import { isMissingEmailReviewColumn, migrationRequiredResult } from "@/lib/prismaCompatibility";
 import {
   communicationDraftCreateSchema,
   communicationScheduleSchema,
@@ -585,21 +585,29 @@ export async function reviewRecipientIssue(input: { communicationId: string; rec
     throw Object.assign(new Error("recipientEmail is required"), { code: "BAD_REQUEST", status: 400 });
   }
 
-  const updated = await prisma.emailEvent.updateMany({
-    where: {
-      communicationId: input.communicationId,
-      recipientEmail: { equals: recipientEmail, mode: "insensitive" },
-      eventType: { in: [EmailEventType.BOUNCED, EmailEventType.FAILED] },
-      reviewedAt: null
-    },
-    data: {
-      reviewedAt: new Date(),
-      reviewedById: input.reviewedById,
-      reviewNote: input.reviewNote
-    }
-  });
+  try {
+    const updated = await prisma.emailEvent.updateMany({
+      where: {
+        communicationId: input.communicationId,
+        recipientEmail: { equals: recipientEmail, mode: "insensitive" },
+        eventType: { in: [EmailEventType.BOUNCED, EmailEventType.FAILED] },
+        reviewedAt: null
+      },
+      data: {
+        reviewedAt: new Date(),
+        reviewedById: input.reviewedById,
+        reviewNote: input.reviewNote
+      }
+    });
 
-  return { reviewed: updated.count };
+    return { reviewed: updated.count };
+  } catch (error) {
+    if (!isMissingEmailReviewColumn(error)) {
+      throw error;
+    }
+
+    return migrationRequiredResult("Communications issue review");
+  }
 }
 
 async function createCommunicationFromTemplate(input: {

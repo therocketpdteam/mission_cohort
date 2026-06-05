@@ -190,14 +190,15 @@ export const roadmapCards: RoadmapCard[] = [
     title: "Platform / QA / Deployment",
     summary: "Quality gates, deployment safety, production audits, and environment readiness.",
     ownerArea: "Engineering",
-    nextAction: "Add production DB migration access and keep Playwright audit reporting URL-specific failures.",
+    nextAction: "Use Settings > System Health before and after deploys, then apply pending production migrations outside the app.",
     items: [
       { title: "Typecheck/build/prepush", status: "done", note: "Standard QA commands are documented and used.", priority: "high" },
       { title: "Playwright audit", status: "in_progress", note: "Audit exists and reports layout/API issues; sandbox permissions affect local runs.", priority: "high" },
       { title: "Production audit", status: "in_progress", note: "Prod app can be checked with live credentials and curl/API probes.", priority: "high" },
-      { title: "Migrations/deploy process", status: "blocked", note: "Prod DATABASE_URL/Vercel CLI access is needed to apply migrations reliably.", priority: "high" },
-      { title: "Error visibility", status: "planned", note: "Need clearer server error reporting/log access.", priority: "medium" },
-      { title: "Environment readiness", status: "in_progress", note: "Health checks exist; prod env completeness needs tightening.", priority: "medium" }
+      { title: "System Health readiness panel", status: "done", note: "Settings now reports schema, storage, and integration readiness.", priority: "high" },
+      { title: "Migrations/deploy process", status: "in_progress", note: "Runbook and readiness checks exist; actual production migration access still required.", priority: "high" },
+      { title: "Error visibility", status: "in_progress", note: "Schema lag now returns controlled migration-required states in priority workflows.", priority: "medium" },
+      { title: "Environment readiness", status: "in_progress", note: "System Health surfaces missing env and bucket readiness.", priority: "medium" }
     ]
   }
 ];
