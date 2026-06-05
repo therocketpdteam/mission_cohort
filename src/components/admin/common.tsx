@@ -524,6 +524,7 @@ export function AppDataGrid<R extends AdminRow = AdminRow>({
   const [page, setPage] = useState(0);
   const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
   const visibleRows = rows.slice(page * pageSize, page * pageSize + pageSize);
+  const totalFlex = columns.reduce((sum, column) => sum + (column.width ? 0 : column.flex ?? 1), 0);
 
   useEffect(() => {
     setPage(0);
@@ -549,6 +550,13 @@ export function AppDataGrid<R extends AdminRow = AdminRow>({
     <div className="app-table-shell">
       <div className="app-table-scroll">
         <table className="app-table">
+          <colgroup>
+            {checkboxSelection && <col style={{ width: 44 }} />}
+            {columns.map((column) => {
+              const flexWidth = column.width ? undefined : `${((column.flex ?? 1) / Math.max(totalFlex, 1)) * 100}%`;
+              return <col key={column.field} style={{ width: column.width ?? flexWidth, minWidth: column.minWidth ?? undefined }} />;
+            })}
+          </colgroup>
           <thead>
             <tr>
               {checkboxSelection && <th style={{ width: 44 }} />}

@@ -261,6 +261,9 @@ Form rules:
 Rules:
 
 - Table headers should be subtle, not heavy.
+- DM Sans gets visually dense when over-weighted. Table headers should stay around medium-bold weight, and body cells should favor regular/medium weights unless the value is the row’s primary scan target.
+- Column sizing must be semantic, not equal-width by accident. Identity columns such as participant, cohort, organization, or message subject get the most room; status, date, money, and action columns stay compact and stable.
+- Prefer identity/context cells over extra columns. For example, show participant name with email/title as subtext, or organization with cohort as subtext, instead of splitting every detail into its own table column.
 - Row hover background: `#F8FAFC`.
 - Status badges should use token colors.
 - Use `AppDataGrid` for admin data tables. Do not import low-level table/grid primitives directly into pages when a shared wrapper exists.

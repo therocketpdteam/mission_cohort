@@ -57,7 +57,7 @@ export const roadmapCards: RoadmapCard[] = [
       { title: "DM Sans", status: "done", note: "Global app typography is standardized.", priority: "medium" },
       { title: "Compact mode", status: "done", note: "Density toggle is available for operational screens.", priority: "medium" },
       { title: "Dark mode", status: "in_progress", note: "Core surfaces work; continue contrast passes on newer UI.", priority: "medium" },
-      { title: "Table and filter consistency", status: "in_progress", note: "Primary pages use shared patterns; continue cleanup on edge workflows.", priority: "high" },
+      { title: "Table and filter consistency", status: "in_progress", note: "Table System V2 is underway: quieter type, better width logic, and primary/context/detail cell patterns.", priority: "high" },
       { title: "Remaining page polish", status: "planned", note: "Forms, settings subflows, and secondary reports need the same standard.", priority: "medium" }
     ]
   },
@@ -114,12 +114,12 @@ export const roadmapCards: RoadmapCard[] = [
     title: "Registrations / Roster",
     summary: "Registration work queues, participant context, roster follow-up, and bulk operations.",
     ownerArea: "Operations",
-    nextAction: "Deepen POC timeline and participant history inside quick views.",
+    nextAction: "Deepen POC timeline and participant history inside quick views after the roster table cleanup.",
     items: [
       { title: "Registration quick view", status: "in_progress", note: "Primary rows open detail; supporting data still needs cleanup.", priority: "high" },
       { title: "POC communication context", status: "planned", note: "Outbound history is planned for registration-side context.", priority: "high" },
       { title: "Roster/payment filters", status: "in_progress", note: "Core filters exist; continue standardizing across views.", priority: "medium" },
-      { title: "Participant history", status: "planned", note: "Match by email across cohorts for context.", priority: "medium" },
+      { title: "Participant history", status: "planned", note: "Match by email across cohorts for context after the participant identity drawer is finished.", priority: "medium" },
       { title: "Bulk actions", status: "in_progress", note: "Participant bulk controls exist; expand to registration operations.", priority: "medium" },
       { title: "Attachments", status: "planned", note: "Needs private storage flow connected to communications.", priority: "medium" }
     ]
@@ -129,11 +129,11 @@ export const roadmapCards: RoadmapCard[] = [
     title: "Communications",
     summary: "Email templates, scheduled/manual sends, delivery telemetry, and message issue visibility.",
     ownerArea: "Communications",
-    nextAction: "Connect outbound attachments and make failed/bounced items easier to act on.",
+    nextAction: "Connect outbound attachments and add recipient-level detail to the new Communications workspace.",
     items: [
       { title: "Templates", status: "done", note: "Template management exists.", priority: "high" },
-      { title: "Scheduled/manual emails", status: "in_progress", note: "Scheduling and manual send flows exist, with more polish needed.", priority: "high" },
-      { title: "SendGrid delivery/open/error telemetry", status: "in_progress", note: "Events can be recorded and surfaced.", priority: "high" },
+      { title: "Scheduled/manual emails", status: "in_progress", note: "Outbox workspace exists; scheduling and manual send flows need deeper recipient actions.", priority: "high" },
+      { title: "SendGrid delivery/open/error telemetry", status: "in_progress", note: "Delivery, open, bounce, and failure counts are surfaced in the Communications workspace.", priority: "high" },
       { title: "Dashboard issue surfacing", status: "in_progress", note: "Failed/bounced items appear in operational attention areas.", priority: "medium" },
       { title: "Outbound attachments", status: "planned", note: "Storage support exists; email attachment flow is next.", priority: "high" },
       { title: "Future inbound reply sync", status: "planned", note: "Explicitly future scope.", priority: "low" }

@@ -317,12 +317,12 @@ a {
 .page-header h1 {
   margin: 0;
   color: var(--color-primary-900);
-  font-size: 1.62rem;
-  font-weight: 900;
+  font-size: 1.52rem;
+  font-weight: 850;
 }
 
 .app-shell.is-compact .page-header h1 {
-  font-size: 1.34rem;
+  font-size: 1.24rem;
 }
 
 .page-header p {
@@ -411,8 +411,8 @@ a {
 .ui-text-h3 {
   margin: 0;
   color: var(--color-primary-900);
-  font-size: 1rem;
-  font-weight: 900;
+  font-size: 0.96rem;
+  font-weight: 850;
 }
 
 .ui-card-content {
@@ -582,8 +582,8 @@ a {
 
 .ui-label {
   color: var(--color-slate-700);
-  font-size: 0.78rem;
-  font-weight: 750;
+  font-size: 0.74rem;
+  font-weight: 700;
 }
 
 .ui-input {
@@ -795,8 +795,8 @@ a {
   overflow: hidden;
   color: var(--color-slate-700);
   background: var(--color-slate-100);
-  font-size: 0.72rem;
-  font-weight: 800;
+  font-size: 0.7rem;
+  font-weight: 750;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -909,14 +909,14 @@ a {
 .app-table th {
   background: var(--color-slate-50);
   color: var(--color-slate-700);
-  font-size: 0.76rem;
-  font-weight: 900;
+  font-size: 0.72rem;
+  font-weight: 780;
 }
 
 .app-table td {
-  height: 56px;
+  height: 52px;
   color: var(--color-slate-900);
-  font-size: 0.88rem;
+  font-size: 0.82rem;
 }
 
 .app-table td,
@@ -925,8 +925,8 @@ a {
 }
 
 .app-shell.is-compact .app-table td {
-  height: 44px;
-  font-size: 0.8rem;
+  height: 40px;
+  font-size: 0.76rem;
 }
 
 .app-shell.is-night .app-table th,
@@ -960,6 +960,55 @@ a {
 
 .app-table-cell-rendered > * {
   max-width: 100%;
+}
+
+.app-table-identity,
+.app-table-context,
+.app-table-metric,
+.app-table-status-stack {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.app-table-main {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-primary-900);
+  font-weight: 760;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-table-sub {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-slate-500);
+  font-size: 0.74rem;
+  font-weight: 560;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-table-metric {
+  justify-items: start;
+}
+
+.app-table-metric strong {
+  color: var(--color-primary-900);
+  font-size: 0.88rem;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.app-shell.is-compact .app-table-main {
+  font-weight: 720;
+}
+
+.app-shell.is-compact .app-table-sub {
+  font-size: 0.68rem;
 }
 
 .jotform-mapping-dialog .ui-field,
@@ -2486,6 +2535,187 @@ a {
   font-size: 0.82rem;
 }
 
+.comms-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.comms-stat-card {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  border: 1px solid var(--color-slate-200);
+  border-radius: 10px;
+  background: var(--color-white);
+  padding: 14px;
+  box-shadow: var(--shadow-soft);
+}
+
+.comms-stat-card span {
+  overflow: hidden;
+  color: var(--color-slate-500);
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.comms-stat-card strong {
+  overflow: hidden;
+  color: var(--color-primary-900);
+  font-size: 1.42rem;
+  font-weight: 850;
+  line-height: 1.05;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.comms-stat-card p {
+  min-height: 1.2em;
+  margin: 0;
+  overflow: hidden;
+  color: var(--color-slate-500);
+  font-size: 0.76rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.comms-stat-card.is-primary {
+  border-color: rgba(20, 121, 201, 0.3);
+}
+
+.comms-stat-card.is-success {
+  border-color: rgba(22, 163, 74, 0.3);
+}
+
+.comms-stat-card.is-warning {
+  border-color: rgba(245, 158, 11, 0.34);
+}
+
+.comms-stat-card.is-error {
+  border-color: rgba(220, 38, 38, 0.32);
+}
+
+.comms-workspace-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.comms-workspace-head > span {
+  max-width: min(100%, 420px);
+  overflow: hidden;
+  color: var(--color-slate-500);
+  font-size: 0.78rem;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.comms-delivery-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+}
+
+.comms-delivery-strip span {
+  display: inline-flex;
+  min-height: 22px;
+  align-items: center;
+  border-radius: 999px;
+  background: var(--color-slate-100);
+  color: var(--color-slate-700);
+  padding: 2px 6px;
+  font-size: 0.68rem;
+  font-weight: 760;
+  line-height: 1;
+}
+
+.comms-delivery-strip .is-success {
+  background: var(--color-success-100);
+  color: #166534;
+}
+
+.comms-delivery-strip .is-warning {
+  background: var(--color-warning-100);
+  color: #92400e;
+}
+
+.comms-delivery-strip .is-error {
+  background: var(--color-danger-100);
+  color: #991b1b;
+}
+
+.comms-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.comms-detail-grid > div,
+.comms-preview-block {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  border: 1px solid var(--color-slate-200);
+  border-radius: 10px;
+  background: var(--color-slate-50);
+  padding: 10px;
+}
+
+.comms-detail-grid span,
+.comms-preview-block > span {
+  color: var(--color-slate-500);
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.comms-detail-grid strong,
+.comms-preview-block strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-primary-900);
+  font-size: 0.9rem;
+  font-weight: 780;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.comms-preview-frame {
+  max-height: 420px;
+  overflow: auto;
+  border-radius: 8px;
+  background: var(--color-white);
+  padding: 14px;
+  color: var(--color-slate-900);
+}
+
+.comms-field-cloud {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+@media (max-width: 1120px) {
+  .comms-summary-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .comms-summary-grid,
+  .comms-detail-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .app-shell.is-night .cohort-metric-card,
 .app-shell.is-night .cohort-revenue-card,
 .app-shell.is-night .cohort-finance-wow-card,
@@ -2498,8 +2728,34 @@ a {
 .app-shell.is-night .readiness-row,
 .app-shell.is-night .readiness-manual-task,
 .app-shell.is-night .distribution-ledger-row,
-.app-shell.is-night .quick-view-list-row {
+.app-shell.is-night .quick-view-list-row,
+.app-shell.is-night .comms-stat-card,
+.app-shell.is-night .comms-detail-grid > div,
+.app-shell.is-night .comms-preview-block,
+.app-shell.is-night .comms-preview-frame {
   background: #0c1725;
+}
+
+.app-shell.is-night .comms-stat-card strong,
+.app-shell.is-night .comms-detail-grid strong,
+.app-shell.is-night .comms-preview-block strong {
+  color: #e5eef8;
+}
+
+.app-shell.is-night .comms-stat-card span,
+.app-shell.is-night .comms-stat-card p,
+.app-shell.is-night .comms-workspace-head > span,
+.app-shell.is-night .comms-detail-grid span,
+.app-shell.is-night .comms-preview-block > span {
+  color: #9fb2c8;
+}
+
+.app-shell.is-compact .comms-stat-card {
+  padding: 10px;
+}
+
+.app-shell.is-compact .comms-stat-card strong {
+  font-size: 1.18rem;
 }
 
 .app-shell.is-night .cohort-finance-wow-card {

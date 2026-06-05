@@ -332,14 +332,71 @@ export function ParticipantsClient() {
   }
 
   const columns: GridColDef[] = [
-    { field: "organization", headerName: "Organization", flex: 1.1, minWidth: 190, valueGetter: (_value, row) => formatProperDisplay(row.organization?.name ?? "") },
-    { field: "name", headerName: "Participant", flex: 1, minWidth: 170, valueGetter: (_value, row) => formatProperDisplay(`${row.firstName} ${row.lastName}`) },
-    { field: "email", headerName: "Email", flex: 1, minWidth: 220 },
-    { field: "cohort", headerName: "Cohort", flex: 0.95, minWidth: 170, valueGetter: (_value, row) => row.cohort?.title ?? "" },
-    { field: "registrationPoc", headerName: "Registration POC", flex: 0.85, minWidth: 150, valueGetter: (_value, row) => formatProperDisplay(row.registration?.primaryContactName ?? "") },
-    { field: "emailStatus", headerName: "Email", width: 116, valueGetter: (_value, row) => row.emailSummary?.lastEmailEvent ?? "", renderCell: (params) => params.value ? <StatusChip value={params.value} /> : <Typography color="text.secondary">-</Typography> },
+    {
+      field: "participant",
+      headerName: "Participant",
+      flex: 1.35,
+      minWidth: 250,
+      renderCell: (params) => {
+        const name = formatProperDisplay(`${params.row.firstName} ${params.row.lastName}`);
+        const helper = [params.row.email, params.row.title].filter(Boolean).join(" · ");
+        return (
+          <div className="app-table-identity">
+            <span className="app-table-main" title={name}>{name}</span>
+            <span className="app-table-sub" title={helper}>{helper || "No contact details"}</span>
+          </div>
+        );
+      }
+    },
+    {
+      field: "context",
+      headerName: "Organization / Cohort",
+      flex: 1.25,
+      minWidth: 240,
+      renderCell: (params) => {
+        const organization = formatProperDisplay(params.row.organization?.name ?? "");
+        const cohort = params.row.cohort?.title ?? "";
+        return (
+          <div className="app-table-context">
+            <span className="app-table-main" title={organization}>{organization || "-"}</span>
+            <span className="app-table-sub" title={cohort}>{cohort || "No cohort"}</span>
+          </div>
+        );
+      }
+    },
+    {
+      field: "registrationPoc",
+      headerName: "POC",
+      flex: 0.9,
+      minWidth: 190,
+      renderCell: (params) => {
+        const poc = formatProperDisplay(params.row.registration?.primaryContactName ?? "");
+        const email = params.row.registration?.primaryContactEmail ?? "";
+        return (
+          <div className="app-table-context">
+            <span className="app-table-main" title={poc}>{poc || "-"}</span>
+            <span className="app-table-sub" title={email}>{email || "No POC email"}</span>
+          </div>
+        );
+      }
+    },
+    {
+      field: "emailStatus",
+      headerName: "Message",
+      width: 132,
+      valueGetter: (_value, row) => row.emailSummary?.lastEmailEvent ?? "",
+      renderCell: (params) => {
+        const sentAt = params.row.emailSummary?.lastEmailEventAt ? new Date(params.row.emailSummary.lastEmailEventAt).toLocaleDateString() : "";
+        return (
+          <div className="app-table-status-stack">
+            {params.value ? <StatusChip value={params.value} /> : <Typography color="text.secondary">-</Typography>}
+            {sentAt ? <span className="app-table-sub" title={sentAt}>{sentAt}</span> : null}
+          </div>
+        );
+      }
+    },
     { field: "status", headerName: "Status", width: 116, renderCell: (params) => <StatusChip value={params.value} /> },
-    { field: "certificateIssued", headerName: "Certificate", width: 112, renderCell: (params) => <StatusChip value={params.value} /> },
+    { field: "certificateIssued", headerName: "Cert.", width: 92, renderCell: (params) => <StatusChip value={params.value} /> },
     {
       field: "actions",
       headerName: "Actions",
