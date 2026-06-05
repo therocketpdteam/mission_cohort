@@ -18,7 +18,7 @@ const storageStatePath = process.env.E2E_STORAGE_STATE || process.env.PLAYWRIGHT
 const hasAdminCredentials = Boolean(adminEmail && adminPassword);
 const hasStoredSession = Boolean(storageStatePath);
 
-const staticRoutes = ["/dashboard", "/cohorts", "/registrations", "/participants", "/payments", "/reports", "/settings"];
+const staticRoutes = ["/dashboard", "/cohorts", "/registrations", "/participants", "/payments", "/communications", "/reports", "/settings"];
 
 function finding(route: string, viewport: string, severity: Severity, area: string, message: string): AuditFinding {
   return { route, viewport, severity, area, message };
@@ -322,6 +322,19 @@ test.describe("Playwright UI audit", () => {
           }
         } catch (error) {
           findings.push(finding(route, viewport, "medium", "dropdown", error instanceof Error ? error.message : String(error)));
+        }
+      }
+
+      if (route === "/settings") {
+        const roadMapTab = page.getByRole("button", { name: "Road Map" });
+        if (await roadMapTab.count() === 0) {
+          findings.push(finding(route, viewport, "medium", "settings tabs", "Road Map tab was not visible."));
+        } else {
+          await roadMapTab.click();
+          if (await page.locator(".roadmap-layout").count() === 0) {
+            findings.push(finding(route, viewport, "medium", "roadmap", "Road Map panel did not render roadmap cards."));
+          }
+          findings.push(...await collectLayoutFindings(page, `${route} roadmap`, viewport));
         }
       }
 

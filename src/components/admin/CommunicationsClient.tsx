@@ -13,6 +13,7 @@ import { mergeFields, renderMergeFields, sampleMergeContext } from "@/modules/em
 import {
   AdminRow,
   AppDataGrid,
+  CompactFilterBar,
   EmptyState,
   FieldConfig,
   MutationDialog,
@@ -150,32 +151,79 @@ export function CommunicationsClient() {
   ];
 
   const outboxColumns: GridColDef[] = [
-    { field: "subject", headerName: "Subject", flex: 1, minWidth: 220 },
-    { field: "cohort", headerName: "Cohort", width: 190, valueGetter: (_value, row) => row.cohort?.title ?? cohorts.find((cohort) => cohort.id === row.cohortId)?.title ?? "" },
-    { field: "template", headerName: "Template", width: 190, valueGetter: (_value, row) => row.template?.name ?? "Custom" },
-    { field: "session", headerName: "Session", width: 180, valueGetter: (_value, row) => row.session?.title ?? "" },
-    { field: "recipientScope", headerName: "Recipients", width: 180, valueFormatter: (value) => formatStatusLabel(String(value ?? "")) },
-    { field: "status", headerName: "Status", width: 130, renderCell: (params) => <StatusChip value={params.value} /> },
-    { field: "scheduledFor", headerName: "Scheduled", width: 170, valueFormatter: (value) => value ? new Date(value).toLocaleString() : "" },
-    { field: "sentAt", headerName: "Sent", width: 170, valueFormatter: (value) => value ? new Date(value).toLocaleString() : "" },
-    { field: "delivered", headerName: "Delivered", width: 110, valueGetter: (_value, row) => row.emailSummary?.deliveredCount ?? 0 },
-    { field: "opened", headerName: "Opened", width: 100, valueGetter: (_value, row) => row.emailSummary?.openedCount ?? 0 },
-    { field: "bounced", headerName: "Bounced", width: 100, valueGetter: (_value, row) => row.emailSummary?.bouncedCount ?? 0 },
-    { field: "failed", headerName: "Failed", width: 90, valueGetter: (_value, row) => row.emailSummary?.failedCount ?? 0 },
+    {
+      field: "subject",
+      headerName: "Message",
+      flex: 1.35,
+      minWidth: 260,
+      renderCell: (params) => (
+        <Box sx={{ minWidth: 0 }}>
+          <Typography fontWeight={800} noWrap>{params.row.subject}</Typography>
+          <Typography variant="caption" color="text.secondary" noWrap>
+            {params.row.template?.name ?? "Custom"}
+          </Typography>
+        </Box>
+      )
+    },
+    {
+      field: "context",
+      headerName: "Context",
+      flex: 1,
+      minWidth: 220,
+      renderCell: (params) => (
+        <Box sx={{ minWidth: 0 }}>
+          <Typography noWrap>{params.row.cohort?.title ?? cohorts.find((cohort) => cohort.id === params.row.cohortId)?.title ?? "-"}</Typography>
+          <Typography variant="caption" color="text.secondary" noWrap>{params.row.session?.title ?? "All sessions"}</Typography>
+        </Box>
+      )
+    },
+    { field: "recipientScope", headerName: "Recipients", width: 132, valueFormatter: (value) => formatStatusLabel(String(value ?? "")) },
+    { field: "status", headerName: "Status", width: 116, renderCell: (params) => <StatusChip value={params.value} /> },
+    {
+      field: "timing",
+      headerName: "Timing",
+      width: 182,
+      renderCell: (params) => {
+        const scheduled = params.row.scheduledFor ? new Date(params.row.scheduledFor).toLocaleDateString() : "No schedule";
+        const sent = params.row.sentAt ? new Date(params.row.sentAt).toLocaleDateString() : "Not sent";
+        return (
+          <Box sx={{ minWidth: 0 }}>
+            <Typography variant="caption" noWrap>{scheduled}</Typography>
+            <Typography variant="caption" color="text.secondary" display="block" noWrap>{sent}</Typography>
+          </Box>
+        );
+      }
+    },
+    {
+      field: "performance",
+      headerName: "Performance",
+      width: 178,
+      renderCell: (params) => {
+        const summary = params.row.emailSummary ?? {};
+        return (
+          <Typography variant="caption" noWrap>
+            D {summary.deliveredCount ?? 0} · O {summary.openedCount ?? 0} · B {summary.bouncedCount ?? 0} · F {summary.failedCount ?? 0}
+          </Typography>
+        );
+      }
+    },
     {
       field: "actions",
       headerName: "Actions",
       width: 112,
       sortable: false,
       renderCell: (params) => (
-        <Button
-          variant="outlined"
-          size="small"
-          startIcon={<SendOutlined />}
-          onClick={() => sendCommunication(params.row, params.row.sentAt ? "resend" : "send")}
-        >
-          {params.row.sentAt ? "Resend" : "Send"}
-        </Button>
+        <Box onClick={(event) => event.stopPropagation()}>
+          <RowActionMenu
+            actions={[
+              {
+                label: params.row.sentAt ? "Resend message" : "Send message",
+                icon: <SendOutlined fontSize="small" />,
+                onClick: () => sendCommunication(params.row, params.row.sentAt ? "resend" : "send")
+              }
+            ]}
+          />
+        </Box>
       )
     }
   ];
@@ -209,7 +257,14 @@ export function CommunicationsClient() {
         <Grid size={{ xs: 12 }}>
           <SectionCard title="Email Templates">
             <TableShell>
-              <AppDataGrid rows={templates} columns={templateColumns} loading={loading} pageSizeOptions={[10, 25]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} />
+              <AppDataGrid
+                rows={templates}
+                columns={templateColumns}
+                loading={loading}
+                pageSizeOptions={[10, 25]}
+                initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
+                onRowClick={(params) => setPreviewTemplate(params.row)}
+              />
             </TableShell>
             {!loading && templates.length === 0 && <EmptyState title="No templates found" description="Create templates for registration confirmations, reminders, and follow-up." />}
           </SectionCard>
@@ -233,13 +288,15 @@ export function CommunicationsClient() {
         </Grid>
         <Grid size={{ xs: 12, lg: 7 }}>
           <SectionCard title="Outbox / Scheduled Messages">
-            <TextField select label="Cohort" value={selectedCohortId} onChange={(event) => load(event.target.value)} sx={{ minWidth: 320, mb: 2 }}>
-              {cohorts.map((cohort) => (
-                <MenuItem value={cohort.id} key={cohort.id}>
-                  {cohort.title}
-                </MenuItem>
-              ))}
-            </TextField>
+            <CompactFilterBar resultCount={communications.length}>
+              <TextField select label="Cohort" value={selectedCohortId} onChange={(event) => load(event.target.value)} sx={{ minWidth: 280 }}>
+                {cohorts.map((cohort) => (
+                  <MenuItem value={cohort.id} key={cohort.id}>
+                    {cohort.title}
+                  </MenuItem>
+                ))}
+              </TextField>
+            </CompactFilterBar>
             <TableShell>
               <AppDataGrid rows={communications} columns={outboxColumns} loading={loading} pageSizeOptions={[10, 25]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} />
             </TableShell>

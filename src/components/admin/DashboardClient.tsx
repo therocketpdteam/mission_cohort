@@ -17,23 +17,13 @@ import {
   DialogContent,
   DialogTitle,
   Divider,
-  Grid,
-  TextField
+  Grid
 } from "@/components/ui/primitives";
 import Link from "next/link";
 import type { Route } from "next";
-import type { ChangeEvent, CSSProperties, ReactNode } from "react";
+import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
-import {
-  DASHBOARD_DATE_RANGE_STORAGE_KEY,
-  dashboardDatePresetOptions,
-  dashboardDateRangeSearchParams,
-  dateRangeToCustomInputs,
-  parseDashboardDateRangeState,
-  type DashboardDatePreset,
-  type DashboardDateRangeState
-} from "@/lib/dashboardDateRange";
 import { formatProperDisplay, formatStatusLabel } from "@/lib/formatting";
 import {
   AdminRow,
@@ -57,12 +47,12 @@ type MetricConfig = {
 };
 
 const metrics: ReadonlyArray<MetricConfig> = [
-  { key: "activeCohorts", label: "Active cohorts", href: "/cohorts", helper: "Published or running in range", icon: <DashboardOutlined /> },
-  { key: "upcomingSessions", label: "Upcoming sessions", href: "/cohorts", helper: "Sessions in selected range", icon: <CalendarMonthOutlined /> },
-  { key: "openRegistrations", label: "Open registrations", href: "/registrations", helper: "New or confirmed in range", icon: <ArticleOutlined /> },
-  { key: "totalParticipants", label: "Participants", href: "/participants", helper: "Rostered in selected range", icon: <GroupsOutlined /> },
-  { key: "pendingPayments", label: "Payments to watch", href: "/registrations", helper: "Pending money in range", icon: <InsightsOutlined /> },
-  { key: "communicationIssues", label: "Email issues", href: "/communications", helper: "Issues in selected range", icon: <EmailOutlined /> }
+  { key: "activeCohorts", label: "Active cohorts", href: "/cohorts", helper: "Published or running now", icon: <DashboardOutlined /> },
+  { key: "upcomingSessions", label: "Upcoming sessions", href: "/cohorts", helper: "Upcoming delivery dates", icon: <CalendarMonthOutlined /> },
+  { key: "openRegistrations", label: "Open registrations", href: "/registrations", helper: "New or confirmed records", icon: <ArticleOutlined /> },
+  { key: "totalParticipants", label: "Participants", href: "/participants", helper: "Rostered participants", icon: <GroupsOutlined /> },
+  { key: "pendingPayments", label: "Payments to watch", href: "/registrations", helper: "Pending money", icon: <InsightsOutlined /> },
+  { key: "communicationIssues", label: "Email issues", href: "/communications", helper: "Delivery issues", icon: <EmailOutlined /> }
 ];
 
 const quickActions: ReadonlyArray<[string, Route]> = [
@@ -80,14 +70,24 @@ function cohortThumbnail(row?: AdminRow | null) {
   return row?.thumbnailUrl ?? row?.cohort?.thumbnailUrl ?? undefined;
 }
 
-function rowArtworkStyle(url?: string): CSSProperties | undefined {
-  if (!url) {
-    return undefined;
-  }
+function cohortInitials(label?: string) {
+  return String(label ?? "Cohort")
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("") || "C";
+}
 
-  return {
-    backgroundImage: `linear-gradient(90deg, var(--dashboard-art-cover) 0%, var(--dashboard-art-cover) 48%, var(--dashboard-art-glass) 74%, var(--dashboard-art-clear) 100%), url(${url})`
-  };
+function DashboardRowThumb({ row, label }: { row?: AdminRow | null; label?: string }) {
+  const thumbnail = cohortThumbnail(row);
+  const title = label ?? row?.title ?? row?.cohort?.title ?? "Cohort";
+
+  return (
+    <span className="dashboard-row-thumb" title={title} aria-label={title}>
+      {thumbnail ? <img src={thumbnail} alt="" /> : <span>{cohortInitials(title)}</span>}
+    </span>
+  );
 }
 
 function taskTemplateName(task: AdminRow) {
@@ -175,49 +175,6 @@ function DashboardSelect({
   );
 }
 
-function DashboardDateFilter({
-  value,
-  onChange
-}: {
-  value: DashboardDateRangeState;
-  onChange: (value: DashboardDateRangeState) => void;
-}) {
-  function updatePreset(nextPreset: string) {
-    const preset = nextPreset as DashboardDatePreset;
-    const next = { ...value, preset };
-    const customInputs = dateRangeToCustomInputs(next);
-    onChange({ ...next, ...customInputs });
-  }
-
-  return (
-    <div className="dashboard-date-filter" aria-label="Dashboard date range">
-      <DashboardSelect
-        label="Snapshot"
-        value={value.preset}
-        options={dashboardDatePresetOptions}
-        onChange={updatePreset}
-        className="dashboard-select-range"
-      />
-      {value.preset === "CUSTOM" && (
-        <div className="dashboard-date-custom">
-          <TextField
-            label="From"
-            type="date"
-            value={value.customStart}
-            onChange={(event: ChangeEvent<HTMLInputElement>) => onChange({ ...value, customStart: event.target.value })}
-          />
-          <TextField
-            label="To"
-            type="date"
-            value={value.customEnd}
-            onChange={(event: ChangeEvent<HTMLInputElement>) => onChange({ ...value, customEnd: event.target.value })}
-          />
-        </div>
-      )}
-    </div>
-  );
-}
-
 function DashboardPanel({
   title,
   eyebrow,
@@ -253,16 +210,13 @@ function DashboardPanel({
   );
 }
 
-function DashboardToolbar({
-  dateRange,
-  onDateRangeChange
-}: {
-  dateRange: DashboardDateRangeState;
-  onDateRangeChange: (value: DashboardDateRangeState) => void;
-}) {
+function DashboardToolbar() {
   return (
     <div className="dashboard-toolbar">
-      <DashboardDateFilter value={dateRange} onChange={onDateRangeChange} />
+      <div className="dashboard-toolbar-copy">
+        <span>Command center</span>
+        <strong>Live operational snapshot</strong>
+      </div>
       <div className="dashboard-toolbar-actions">
         {quickActions.map(([label, href]) => (
           <Button component={Link} href={href} startIcon={<AddIcon />} variant={label === "Create Cohort" ? "contained" : "outlined"} key={label}>
@@ -335,7 +289,6 @@ function PriorityPanel({
       <div className="dashboard-priority-list">
         {rows.map((row) => (
           <div className="dashboard-priority-row" key={row.cohort.id}>
-            <span className="dashboard-row-art" style={rowArtworkStyle(cohortThumbnail(row.cohort))} aria-hidden="true" />
             <DateBadge value={row.nextSession?.startTime} />
             <div className="dashboard-row-main">
               <strong title={row.cohort.title}>{row.cohort.title}</strong>
@@ -347,6 +300,7 @@ function PriorityPanel({
             <Button size="small" variant="outlined" onClick={() => onOpen(row)}>
               Details
             </Button>
+            <DashboardRowThumb row={row.cohort} label={row.cohort.title} />
           </div>
         ))}
       </div>
@@ -363,7 +317,6 @@ function TodayPanel({ loading, sessions }: { loading: boolean; sessions: AdminRo
       <div className="dashboard-agenda-list">
         {sessions.slice(0, 6).map((session) => (
           <div className="dashboard-agenda-row" key={session.id}>
-            <span className="dashboard-row-art" style={rowArtworkStyle(cohortThumbnail(session))} aria-hidden="true" />
             <div className="dashboard-agenda-date">
               <strong>{shortDate(session.startTime)}</strong>
               <span>{timeText(session.startTime)}</span>
@@ -372,6 +325,7 @@ function TodayPanel({ loading, sessions }: { loading: boolean; sessions: AdminRo
               <strong title={session.title}>{session.title}</strong>
               <span>{session.cohort?.title ?? "Cohort"}</span>
             </div>
+            <DashboardRowThumb row={session} label={session.cohort?.title ?? session.title} />
           </div>
         ))}
       </div>
@@ -384,30 +338,20 @@ export function DashboardClient() {
   const [data, setData] = useState<AdminRow | null>(null);
   const [templates, setTemplates] = useState<AdminRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [dateRange, setDateRange] = useState<DashboardDateRangeState>(() => parseDashboardDateRangeState(null));
   const [readinessCohort, setReadinessCohort] = useState<AdminRow | null>(null);
   const [recentRegistration, setRecentRegistration] = useState<AdminRow | null>(null);
   const [paymentFilter, setPaymentFilter] = useState("ALL");
   const [paymentCohortFilter, setPaymentCohortFilter] = useState("ALL");
   const [sendingTaskId, setSendingTaskId] = useState("");
   const { notifySuccess, notifyError, snackbar } = useNotifier();
-  const dateRangeQuery = useMemo(() => dashboardDateRangeSearchParams(dateRange), [dateRange]);
-
-  useEffect(() => {
-    setDateRange(parseDashboardDateRangeState(window.localStorage.getItem(DASHBOARD_DATE_RANGE_STORAGE_KEY)));
-  }, []);
-
-  useEffect(() => {
-    window.localStorage.setItem(DASHBOARD_DATE_RANGE_STORAGE_KEY, JSON.stringify(dateRange));
-  }, [dateRange]);
 
   useEffect(() => {
     setLoading(true);
-    adminApi<AdminRow>(`/api/admin-dashboard?${dateRangeQuery}`)
+    adminApi<AdminRow>("/api/admin-dashboard")
       .then((dashboardData) => setData(dashboardData))
       .catch((error) => notifyError(error.message))
       .finally(() => setLoading(false));
-  }, [dateRangeQuery, notifyError]);
+  }, [notifyError]);
 
   useEffect(() => {
     adminApi<AdminRow[]>("/api/communications/templates")
@@ -535,7 +479,7 @@ export function DashboardClient() {
 
   return (
     <PageStack className="dashboard-page">
-      <DashboardToolbar dateRange={dateRange} onDateRangeChange={setDateRange} />
+      <DashboardToolbar />
       <DashboardHero data={data} readinessCount={readinessRows.length} />
       <MetricGrid data={data} />
       {loading && <LoadingState label="Loading dashboard" />}
@@ -558,12 +502,12 @@ export function DashboardClient() {
           <div className="dashboard-compact-list">
             {(data?.recentRegistrations ?? []).slice(0, 8).map((registration: AdminRow) => (
               <button className="dashboard-compact-row is-clickable" type="button" key={registration.id} onClick={() => openRecentRegistration(registration.id)}>
-                <span className="dashboard-row-art" style={rowArtworkStyle(cohortThumbnail(registration))} aria-hidden="true" />
                 <div className="dashboard-row-main">
                   <strong>{formatProperDisplay(registration.primaryContactName)}</strong>
                   <span>{formatProperDisplay(registration.organization?.name ?? "Organization")} · {registration.cohort?.title ?? "Cohort"}</span>
                 </div>
                 <StatusChip value={registration.status} />
+                <DashboardRowThumb row={registration} label={registration.cohort?.title ?? "Cohort"} />
               </button>
             ))}
           </div>

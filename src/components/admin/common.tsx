@@ -571,10 +571,14 @@ export function AppDataGrid<R extends AdminRow = AdminRow>({
                   )}
                   {columns.map((column) => {
                     const value = getCellValue(column, row);
+                    const rendered = Boolean(column.renderCell);
                     const content = column.renderCell ? column.renderCell({ row, value, field: column.field }) : column.valueFormatter ? column.valueFormatter(value, row) : value;
                     return (
                       <td key={column.field}>
-                        <div className="app-table-cell-content" title={typeof content === "string" || typeof content === "number" ? String(content) : undefined}>
+                        <div
+                          className={`app-table-cell-content${rendered ? " app-table-cell-rendered" : ""}`}
+                          title={typeof content === "string" || typeof content === "number" ? String(content) : undefined}
+                        >
                           {content as ReactNode}
                         </div>
                       </td>

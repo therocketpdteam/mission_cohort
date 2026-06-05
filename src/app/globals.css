@@ -953,6 +953,15 @@ a {
   white-space: nowrap;
 }
 
+.app-table-cell-rendered {
+  display: block;
+  white-space: normal;
+}
+
+.app-table-cell-rendered > * {
+  max-width: 100%;
+}
+
 .jotform-mapping-dialog .ui-field,
 .jotform-mapping-dialog .ui-select,
 .jotform-mapping-dialog .ui-select-trigger {
@@ -1752,19 +1761,19 @@ a {
 }
 
 .cohort-cell-thumb {
-  width: 44px;
-  min-width: 44px;
-  height: 34px;
-  border: 1px solid var(--color-slate-200);
-  border-radius: 8px;
+  width: 42px;
+  min-width: 42px;
+  height: 42px;
+  border: 2px solid var(--color-white);
+  border-radius: 999px;
+  box-shadow: 0 0 0 1px var(--color-slate-200);
   object-fit: cover;
 }
 
 .app-shell.is-compact .cohort-cell-thumb {
   width: 34px;
   min-width: 34px;
-  height: 26px;
-  border-radius: 6px;
+  height: 34px;
 }
 
 .cohort-counts {
@@ -2549,9 +2558,6 @@ a {
   --color-success-100: rgba(22, 163, 74, 0.18);
   --color-warning-100: rgba(217, 119, 6, 0.18);
   --color-danger-100: rgba(220, 38, 38, 0.18);
-  --dashboard-art-cover: rgba(16, 29, 46, 1);
-  --dashboard-art-glass: rgba(16, 29, 46, 0.52);
-  --dashboard-art-clear: rgba(16, 29, 46, 0.5);
 }
 
 .app-shell.is-night .dashboard-page .dashboard-toolbar,
@@ -2567,6 +2573,20 @@ a {
 .app-shell.is-night .dashboard-page .dashboard-agenda-row,
 .app-shell.is-night .dashboard-page .dashboard-task-row {
   background: #101d2e;
+}
+
+.app-shell.is-night .dashboard-toolbar-copy strong,
+.app-shell.is-night .dashboard-row-main strong {
+  color: #e5eef8;
+}
+
+.app-shell.is-night .dashboard-toolbar-copy span {
+  color: #9fb2c8;
+}
+
+.app-shell.is-night .dashboard-row-thumb {
+  border-color: #0c1725;
+  box-shadow: 0 0 0 1px rgba(148, 163, 184, 0.24);
 }
 
 .app-shell.is-compact .dashboard-page {
@@ -2627,6 +2647,28 @@ a {
 .dashboard-toolbar-actions {
   flex: 1 1 auto;
   justify-content: flex-end;
+}
+
+.dashboard-toolbar-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.dashboard-toolbar-copy span {
+  color: var(--color-slate-500);
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.dashboard-toolbar-copy strong {
+  overflow: hidden;
+  color: var(--color-primary-900);
+  font-size: 0.94rem;
+  font-weight: 950;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .dashboard-segmented {
@@ -2903,26 +2945,9 @@ a {
   background: var(--color-slate-50);
 }
 
-.dashboard-row-art {
-  position: absolute;
-  inset: 0 0 0 auto;
-  z-index: 0;
-  width: min(54%, 360px);
-  background-position: center right;
-  background-size: cover;
-  pointer-events: none;
-}
-
-.dashboard-priority-row > :not(.dashboard-row-art),
-.dashboard-compact-row > :not(.dashboard-row-art),
-.dashboard-agenda-row > :not(.dashboard-row-art) {
-  position: relative;
-  z-index: 1;
-}
-
 .dashboard-priority-row {
   display: grid;
-  grid-template-columns: 68px minmax(0, 1fr) minmax(118px, auto) auto;
+  grid-template-columns: 68px minmax(0, 1fr) minmax(118px, auto) auto 54px;
   gap: 12px;
   align-items: center;
   padding: 12px;
@@ -2931,7 +2956,7 @@ a {
 .dashboard-compact-row,
 .dashboard-activity-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto 54px;
   gap: 12px;
   align-items: center;
   padding: 12px;
@@ -2980,10 +3005,32 @@ a {
 
 .dashboard-agenda-row {
   display: grid;
-  grid-template-columns: 92px minmax(0, 1fr);
+  grid-template-columns: 92px minmax(0, 1fr) 54px;
   gap: 12px;
   align-items: center;
   padding: 12px;
+}
+
+.dashboard-row-thumb {
+  display: inline-grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  justify-self: end;
+  overflow: hidden;
+  border: 2px solid var(--color-white);
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--color-blue-100), var(--color-cyan-100));
+  box-shadow: 0 0 0 1px var(--color-slate-200), 0 10px 24px rgba(15, 23, 42, 0.08);
+  color: var(--color-primary-700);
+  font-size: 0.8rem;
+  font-weight: 950;
+}
+
+.dashboard-row-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .dashboard-agenda-date {
@@ -3316,11 +3363,12 @@ a {
   }
 
   .dashboard-priority-row {
-    grid-template-columns: 58px minmax(0, 1fr);
+    grid-template-columns: 58px minmax(0, 1fr) auto;
   }
 
   .dashboard-priority-row .status-chip,
-  .dashboard-priority-row .ui-button {
+  .dashboard-priority-row .ui-button,
+  .dashboard-priority-row .dashboard-row-thumb {
     justify-self: start;
   }
 
@@ -3508,11 +3556,8 @@ a {
     grid-template-columns: 1fr;
   }
 
-  .dashboard-date-filter,
-  .dashboard-date-custom,
   .dashboard-filter-row,
-  .dashboard-select,
-  .dashboard-date-custom .ui-field {
+  .dashboard-select {
     width: 100%;
   }
 
@@ -3525,6 +3570,10 @@ a {
   .dashboard-compact-row,
   .dashboard-task-row {
     grid-template-columns: 1fr;
+  }
+
+  .dashboard-row-thumb {
+    justify-self: start;
   }
 
   .dashboard-task-actions {

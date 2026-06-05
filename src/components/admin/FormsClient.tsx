@@ -9,8 +9,10 @@ import { adminApi } from "@/lib/adminApi";
 import {
   AdminRow,
   AppDataGrid,
+  CompactFilterBar,
   EmptyState,
   FieldConfig,
+  MetadataPill,
   MutationDialog,
   PageHeader,
   PageStack,
@@ -76,11 +78,30 @@ export function FormsClient() {
   const publicBase = typeof window === "undefined" ? "" : window.location.origin;
 
   const columns: GridColDef[] = [
-    { field: "title", headerName: "Title", flex: 1, minWidth: 220 },
-    { field: "slug", headerName: "Slug", flex: 1, minWidth: 220 },
-    { field: "active", headerName: "Active", width: 120, renderCell: (params) => <StatusChip value={params.value} /> },
-    { field: "webhookEnabled", headerName: "Webhook", width: 120, renderCell: (params) => <StatusChip value={params.value} /> },
-    { field: "webhookEndpoint", headerName: "Webhook endpoint", flex: 1, minWidth: 260, valueGetter: () => "/api/webhooks/registrations" },
+    {
+      field: "title",
+      headerName: "Form",
+      flex: 1.4,
+      minWidth: 260,
+      renderCell: (params) => (
+        <Box sx={{ minWidth: 0 }}>
+          <Typography fontWeight={800} noWrap>{params.row.title}</Typography>
+          <Typography variant="caption" color="text.secondary" noWrap>{params.row.slug}</Typography>
+        </Box>
+      )
+    },
+    {
+      field: "status",
+      headerName: "Status",
+      width: 210,
+      renderCell: (params) => (
+        <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
+          <StatusChip value={params.row.active ? "Active" : "Inactive"} />
+          <StatusChip value={params.row.webhookEnabled ? "Webhook on" : "Webhook off"} />
+        </Stack>
+      )
+    },
+    { field: "webhookEndpoint", headerName: "Endpoint", flex: 0.9, minWidth: 180, valueGetter: () => "/api/webhooks/registrations" },
     {
       field: "actions",
       headerName: "Actions",
@@ -141,21 +162,17 @@ export function FormsClient() {
         description="Configure internal registration forms, field groups, webhook behavior, and shareable placeholders."
         action={<ToolbarButton onClick={() => setDialogOpen(true)}>Create Form</ToolbarButton>}
       />
-      <SectionCard title="Cohort">
-        <Stack direction={{ xs: "column", md: "row" }} spacing={2} alignItems={{ md: "center" }}>
-          <TextField select label="Cohort" value={selectedCohortId} onChange={(event) => loadForms(event.target.value)} sx={{ minWidth: 320 }}>
-            {cohorts.map((cohort) => (
-              <MenuItem value={cohort.id} key={cohort.id}>
-                {cohort.title}
-              </MenuItem>
-            ))}
-          </TextField>
-          <Typography color="text.secondary">
-            Webhook endpoint: <strong>/api/webhooks/registrations</strong>
-          </Typography>
-        </Stack>
-      </SectionCard>
-      <SectionCard title={`Forms${selectedCohort ? ` for ${selectedCohort.title}` : ""}`}>
+      <CompactFilterBar resultCount={forms.length}>
+        <TextField select label="Cohort" value={selectedCohortId} onChange={(event) => loadForms(event.target.value)} sx={{ minWidth: 280 }}>
+          {cohorts.map((cohort) => (
+            <MenuItem value={cohort.id} key={cohort.id}>
+              {cohort.title}
+            </MenuItem>
+          ))}
+        </TextField>
+        <MetadataPill maxWidth={280}>Webhook: /api/webhooks/registrations</MetadataPill>
+      </CompactFilterBar>
+      <SectionCard title={selectedCohort ? `Forms for ${selectedCohort.title}` : "Registration Form Library"}>
         <TableShell>
           <AppDataGrid rows={forms} columns={columns} loading={loading} pageSizeOptions={[10, 25]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} />
         </TableShell>

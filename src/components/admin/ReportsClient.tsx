@@ -74,16 +74,25 @@ export function ReportsClient() {
   }
 
   const linkColumns: GridColDef[] = [
-    { field: "title", headerName: "Title", flex: 1, minWidth: 220 },
-    { field: "cohort", headerName: "Cohort", flex: 1, minWidth: 220, valueGetter: (_value, row) => row.cohort?.title ?? "All cohorts" },
-    { field: "status", headerName: "Status", width: 130, renderCell: (params) => <StatusChip value={params.value} /> },
-    { field: "expiresAt", headerName: "Expires", width: 170, valueFormatter: (value) => value ? new Date(value).toLocaleDateString() : "" },
     {
-      field: "shareUrl",
-      headerName: "Share URL",
-      flex: 1,
+      field: "title",
+      headerName: "Share Link",
+      flex: 1.4,
       minWidth: 260,
-      valueGetter: (_value, row) => `/reports/share/${row.token}`
+      renderCell: (params) => (
+        <Box sx={{ minWidth: 0 }}>
+          <Typography fontWeight={800} noWrap>{params.row.title}</Typography>
+          <Typography variant="caption" color="text.secondary" noWrap>{`/reports/share/${params.row.token}`}</Typography>
+        </Box>
+      )
+    },
+    { field: "cohort", headerName: "Cohort", flex: 1, minWidth: 220, valueGetter: (_value, row) => row.cohort?.title ?? "All cohorts" },
+    { field: "status", headerName: "Status", width: 120, renderCell: (params) => <StatusChip value={params.value} /> },
+    {
+      field: "expiresAt",
+      headerName: "Expires",
+      width: 132,
+      valueFormatter: (value) => value ? new Date(value).toLocaleDateString() : ""
     },
     {
       field: "actions",
@@ -115,7 +124,7 @@ export function ReportsClient() {
           label="Cohort"
           value={selectedCohortId}
           onChange={(event) => { setSelectedCohortId(event.target.value); load(event.target.value); }}
-          sx={{ minWidth: 360 }}
+          sx={{ minWidth: 280 }}
         >
           <MenuItem value="">All cohorts</MenuItem>
           {cohorts.map((cohort) => (
