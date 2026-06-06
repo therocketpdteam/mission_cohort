@@ -554,6 +554,44 @@ export function parseParticipantCsvText(text: unknown): { participants: ParsedPa
   return { participants, errors };
 }
 
+function splitFullName(value: string): { firstName: string; lastName: string } {
+  const parts = value.trim().split(/\s+/).filter(Boolean);
+
+  if (parts.length === 0) {
+    return { firstName: "Participant", lastName: "-" };
+  }
+
+  if (parts.length === 1) {
+    return { firstName: parts[0], lastName: "-" };
+  }
+
+  return {
+    firstName: parts.slice(0, -1).join(" "),
+    lastName: parts[parts.length - 1]
+  };
+}
+
+function primaryContactAsParticipant(input: {
+  participantCount: number;
+  primaryContactName: string;
+  primaryContactEmail: string;
+  primaryContactPhone?: string;
+  primaryContactTitle?: string;
+}): ParsedParticipant | null {
+  if (input.participantCount > 1 || !emailPattern.test(input.primaryContactEmail)) {
+    return null;
+  }
+
+  const name = splitFullName(input.primaryContactName);
+
+  return {
+    ...name,
+    email: input.primaryContactEmail.toLowerCase(),
+    title: input.primaryContactTitle,
+    phone: input.primaryContactPhone
+  };
+}
+
 export async function parseJotformWebhookRequest(request: Request): Promise<UnknownRecord> {
   const contentType = request.headers.get("content-type") ?? "";
   const url = new URL(request.url);
@@ -664,6 +702,28 @@ export function normalizeJotformRegistrationPayload(payload: UnknownRecord, mapp
   const primaryContactLastName = readString(mappedFirstValue(flat, registration, fieldMap, "primaryContactLastName", ["primaryContactLastName", "contactLastName", "registrantLastName", "lastName", "Last Name", "last"]));
   const primaryContactFullName = readString(mappedFirstValue(flat, registration, fieldMap, "primaryContactName", ["primaryContactName", "contactName", "registrantName", "fullName", "q7_name", "Name", "name"]));
   const primaryContactName = primaryContactFullName || [primaryContactFirstName, primaryContactLastName].filter(Boolean).join(" ");
+  const primaryContactEmail = readString(mappedFirstValue(flat, registration, fieldMap, "primaryContactEmail", ["primaryContactEmail", "contactEmail", "registrantEmail", "q12_email", "Email", "email"]));
+  const primaryContactPhone = readString(mappedFirstValue(flat, registration, fieldMap, "primaryContactPhone", ["primaryContactPhone", "contactPhone", "registrantPhone", "q13_billTo13", "Phone Number", "phone"]));
+  const primaryContactTitle = readString(mappedFirstValue(flat, registration, fieldMap, "primaryContactTitle", ["primaryContactTitle", "contactTitle", "q63_title", "Title", "title"]));
+  const declaredParticipantCount = readParticipantCount(mappedFirstValue(flat, registration, fieldMap, "participantCount", [
+    "participantCount",
+    "q20_howMany",
+    "numberOfParticipants",
+    "participantsCount",
+    "How many participants will be joining?",
+    "Please select how many participants will be joining?"
+  ]));
+  const fallbackParticipant = participants.length === 0
+    ? primaryContactAsParticipant({
+        participantCount: declaredParticipantCount,
+        primaryContactName,
+        primaryContactEmail,
+        primaryContactPhone,
+        primaryContactTitle
+      })
+    : null;
+  const normalizedParticipants = fallbackParticipant ? [fallbackParticipant] : participants;
+  const participantCount = declaredParticipantCount || normalizedParticipants.length;
 
   return {
     source: "jotform",
@@ -689,9 +749,9 @@ export function normalizeJotformRegistrationPayload(payload: UnknownRecord, mapp
       cohortSlug: routing.cohortSlug,
       formId: readString(firstValue(registration, ["formId", "form_id"])),
       primaryContactName,
-      primaryContactEmail: readString(mappedFirstValue(flat, registration, fieldMap, "primaryContactEmail", ["primaryContactEmail", "contactEmail", "registrantEmail", "q12_email", "Email", "email"])),
-      primaryContactPhone: readString(mappedFirstValue(flat, registration, fieldMap, "primaryContactPhone", ["primaryContactPhone", "contactPhone", "registrantPhone", "q13_billTo13", "Phone Number", "phone"])),
-      primaryContactTitle: readString(mappedFirstValue(flat, registration, fieldMap, "primaryContactTitle", ["primaryContactTitle", "contactTitle", "q63_title", "Title", "title"])),
+      primaryContactEmail,
+      primaryContactPhone,
+      primaryContactTitle,
       billingContactName: readString(firstValue(registration, ["billingContactName", "billingName"])),
       billingContactEmail: readString(firstValue(registration, ["billingContactEmail", "billingEmail"])),
       billingAddress: readString(mappedFirstValue(flat, registration, fieldMap, "organizationAddress", ["billingAddress", "address"])),
@@ -705,14 +765,7 @@ export function normalizeJotformRegistrationPayload(payload: UnknownRecord, mapp
       quickBooksCustomerRef: readString(firstValue(payment, ["quickBooksCustomerRef", "quickbooksCustomerId"])),
       quickBooksInvoiceRef: readString(firstValue(payment, ["quickBooksInvoiceRef", "quickbooksInvoiceId"])),
       totalAmount: readNumber(mappedFirstValue(flat, payment, fieldMap, "totalAmount", ["totalAmount", "q56_totalCost56", "amount", "total", "CC - Total", "Total Cost"])),
-      participantCount: readParticipantCount(mappedFirstValue(flat, registration, fieldMap, "participantCount", [
-        "participantCount",
-        "q20_howMany",
-        "numberOfParticipants",
-        "participantsCount",
-        "How many participants will be joining?",
-        "Please select how many participants will be joining?"
-      ])),
+      participantCount,
       status: readEnumValue(RegistrationStatus, firstValue(registration, ["registrationStatus"]), RegistrationStatus.NEW),
       notes: readString(mappedFirstValue(flat, registration, fieldMap, "notes", ["notes", "additionalNotes", "How did you hear about us?"])),
       utmSource: readUtmValue(flat, fieldMap, "utmSource", ["utm_source", "utmSource", "UTM Source"], sourceUrls),
@@ -726,7 +779,7 @@ export function normalizeJotformRegistrationPayload(payload: UnknownRecord, mapp
       invoiceUrl: readString(mappedFirstValue(flat, supportingDocuments, fieldMap, "invoiceUrl", ["invoiceUrl", "invoiceLink"])),
       confirmationDocsSentAt: readString(mappedFirstValue(flat, supportingDocuments, fieldMap, "confirmationDocsSentAt", ["confirmationDocsSentAt"]))
     },
-    participants,
+    participants: normalizedParticipants,
     payment: {
       amount: readNumber(mappedFirstValue(flat, payment, fieldMap, "totalAmount", ["paymentAmount", "q56_totalCost56", "amount", "totalAmount", "total", "CC - Total", "Total Cost"])),
       method: readPaymentMethod(mappedFirstValue(flat, payment, fieldMap, "paymentMethod", ["paymentMethod", "q46_preferredMethod", "method", "Preferred method of payment?"])),

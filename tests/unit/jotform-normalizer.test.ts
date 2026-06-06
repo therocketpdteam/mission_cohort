@@ -125,3 +125,43 @@ test("uses the only URL route when Jotform sends a generic landing page", () => 
   assert.equal(normalized.routing.cohortId, "cohort-1");
   assert.equal(normalized.registration.cohortId, "cohort-1");
 });
+
+test("defaults one-person no-roster Jotform registrations to the primary contact participant", () => {
+  const normalized = normalizeJotformRegistrationPayload(
+    {
+      formID: "12345",
+      submissionID: "sub-single",
+      Name: "Natashia Michael",
+      Email: "natashia.michael@fayar.net",
+      "Name of Organization": "Fayetteville Public Schools",
+      "Total Cost": "495",
+      "Get Page URL": "https://rocketpd.com/cohorts/summer-leadership"
+    },
+    [urlMapping]
+  );
+
+  assert.equal(normalized.registration.participantCount, 1);
+  assert.equal(normalized.participants.length, 1);
+  assert.equal(normalized.participants[0].firstName, "Natashia");
+  assert.equal(normalized.participants[0].lastName, "Michael");
+  assert.equal(normalized.participants[0].email, "natashia.michael@fayar.net");
+});
+
+test("keeps multi-person no-roster Jotform registrations open for roster follow-up", () => {
+  const normalized = normalizeJotformRegistrationPayload(
+    {
+      formID: "12345",
+      submissionID: "sub-multi",
+      Name: "Kay Farmer",
+      Email: "kfarmer@vbisd.org",
+      "Name of Organization": "Van Buren ISD",
+      "How many participants will be joining?": "3",
+      "Total Cost": "1485",
+      "Get Page URL": "https://rocketpd.com/cohorts/summer-leadership"
+    },
+    [urlMapping]
+  );
+
+  assert.equal(normalized.registration.participantCount, 3);
+  assert.equal(normalized.participants.length, 0);
+});
