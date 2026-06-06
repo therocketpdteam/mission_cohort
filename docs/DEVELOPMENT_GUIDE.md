@@ -68,7 +68,7 @@ node scripts/ensure-storage-buckets.mjs
 pnpm build
 ```
 
-The migration runner uses `DATABASE_DIRECT_URL` when available; otherwise it uses the production `DATABASE_URL` with Prisma advisory locks disabled so Supabase pooler migrations do not hang. Do not run migrations from the app UI. For a manual emergency migration with direct database access, use:
+The migration runner uses `DATABASE_DIRECT_URL` when available; otherwise it converts Supabase transaction pooler URLs from port `6543` to the session pooler on port `5432` and disables Prisma advisory locks for migration safety. Do not run migrations from the app UI. For a manual emergency migration with direct database access, use:
 
 ```bash
 pnpm prisma migrate deploy

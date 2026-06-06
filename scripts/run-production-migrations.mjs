@@ -9,6 +9,18 @@ function migrationDatabaseUrl() {
     throw new Error("DATABASE_URL is required to run production migrations.");
   }
 
+  if (process.env.DATABASE_DIRECT_URL) {
+    return value;
+  }
+
+  const url = new URL(value);
+
+  if (url.hostname.includes("pooler.supabase.com") && url.port === "6543") {
+    url.port = "5432";
+    url.search = "";
+    return url.toString();
+  }
+
   return value;
 }
 
