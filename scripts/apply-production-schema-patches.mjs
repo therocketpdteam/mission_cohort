@@ -242,11 +242,46 @@ const patches = [
   }
 ];
 
+function splitSqlStatements(sql) {
+  const statements = [];
+  let current = "";
+  let inDollarBlock = false;
+
+  for (let index = 0; index < sql.length; index += 1) {
+    if (sql.startsWith("$$", index)) {
+      inDollarBlock = !inDollarBlock;
+      current += "$$";
+      index += 1;
+      continue;
+    }
+
+    const character = sql[index];
+
+    if (character === ";" && !inDollarBlock) {
+      if (current.trim()) {
+        statements.push(current.trim());
+      }
+      current = "";
+      continue;
+    }
+
+    current += character;
+  }
+
+  if (current.trim()) {
+    statements.push(current.trim());
+  }
+
+  return statements;
+}
+
 async function main() {
   console.log(`Applying production schema patches against ${describeDatabase(databaseUrl)}`);
 
   for (const patch of patches) {
-    await prisma.$executeRawUnsafe(patch.sql);
+    for (const statement of splitSqlStatements(patch.sql)) {
+      await prisma.$executeRawUnsafe(statement);
+    }
     console.log(`Schema patch ready: ${patch.name}`);
   }
 }
