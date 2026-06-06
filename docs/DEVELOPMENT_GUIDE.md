@@ -63,12 +63,12 @@ pnpm prisma migrate status
 3. Production deploys run the Vercel build command from `vercel.json`, which applies migrations and prepares Supabase buckets inside Vercel using production environment variables:
 
 ```bash
-node scripts/run-production-migrations.mjs
+node scripts/apply-production-schema-patches.mjs
 node scripts/ensure-storage-buckets.mjs
 pnpm build
 ```
 
-The migration runner uses `DATABASE_DIRECT_URL` when available; otherwise it converts Supabase transaction pooler URLs from port `6543` to the session pooler on port `5432` and disables Prisma advisory locks for migration safety. Do not run migrations from the app UI. For a manual emergency migration with direct database access, use:
+The schema patch script is idempotent and covers the current production backlog because this database was originally created before Prisma Migrate history existed. Do not run migrations from the app UI. For a manual emergency migration with direct database access and a baselined migration history, use:
 
 ```bash
 pnpm prisma migrate deploy
