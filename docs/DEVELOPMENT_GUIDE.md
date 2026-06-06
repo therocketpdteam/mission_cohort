@@ -63,12 +63,12 @@ pnpm prisma migrate status
 3. Production deploys run the Vercel build command from `vercel.json`, which applies migrations and prepares Supabase buckets inside Vercel using production environment variables:
 
 ```bash
-pnpm prisma:deploy
+node scripts/run-production-migrations.mjs
 node scripts/ensure-storage-buckets.mjs
 pnpm build
 ```
 
-Do not run migrations from the app UI. For a manual emergency migration with direct database access, use:
+The migration runner converts the Supabase pooled app URL to the direct Supabase host for Prisma Migrate. Do not run migrations from the app UI. For a manual emergency migration with direct database access, use:
 
 ```bash
 pnpm prisma migrate deploy

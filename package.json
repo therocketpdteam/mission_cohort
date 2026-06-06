@@ -8,7 +8,7 @@
     "build": "prisma generate && next build",
     "postinstall": "prisma generate",
     "start": "next start",
-    "vercel:build": "pnpm prisma:deploy && node scripts/ensure-storage-buckets.mjs && pnpm build",
+    "vercel:build": "node scripts/run-production-migrations.mjs && node scripts/ensure-storage-buckets.mjs && pnpm build",
     "lint": "next lint",
     "typecheck": "next typegen && tsc --noEmit",
     "prisma:generate": "prisma generate",
