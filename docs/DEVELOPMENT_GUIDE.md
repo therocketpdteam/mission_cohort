@@ -60,7 +60,15 @@ pnpm qa:prepush
 pnpm prisma migrate status
 ```
 
-3. Apply production migrations with the production `DATABASE_URL` from the deployment environment. Do this outside the app UI; Mission Control reports readiness but does not run migrations.
+3. Production deploys run the Vercel build command from `vercel.json`, which applies migrations and prepares Supabase buckets inside Vercel using production environment variables:
+
+```bash
+pnpm prisma:deploy
+node scripts/ensure-storage-buckets.mjs
+pnpm build
+```
+
+Do not run migrations from the app UI. For a manual emergency migration with direct database access, use:
 
 ```bash
 pnpm prisma migrate deploy
