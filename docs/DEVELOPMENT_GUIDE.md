@@ -78,7 +78,7 @@ pnpm prisma migrate deploy
 
 - public bucket: `mission-control-public` unless `SUPABASE_PUBLIC_BUCKET` overrides it
 - private bucket: `mission-control-private` unless `SUPABASE_PRIVATE_BUCKET` overrides it
-- private bucket supports invoices, receipts, materials, and email attachments
+- private bucket supports invoices, receipts, materials, and email attachments up to 20MB per file
 
 5. Deploy/push to `main`, then smoke test:
 

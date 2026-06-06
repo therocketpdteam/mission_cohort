@@ -18,13 +18,13 @@ const maxBytes: Record<UploadPurpose, number> = {
   "cohort-thumbnail": 5 * 1024 * 1024,
   invoice: 10 * 1024 * 1024,
   receipt: 10 * 1024 * 1024,
-  material: 250 * 1024 * 1024,
+  material: 20 * 1024 * 1024,
   "email-attachment": 20 * 1024 * 1024
 };
 
 const bucketLimits = {
   public: maxBytes["cohort-thumbnail"],
-  private: maxBytes.material
+  private: maxBytes["email-attachment"]
 };
 
 function isMissingBucket(error: unknown) {

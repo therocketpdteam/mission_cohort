@@ -14,7 +14,7 @@ const buckets = [
   {
     name: privateBucket,
     public: false,
-    fileSizeLimit: 250 * 1024 * 1024
+    fileSizeLimit: 20 * 1024 * 1024
   }
 ];
 
