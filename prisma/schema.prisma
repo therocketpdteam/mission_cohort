@@ -452,6 +452,8 @@ model Registration {
   externalSource        String?
   externalSubmissionId  String?
   notes                 String?
+  archivedAt            DateTime?
+  archivedReason        String?
   createdAt             DateTime           @default(now())
   updatedAt             DateTime           @updatedAt
   cohort                Cohort             @relation(fields: [cohortId], references: [id])
@@ -471,6 +473,7 @@ model Registration {
   @@index([paymentStatus])
   @@index([participantListStatus])
   @@index([supportingDocumentStatus])
+  @@index([archivedAt])
   @@index([utmSource])
   @@index([utmCampaign])
   @@index([quickBooksInvoiceRef])

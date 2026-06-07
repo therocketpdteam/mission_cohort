@@ -190,6 +190,15 @@ const patches = [
     `
   },
   {
+    name: "registration archive",
+    sql: `
+      ALTER TABLE "Registration" ADD COLUMN IF NOT EXISTS "archivedAt" TIMESTAMP(3);
+      ALTER TABLE "Registration" ADD COLUMN IF NOT EXISTS "archivedReason" TEXT;
+
+      CREATE INDEX IF NOT EXISTS "Registration_archivedAt_idx" ON "Registration"("archivedAt");
+    `
+  },
+  {
     name: "foreign keys",
     sql: `
       DO $$

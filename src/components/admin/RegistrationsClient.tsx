@@ -1,6 +1,7 @@
 "use client";
 
 import { AddIcon } from "@/components/ui/icons";
+import { ArchiveOutlined } from "@/components/ui/icons";
 import { CancelOutlined } from "@/components/ui/icons";
 import { CheckCircleOutline } from "@/components/ui/icons";
 import { DeleteOutline } from "@/components/ui/icons";
@@ -48,6 +49,11 @@ const paymentMethods = ["CREDIT_CARD", "PURCHASE_ORDER", "INVOICE", "COMPED", "U
 const paymentStatuses = ["PENDING", "INVOICED", "PARTIALLY_PAID", "PAID", "REFUNDED", "CANCELLED"];
 const rosterStatuses = ["NOT_REQUESTED", "NEEDED", "PARTIAL", "COMPLETE"];
 const documentStatuses = ["NOT_READY", "READY", "SENT", "FAILED"];
+const visibilityOptions = [
+  { value: "active", label: "Active registrations" },
+  { value: "archived", label: "Archived registrations" },
+  { value: "all", label: "All registrations" }
+];
 
 function money(value: unknown) {
   return `$${Number(value ?? 0).toLocaleString()}`;
@@ -524,11 +530,14 @@ export function RegistrationsClient() {
   const [paymentStatus, setPaymentStatus] = useState("");
   const [rosterStatus, setRosterStatus] = useState("");
   const [source, setSource] = useState("");
+  const [visibility, setVisibility] = useState("active");
+  const [pendingLifecycleAction, setPendingLifecycleAction] = useState<{ action: "archive" | "restore" | "delete"; row: AdminRow } | null>(null);
   const { notifySuccess, notifyError, snackbar } = useNotifier();
 
   async function load() {
+    const includeArchived = visibility !== "active";
     const [registrationRows, cohortRows, organizationRows, templateRows] = await Promise.all([
-      adminApi<AdminRow[]>("/api/registrations"),
+      adminApi<AdminRow[]>(`/api/registrations${includeArchived ? "?includeArchived=1" : ""}`),
       adminApi<AdminRow[]>("/api/cohorts"),
       adminApi<AdminRow[]>("/api/organizations"),
       adminApi<AdminRow[]>("/api/communications/templates").catch(() => [])
@@ -557,7 +566,7 @@ export function RegistrationsClient() {
       notifyError(error.message);
       setLoading(false);
     });
-  }, [notifyError]);
+  }, [notifyError, visibility]);
 
   const filteredRows = useMemo(
     () =>
@@ -578,9 +587,14 @@ export function RegistrationsClient() {
         const matchRoster = rosterStatus ? row.participantListStatus === rosterStatus : true;
         const sourceLabel = formatRegistrationSource(row);
         const matchSource = source ? sourceLabel === source : true;
-        return matchSearch && matchPayment && matchRoster && matchSource;
+        const matchVisibility = visibility === "archived"
+          ? Boolean(row.archivedAt)
+          : visibility === "active"
+            ? !row.archivedAt
+            : true;
+        return matchSearch && matchPayment && matchRoster && matchSource && matchVisibility;
       }),
-    [rows, search, paymentStatus, rosterStatus, source]
+    [rows, search, paymentStatus, rosterStatus, source, visibility]
   );
 
   const sourceOptions = useMemo(
@@ -602,7 +616,7 @@ export function RegistrationsClient() {
     }
   }
 
-  async function runBulkAction(action: "confirm" | "cancel" | "payment" | "roster" | "docs" | "send") {
+  async function runBulkAction(action: "confirm" | "cancel" | "archive" | "restore" | "payment" | "roster" | "docs" | "send") {
     if (selectedIds.length === 0) {
       return;
     }
@@ -642,6 +656,8 @@ export function RegistrationsClient() {
             ids: selectedIds,
             ...(action === "confirm" ? { bulkAction: "confirm" } : {}),
             ...(action === "cancel" ? { bulkAction: "cancel" } : {}),
+            ...(action === "archive" ? { bulkAction: "archive" } : {}),
+            ...(action === "restore" ? { bulkAction: "restore" } : {}),
             ...(action === "payment" && bulkPaymentStatus ? { paymentStatus: bulkPaymentStatus } : {}),
             ...(action === "roster" && bulkRosterStatus ? { participantListStatus: bulkRosterStatus } : {}),
             ...(action === "docs" && bulkDocumentStatus ? { supportingDocumentStatus: bulkDocumentStatus } : {})
@@ -657,6 +673,41 @@ export function RegistrationsClient() {
     }
   }
 
+  async function runLifecycleAction() {
+    if (!pendingLifecycleAction) {
+      return;
+    }
+
+    const { action, row } = pendingLifecycleAction;
+
+    try {
+      if (action === "delete") {
+        await adminApi(`/api/registrations?id=${encodeURIComponent(String(row.id))}`, { method: "DELETE" });
+        notifySuccess("Registration permanently deleted");
+      } else {
+        await adminApi("/api/registrations", {
+          method: "PATCH",
+          body: {
+            id: row.id,
+            action,
+            ...(action === "archive" ? { reason: "Archived from registration list" } : {})
+          }
+        });
+        notifySuccess(action === "archive" ? "Registration archived" : "Registration restored");
+      }
+
+      setPendingLifecycleAction(null);
+      setSelectedIds((current) => current.filter((id) => id !== row.id));
+      if (detail?.id === row.id && action === "delete") {
+        setDetailOpen(false);
+        setDetail(null);
+      }
+      await load();
+    } catch (error) {
+      notifyError((error as Error).message);
+    }
+  }
+
   const columns: GridColDef[] = [
     {
       field: "primaryContactName",
@@ -666,7 +717,9 @@ export function RegistrationsClient() {
       renderCell: (params) => (
         <Box sx={{ minWidth: 0 }}>
           <Typography fontWeight={800} noWrap>{formatProperDisplay(params.row.primaryContactName)}</Typography>
-          <Typography variant="caption" color="text.secondary" noWrap>{params.row.primaryContactEmail}</Typography>
+          <Typography variant="caption" color="text.secondary" noWrap>
+            {params.row.archivedAt ? `Archived · ${params.row.primaryContactEmail}` : params.row.primaryContactEmail}
+          </Typography>
         </Box>
       )
     },
@@ -713,7 +766,11 @@ export function RegistrationsClient() {
             actions={[
               { label: "Edit registration", icon: <EditOutlined fontSize="small" />, onClick: () => { setEditing(params.row); setDialogOpen(true); } },
               { label: "Confirm registration", icon: <CheckCircleOutline fontSize="small" />, color: "success", onClick: () => mutate({ id: params.row.id, action: "confirm" }, "Registration confirmed") },
-              { label: "Cancel registration", icon: <CancelOutlined fontSize="small" />, color: "warning", onClick: () => mutate({ id: params.row.id, action: "cancel" }, "Registration cancelled") }
+              { label: "Cancel registration", icon: <CancelOutlined fontSize="small" />, color: "warning", onClick: () => mutate({ id: params.row.id, action: "cancel" }, "Registration cancelled") },
+              params.row.archivedAt
+                ? { label: "Restore registration", icon: <ArchiveOutlined fontSize="small" />, onClick: () => setPendingLifecycleAction({ action: "restore", row: params.row }) }
+                : { label: "Archive registration", icon: <ArchiveOutlined fontSize="small" />, onClick: () => setPendingLifecycleAction({ action: "archive", row: params.row }) },
+              { label: "Delete permanently", icon: <DeleteOutline fontSize="small" />, color: "error", onClick: () => setPendingLifecycleAction({ action: "delete", row: params.row }) }
             ]}
           />
         </Box>
@@ -742,6 +799,9 @@ export function RegistrationsClient() {
           <MenuItem value="">All sources</MenuItem>
           {sourceOptions.map((value) => <MenuItem value={value} key={value}>{value}</MenuItem>)}
         </TextField>
+        <TextField select label="Visibility" value={visibility} onChange={(event) => setVisibility(event.target.value)} sx={{ minWidth: 190 }}>
+          {visibilityOptions.map((option) => <MenuItem value={option.value} key={option.value}>{option.label}</MenuItem>)}
+        </TextField>
       </CompactFilterBar>
       <SectionCard title="Registration Management">
         {selectedIds.length > 0 && (
@@ -749,6 +809,9 @@ export function RegistrationsClient() {
             <StatusChip value={`${selectedIds.length} selected`} />
             <Button size="small" variant="outlined" color="success" onClick={() => runBulkAction("confirm")}>Confirm</Button>
             <Button size="small" variant="outlined" color="warning" onClick={() => runBulkAction("cancel")}>Cancel</Button>
+            <Button size="small" variant="outlined" onClick={() => runBulkAction(visibility === "archived" ? "restore" : "archive")}>
+              {visibility === "archived" ? "Restore" : "Archive"}
+            </Button>
             <TextField select size="small" label="Payment" value={bulkPaymentStatus} onChange={(event) => setBulkPaymentStatus(event.target.value)} sx={{ minWidth: 170 }}>
               {paymentStatuses.map((value) => <MenuItem value={value} key={value}>{formatStatusLabel(value)}</MenuItem>)}
             </TextField>
@@ -801,6 +864,41 @@ export function RegistrationsClient() {
         onClose={() => { setDetailOpen(false); setDetail(null); }}
         onChanged={reloadDetail}
       />
+      <Dialog open={Boolean(pendingLifecycleAction)} onClose={() => setPendingLifecycleAction(null)} fullWidth maxWidth="sm">
+        <DialogTitle>
+          {pendingLifecycleAction?.action === "delete"
+            ? "Delete registration permanently?"
+            : pendingLifecycleAction?.action === "restore"
+              ? "Restore registration?"
+              : "Archive registration?"}
+        </DialogTitle>
+        <DialogContent>
+          <Stack spacing={1.5}>
+            <Typography>
+              {pendingLifecycleAction?.row
+                ? `${formatProperDisplay(String(pendingLifecycleAction.row.primaryContactName ?? ""))} · ${pendingLifecycleAction.row.primaryContactEmail ?? ""}`
+                : ""}
+            </Typography>
+            {pendingLifecycleAction?.action === "delete" ? (
+              <Alert severity="warning">
+                Permanent delete removes the registration, participants, payments, and registration tasks. Jotform history is kept for audit. Records with invoices or QuickBooks references are blocked and should be archived instead.
+              </Alert>
+            ) : pendingLifecycleAction?.action === "archive" ? (
+              <Alert severity="info">
+                Archive hides this registration from normal operational lists without deleting history or finance context.
+              </Alert>
+            ) : (
+              <Alert severity="info">Restore brings this registration back into the normal operational lists.</Alert>
+            )}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button variant="outlined" onClick={() => setPendingLifecycleAction(null)}>Cancel</Button>
+          <Button color={pendingLifecycleAction?.action === "delete" ? "error" : "primary"} onClick={runLifecycleAction}>
+            {pendingLifecycleAction?.action === "delete" ? "Delete permanently" : pendingLifecycleAction?.action === "restore" ? "Restore" : "Archive"}
+          </Button>
+        </DialogActions>
+      </Dialog>
       <Box>{snackbar}</Box>
     </PageStack>
   );

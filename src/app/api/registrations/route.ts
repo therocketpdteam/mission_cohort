@@ -1,11 +1,14 @@
 import { fail, handleApiError, ok } from "@/lib/api";
 import {
+  archiveRegistration,
   bulkUpdateRegistrations,
   cancelRegistration,
   confirmRegistration,
   createRegistration,
+  deleteRegistration,
   getRegistrationById,
   listRegistrations,
+  restoreRegistration,
   updateRegistration
 } from "@/services/registrationService";
 
@@ -19,7 +22,7 @@ export async function GET(request: Request) {
       return registration ? ok(registration) : fail("Registration not found", "NOT_FOUND", 404);
     }
 
-    return ok(await listRegistrations(params.get("cohortId") ?? undefined));
+    return ok(await listRegistrations(params.get("cohortId") ?? undefined, { includeArchived: params.get("includeArchived") === "1" }));
   } catch (error) {
     return handleApiError(error);
   }
@@ -53,7 +56,30 @@ export async function PATCH(request: Request) {
       return ok(await cancelRegistration(body.id));
     }
 
+    if (body.action === "archive") {
+      return ok(await archiveRegistration(body.id, body.reason));
+    }
+
+    if (body.action === "restore") {
+      return ok(await restoreRegistration(body.id));
+    }
+
     return ok(await updateRegistration(body.id, body));
+  } catch (error) {
+    return handleApiError(error);
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const params = new URL(request.url).searchParams;
+    const id = params.get("id");
+
+    if (!id) {
+      return fail("id is required", "BAD_REQUEST", 400);
+    }
+
+    return ok(await deleteRegistration(id));
   } catch (error) {
     return handleApiError(error);
   }

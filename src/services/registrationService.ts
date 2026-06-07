@@ -59,9 +59,106 @@ export async function cancelRegistration(id: string) {
   return registration;
 }
 
+export async function archiveRegistration(id: string, reason?: string) {
+  const registration = await prisma.registration.update({
+    where: { id },
+    data: {
+      archivedAt: new Date(),
+      archivedReason: reason?.trim() || undefined
+    }
+  });
+
+  logAuditEventAsync({
+    entityType: "Registration",
+    entityId: registration.id,
+    action: "ARCHIVED",
+    description: "Registration archived",
+    metadata: { cohortId: registration.cohortId, organizationId: registration.organizationId, reason: reason ?? null }
+  });
+  void queueRegistrationCrmSync(registration.id, "registration.archived").catch(() => undefined);
+  return registration;
+}
+
+export async function restoreRegistration(id: string) {
+  const registration = await prisma.registration.update({
+    where: { id },
+    data: {
+      archivedAt: null,
+      archivedReason: null
+    }
+  });
+
+  logAuditEventAsync({
+    entityType: "Registration",
+    entityId: registration.id,
+    action: "RESTORED",
+    description: "Registration restored from archive",
+    metadata: { cohortId: registration.cohortId, organizationId: registration.organizationId }
+  });
+  void queueRegistrationCrmSync(registration.id, "registration.restored").catch(() => undefined);
+  return registration;
+}
+
+export async function deleteRegistration(id: string) {
+  const registration = await prisma.registration.findUnique({
+    where: { id },
+    include: {
+      invoiceDrafts: true,
+      paymentRecords: true,
+      _count: { select: { participants: true, operationsTasks: true, webhookEvents: true } }
+    }
+  });
+
+  if (!registration) {
+    throw Object.assign(new Error("Registration not found"), { code: "NOT_FOUND", status: 404 });
+  }
+
+  const hasQuickBooksReference = Boolean(
+    registration.quickBooksCustomerRef ||
+      registration.quickBooksInvoiceRef ||
+      registration.quickBooksRealmId ||
+      registration.paymentRecords.some((payment) => payment.quickBooksInvoiceRef || payment.quickBooksPaymentRef || payment.quickBooksRealmId) ||
+      registration.invoiceDrafts.some((invoice) => invoice.quickBooksInvoiceRef || invoice.quickBooksCustomerRef || invoice.quickBooksRealmId)
+  );
+
+  if (hasQuickBooksReference) {
+    throw Object.assign(new Error("This registration has QuickBooks references. Archive it instead, or void/detach the finance records before permanent deletion."), {
+      code: "BAD_REQUEST",
+      status: 400
+    });
+  }
+
+  if (registration.invoiceDrafts.length > 0) {
+    throw Object.assign(new Error("This registration has invoice drafts. Archive it instead, or remove the invoice drafts before permanent deletion."), {
+      code: "BAD_REQUEST",
+      status: 400
+    });
+  }
+
+  await prisma.registration.delete({ where: { id } });
+
+  logAuditEventAsync({
+    entityType: "Registration",
+    entityId: id,
+    action: "DELETED",
+    description: "Registration permanently deleted",
+    metadata: {
+      cohortId: registration.cohortId,
+      organizationId: registration.organizationId,
+      participants: registration._count.participants,
+      paymentRecords: registration.paymentRecords.length,
+      invoiceDrafts: registration.invoiceDrafts.length,
+      operationsTasks: registration._count.operationsTasks,
+      webhookEventsDetached: registration._count.webhookEvents
+    }
+  });
+
+  return { id, deleted: true };
+}
+
 export async function bulkUpdateRegistrations(input: {
   ids: string[];
-  action?: "confirm" | "cancel";
+  action?: "confirm" | "cancel" | "archive" | "restore";
   paymentStatus?: PaymentStatus;
   participantListStatus?: ParticipantListStatus;
   supportingDocumentStatus?: SupportingDocumentStatus;
@@ -76,6 +173,10 @@ export async function bulkUpdateRegistrations(input: {
     await prisma.registration.updateMany({ where: { id: { in: ids } }, data: { status: RegistrationStatus.CONFIRMED } });
   } else if (input.action === "cancel") {
     await prisma.registration.updateMany({ where: { id: { in: ids } }, data: { status: RegistrationStatus.CANCELLED } });
+  } else if (input.action === "archive") {
+    await prisma.registration.updateMany({ where: { id: { in: ids } }, data: { archivedAt: new Date() } });
+  } else if (input.action === "restore") {
+    await prisma.registration.updateMany({ where: { id: { in: ids } }, data: { archivedAt: null, archivedReason: null } });
   } else {
     const data: {
       paymentStatus?: PaymentStatus;
@@ -112,9 +213,12 @@ export async function bulkUpdateRegistrations(input: {
   return { count: ids.length };
 }
 
-export async function listRegistrations(cohortId?: string) {
+export async function listRegistrations(cohortId?: string, options: { includeArchived?: boolean } = {}) {
   return prisma.registration.findMany({
-    where: cohortId ? { cohortId } : undefined,
+    where: {
+      ...(cohortId ? { cohortId } : {}),
+      ...(options.includeArchived ? {} : { archivedAt: null })
+    },
     orderBy: { createdAt: "desc" },
     include: { cohort: true, organization: true, _count: { select: { participants: true } } }
   });

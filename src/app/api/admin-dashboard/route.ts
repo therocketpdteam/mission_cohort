@@ -122,7 +122,7 @@ export async function GET(request: Request) {
       }
     }),
     prisma.cohortSession.count({ where: sessionMetricWhere }),
-    prisma.registration.count({ where: { status: { in: [RegistrationStatus.NEW, RegistrationStatus.CONFIRMED] }, ...registrationMetricWhere } }),
+    prisma.registration.count({ where: { archivedAt: null, status: { in: [RegistrationStatus.NEW, RegistrationStatus.CONFIRMED] }, ...registrationMetricWhere } }),
     prisma.participant.count({ where: participantMetricWhere }),
     prisma.paymentRecord.count({ where: { status: { in: [PaymentStatus.PENDING, PaymentStatus.INVOICED, PaymentStatus.PARTIALLY_PAID] }, ...paymentSnapshotWhere } }),
     prisma.cohortCommunication.count({ where: { status: CommunicationStatus.SCHEDULED, ...scheduledCommunicationWhere } }),
@@ -134,6 +134,7 @@ export async function GET(request: Request) {
       include: { cohort: true }
     }),
     prisma.registration.findMany({
+      where: { archivedAt: null },
       orderBy: { createdAt: "desc" },
       take: 6,
       include: { cohort: true, organization: true }
