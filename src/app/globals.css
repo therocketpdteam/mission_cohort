@@ -1140,6 +1140,19 @@ a {
   font-size: 0.88rem;
 }
 
+.app-shell.is-compact .participant-detail {
+  gap: 10px;
+}
+
+.app-shell.is-compact .participant-hero,
+.app-shell.is-compact .participant-detail-tile {
+  padding: 9px;
+}
+
+.app-shell.is-compact .participant-section-heading h3 {
+  font-size: 0.88rem;
+}
+
 .jotform-mapping-dialog .ui-field,
 .jotform-mapping-dialog .ui-select,
 .jotform-mapping-dialog .ui-select-trigger {
@@ -2159,6 +2172,122 @@ a {
   grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
   gap: 8px;
   align-items: end;
+}
+
+.participant-detail {
+  display: grid;
+  gap: 14px;
+}
+
+.participant-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  min-width: 0;
+  border: 1px solid rgba(20, 121, 201, 0.16);
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at top right, rgba(20, 121, 201, 0.14), transparent 42%),
+    linear-gradient(135deg, rgba(32, 199, 217, 0.08), rgba(255, 255, 255, 0.96));
+  padding: 14px;
+}
+
+.participant-hero > div:first-child {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.participant-hero span {
+  color: var(--color-primary-700);
+  font-size: 0.72rem;
+  font-weight: 820;
+}
+
+.participant-hero h3 {
+  margin: 0;
+  color: var(--color-primary-900);
+  font-size: 1.15rem;
+  font-weight: 920;
+  line-height: 1.12;
+}
+
+.participant-hero p {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--color-slate-500);
+  font-size: 0.82rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.participant-hero-status {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.participant-detail-section {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  border-top: 1px solid var(--color-slate-200);
+  padding-top: 14px;
+}
+
+.participant-section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.participant-section-heading > div {
+  min-width: 0;
+}
+
+.participant-section-heading h3 {
+  margin: 0;
+  color: var(--color-primary-900);
+  font-size: 0.96rem;
+  font-weight: 850;
+}
+
+.participant-section-heading p {
+  margin: 3px 0 0;
+  color: var(--color-slate-500);
+  font-size: 0.78rem;
+}
+
+.participant-detail-tile {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  border: 1px solid var(--color-slate-200);
+  border-radius: 10px;
+  background: var(--color-slate-50);
+  padding: 10px;
+}
+
+.participant-detail-tile span {
+  color: var(--color-slate-500);
+  font-size: 0.72rem;
+  font-weight: 740;
+}
+
+.participant-detail-tile strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-primary-900);
+  font-size: 0.86rem;
+  font-weight: 760;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .ui-stepper,
@@ -3484,23 +3613,35 @@ a {
 .app-shell.is-night .registration-roster-cell strong,
 .app-shell.is-night .registration-hero h3,
 .app-shell.is-night .registration-section-heading h3,
-.app-shell.is-night .registration-detail-tile strong {
+.app-shell.is-night .registration-detail-tile strong,
+.app-shell.is-night .participant-hero h3,
+.app-shell.is-night .participant-section-heading h3,
+.app-shell.is-night .participant-detail-tile strong {
   color: #e5eef8;
 }
 
 .app-shell.is-night .registration-roster-cell span:not(.registration-health-dot),
 .app-shell.is-night .registration-hero p,
 .app-shell.is-night .registration-section-heading p,
-.app-shell.is-night .registration-detail-tile span {
+.app-shell.is-night .registration-detail-tile span,
+.app-shell.is-night .participant-hero p,
+.app-shell.is-night .participant-section-heading p,
+.app-shell.is-night .participant-detail-tile span {
   color: #9fb0c5;
 }
 
 .app-shell.is-night .registration-hero,
-.app-shell.is-night .registration-detail-tile {
+.app-shell.is-night .registration-detail-tile,
+.app-shell.is-night .participant-hero,
+.app-shell.is-night .participant-detail-tile {
   border-color: rgba(148, 163, 184, 0.22);
   background:
     radial-gradient(circle at top right, rgba(32, 199, 217, 0.11), transparent 42%),
     #0c1725;
+}
+
+.app-shell.is-night .participant-hero span {
+  color: #7dd3fc;
 }
 
 .app-shell.is-night .invoice-workbench-title span {
@@ -4446,11 +4587,14 @@ a {
   }
 
   .registration-hero,
-  .registration-section-heading {
+  .registration-section-heading,
+  .participant-hero,
+  .participant-section-heading {
     flex-direction: column;
   }
 
-  .registration-hero-status {
+  .registration-hero-status,
+  .participant-hero-status {
     justify-content: flex-start;
   }
 

@@ -119,8 +119,8 @@ export const roadmapCards: RoadmapCard[] = [
       { title: "Registration quick view", status: "done", note: "Primary rows open an operational drawer with roster, Jotform revisions, POC history, and finance/source context.", priority: "high" },
       { title: "POC communication context", status: "done", note: "Registration detail links outbound history back to Communications.", priority: "high" },
       { title: "Roster/payment filters", status: "done", note: "Payment, roster, cohort, organization, source, and archive filters use the shared compact filter pattern.", priority: "medium" },
-      { title: "Participant history", status: "planned", note: "Match by email across cohorts for context after the participant identity drawer is finished.", priority: "medium" },
-      { title: "Bulk actions", status: "done", note: "Registration bulk confirm/cancel/archive/restore/status/send actions are available from the list.", priority: "medium" },
+      { title: "Participant history", status: "done", note: "Participant detail now matches by email across cohorts for quick participation context.", priority: "medium" },
+      { title: "Bulk actions", status: "done", note: "Registration and participant bulk status, certificate, archive/restore, and send-message actions are available from list views.", priority: "medium" },
       { title: "Attachments", status: "planned", note: "Needs private storage flow connected to communications.", priority: "medium" }
     ]
   },

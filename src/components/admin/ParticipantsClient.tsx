@@ -18,7 +18,7 @@ import {
   TextField,
   Typography
 } from "@/components/ui/primitives";
-import { GridColDef, GridRowParams } from "./common";
+import { GridColDef, GridRowParams, GridRowSelectionModel } from "./common";
 import { useEffect, useMemo, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
 import { formatProperDisplay, formatStatusLabel } from "@/lib/formatting";
@@ -26,9 +26,11 @@ import {
   AdminRow,
   AppDataGrid,
   CompactFilterBar,
+  DateBadge,
   EmptyState,
   PageHeader,
   PageStack,
+  QuickViewDrawer,
   RowActionMenu,
   SectionCard,
   StatusChip,
@@ -150,6 +152,7 @@ function ParticipantDetailDialog({
   participant,
   open,
   templates,
+  participantHistory,
   onClose,
   onSent,
   onError
@@ -157,6 +160,7 @@ function ParticipantDetailDialog({
   participant: AdminRow | null;
   open: boolean;
   templates: AdminRow[];
+  participantHistory: AdminRow[];
   onClose: () => void;
   onSent: () => Promise<void>;
   onError: (message: string) => void;
@@ -190,60 +194,117 @@ function ParticipantDetailDialog({
     }
   }
 
+  const name = participant ? formatProperDisplay(`${participant.firstName} ${participant.lastName}`) : "Participant detail";
+
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
-      <DialogTitle>Participant Detail</DialogTitle>
-      <DialogContent>
-        {participant ? (
-          <Grid container spacing={2}>
-            {[
-              ["Participant", formatProperDisplay(`${participant.firstName} ${participant.lastName}`)],
-              ["Email", participant.email],
-              ["Phone", participant.phone ?? "-"],
-              ["Title", participant.title ?? "-"],
-              ["Status", participant.status],
-              ["Certificate", participant.certificateIssued ? "Issued" : "Not issued"],
-              ["Cohort", participant.cohort?.title ?? "-"],
-              ["Organization", formatProperDisplay(participant.organization?.name ?? "-")],
-              ["Registration POC", formatProperDisplay(participant.registration?.primaryContactName ?? "-")],
-              ["POC Email", participant.registration?.primaryContactEmail ?? "-"],
-              ["Last Email Status", participant.emailSummary?.lastEmailEvent ?? "-"],
-              ["Last Email Sent", participant.emailSummary?.lastEmailEventAt ? new Date(participant.emailSummary.lastEmailEventAt).toLocaleString() : "-"],
-              ["Payment", participant.registration?.paymentStatus ?? latestPayment?.status ?? "-"],
-              ["Amount", `$${Number(participant.registration?.totalAmount ?? latestPayment?.amount ?? 0).toLocaleString()}`]
-            ].map(([label, value]) => (
-              <Grid size={{ xs: 12, sm: 6 }} key={label}>
-                <Typography variant="body2" color="text.secondary">{label}</Typography>
-                <Typography>{value}</Typography>
-              </Grid>
-            ))}
-            <Grid size={{ xs: 12 }}>
-              <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} sx={{ mt: 1 }}>
-                <TextField
-                  select
-                  label="Resend template"
-                  value={templateId}
-                  onChange={(event) => setTemplateId(event.target.value)}
-                  sx={{ minWidth: 280 }}
-                >
-                  {templates.filter((template) => template.active).map((template) => (
-                    <MenuItem value={template.id} key={template.id}>{template.name}</MenuItem>
-                  ))}
-                </TextField>
-                <Button variant="outlined" startIcon={<SendOutlined />} disabled={!templateId || sending} onClick={sendTemplate}>
-                  {sending ? "Sending" : "Send / Resend"}
+    <QuickViewDrawer
+      open={open}
+      onClose={onClose}
+      title={name || "Participant detail"}
+      actions={
+        participant ? (
+          <>
+            <TextField
+              select
+              label="Template"
+              value={templateId}
+              onChange={(event) => setTemplateId(event.target.value)}
+              sx={{ minWidth: 220 }}
+            >
+              {templates.filter((template) => template.active).map((template) => (
+                <MenuItem value={template.id} key={template.id}>{template.name}</MenuItem>
+              ))}
+            </TextField>
+            <Button variant="outlined" startIcon={<SendOutlined />} disabled={!templateId || sending} onClick={sendTemplate}>
+              {sending ? "Sending" : "Send message"}
+            </Button>
+            <Button onClick={onClose}>Done</Button>
+          </>
+        ) : null
+      }
+    >
+      {participant ? (
+        <div className="participant-detail">
+          <section className="participant-hero">
+            <div>
+              <span>{formatProperDisplay(participant.organization?.name ?? "Participant")}</span>
+              <h3>{name}</h3>
+              <p title={participant.cohort?.title ?? ""}>{participant.cohort?.title ?? "No cohort assigned"}</p>
+            </div>
+            <div className="participant-hero-status">
+              <StatusChip value={participant.status} />
+              <StatusChip value={participant.certificateIssued ? "Certificate issued" : "Certificate needed"} />
+            </div>
+          </section>
+
+          <div className="quick-view-grid">
+            <ParticipantTile label="Email" value={participant.email} />
+            <ParticipantTile label="Phone" value={participant.phone ?? "-"} />
+            <ParticipantTile label="Title" value={participant.title ?? "-"} />
+            <ParticipantTile label="Registration POC" value={formatProperDisplay(participant.registration?.primaryContactName ?? "-")} />
+            <ParticipantTile label="POC email" value={participant.registration?.primaryContactEmail ?? "-"} />
+            <ParticipantTile label="Payment" value={formatStatusLabel(participant.registration?.paymentStatus ?? latestPayment?.status ?? "-")} />
+            <ParticipantTile label="Amount" value={`$${Number(participant.registration?.totalAmount ?? latestPayment?.amount ?? 0).toLocaleString()}`} />
+            <ParticipantTile label="Last email" value={participant.emailSummary?.lastEmailEvent ? `${formatStatusLabel(participant.emailSummary.lastEmailEvent)} · ${participant.emailSummary.lastEmailEventAt ? new Date(participant.emailSummary.lastEmailEventAt).toLocaleDateString() : ""}` : "-"} />
+          </div>
+
+          <section className="participant-detail-section">
+            <div className="participant-section-heading">
+              <div>
+                <h3>Participation History</h3>
+                <p>Other cohort appearances matched by participant email.</p>
+              </div>
+            </div>
+            {participantHistory.length > 0 ? (
+              <div className="quick-view-list">
+                {participantHistory.map((row) => (
+                  <div className="quick-view-list-row" key={row.id}>
+                    <div>
+                      <strong>{row.cohort?.title ?? "Cohort"}</strong>
+                      <span>{formatProperDisplay(row.organization?.name ?? "Organization")} · {formatStatusLabel(row.status)}</span>
+                    </div>
+                    <DateBadge value={row.createdAt} />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <EmptyState title="No other cohort history" description="This participant email has not appeared in another cohort yet." />
+            )}
+          </section>
+
+          <section className="participant-detail-section">
+            <div className="participant-section-heading">
+              <div>
+                <h3>Communication Context</h3>
+                <p>Jump to Communications filtered to this participant.</p>
+              </div>
+              {participant.email ? (
+                <Button href={`/communications?search=${encodeURIComponent(participant.email)}`} variant="outlined" size="small">
+                  Open in Communications
                 </Button>
-              </Stack>
-            </Grid>
-          </Grid>
-        ) : (
-          <Typography color="text.secondary">No participant selected.</Typography>
-        )}
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>Close</Button>
-      </DialogActions>
-    </Dialog>
+              ) : null}
+            </div>
+            <div className="quick-view-grid">
+              <ParticipantTile label="Sent" value={participant.emailSummary?.sentCount ?? 0} />
+              <ParticipantTile label="Opened" value={participant.emailSummary?.openedCount ?? 0} />
+              <ParticipantTile label="Clicked" value={participant.emailSummary?.clickedCount ?? 0} />
+              <ParticipantTile label="Issues" value={participant.emailSummary?.unreviewedIssueCount ?? 0} />
+            </div>
+          </section>
+        </div>
+      ) : (
+        <Typography color="text.secondary">No participant selected.</Typography>
+      )}
+    </QuickViewDrawer>
+  );
+}
+
+function ParticipantTile({ label, value }: { label: string; value?: unknown }) {
+  return (
+    <div className="participant-detail-tile">
+      <span>{label}</span>
+      <strong title={String(value ?? "-")}>{value == null || value === "" ? "-" : String(value)}</strong>
+    </div>
   );
 }
 
@@ -255,6 +316,10 @@ export function ParticipantsClient() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<AdminRow | null>(null);
   const [detail, setDetail] = useState<AdminRow | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkStatus, setBulkStatus] = useState("");
+  const [bulkCertificate, setBulkCertificate] = useState("");
+  const [bulkTemplateId, setBulkTemplateId] = useState("");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
   const [certificateIssued, setCertificateIssued] = useState("");
@@ -320,11 +385,69 @@ export function ParticipantsClient() {
     () => Array.from(new Set(rows.map((row) => row.registration?.primaryContactName).filter(Boolean))) as string[],
     [rows]
   );
+  const rowSelectionModel = useMemo<GridRowSelectionModel>(
+    () => ({ type: "include", ids: new Set(selectedIds) }),
+    [selectedIds]
+  );
+  const participantHistory = useMemo(() => {
+    if (!detail?.email) {
+      return [];
+    }
+
+    const email = String(detail.email).toLowerCase();
+    return rows.filter((row) => String(row.email ?? "").toLowerCase() === email && row.id !== detail.id);
+  }, [detail, rows]);
 
   async function patchParticipant(body: AdminRow, success: string) {
     try {
       await adminApi("/api/participants", { method: "PATCH", body });
       notifySuccess(success);
+      await load();
+    } catch (error) {
+      notifyError((error as Error).message);
+    }
+  }
+
+  async function runBulkAction(action: "status" | "certificate" | "send") {
+    if (selectedIds.length === 0) {
+      return;
+    }
+
+    try {
+      if (action === "status") {
+        if (!bulkStatus) {
+          notifyError("Choose a participant status first");
+          return;
+        }
+
+        await Promise.all(selectedIds.map((id) => adminApi("/api/participants", { method: "PATCH", body: { id, status: bulkStatus } })));
+        notifySuccess("Participant statuses updated");
+      }
+
+      if (action === "certificate") {
+        if (!bulkCertificate) {
+          notifyError("Choose a certificate value first");
+          return;
+        }
+
+        await Promise.all(selectedIds.map((id) => adminApi("/api/participants", { method: "PATCH", body: { id, certificateIssued: bulkCertificate === "true" } })));
+        notifySuccess("Certificate status updated");
+      }
+
+      if (action === "send") {
+        if (!bulkTemplateId) {
+          notifyError("Choose an email template first");
+          return;
+        }
+
+        await Promise.all(selectedIds.map((participantId) => adminApi("/api/communications", {
+          method: "PATCH",
+          body: { action: "sendTemplateToParticipant", participantId, templateId: bulkTemplateId }
+        })));
+        notifySuccess("Participant messages sent");
+      }
+
+      setSelectedIds([]);
       await load();
     } catch (error) {
       notifyError((error as Error).message);
@@ -395,8 +518,17 @@ export function ParticipantsClient() {
         );
       }
     },
-    { field: "status", headerName: "Status", width: 116, renderCell: (params) => <StatusChip value={params.value} /> },
-    { field: "certificateIssued", headerName: "Cert.", width: 92, renderCell: (params) => <StatusChip value={params.value} /> },
+    {
+      field: "progress",
+      headerName: "Progress",
+      width: 138,
+      renderCell: (params) => (
+        <div className="app-table-status-stack">
+          <StatusChip value={params.row.status} />
+          <span className="app-table-sub">{params.row.certificateIssued ? "Certificate issued" : "No certificate"}</span>
+        </div>
+      )
+    },
     {
       field: "actions",
       headerName: "Actions",
@@ -467,12 +599,33 @@ export function ParticipantsClient() {
         </TextField>
       </CompactFilterBar>
       <SectionCard title="Participant Roster">
+        {selectedIds.length > 0 && (
+          <div className="participant-bulk-bar">
+            <span>{selectedIds.length} selected</span>
+            <TextField select size="small" label="Status" value={bulkStatus} onChange={(event) => setBulkStatus(event.target.value)}>
+              {participantStatuses.map((value) => <MenuItem value={value} key={value}>{formatStatusLabel(value)}</MenuItem>)}
+            </TextField>
+            <Button size="small" variant="outlined" onClick={() => runBulkAction("status")}>Apply Status</Button>
+            <TextField select size="small" label="Certificate" value={bulkCertificate} onChange={(event) => setBulkCertificate(event.target.value)}>
+              <MenuItem value="true">Issued</MenuItem>
+              <MenuItem value="false">Not issued</MenuItem>
+            </TextField>
+            <Button size="small" variant="outlined" onClick={() => runBulkAction("certificate")}>Apply Certificate</Button>
+            <TextField select size="small" label="Template" value={bulkTemplateId} onChange={(event) => setBulkTemplateId(event.target.value)}>
+              {templates.filter((template) => template.active).map((template) => <MenuItem value={template.id} key={template.id}>{template.name}</MenuItem>)}
+            </TextField>
+            <Button size="small" variant="outlined" startIcon={<SendOutlined />} onClick={() => runBulkAction("send")}>Send Message</Button>
+          </div>
+        )}
         <TableShell>
           <AppDataGrid
             rows={filteredRows}
             columns={columns}
             loading={loading}
+            checkboxSelection
             initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
+            rowSelectionModel={rowSelectionModel}
+            onRowSelectionModelChange={(model) => setSelectedIds(Array.from(model.ids).map(String))}
             onRowClick={(params: GridRowParams) => setDetail(params.row)}
           />
         </TableShell>
@@ -492,6 +645,7 @@ export function ParticipantsClient() {
         participant={detail}
         open={Boolean(detail)}
         templates={templates}
+        participantHistory={participantHistory}
         onClose={() => setDetail(null)}
         onSent={async () => {
           notifySuccess("Participant communication sent");
