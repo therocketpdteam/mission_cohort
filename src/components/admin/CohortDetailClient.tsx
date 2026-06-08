@@ -890,6 +890,16 @@ export function CohortDetailClient({ id }: { id: string }) {
     });
   }, [id, notifyError]);
 
+  async function openRegistrationDetail(row: AdminRow) {
+    setRegistrationDetail(row);
+
+    try {
+      setRegistrationDetail(await adminApi<AdminRow>(`/api/registrations?id=${row.id}`));
+    } catch (error) {
+      notifyError((error as Error).message);
+    }
+  }
+
   useEffect(() => {
     if (!compareCohortId) {
       setCompareRegistrations([]);
@@ -1320,7 +1330,7 @@ export function CohortDetailClient({ id }: { id: string }) {
       sortable: false,
       renderCell: (params) => (
         <Box onClick={(event) => event.stopPropagation()}>
-          <RowActionMenu actions={[{ label: "Quick view", onClick: () => setRegistrationDetail(params.row) }]} />
+          <RowActionMenu actions={[{ label: "Quick view", onClick: () => void openRegistrationDetail(params.row) }]} />
         </Box>
       )
     }
@@ -1755,7 +1765,7 @@ export function CohortDetailClient({ id }: { id: string }) {
               loading={loading}
               pageSizeOptions={[10, 25]}
               initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
-              onRowClick={(params) => setRegistrationDetail(params.row)}
+              onRowClick={(params) => void openRegistrationDetail(params.row)}
             />
           </TableShell>
           {!loading && filteredRegistrations.length === 0 && <EmptyState title="No registrations found" description="Registrations for this cohort will appear here, or adjust payment and roster filters." />}
@@ -2053,6 +2063,29 @@ export function CohortDetailClient({ id }: { id: string }) {
             </div>
             <SectionCard title="Notes">
               <Typography color="text.secondary">{registrationDetail.notes ?? "No notes captured yet."}</Typography>
+            </SectionCard>
+            <SectionCard title="Open Follow-Ups">
+              {(registrationDetail.operationsTasks ?? []).filter((task: AdminRow) => task.status !== "COMPLETED").length > 0 ? (
+                <div className="quick-view-list">
+                  {(registrationDetail.operationsTasks ?? [])
+                    .filter((task: AdminRow) => task.status !== "COMPLETED")
+                    .map((task: AdminRow) => (
+                      <div className="quick-view-list-row" key={task.id}>
+                        <div>
+                          <strong>{task.title}</strong>
+                          <span>
+                            {[formatStatusLabel(task.category), task.description, task.dueDate ? new Date(task.dueDate).toLocaleDateString() : ""]
+                              .filter(Boolean)
+                              .join(" · ")}
+                          </span>
+                        </div>
+                        <StatusChip value={task.priority ?? task.status} />
+                      </div>
+                    ))}
+                </div>
+              ) : (
+                <Typography color="text.secondary">No open follow-ups for this registration.</Typography>
+              )}
             </SectionCard>
             <SectionCard
               title="POC Communication History"
