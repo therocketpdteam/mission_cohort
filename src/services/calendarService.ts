@@ -34,65 +34,66 @@ export async function createCalendarInvitePlaceholder(sessionId?: string, mode: 
     throw Object.assign(new Error("Session not found"), { code: "NOT_FOUND", status: 404 });
   }
 
-  if (mode === "google") {
-    const connection = await getDecryptedIntegrationConnection(IntegrationProvider.GOOGLE_CALENDAR);
-    const existing = await prisma.calendarEvent.findFirst({
-      where: { sessionId: session.id, provider: "google" },
-      orderBy: { createdAt: "desc" }
-    });
-    const result = await upsertGoogleCalendarEvent({
-      title: session.title,
-      description: session.description ?? undefined,
-      startTime: session.startTime,
-      endTime: session.endTime,
-      timezone: session.timezone,
-      meetingUrl: session.meetingUrl,
-      location: session.location,
-      accessToken: connection?.accessToken,
-      providerEventId: existing?.providerEventId
-    });
+  try {
+    if (mode === "google") {
+      const connection = await getDecryptedIntegrationConnection(IntegrationProvider.GOOGLE_CALENDAR);
+      const existing = await prisma.calendarEvent.findFirst({
+        where: { sessionId: session.id, provider: "google" },
+        orderBy: { createdAt: "desc" }
+      });
+      const result = await upsertGoogleCalendarEvent({
+        title: session.title,
+        description: session.description ?? undefined,
+        startTime: session.startTime,
+        endTime: session.endTime,
+        timezone: session.timezone,
+        meetingUrl: session.meetingUrl,
+        location: session.location,
+        accessToken: connection?.accessToken,
+        providerEventId: existing?.providerEventId
+      });
 
-    const calendarEvent = existing
-      ? await prisma.calendarEvent.update({
-          where: { id: existing.id },
-          data: {
-            providerEventId: result.id,
-            title: session.title,
-            startTime: session.startTime,
-            endTime: session.endTime,
-            timezone: session.timezone,
-            inviteUrl: session.meetingUrl,
-            htmlLink: result.htmlLink,
-            status: CalendarInviteStatus.UPDATED
-          }
-        })
-      : await prisma.calendarEvent.create({
-          data: {
-            cohortId: session.cohortId,
-            sessionId: session.id,
-            provider: "google",
-            providerEventId: result.id,
-            title: session.title,
-            startTime: session.startTime,
-            endTime: session.endTime,
-            timezone: session.timezone,
-            inviteUrl: session.meetingUrl,
-            htmlLink: result.htmlLink,
-            status: CalendarInviteStatus.CREATED
-          }
-        });
+      const calendarEvent = existing
+        ? await prisma.calendarEvent.update({
+            where: { id: existing.id },
+            data: {
+              providerEventId: result.id,
+              title: session.title,
+              startTime: session.startTime,
+              endTime: session.endTime,
+              timezone: session.timezone,
+              inviteUrl: session.meetingUrl,
+              htmlLink: result.htmlLink,
+              status: CalendarInviteStatus.UPDATED
+            }
+          })
+        : await prisma.calendarEvent.create({
+            data: {
+              cohortId: session.cohortId,
+              sessionId: session.id,
+              provider: "google",
+              providerEventId: result.id,
+              title: session.title,
+              startTime: session.startTime,
+              endTime: session.endTime,
+              timezone: session.timezone,
+              inviteUrl: session.meetingUrl,
+              htmlLink: result.htmlLink,
+              status: CalendarInviteStatus.CREATED
+            }
+          });
 
-    await prisma.cohortSession.update({
-      where: { id: session.id },
-      data: { calendarInviteStatus: CalendarInviteStatus.CREATED }
-    });
+      await prisma.cohortSession.update({
+        where: { id: session.id },
+        data: { calendarInviteStatus: CalendarInviteStatus.CREATED }
+      });
 
-    return { provider: "google", status: "created", event: calendarEvent };
-  }
+      return { provider: "google", status: "created", event: calendarEvent };
+    }
 
-  const ics = generateSessionIcs(session);
-  await prisma.calendarEvent.create({
-    data: {
+    const ics = generateSessionIcs(session);
+    await prisma.calendarEvent.create({
+      data: {
         cohortId: session.cohortId,
         sessionId: session.id,
         provider: "ics",
@@ -102,17 +103,85 @@ export async function createCalendarInvitePlaceholder(sessionId?: string, mode: 
         timezone: session.timezone,
         inviteUrl: session.meetingUrl,
         status: CalendarInviteStatus.CREATED
-    }
-  });
+      }
+    });
 
-  await prisma.cohortSession.update({
-    where: { id: session.id },
-    data: { calendarInviteStatus: CalendarInviteStatus.CREATED }
+    await prisma.cohortSession.update({
+      where: { id: session.id },
+      data: { calendarInviteStatus: CalendarInviteStatus.CREATED }
+    });
+
+    return {
+      provider: "ics",
+      status: "created",
+      ics
+    };
+  } catch (error) {
+    await prisma.cohortSession.update({
+      where: { id: session.id },
+      data: { calendarInviteStatus: CalendarInviteStatus.FAILED }
+    });
+    throw error;
+  }
+}
+
+export async function prepareCohortCalendarInvites(input: { cohortId?: string; mode?: "google" | "ics"; fallbackToIcs?: boolean }) {
+  if (!input.cohortId) {
+    throw Object.assign(new Error("cohortId is required"), { code: "BAD_REQUEST", status: 400 });
+  }
+
+  const sessions = await prisma.cohortSession.findMany({
+    where: { cohortId: input.cohortId },
+    orderBy: { startTime: "asc" }
   });
+  const mode = input.mode ?? "ics";
+  const results = [];
+
+  for (const session of sessions) {
+    try {
+      results.push({
+        sessionId: session.id,
+        sessionTitle: session.title,
+        ...(await createCalendarInvitePlaceholder(session.id, mode))
+      });
+    } catch (error) {
+      if (mode === "google" && input.fallbackToIcs !== false) {
+        try {
+          results.push({
+            sessionId: session.id,
+            sessionTitle: session.title,
+            fallbackReason: error instanceof Error ? error.message : "Google Calendar sync failed",
+            ...(await createCalendarInvitePlaceholder(session.id, "ics"))
+          });
+          continue;
+        } catch (fallbackError) {
+          results.push({
+            sessionId: session.id,
+            sessionTitle: session.title,
+            status: "failed",
+            provider: "ics",
+            error: fallbackError instanceof Error ? fallbackError.message : "ICS invite failed"
+          });
+          continue;
+        }
+      }
+
+      results.push({
+        sessionId: session.id,
+        sessionTitle: session.title,
+        status: "failed",
+        provider: mode,
+        error: error instanceof Error ? error.message : "Calendar invite failed"
+      });
+    }
+  }
 
   return {
-    provider: "ics",
-    status: "created",
-    ics
+    cohortId: input.cohortId,
+    requestedProvider: mode,
+    total: sessions.length,
+    created: results.filter((result) => result.status === "created").length,
+    failed: results.filter((result) => result.status === "failed").length,
+    results
   };
 }

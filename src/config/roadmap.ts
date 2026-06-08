@@ -166,7 +166,7 @@ export const roadmapCards: RoadmapCard[] = [
       { title: "Supabase auth/storage", status: "done", note: "Auth configuration and public/private storage buckets are healthy in production.", priority: "high" },
       { title: "SendGrid", status: "in_progress", note: "Outbound/events exist; operational health needs continued QA.", priority: "high" },
       { title: "Jotform", status: "in_progress", note: "Intake, mapping, replay, and revision schema work; shared-form routing edge cases remain.", priority: "high" },
-      { title: "Google Calendar", status: "planned", note: "Calendar invite creation/sync needs full end-to-end verification.", priority: "medium" },
+      { title: "Google Calendar", status: "in_progress", note: "Batch invite preparation, ICS fallback, and Google sync actions exist; production OAuth/calendar connection still needs end-to-end verification.", priority: "medium" },
       { title: "QuickBooks", status: "planned", note: "References/status first; full invoice sync later.", priority: "medium" },
       { title: "CRM handoff", status: "planned", note: "Outbound contact/registration sync is scoped.", priority: "medium" },
       { title: "Mux/resources", status: "planned", note: "Recording/resource workflows remain future-facing.", priority: "low" }

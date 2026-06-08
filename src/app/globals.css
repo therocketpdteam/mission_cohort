@@ -2797,6 +2797,58 @@ a {
   gap: 12px;
 }
 
+.calendar-readiness-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  margin-bottom: 12px;
+  border: 1px solid rgba(20, 121, 201, 0.16);
+  border-radius: 10px;
+  background:
+    radial-gradient(circle at top right, rgba(32, 199, 217, 0.12), transparent 34%),
+    var(--color-slate-50);
+  padding: 10px;
+}
+
+.calendar-readiness-panel > div:first-child {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.calendar-readiness-panel span {
+  color: var(--color-primary-700);
+  font-size: 0.72rem;
+  font-weight: 900;
+}
+
+.calendar-readiness-panel strong {
+  overflow: hidden;
+  color: var(--color-primary-900);
+  font-size: 0.94rem;
+  font-weight: 860;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.calendar-readiness-panel p {
+  margin: 0;
+  color: var(--color-slate-500);
+  font-size: 0.78rem;
+}
+
+.calendar-readiness-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.calendar-readiness-actions .ui-field {
+  width: 170px;
+}
+
 .session-readiness-strip {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -3719,6 +3771,7 @@ a {
 .app-shell.is-night .registration-detail-tile,
 .app-shell.is-night .participant-hero,
 .app-shell.is-night .participant-detail-tile,
+.app-shell.is-night .calendar-readiness-panel,
 .app-shell.is-night .session-readiness-strip,
 .app-shell.is-night .cohort-material-bank,
 .app-shell.is-night .cohort-material-bank a,
@@ -3733,10 +3786,19 @@ a {
   color: #7dd3fc;
 }
 
+.app-shell.is-night .calendar-readiness-panel span,
 .app-shell.is-night .cohort-material-bank > span,
 .app-shell.is-night .cohort-material-bank a,
 .app-shell.is-night .cohort-material-bank div > span {
   color: #7dd3fc;
+}
+
+.app-shell.is-night .calendar-readiness-panel strong {
+  color: #e5eef8;
+}
+
+.app-shell.is-night .calendar-readiness-panel p {
+  color: #9fb2c8;
 }
 
 .app-shell.is-night .invoice-workbench-title span {
@@ -4663,6 +4725,14 @@ a {
 
   .finance-wow-values {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .calendar-readiness-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .calendar-readiness-actions {
+    justify-content: flex-start;
   }
 
   .session-readiness-strip {

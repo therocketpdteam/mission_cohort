@@ -1,6 +1,6 @@
 import { handleApiError, ok } from "@/lib/api";
 import { getEnvPresence } from "@/lib/env";
-import { createCalendarInvitePlaceholder } from "@/services/calendarService";
+import { createCalendarInvitePlaceholder, prepareCohortCalendarInvites } from "@/services/calendarService";
 import { getIntegrationConnection } from "@/services/integrationService";
 import { IntegrationProvider } from "@prisma/client";
 
@@ -24,6 +24,14 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json().catch(() => ({}));
+    if (body.action === "prepareCohortInvites") {
+      return ok(await prepareCohortCalendarInvites({
+        cohortId: body.cohortId,
+        mode: body.mode ?? "ics",
+        fallbackToIcs: body.fallbackToIcs !== false
+      }), { status: 202 });
+    }
+
     return ok(await createCalendarInvitePlaceholder(body.sessionId, body.mode ?? "ics"), { status: 202 });
   } catch (error) {
     return handleApiError(error);

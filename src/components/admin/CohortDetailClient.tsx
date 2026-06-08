@@ -841,6 +841,9 @@ export function CohortDetailClient({ id }: { id: string }) {
   const [editingPayout, setEditingPayout] = useState<AdminRow | null>(null);
   const [distributionSettings, setDistributionSettings] = useState({ commissionPercent: "30", tlSharePercent: "70", tlName: "", notes: "" });
   const [financeHealth, setFinanceHealth] = useState<FinanceHealth | null>(null);
+  const [calendarHealth, setCalendarHealth] = useState<AdminRow | null>(null);
+  const [calendarProvider, setCalendarProvider] = useState<"ics" | "google">("ics");
+  const [preparingInvites, setPreparingInvites] = useState(false);
   const { notifySuccess, notifyError, snackbar } = useNotifier();
 
   async function load() {
@@ -876,6 +879,7 @@ export function CohortDetailClient({ id }: { id: string }) {
     setTasks(taskRows);
     setResources(resourceRows);
     setActivity(activityRows);
+    adminApi<AdminRow>("/api/calendar").then(setCalendarHealth).catch(() => setCalendarHealth(null));
     setLoading(false);
   }
 
@@ -1020,6 +1024,48 @@ export function CohortDetailClient({ id }: { id: string }) {
       await load();
     } catch (error) {
       notifyError((error as Error).message);
+    }
+  }
+
+  async function prepareAllCalendarInvites() {
+    setPreparingInvites(true);
+    try {
+      const result = await adminApi<AdminRow>("/api/calendar", {
+        method: "POST",
+        body: {
+          action: "prepareCohortInvites",
+          cohortId: id,
+          mode: calendarProvider,
+          fallbackToIcs: true
+        }
+      });
+      const fallbackCount = (result.results ?? []).filter((row: AdminRow) => row.fallbackReason).length;
+      notifySuccess(
+        fallbackCount > 0
+          ? `${result.created ?? 0}/${result.total ?? 0} invites prepared; ${fallbackCount} used ICS fallback`
+          : `${result.created ?? 0}/${result.total ?? 0} calendar invites prepared`
+      );
+      await load();
+    } catch (error) {
+      notifyError((error as Error).message);
+    } finally {
+      setPreparingInvites(false);
+    }
+  }
+
+  async function syncGoogleCalendarSession(sessionId: string) {
+    try {
+      await adminApi("/api/calendar", { method: "POST", body: { sessionId, mode: "google" } });
+      notifySuccess("Google Calendar invite synced");
+      await load();
+    } catch (error) {
+      try {
+        await adminApi("/api/calendar", { method: "POST", body: { sessionId, mode: "ics" } });
+        notifySuccess("Google unavailable; ICS invite generated");
+        await load();
+      } catch {
+        notifyError((error as Error).message);
+      }
     }
   }
 
@@ -1250,15 +1296,7 @@ export function CohortDetailClient({ id }: { id: string }) {
               {
                 label: "Sync Google Calendar",
                 icon: <CalendarMonthOutlined fontSize="small" />,
-                onClick: async () => {
-                  try {
-                    await adminApi("/api/calendar", { method: "POST", body: { sessionId: params.row.id, mode: "google" } });
-                    notifySuccess("Google Calendar invite synced");
-                    await load();
-                  } catch (error) {
-                    notifyError((error as Error).message);
-                  }
-                }
+                onClick: () => void syncGoogleCalendarSession(params.row.id)
               }
             ]}
           />
@@ -1557,6 +1595,22 @@ export function CohortDetailClient({ id }: { id: string }) {
               </div>
             }
           >
+            <div className="calendar-readiness-panel">
+              <div>
+                <span>Calendar readiness</span>
+                <strong>{calendarHealth?.connection?.status === "CONNECTED" ? "Google Calendar connected" : calendarHealth?.configured ? "Google configured, connection needed" : "ICS fallback available"}</strong>
+                <p>{calendarProvider === "google" ? "Google sync will fall back to ICS if the connection is not ready." : "ICS invites can be generated without Google Calendar."}</p>
+              </div>
+              <div className="calendar-readiness-actions">
+                <TextField select label="Provider" value={calendarProvider} onChange={(event) => setCalendarProvider(event.target.value as "ics" | "google")}>
+                  <MenuItem value="ics">ICS fallback</MenuItem>
+                  <MenuItem value="google">Google Calendar</MenuItem>
+                </TextField>
+                <Button variant="outlined" startIcon={<CalendarMonthOutlined />} disabled={preparingInvites || sessions.length === 0} onClick={prepareAllCalendarInvites}>
+                  {preparingInvites ? "Preparing" : "Prepare all invites"}
+                </Button>
+              </div>
+            </div>
             <div className="session-readiness-strip">
               <DetailField label="Sessions" value={sessions.length} />
               <DetailField label="Calendar Ready" value={`${sessionReadinessStats.calendarReady}/${sessions.length}`} />
@@ -1669,15 +1723,7 @@ export function CohortDetailClient({ id }: { id: string }) {
                       {
                         label: "Sync Google Calendar",
                         icon: <CalendarMonthOutlined fontSize="small" />,
-                        onClick: async () => {
-                          try {
-                            await adminApi("/api/calendar", { method: "POST", body: { sessionId: session.id, mode: "google" } });
-                            notifySuccess("Google Calendar invite synced");
-                            await load();
-                          } catch (error) {
-                            notifyError((error as Error).message);
-                          }
-                        }
+                        onClick: () => void syncGoogleCalendarSession(session.id)
                       }
                     ]}
                   />
