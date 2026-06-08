@@ -2,6 +2,7 @@ import { fail, handleApiError, ok } from "@/lib/api";
 import { requireUser } from "@/lib/auth";
 import {
   addCommunicationAttachment,
+  attachResourceToCommunication,
   createCommunicationDraft,
   createDefaultSessionCommunications,
   createPlannedSessionReminders,
@@ -48,6 +49,14 @@ export async function PATCH(request: Request) {
 
     if (body.action === "attachFile") {
       return ok(await addCommunicationAttachment(body));
+    }
+
+    if (body.action === "attachResource") {
+      if (!body.communicationId || !body.resourceId) {
+        return fail("communicationId and resourceId are required", "BAD_REQUEST", 400);
+      }
+
+      return ok(await attachResourceToCommunication(body));
     }
 
     if (body.action === "removeAttachment") {

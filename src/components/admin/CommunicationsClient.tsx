@@ -110,6 +110,14 @@ function relatedLabel(related?: AdminRow | null) {
   return [name, organization].filter(Boolean).join(" · ") || "Related record";
 }
 
+function resourceAttachmentKey(resource: AdminRow) {
+  return resource.fileKey || `resource:${resource.id}`;
+}
+
+function resourceDisplayType(resource: AdminRow) {
+  return [formatStatusLabel(String(resource.type ?? "Material")), resource.session?.title].filter(Boolean).join(" · ");
+}
+
 function recipientSearchText(row: AdminRow) {
   return [
     row.recipientEmail,
@@ -136,6 +144,8 @@ export function CommunicationsClient() {
   const [editing, setEditing] = useState<AdminRow | null>(null);
   const [previewTemplate, setPreviewTemplate] = useState<AdminRow | null>(null);
   const [messageDetail, setMessageDetail] = useState<AdminRow | null>(null);
+  const [messageResources, setMessageResources] = useState<AdminRow[]>([]);
+  const [loadingResources, setLoadingResources] = useState(false);
   const [reviewTarget, setReviewTarget] = useState<{ communicationId: string; recipientEmail: string; subject?: string; latestEvent?: string | null } | null>(null);
   const [reviewNote, setReviewNote] = useState("");
   const [reviewingIssue, setReviewingIssue] = useState(false);
@@ -180,6 +190,19 @@ export function CommunicationsClient() {
       setLoading(false);
     });
   }, [notifyError]);
+
+  useEffect(() => {
+    if (!messageDetail?.cohortId) {
+      setMessageResources([]);
+      return;
+    }
+
+    setLoadingResources(true);
+    adminApi<AdminRow[]>(`/api/resources?cohortId=${messageDetail.cohortId}`)
+      .then(setMessageResources)
+      .catch((error) => notifyError((error as Error).message))
+      .finally(() => setLoadingResources(false));
+  }, [messageDetail?.cohortId, notifyError]);
 
   const preview = useMemo(() => {
     if (!previewTemplate) {
@@ -354,6 +377,28 @@ export function CommunicationsClient() {
     }
   }
 
+  async function attachResource(resource: AdminRow) {
+    if (!messageDetail) {
+      return;
+    }
+
+    try {
+      const attachment = await adminApi<AdminRow>("/api/communications", {
+        method: "PATCH",
+        body: {
+          action: "attachResource",
+          communicationId: messageDetail.id,
+          resourceId: resource.id
+        }
+      });
+      setMessageDetail((current) => current ? { ...current, attachments: [...(current.attachments ?? []), attachment] } : current);
+      notifySuccess("Material linked to message");
+      await load(selectedCohortId);
+    } catch (error) {
+      notifyError((error as Error).message);
+    }
+  }
+
   const outboxColumns: GridColDef[] = [
     {
       field: "subject",
@@ -510,6 +555,13 @@ export function CommunicationsClient() {
       )
     }
   ];
+  const attachedResourceKeys = new Set((messageDetail?.attachments ?? []).map((attachment: AdminRow) => attachment.fileKey));
+  const eligibleResources = messageResources.filter((resource) => (
+    !messageDetail?.sessionId ||
+    !resource.sessionId ||
+    resource.sessionId === messageDetail.sessionId
+  ));
+  const availableResources = eligibleResources.filter((resource) => !attachedResourceKeys.has(resourceAttachmentKey(resource)));
 
   return (
     <PageStack>
@@ -669,6 +721,38 @@ export function CommunicationsClient() {
                 <DeliverySummary row={messageDetail} />
               </div>
             </div>
+
+            <SectionCard title="Materials">
+              <div className="comms-material-picker">
+                {loadingResources ? (
+                  <Typography color="text.secondary">Loading materials...</Typography>
+                ) : eligibleResources.length > 0 ? (
+                  <>
+                    {eligibleResources.map((resource) => {
+                      const linked = attachedResourceKeys.has(resourceAttachmentKey(resource));
+                      const href = resource.url || (resource.muxPlaybackId ? `https://stream.mux.com/${resource.muxPlaybackId}` : "");
+                      return (
+                        <div className={`comms-material-row ${linked ? "is-linked" : ""}`.trim()} key={resource.id}>
+                          <div>
+                            <strong title={resource.title}>{resource.title}</strong>
+                            <span title={resourceDisplayType(resource)}>{resourceDisplayType(resource)}</span>
+                          </div>
+                          <ActionGroup>
+                            {href ? <Button href={href} target="_blank" rel="noreferrer" variant="text" size="small">Open</Button> : null}
+                            <Button variant={linked ? "text" : "outlined"} size="small" disabled={linked} onClick={() => attachResource(resource)}>
+                              {linked ? "Linked" : "Attach"}
+                            </Button>
+                          </ActionGroup>
+                        </div>
+                      );
+                    })}
+                    {availableResources.length === 0 && <Typography color="text.secondary">All eligible materials are linked to this message.</Typography>}
+                  </>
+                ) : (
+                  <Typography color="text.secondary">No cohort or session materials are available for this message yet.</Typography>
+                )}
+              </div>
+            </SectionCard>
 
             <SectionCard title="Attachments">
               <div className="comms-attachment-list">

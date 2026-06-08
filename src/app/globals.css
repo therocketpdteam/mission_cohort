@@ -3563,12 +3563,14 @@ a {
   gap: 8px;
 }
 
+.comms-material-picker,
 .comms-attachment-list,
 .comms-recipient-list {
   display: grid;
   gap: 8px;
 }
 
+.comms-material-row,
 .comms-attachment-row,
 .comms-recipient-row {
   display: grid;
@@ -3582,6 +3584,11 @@ a {
   padding: 10px;
 }
 
+.comms-material-row.is-linked {
+  border-color: rgba(22, 163, 74, 0.22);
+  background: color-mix(in srgb, var(--color-success-100) 28%, var(--color-white));
+}
+
 .comms-recipient-row {
   grid-template-columns: minmax(0, 1.15fr) auto minmax(120px, 0.75fr) auto;
 }
@@ -3591,6 +3598,7 @@ a {
   background: color-mix(in srgb, var(--color-danger-100) 35%, var(--color-white));
 }
 
+.comms-material-row > div,
 .comms-attachment-row > div,
 .comms-recipient-row > div:first-child {
   display: grid;
@@ -3598,6 +3606,7 @@ a {
   gap: 2px;
 }
 
+.comms-material-row strong,
 .comms-attachment-row strong,
 .comms-recipient-row strong {
   min-width: 0;
@@ -3609,6 +3618,7 @@ a {
   white-space: nowrap;
 }
 
+.comms-material-row span,
 .comms-attachment-row span,
 .comms-recipient-row span {
   min-width: 0;
@@ -3675,6 +3685,7 @@ a {
 .app-shell.is-night .comms-detail-grid > div,
 .app-shell.is-night .comms-preview-block,
 .app-shell.is-night .comms-preview-frame,
+.app-shell.is-night .comms-material-row,
 .app-shell.is-night .comms-attachment-row,
 .app-shell.is-night .comms-recipient-row {
   background: #0c1725;
@@ -3741,6 +3752,7 @@ a {
 .app-shell.is-night .comms-review-target strong,
 .app-shell.is-night .comms-detail-grid strong,
 .app-shell.is-night .comms-preview-block strong,
+.app-shell.is-night .comms-material-row strong,
 .app-shell.is-night .comms-attachment-row strong,
 .app-shell.is-night .comms-recipient-row strong {
   color: #e5eef8;
@@ -3755,6 +3767,7 @@ a {
 .app-shell.is-night .comms-workspace-head > span,
 .app-shell.is-night .comms-detail-grid span,
 .app-shell.is-night .comms-preview-block > span,
+.app-shell.is-night .comms-material-row span,
 .app-shell.is-night .comms-attachment-row span,
 .app-shell.is-night .comms-recipient-row span {
   color: #9fb2c8;

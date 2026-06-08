@@ -227,6 +227,7 @@ export async function addCommunicationAttachment(input: {
   fileName: string;
   contentType?: string;
   fileSize?: number;
+  provider?: string;
   fileKey: string;
   url?: string;
 }) {
@@ -237,9 +238,66 @@ export async function addCommunicationAttachment(input: {
       fileName: input.fileName,
       contentType: input.contentType,
       fileSize: input.fileSize,
+      provider: input.provider,
       fileKey: input.fileKey,
       url: input.url
     }
+  });
+}
+
+function resourceAttachmentUrl(resource: { url?: string | null; muxPlaybackId?: string | null }) {
+  if (resource.url) {
+    return resource.url;
+  }
+
+  if (resource.muxPlaybackId) {
+    return `https://stream.mux.com/${resource.muxPlaybackId}`;
+  }
+
+  return null;
+}
+
+export async function attachResourceToCommunication(input: { communicationId: string; resourceId: string }) {
+  const [communication, resource] = await Promise.all([
+    prisma.cohortCommunication.findUnique({ where: { id: input.communicationId } }),
+    prisma.cohortResource.findUnique({ where: { id: input.resourceId }, include: { session: true } })
+  ]);
+
+  if (!communication) {
+    throw Object.assign(new Error("Communication not found"), { code: "NOT_FOUND", status: 404 });
+  }
+
+  if (!resource) {
+    throw Object.assign(new Error("Material not found"), { code: "NOT_FOUND", status: 404 });
+  }
+
+  if (resource.cohortId !== communication.cohortId) {
+    throw Object.assign(new Error("Material must belong to the same cohort as this communication."), { code: "BAD_REQUEST", status: 400 });
+  }
+
+  if (communication.sessionId && resource.sessionId && resource.sessionId !== communication.sessionId) {
+    throw Object.assign(new Error("Session material must belong to this communication's session."), { code: "BAD_REQUEST", status: 400 });
+  }
+
+  const fileKey = resource.fileKey || `resource:${resource.id}`;
+  const existing = await prisma.communicationAttachment.findFirst({
+    where: {
+      communicationId: input.communicationId,
+      fileKey
+    }
+  });
+
+  if (existing) {
+    return existing;
+  }
+
+  return addCommunicationAttachment({
+    communicationId: input.communicationId,
+    fileName: resource.session ? `${resource.session.sessionNumber}. ${resource.title}` : resource.title,
+    contentType: resource.type,
+    provider: resource.provider || "resource",
+    fileKey,
+    url: resourceAttachmentUrl(resource) ?? undefined
   });
 }
 
@@ -250,7 +308,7 @@ export async function removeCommunicationAttachment(id: string) {
     throw Object.assign(new Error("Attachment not found"), { code: "NOT_FOUND", status: 404 });
   }
 
-  if (attachment.fileKey) {
+  if (attachment.fileKey && attachment.provider === "supabase" && !attachment.fileKey.startsWith("resource:")) {
     await deletePrivateAppFile(attachment.fileKey).catch(() => null);
   }
 

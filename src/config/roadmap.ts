@@ -88,7 +88,7 @@ export const roadmapCards: RoadmapCard[] = [
       { title: "Overview/readiness", status: "done", note: "Basics and readiness are centered in Overview.", priority: "high" },
       { title: "Sessions checklist", status: "done", note: "Overview uses a compact readiness checklist for calendar, default emails, and session materials.", priority: "high" },
       { title: "Registration/participant quick views", status: "in_progress", note: "Rows are clickable; history and edit affordances continue to improve.", priority: "high" },
-      { title: "Materials/session resources", status: "in_progress", note: "Materials can be added directly to sessions and shown in the session checklist; attachment-to-email automation is next.", priority: "medium" },
+      { title: "Materials/session resources", status: "done", note: "Materials can be added directly to sessions, shown in the session checklist, and linked into outbound communication attachments.", priority: "medium" },
       { title: "Publish-readiness workflow", status: "in_progress", note: "Checklist exists; automation and completion rules need tightening.", priority: "high" }
     ]
   },
@@ -136,7 +136,7 @@ export const roadmapCards: RoadmapCard[] = [
       { title: "Recipient issue review", status: "done", note: "Failed/bounced recipients can be reviewed with notes and removed from the active queue.", priority: "high" },
       { title: "SendGrid delivery/open/error telemetry", status: "in_progress", note: "Recipient timelines support events; production webhook key is still a health warning.", priority: "high" },
       { title: "Dashboard issue surfacing", status: "done", note: "Dashboard issue counts now track unreviewed failed/bounced recipients.", priority: "medium" },
-      { title: "Outbound attachments", status: "in_progress", note: "Per-message attachments can be uploaded and removed; real send QA depends on SendGrid readiness.", priority: "high" },
+      { title: "Outbound attachments", status: "done", note: "Per-message uploads and cohort/session material links are available; live send QA still depends on SendGrid readiness.", priority: "high" },
       { title: "Future inbound reply sync", status: "planned", note: "Explicitly future scope.", priority: "low" }
     ]
   },
