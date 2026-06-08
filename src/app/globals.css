@@ -2751,6 +2751,45 @@ a {
   padding: 12px;
 }
 
+.finance-readiness-strip {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: -2px 0 12px;
+  border: 1px solid var(--color-slate-200);
+  border-radius: 10px;
+  background: var(--color-white);
+  padding: 9px 10px;
+}
+
+.finance-readiness-strip span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  border-radius: 999px;
+  padding: 0 10px;
+  font-size: 0.76rem;
+  font-weight: 900;
+}
+
+.finance-readiness-strip .is-ready {
+  background: var(--color-success-100);
+  color: var(--color-success-700);
+}
+
+.finance-readiness-strip .is-warning {
+  background: var(--color-warning-100);
+  color: var(--color-warning-700);
+}
+
+.finance-readiness-strip small {
+  min-width: min(100%, 280px);
+  color: var(--color-slate-500);
+  font-size: 0.8rem;
+  font-weight: 750;
+}
+
 .distribution-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
@@ -3210,6 +3249,7 @@ a {
 .app-shell.is-night .session-material-links a,
 .app-shell.is-night .participant-bulk-bar,
 .app-shell.is-night .cohort-finance-strip,
+.app-shell.is-night .finance-readiness-strip,
 .app-shell.is-night .finance-settings-panel,
 .app-shell.is-night .invoice-line-editor,
 .app-shell.is-night .invoice-workbench-row,
@@ -3234,6 +3274,10 @@ a {
 }
 
 .app-shell.is-night .invoice-workbench-title span {
+  color: #9fb2c8;
+}
+
+.app-shell.is-night .finance-readiness-strip small {
   color: #9fb2c8;
 }
 

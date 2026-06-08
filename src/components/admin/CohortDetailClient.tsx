@@ -131,6 +131,13 @@ const rosterStatuses = ["NOT_REQUESTED", "NEEDED", "PARTIAL", "COMPLETE"];
 const invoiceStatuses = ["DRAFT", "SENT", "PAID", "VOIDED", "CANCELLED"];
 const payoutStatuses = ["PLANNED", "PARTIAL", "PAID", "CANCELLED"];
 
+type FinanceHealth = {
+  sendgridReady: boolean;
+  storageReady: boolean;
+  privateBucketReady: boolean;
+  checkedAt?: string;
+};
+
 function money(value: unknown) {
   return `$${Number(value ?? 0).toLocaleString()}`;
 }
@@ -832,6 +839,7 @@ export function CohortDetailClient({ id }: { id: string }) {
   const [payoutDialogOpen, setPayoutDialogOpen] = useState(false);
   const [editingPayout, setEditingPayout] = useState<AdminRow | null>(null);
   const [distributionSettings, setDistributionSettings] = useState({ commissionPercent: "30", tlSharePercent: "70", tlName: "", notes: "" });
+  const [financeHealth, setFinanceHealth] = useState<FinanceHealth | null>(null);
   const { notifySuccess, notifyError, snackbar } = useNotifier();
 
   async function load() {
@@ -913,6 +921,22 @@ export function CohortDetailClient({ id }: { id: string }) {
       notes: distribution.distribution.notes ?? ""
     });
   }, [distribution]);
+
+  useEffect(() => {
+    adminApi<AdminRow>("/api/system-health")
+      .then((health) => {
+        const groups = (health.groups ?? []) as AdminRow[];
+        const checks = groups.flatMap((group) => (group.checks ?? []) as AdminRow[]);
+        const byKey = new Map(checks.map((check) => [String(check.key), check]));
+        setFinanceHealth({
+          sendgridReady: byKey.get("sendgrid")?.status === "healthy",
+          storageReady: byKey.get("storageEnv")?.status === "healthy",
+          privateBucketReady: byKey.get("mission-control-private")?.status === "healthy" || checks.some((check) => check.label === "Private files bucket" && check.status === "healthy"),
+          checkedAt: health.generatedAt
+        });
+      })
+      .catch(() => setFinanceHealth(null));
+  }, []);
 
   const totals = useMemo(() => {
     const totalAmount = registrations.reduce((sum, registration) => sum + Number(registration.totalAmount ?? 0), 0);
@@ -1731,6 +1755,15 @@ export function CohortDetailClient({ id }: { id: string }) {
               <DetailField label="Receipts" value={invoiceDrafts.filter((invoice) => invoice.receiptUrl).length} />
               <DetailField label="Open Balance" value={money(invoiceDrafts.reduce((sum, invoice) => sum + Math.max(Number(invoice.totalAmount ?? 0) - Number(invoice.paidAmount ?? 0), 0), 0))} />
             </div>
+            <div className="finance-readiness-strip">
+              <span className={financeHealth?.storageReady && financeHealth?.privateBucketReady ? "is-ready" : "is-warning"}>
+                Storage {financeHealth?.storageReady && financeHealth?.privateBucketReady ? "ready" : "needs check"}
+              </span>
+              <span className={financeHealth?.sendgridReady ? "is-ready" : "is-warning"}>
+                SendGrid {financeHealth?.sendgridReady ? "ready" : "not configured"}
+              </span>
+              <small>{financeHealth?.sendgridReady ? "Invoice and receipt send actions are enabled." : "PDFs can still be generated and opened; sending requires SENDGRID_API_KEY and SENDGRID_FROM_EMAIL."}</small>
+            </div>
             <div className="invoice-workbench">
               {invoiceDrafts.map((invoice) => (
                 <div className="invoice-workbench-row" key={invoice.id}>
@@ -1747,9 +1780,12 @@ export function CohortDetailClient({ id }: { id: string }) {
                       { label: "Edit invoice", onClick: () => openInvoiceEditor(invoice) },
                       { label: invoice.pdfUrl ? "Regenerate PDF" : "Generate PDF", onClick: () => void generateInvoiceDocument(invoice) },
                       ...(invoice.pdfUrl ? [{ label: "Open PDF", onClick: () => window.open(invoice.pdfUrl, "_blank", "noreferrer") }] : []),
-                      { label: "Send invoice", onClick: () => void sendInvoiceDocument(invoice) },
+                      { label: financeHealth?.sendgridReady === false ? "Send invoice unavailable" : "Send invoice", disabled: financeHealth?.sendgridReady === false, onClick: () => void sendInvoiceDocument(invoice) },
                       { label: invoice.receiptUrl ? "Regenerate receipt" : "Generate receipt", onClick: () => void generateInvoiceDocument(invoice, true) },
-                      ...(invoice.receiptUrl ? [{ label: "Open receipt", onClick: () => window.open(invoice.receiptUrl, "_blank", "noreferrer") }, { label: "Send receipt", onClick: () => void sendInvoiceDocument(invoice, true) }] : [])
+                      ...(invoice.receiptUrl ? [
+                        { label: "Open receipt", onClick: () => window.open(invoice.receiptUrl, "_blank", "noreferrer") },
+                        { label: financeHealth?.sendgridReady === false ? "Send receipt unavailable" : "Send receipt", disabled: financeHealth?.sendgridReady === false, onClick: () => void sendInvoiceDocument(invoice, true) }
+                      ] : [])
                     ]}
                   />
                 </div>
