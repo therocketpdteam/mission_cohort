@@ -22,6 +22,10 @@ export const distributionPayoutCreateSchema = z.object({
   notes: z.string().optional()
 });
 
+export const distributionPayoutUpdateSchema = distributionPayoutCreateSchema.partial().extend({
+  id: z.string().min(1)
+});
+
 function roundMoney(value: number) {
   return Math.round(value * 100) / 100;
 }
@@ -39,8 +43,8 @@ export async function getCohortDistribution(cohortId: string) {
       create: { cohortId, commissionPercent: 30, tlSharePercent: 70 },
       include: { payouts: { orderBy: { createdAt: "desc" }, include: { paymentRecord: true } } }
     }),
-    prisma.paymentRecord.findMany({ where: { cohortId } }),
-    prisma.registration.findMany({ where: { cohortId } })
+    prisma.paymentRecord.findMany({ where: { cohortId, registration: { archivedAt: null } } }),
+    prisma.registration.findMany({ where: { cohortId, archivedAt: null } })
   ]);
 
   if (!cohort) {
@@ -118,5 +122,28 @@ export async function createDistributionPayout(input: z.input<typeof distributio
       attachmentUrl: data.attachmentUrl,
       notes: data.notes
     }
+  });
+}
+
+export async function updateDistributionPayout(input: z.input<typeof distributionPayoutUpdateSchema>) {
+  const data = distributionPayoutUpdateSchema.parse(input);
+  return prisma.distributionPayout.update({
+    where: { id: data.id },
+    data: {
+      paymentRecordId: data.paymentRecordId,
+      amount: data.amount,
+      status: data.status,
+      paymentDate: data.paymentDate,
+      attachmentFileKey: data.attachmentFileKey,
+      attachmentUrl: data.attachmentUrl,
+      notes: data.notes
+    }
+  });
+}
+
+export async function cancelDistributionPayout(id: string) {
+  return prisma.distributionPayout.update({
+    where: { id },
+    data: { status: DistributionPayoutStatus.CANCELLED }
   });
 }

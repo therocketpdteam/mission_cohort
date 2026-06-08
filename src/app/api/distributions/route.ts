@@ -1,6 +1,6 @@
 import { handleApiError, ok } from "@/lib/api";
 import { isMissingPrismaSchema, migrationRequiredResult } from "@/lib/prismaCompatibility";
-import { createDistributionPayout, getCohortDistribution, updateCohortDistribution } from "@/services/distributionService";
+import { cancelDistributionPayout, createDistributionPayout, getCohortDistribution, updateCohortDistribution, updateDistributionPayout } from "@/services/distributionService";
 
 export async function GET(request: Request) {
   try {
@@ -22,7 +22,17 @@ export async function GET(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    return ok(await updateCohortDistribution(await request.json()));
+    const body = await request.json();
+
+    if (body.action === "updatePayout") {
+      return ok(await updateDistributionPayout(body));
+    }
+
+    if (body.action === "cancelPayout") {
+      return ok(await cancelDistributionPayout(body.id));
+    }
+
+    return ok(await updateCohortDistribution(body));
   } catch (error) {
     if (isMissingPrismaSchema(error)) {
       return ok(migrationRequiredResult("Distribution ledger"), { status: 409 });

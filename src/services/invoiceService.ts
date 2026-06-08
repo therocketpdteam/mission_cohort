@@ -1,9 +1,10 @@
-import { InvoiceDraftStatus } from "@prisma/client";
+import { CommunicationStatus, InvoiceDraftStatus, RecipientScope } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { dateInput, moneyInput, positiveIntInput } from "@/lib/validators";
 import { buildSimplePdf } from "./pdfService";
 import { uploadAppFile } from "./storageService";
+import { addCommunicationAttachment, getSystemUserId, sendCommunication } from "./communicationService";
 
 const lineItemSchema = z.object({
   id: z.string().optional(),
@@ -57,6 +58,25 @@ function money(value: unknown) {
   return `$${Number(value ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+function defaultInvoiceNumber(id: string, date: Date = new Date()) {
+  return `RPD-${date.getFullYear()}-${id.slice(-8).toUpperCase()}`;
+}
+
+function dedupeEmails(values: Array<string | null | undefined>) {
+  const seen = new Set<string>();
+  return values
+    .map((value) => value?.trim())
+    .filter((value): value is string => Boolean(value))
+    .filter((value) => {
+      const key = value.toLowerCase();
+      if (seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    });
+}
+
 export async function listInvoiceDrafts(cohortId?: string) {
   return prisma.invoiceDraft.findMany({
     where: cohortId ? { cohortId } : undefined,
@@ -71,6 +91,11 @@ export async function createInvoiceDraft(input: z.input<typeof invoiceDraftInput
     ? await prisma.registration.findUnique({ where: { id: data.registrationId }, include: { organization: true, cohort: true } })
     : null;
   const registration = await fallbackRegistration;
+
+  if (registration?.archivedAt) {
+    throw Object.assign(new Error("Archived registrations cannot be invoiced."), { code: "BAD_REQUEST", status: 400 });
+  }
+
   const lineItems = data.lineItems ?? [
     {
       description: registration ? `${registration.cohort.title} registration seats` : "Cohort registration",
@@ -80,34 +105,48 @@ export async function createInvoiceDraft(input: z.input<typeof invoiceDraftInput
   ];
   const totals = invoiceTotals(lineItems, data.taxAmount);
 
-  return prisma.invoiceDraft.create({
-    data: {
-      cohortId: data.cohortId,
-      registrationId: data.registrationId,
-      organizationId: data.organizationId ?? registration?.organizationId,
-      invoiceNumber: data.invoiceNumber ?? registration?.invoiceNumber,
-      purchaseOrderNumber: data.purchaseOrderNumber ?? registration?.purchaseOrderNumber,
-      issueDate: data.issueDate ?? new Date(),
-      dueDate: data.dueDate,
-      status: data.status ?? InvoiceDraftStatus.DRAFT,
-      subtotalAmount: totals.subtotalAmount,
-      taxAmount: totals.taxAmount,
-      totalAmount: totals.totalAmount,
-      paidAmount: data.paidAmount,
-      quickBooksCustomerRef: data.quickBooksCustomerRef ?? registration?.quickBooksCustomerRef,
-      quickBooksInvoiceRef: data.quickBooksInvoiceRef ?? registration?.quickBooksInvoiceRef,
-      quickBooksRealmId: data.quickBooksRealmId ?? registration?.quickBooksRealmId,
-      notes: data.notes,
-      lineItems: {
-        create: lineItems.map((item) => ({
-          description: item.description,
-          quantity: item.quantity,
-          unitAmount: item.unitAmount,
-          totalAmount: Number(item.quantity ?? 0) * Number(item.unitAmount ?? 0)
-        }))
+  return prisma.$transaction(async (tx) => {
+    const created = await tx.invoiceDraft.create({
+      data: {
+        cohortId: data.cohortId,
+        registrationId: data.registrationId,
+        organizationId: data.organizationId ?? registration?.organizationId,
+        invoiceNumber: data.invoiceNumber ?? registration?.invoiceNumber,
+        purchaseOrderNumber: data.purchaseOrderNumber ?? registration?.purchaseOrderNumber,
+        issueDate: data.issueDate ?? new Date(),
+        dueDate: data.dueDate,
+        status: data.status ?? InvoiceDraftStatus.DRAFT,
+        subtotalAmount: totals.subtotalAmount,
+        taxAmount: totals.taxAmount,
+        totalAmount: totals.totalAmount,
+        paidAmount: data.paidAmount,
+        quickBooksCustomerRef: data.quickBooksCustomerRef ?? registration?.quickBooksCustomerRef,
+        quickBooksInvoiceRef: data.quickBooksInvoiceRef ?? registration?.quickBooksInvoiceRef,
+        quickBooksRealmId: data.quickBooksRealmId ?? registration?.quickBooksRealmId,
+        notes: data.notes,
+        lineItems: {
+          create: lineItems.map((item) => ({
+            description: item.description,
+            quantity: item.quantity,
+            unitAmount: item.unitAmount,
+            totalAmount: Number(item.quantity ?? 0) * Number(item.unitAmount ?? 0)
+          }))
+        }
       }
-    },
-    include: invoiceInclude()
+    });
+
+    if (created.invoiceNumber) {
+      return tx.invoiceDraft.findUniqueOrThrow({
+        where: { id: created.id },
+        include: invoiceInclude()
+      });
+    }
+
+    return tx.invoiceDraft.update({
+      where: { id: created.id },
+      data: { invoiceNumber: defaultInvoiceNumber(created.id, created.issueDate) },
+      include: invoiceInclude()
+    });
   });
 }
 
@@ -199,4 +238,86 @@ export async function generateInvoicePdf(id: string, receipt = false) {
     data: receipt ? { receiptFileKey: upload.fileKey, receiptUrl: upload.url, status: InvoiceDraftStatus.PAID } : { pdfFileKey: upload.fileKey, pdfUrl: upload.url },
     include: invoiceInclude()
   });
+}
+
+export async function sendInvoiceDocument(id: string, receipt = false) {
+  let invoice = await prisma.invoiceDraft.findUnique({
+    where: { id },
+    include: invoiceInclude()
+  });
+
+  if (!invoice) {
+    throw Object.assign(new Error("Invoice draft not found."), { code: "NOT_FOUND", status: 404 });
+  }
+
+  if (invoice.registration?.archivedAt) {
+    throw Object.assign(new Error("Archived registrations cannot receive invoice emails."), { code: "BAD_REQUEST", status: 400 });
+  }
+
+  if (receipt && !invoice.receiptFileKey) {
+    invoice = await generateInvoicePdf(id, true);
+  }
+
+  if (!receipt && !invoice.pdfFileKey) {
+    invoice = await generateInvoicePdf(id, false);
+  }
+
+  const organization = invoice.organization ?? invoice.registration?.organization;
+  const recipients = dedupeEmails([invoice.registration?.billingContactEmail, invoice.registration?.primaryContactEmail]);
+
+  if (recipients.length === 0) {
+    throw Object.assign(new Error("No billing or POC email is available for this invoice."), { code: "BAD_REQUEST", status: 400 });
+  }
+
+  const userId = await getSystemUserId();
+  const documentLabel = receipt ? "receipt" : "invoice";
+  const fileName = `${receipt ? "Receipt" : "Invoice"} ${invoice.invoiceNumber ?? invoice.id}.pdf`;
+  const fileKey = receipt ? invoice.receiptFileKey : invoice.pdfFileKey;
+  const url = receipt ? invoice.receiptUrl : invoice.pdfUrl;
+
+  if (!fileKey || !url) {
+    throw Object.assign(new Error(`Generate the ${documentLabel} PDF before sending.`), { code: "BAD_REQUEST", status: 400 });
+  }
+
+  const communication = await prisma.cohortCommunication.create({
+    data: {
+      cohortId: invoice.cohortId,
+      subject: `${receipt ? "Receipt" : "Invoice"} ${invoice.invoiceNumber ?? ""} for ${invoice.cohort.title}`.trim(),
+      bodyHtml: receipt
+        ? `<p>Hello,</p><p>Your paid receipt for <strong>${invoice.cohort.title}</strong> is attached below.</p><p>Thank you.</p>`
+        : `<p>Hello,</p><p>Your invoice for <strong>${invoice.cohort.title}</strong> is attached below.</p><p>Total: <strong>${money(invoice.totalAmount)}</strong></p>`,
+      bodyText: receipt
+        ? `Your paid receipt for ${invoice.cohort.title} is attached below.`
+        : `Your invoice for ${invoice.cohort.title} is attached below. Total: ${money(invoice.totalAmount)}.`,
+      status: CommunicationStatus.DRAFT,
+      recipientScope: RecipientScope.CUSTOM,
+      recipientEmails: recipients,
+      createdById: userId
+    }
+  });
+
+  await addCommunicationAttachment({
+    communicationId: communication.id,
+    fileName,
+    contentType: "application/pdf",
+    fileKey,
+    url
+  });
+
+  const sent = await sendCommunication(communication.id, {
+    recipients,
+    context: {
+      cohort: { title: invoice.cohort.title, startDate: invoice.cohort.startDate },
+      organization: organization ? { name: organization.name } : undefined,
+      registration: invoice.registration ?? undefined
+    }
+  });
+
+  const updatedInvoice = await prisma.invoiceDraft.update({
+    where: { id },
+    data: receipt ? { status: InvoiceDraftStatus.PAID } : { status: InvoiceDraftStatus.SENT },
+    include: invoiceInclude()
+  });
+
+  return { invoice: updatedInvoice, communication: sent, recipients };
 }

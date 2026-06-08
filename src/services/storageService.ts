@@ -2,7 +2,7 @@ import { env } from "@/lib/env";
 import { createSupabaseAdminClient } from "@/lib/supabase";
 import { randomUUID } from "node:crypto";
 
-export type UploadPurpose = "cohort-thumbnail" | "invoice" | "receipt" | "material" | "email-attachment";
+export type UploadPurpose = "cohort-thumbnail" | "invoice" | "receipt" | "material" | "email-attachment" | "payout-proof";
 
 const publicPurposes = new Set<UploadPurpose>(["cohort-thumbnail"]);
 
@@ -11,7 +11,8 @@ const acceptedTypes: Record<UploadPurpose, RegExp> = {
   invoice: /^application\/pdf$/i,
   receipt: /^application\/pdf$/i,
   material: /^(application\/pdf|image\/|video\/|text\/|application\/vnd\.openxmlformats-officedocument|application\/msword)/i,
-  "email-attachment": /^(application\/pdf|image\/|text\/|application\/vnd\.openxmlformats-officedocument|application\/msword)/i
+  "email-attachment": /^(application\/pdf|image\/|text\/|application\/vnd\.openxmlformats-officedocument|application\/msword)/i,
+  "payout-proof": /^(application\/pdf|image\/|text\/|application\/vnd\.openxmlformats-officedocument|application\/msword)/i
 };
 
 const maxBytes: Record<UploadPurpose, number> = {
@@ -19,7 +20,8 @@ const maxBytes: Record<UploadPurpose, number> = {
   invoice: 10 * 1024 * 1024,
   receipt: 10 * 1024 * 1024,
   material: 20 * 1024 * 1024,
-  "email-attachment": 20 * 1024 * 1024
+  "email-attachment": 20 * 1024 * 1024,
+  "payout-proof": 20 * 1024 * 1024
 };
 
 const bucketLimits = {

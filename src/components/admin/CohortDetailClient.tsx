@@ -128,9 +128,19 @@ const sessionEmailTypes = [
 const paymentStatuses = ["PENDING", "INVOICED", "PARTIALLY_PAID", "PAID", "REFUNDED", "CANCELLED"];
 const participantStatuses = ["REGISTERED", "CANCELLED", "COMPLETED", "NO_SHOW"];
 const rosterStatuses = ["NOT_REQUESTED", "NEEDED", "PARTIAL", "COMPLETE"];
+const invoiceStatuses = ["DRAFT", "SENT", "PAID", "VOIDED", "CANCELLED"];
+const payoutStatuses = ["PLANNED", "PARTIAL", "PAID", "CANCELLED"];
 
 function money(value: unknown) {
   return `$${Number(value ?? 0).toLocaleString()}`;
+}
+
+function dateInputValue(value: unknown) {
+  return value ? new Date(value as string | Date).toISOString().slice(0, 10) : "";
+}
+
+function numericInputValue(value: unknown) {
+  return Number(value ?? 0);
 }
 
 function communicationIssueLabel(communication: AdminRow) {
@@ -499,6 +509,289 @@ function PaymentDetailDialog({
   );
 }
 
+type InvoiceLineItemState = {
+  description: string;
+  quantity: number;
+  unitAmount: number;
+};
+
+function InvoiceEditorDialog({
+  cohortId,
+  invoice,
+  seedRegistration,
+  registrations,
+  open,
+  onClose,
+  onSaved,
+  onError
+}: {
+  cohortId: string;
+  invoice: AdminRow | null;
+  seedRegistration: AdminRow | null;
+  registrations: AdminRow[];
+  open: boolean;
+  onClose: () => void;
+  onSaved: () => Promise<void>;
+  onError: (message: string) => void;
+}) {
+  const [registrationId, setRegistrationId] = useState("");
+  const [invoiceNumber, setInvoiceNumber] = useState("");
+  const [purchaseOrderNumber, setPurchaseOrderNumber] = useState("");
+  const [issueDate, setIssueDate] = useState(dateInputValue(new Date()));
+  const [dueDate, setDueDate] = useState("");
+  const [status, setStatus] = useState("DRAFT");
+  const [paidAmount, setPaidAmount] = useState(0);
+  const [taxAmount, setTaxAmount] = useState(0);
+  const [notes, setNotes] = useState("");
+  const [quickBooksCustomerRef, setQuickBooksCustomerRef] = useState("");
+  const [quickBooksInvoiceRef, setQuickBooksInvoiceRef] = useState("");
+  const [quickBooksRealmId, setQuickBooksRealmId] = useState("");
+  const [lineItems, setLineItems] = useState<InvoiceLineItemState[]>([{ description: "Cohort registration seats", quantity: 1, unitAmount: 0 }]);
+  const selectedRegistration = registrations.find((registration) => registration.id === registrationId);
+
+  useEffect(() => {
+    const row = invoice;
+    const seed = seedRegistration;
+    setRegistrationId(row?.registrationId ?? seed?.id ?? "");
+    setInvoiceNumber(row?.invoiceNumber ?? "");
+    setPurchaseOrderNumber(row?.purchaseOrderNumber ?? seed?.purchaseOrderNumber ?? "");
+    setIssueDate(dateInputValue(row?.issueDate ?? new Date()));
+    setDueDate(dateInputValue(row?.dueDate));
+    setStatus(row?.status ?? "DRAFT");
+    setPaidAmount(numericInputValue(row?.paidAmount));
+    setTaxAmount(numericInputValue(row?.taxAmount));
+    setNotes(row?.notes ?? "");
+    setQuickBooksCustomerRef(row?.quickBooksCustomerRef ?? seed?.quickBooksCustomerRef ?? "");
+    setQuickBooksInvoiceRef(row?.quickBooksInvoiceRef ?? seed?.quickBooksInvoiceRef ?? "");
+    setQuickBooksRealmId(row?.quickBooksRealmId ?? seed?.quickBooksRealmId ?? "");
+    setLineItems(
+      row?.lineItems?.length
+        ? row.lineItems.map((item: AdminRow) => ({
+            description: item.description ?? "Cohort registration seats",
+            quantity: numericInputValue(item.quantity) || 1,
+            unitAmount: numericInputValue(item.unitAmount)
+          }))
+        : [{
+            description: seed ? `${seed.organization?.name ?? "Organization"} cohort seats` : "Cohort registration seats",
+            quantity: numericInputValue(seed?.participantCount) || 1,
+            unitAmount: seed?.participantCount ? numericInputValue(seed.totalAmount) / Math.max(numericInputValue(seed.participantCount), 1) : 0
+          }]
+    );
+  }, [invoice, seedRegistration, open]);
+
+  function updateLineItem(index: number, field: keyof InvoiceLineItemState, value: string) {
+    setLineItems((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, [field]: field === "description" ? value : Number(value) } : item));
+  }
+
+  async function save() {
+    try {
+      const payload = {
+        id: invoice?.id,
+        cohortId,
+        registrationId: registrationId || undefined,
+        organizationId: selectedRegistration?.organizationId ?? invoice?.organizationId,
+        invoiceNumber: invoiceNumber || undefined,
+        purchaseOrderNumber: purchaseOrderNumber || undefined,
+        issueDate: issueDate || undefined,
+        dueDate: dueDate || undefined,
+        status,
+        paidAmount,
+        taxAmount,
+        notes: notes || undefined,
+        quickBooksCustomerRef: quickBooksCustomerRef || undefined,
+        quickBooksInvoiceRef: quickBooksInvoiceRef || undefined,
+        quickBooksRealmId: quickBooksRealmId || undefined,
+        lineItems: lineItems.filter((item) => item.description.trim()).map((item) => ({
+          description: item.description.trim(),
+          quantity: Math.max(1, Number(item.quantity ?? 1)),
+          unitAmount: Number(item.unitAmount ?? 0)
+        }))
+      };
+
+      if (payload.lineItems.length === 0) {
+        throw new Error("Add at least one invoice line item.");
+      }
+
+      if (invoice?.id) {
+        await adminApi("/api/invoices", { method: "PATCH", body: payload });
+      } else {
+        await adminApi("/api/invoices", { method: "POST", body: payload });
+      }
+
+      await onSaved();
+      onClose();
+    } catch (error) {
+      onError((error as Error).message);
+    }
+  }
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
+      <DialogTitle>{invoice ? "Edit Invoice Draft" : "Create Invoice"}</DialogTitle>
+      <DialogContent>
+        <div className="finance-dialog-grid">
+          <TextField select fullWidth label="Registration" value={registrationId} onChange={(event) => setRegistrationId(event.target.value)}>
+            <MenuItem value="">Cohort-level invoice</MenuItem>
+            {registrations.filter((registration) => !registration.archivedAt).map((registration) => (
+              <MenuItem value={registration.id} key={registration.id}>
+                {formatProperDisplay(registration.organization?.name ?? registration.primaryContactName)}
+              </MenuItem>
+            ))}
+          </TextField>
+          <TextField fullWidth label="Invoice number" value={invoiceNumber} onChange={(event) => setInvoiceNumber(event.target.value)} placeholder="Auto generated" />
+          <TextField fullWidth label="PO number" value={purchaseOrderNumber} onChange={(event) => setPurchaseOrderNumber(event.target.value)} />
+          <TextField select fullWidth label="Status" value={status} onChange={(event) => setStatus(event.target.value)}>
+            {invoiceStatuses.map((value) => <MenuItem value={value} key={value}>{formatStatusLabel(value)}</MenuItem>)}
+          </TextField>
+          <TextField fullWidth label="Issue date" type="date" value={issueDate} onChange={(event) => setIssueDate(event.target.value)} InputLabelProps={{ shrink: true }} />
+          <TextField fullWidth label="Due date" type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} InputLabelProps={{ shrink: true }} />
+          <TextField fullWidth label="Paid amount" type="number" value={paidAmount} onChange={(event) => setPaidAmount(Number(event.target.value))} />
+          <TextField fullWidth label="Tax amount" type="number" value={taxAmount} onChange={(event) => setTaxAmount(Number(event.target.value))} />
+          <TextField fullWidth label="QuickBooks customer ref" value={quickBooksCustomerRef} onChange={(event) => setQuickBooksCustomerRef(event.target.value)} />
+          <TextField fullWidth label="QuickBooks invoice ref" value={quickBooksInvoiceRef} onChange={(event) => setQuickBooksInvoiceRef(event.target.value)} />
+          <TextField fullWidth label="QuickBooks realm" value={quickBooksRealmId} onChange={(event) => setQuickBooksRealmId(event.target.value)} />
+        </div>
+        <div className="invoice-line-editor">
+          <div className="section-inline-header">
+            <Typography variant="subtitle2">Line items</Typography>
+            <Button variant="outlined" size="small" onClick={() => setLineItems((items) => [...items, { description: "", quantity: 1, unitAmount: 0 }])}>Add line</Button>
+          </div>
+          {lineItems.map((item, index) => (
+            <div className="invoice-line-row" key={`${index}-${item.description}`}>
+              <TextField label="Description" value={item.description} onChange={(event) => updateLineItem(index, "description", event.target.value)} />
+              <TextField label="Qty" type="number" value={item.quantity} onChange={(event) => updateLineItem(index, "quantity", event.target.value)} />
+              <TextField label="Unit" type="number" value={item.unitAmount} onChange={(event) => updateLineItem(index, "unitAmount", event.target.value)} />
+              <Button
+                variant="text"
+                color="error"
+                onClick={() => setLineItems((items) => items.filter((_, itemIndex) => itemIndex !== index))}
+                disabled={lineItems.length === 1}
+              >
+                Remove
+              </Button>
+            </div>
+          ))}
+        </div>
+        <TextField fullWidth multiline minRows={3} label="Notes" value={notes} onChange={(event) => setNotes(event.target.value)} />
+      </DialogContent>
+      <DialogActions>
+        <Button variant="outlined" onClick={onClose}>Cancel</Button>
+        <Button onClick={save}>Save invoice</Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+function PayoutEditorDialog({
+  cohortId,
+  payout,
+  payments,
+  open,
+  onClose,
+  onSaved,
+  onError
+}: {
+  cohortId: string;
+  payout: AdminRow | null;
+  payments: AdminRow[];
+  open: boolean;
+  onClose: () => void;
+  onSaved: () => Promise<void>;
+  onError: (message: string) => void;
+}) {
+  const [amount, setAmount] = useState(0);
+  const [status, setStatus] = useState("PLANNED");
+  const [paymentDate, setPaymentDate] = useState("");
+  const [paymentRecordId, setPaymentRecordId] = useState("");
+  const [notes, setNotes] = useState("");
+  const [attachmentFileKey, setAttachmentFileKey] = useState("");
+  const [attachmentUrl, setAttachmentUrl] = useState("");
+  const [uploading, setUploading] = useState(false);
+
+  useEffect(() => {
+    setAmount(numericInputValue(payout?.amount));
+    setStatus(payout?.status ?? "PLANNED");
+    setPaymentDate(dateInputValue(payout?.paymentDate));
+    setPaymentRecordId(payout?.paymentRecordId ?? "");
+    setNotes(payout?.notes ?? "");
+    setAttachmentFileKey(payout?.attachmentFileKey ?? "");
+    setAttachmentUrl(payout?.attachmentUrl ?? "");
+  }, [payout, open]);
+
+  async function uploadProof(file?: File) {
+    if (!file) {
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const upload = await uploadAdminFile<AdminRow>(file, "payout-proof");
+      setAttachmentFileKey(upload.fileKey ?? "");
+      setAttachmentUrl(upload.url ?? "");
+    } catch (error) {
+      onError((error as Error).message);
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function save() {
+    try {
+      const body = {
+        ...(payout?.id ? { action: "updatePayout", id: payout.id } : { cohortId }),
+        paymentRecordId: paymentRecordId || undefined,
+        amount,
+        status,
+        paymentDate: paymentDate || undefined,
+        attachmentFileKey: attachmentFileKey || undefined,
+        attachmentUrl: attachmentUrl || undefined,
+        notes: notes || undefined
+      };
+
+      await adminApi("/api/distributions", { method: payout?.id ? "PATCH" : "POST", body });
+      await onSaved();
+      onClose();
+    } catch (error) {
+      onError((error as Error).message);
+    }
+  }
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>{payout ? "Edit Payout" : "Create Payout"}</DialogTitle>
+      <DialogContent>
+        <div className="finance-dialog-grid">
+          <TextField fullWidth label="Amount" type="number" value={amount} onChange={(event) => setAmount(Number(event.target.value))} />
+          <TextField select fullWidth label="Status" value={status} onChange={(event) => setStatus(event.target.value)}>
+            {payoutStatuses.map((value) => <MenuItem value={value} key={value}>{formatStatusLabel(value)}</MenuItem>)}
+          </TextField>
+          <TextField fullWidth label="Payment date" type="date" value={paymentDate} onChange={(event) => setPaymentDate(event.target.value)} InputLabelProps={{ shrink: true }} />
+          <TextField select fullWidth label="Linked incoming payment" value={paymentRecordId} onChange={(event) => setPaymentRecordId(event.target.value)}>
+            <MenuItem value="">No direct payment link</MenuItem>
+            {payments.map((payment) => (
+              <MenuItem value={payment.id} key={payment.id}>
+                {formatProperDisplay(payment.organization?.name ?? payment.registration?.organization?.name ?? "Payment")} · {money(payment.amount)}
+              </MenuItem>
+            ))}
+          </TextField>
+        </div>
+        <TextField fullWidth multiline minRows={3} label="Note" value={notes} onChange={(event) => setNotes(event.target.value)} />
+        <div className="finance-upload-row">
+          <Button variant="outlined" component="label" disabled={uploading}>
+            {uploading ? "Uploading..." : attachmentUrl ? "Replace proof" : "Upload proof"}
+            <input hidden type="file" onChange={(event) => void uploadProof(event.target.files?.[0])} />
+          </Button>
+          {attachmentUrl && <Button href={attachmentUrl} target="_blank" rel="noreferrer" variant="text">Open proof</Button>}
+        </div>
+      </DialogContent>
+      <DialogActions>
+        <Button variant="outlined" onClick={onClose}>Cancel</Button>
+        <Button onClick={save}>Save payout</Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
 export function CohortDetailClient({ id }: { id: string }) {
   const [tab, setTab] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -533,6 +826,12 @@ export function CohortDetailClient({ id }: { id: string }) {
   const [participantDetail, setParticipantDetail] = useState<AdminRow | null>(null);
   const [participantSelection, setParticipantSelection] = useState<GridRowSelectionModel>({ type: "include", ids: new Set() });
   const [bulkParticipantStatus, setBulkParticipantStatus] = useState("REGISTERED");
+  const [invoiceDialogOpen, setInvoiceDialogOpen] = useState(false);
+  const [editingInvoice, setEditingInvoice] = useState<AdminRow | null>(null);
+  const [invoiceSeedRegistration, setInvoiceSeedRegistration] = useState<AdminRow | null>(null);
+  const [payoutDialogOpen, setPayoutDialogOpen] = useState(false);
+  const [editingPayout, setEditingPayout] = useState<AdminRow | null>(null);
+  const [distributionSettings, setDistributionSettings] = useState({ commissionPercent: "30", tlSharePercent: "70", tlName: "", notes: "" });
   const { notifySuccess, notifyError, snackbar } = useNotifier();
 
   async function load() {
@@ -602,6 +901,19 @@ export function CohortDetailClient({ id }: { id: string }) {
       .finally(() => setRegistrationThreadLoading(false));
   }, [registrationDetail?.primaryContactEmail, notifyError]);
 
+  useEffect(() => {
+    if (!distribution?.distribution) {
+      return;
+    }
+
+    setDistributionSettings({
+      commissionPercent: String(distribution.distribution.commissionPercent ?? 30),
+      tlSharePercent: String(distribution.distribution.tlSharePercent ?? 70),
+      tlName: distribution.distribution.tlName ?? "",
+      notes: distribution.distribution.notes ?? ""
+    });
+  }, [distribution]);
+
   const totals = useMemo(() => {
     const totalAmount = registrations.reduce((sum, registration) => sum + Number(registration.totalAmount ?? 0), 0);
     const paidAmount = payments
@@ -639,6 +951,8 @@ export function CohortDetailClient({ id }: { id: string }) {
   const distributionLedgerRows = useMemo(() => {
     const incoming = payments.map((payment) => ({
       id: `payment-${payment.id}`,
+      kind: "payment",
+      source: payment,
       date: payment.paymentDate ?? payment.createdAt,
       label: payment.organization?.name ?? payment.registration?.organization?.name ?? "Incoming payment",
       helper: `Incoming · ${formatStatusLabel(payment.status)}`,
@@ -647,6 +961,8 @@ export function CohortDetailClient({ id }: { id: string }) {
     }));
     const payouts = (distribution?.distribution?.payouts ?? []).map((payout: AdminRow) => ({
       id: `payout-${payout.id}`,
+      kind: "payout",
+      source: payout,
       date: payout.paymentDate ?? payout.createdAt,
       label: distribution?.distribution?.tlName ?? "TL payout",
       helper: `Outgoing · ${formatStatusLabel(payout.status)}`,
@@ -707,6 +1023,86 @@ export function CohortDetailClient({ id }: { id: string }) {
       await Promise.all(ids.map((participantId) => adminApi("/api/participants", { method: "PATCH", body: { id: participantId, status: bulkParticipantStatus } })));
       notifySuccess(`${ids.length} participants updated`);
       setParticipantSelection({ type: "include", ids: new Set() });
+      await load();
+    } catch (error) {
+      notifyError((error as Error).message);
+    }
+  }
+
+  function openInvoiceEditor(invoice?: AdminRow | null, registration?: AdminRow | null) {
+    setEditingInvoice(invoice ?? null);
+    setInvoiceSeedRegistration(registration ?? null);
+    setInvoiceDialogOpen(true);
+  }
+
+  async function saveDistributionSettings() {
+    try {
+      await adminApi("/api/distributions", {
+        method: "PATCH",
+        body: {
+          cohortId: id,
+          commissionPercent: Number(distributionSettings.commissionPercent),
+          tlSharePercent: Number(distributionSettings.tlSharePercent),
+          tlName: distributionSettings.tlName || undefined,
+          notes: distributionSettings.notes || undefined
+        }
+      });
+      notifySuccess("Distribution settings saved");
+      await load();
+    } catch (error) {
+      notifyError((error as Error).message);
+    }
+  }
+
+  async function createBatchInvoices() {
+    const existingRegistrationIds = new Set(invoiceDrafts.map((invoice) => invoice.registrationId).filter(Boolean));
+    const candidates = registrations.filter((registration) => (
+      !registration.archivedAt &&
+      !existingRegistrationIds.has(registration.id) &&
+      ["PENDING", "INVOICED", "PARTIALLY_PAID"].includes(registration.paymentStatus ?? "")
+    ));
+
+    if (candidates.length === 0) {
+      notifyError("No unpaid registrations are missing invoice drafts.");
+      return;
+    }
+
+    try {
+      await Promise.all(candidates.map((registration) => adminApi("/api/invoices", {
+        method: "POST",
+        body: { cohortId: id, registrationId: registration.id, organizationId: registration.organizationId }
+      })));
+      notifySuccess(`${candidates.length} invoice drafts created`);
+      await load();
+    } catch (error) {
+      notifyError((error as Error).message);
+    }
+  }
+
+  async function generateInvoiceDocument(invoice: AdminRow, receipt = false) {
+    try {
+      await adminApi("/api/invoices", { method: "PATCH", body: { action: "generatePdf", id: invoice.id, receipt } });
+      notifySuccess(receipt ? "Receipt PDF generated" : "Invoice PDF generated");
+      await load();
+    } catch (error) {
+      notifyError((error as Error).message);
+    }
+  }
+
+  async function sendInvoiceDocument(invoice: AdminRow, receipt = false) {
+    try {
+      await adminApi("/api/invoices", { method: "PATCH", body: { action: receipt ? "sendReceipt" : "sendInvoice", id: invoice.id } });
+      notifySuccess(receipt ? "Receipt sent" : "Invoice sent");
+      await load();
+    } catch (error) {
+      notifyError((error as Error).message);
+    }
+  }
+
+  async function cancelPayout(payout: AdminRow) {
+    try {
+      await adminApi("/api/distributions", { method: "PATCH", body: { action: "cancelPayout", id: payout.id } });
+      notifySuccess("Payout cancelled");
       await load();
     } catch (error) {
       notifyError((error as Error).message);
@@ -892,7 +1288,12 @@ export function CohortDetailClient({ id }: { id: string }) {
       sortable: false,
       renderCell: (params) => (
         <Box onClick={(event) => event.stopPropagation()}>
-          <RowActionMenu actions={[{ label: "Payment detail", onClick: () => setPaymentDetail(params.row) }]} />
+          <RowActionMenu
+            actions={[
+              { label: "Payment detail", onClick: () => setPaymentDetail(params.row) },
+              { label: "Create invoice", onClick: () => openInvoiceEditor(null, params.row.registration ?? null) }
+            ]}
+          />
         </Box>
       )
     }
@@ -1272,29 +1673,94 @@ export function CohortDetailClient({ id }: { id: string }) {
 
       {tab === 4 && (
         <Stack spacing={2}>
-          <SectionCard title="Distribution Snapshot">
+          <SectionCard title="Finance Snapshot">
             {distribution ? (
-              <div className="distribution-grid">
-                <ProjectReturnCard distribution={distribution} />
-                {[
-                  ["RPD Commission", `${distribution.distribution?.commissionPercent ?? 30}% · ${money(distribution.totals?.commissionAmount)}`],
-                  ["TL Share", `${distribution.distribution?.tlSharePercent ?? 70}% · ${money(distribution.totals?.tlShareAmount)}`],
-                  ["TL Payout Due", money(distribution.totals?.tlPayoutDue)],
-                  ["Paid Out", money(distribution.totals?.payoutMade)],
-                  ["Pending Payout", money(distribution.totals?.pendingPayout)],
-                  ["Payment Ratio", `${Math.round(Number(distribution.totals?.paymentRatio ?? 0) * 100)}%`]
-                ].map(([label, value]) => (
-                  <article className="cohort-metric-card" key={label}>
-                    <span className="cohort-metric-label">{label}</span>
-                    <strong>{value}</strong>
-                  </article>
-                ))}
+              <div className="finance-command-grid">
+                <div className="finance-command-main">
+                  <ProjectReturnCard distribution={distribution} />
+                  <div className="distribution-grid">
+                    {[
+                      ["Total Sold", money(distribution.totals?.soldAmount)],
+                      ["Paid In", money(distribution.totals?.paidAmount)],
+                      ["RPD Commission", `${distribution.distribution?.commissionPercent ?? 30}% · ${money(distribution.totals?.commissionAmount)}`],
+                      ["TL Share", `${distribution.distribution?.tlSharePercent ?? 70}% · ${money(distribution.totals?.tlShareAmount)}`],
+                      ["TL Payout Due", money(distribution.totals?.tlPayoutDue)],
+                      ["Paid Out", money(distribution.totals?.payoutMade)],
+                      ["Pending Payout", money(distribution.totals?.pendingPayout)],
+                      ["Payment Ratio", `${Math.round(Number(distribution.totals?.paymentRatio ?? 0) * 100)}%`]
+                    ].map(([label, value]) => (
+                      <article className="cohort-metric-card" key={label}>
+                        <span className="cohort-metric-label">{label}</span>
+                        <strong>{value}</strong>
+                      </article>
+                    ))}
+                  </div>
+                </div>
+                <div className="finance-settings-panel">
+                  <div className="section-inline-header">
+                    <div>
+                      <Typography variant="subtitle2">Distribution Controls</Typography>
+                      <Typography variant="body2" color="text.secondary">QuickBooks stays as reference/status in this sprint.</Typography>
+                    </div>
+                    <Button size="small" onClick={saveDistributionSettings}>Save</Button>
+                  </div>
+                  <div className="finance-settings-grid">
+                    <TextField label="RPD %" type="number" value={distributionSettings.commissionPercent} onChange={(event) => setDistributionSettings((values) => ({ ...values, commissionPercent: event.target.value }))} />
+                    <TextField label="TL %" type="number" value={distributionSettings.tlSharePercent} onChange={(event) => setDistributionSettings((values) => ({ ...values, tlSharePercent: event.target.value }))} />
+                    <TextField label="TL name" value={distributionSettings.tlName} onChange={(event) => setDistributionSettings((values) => ({ ...values, tlName: event.target.value }))} />
+                    <TextField label="Notes" value={distributionSettings.notes} onChange={(event) => setDistributionSettings((values) => ({ ...values, notes: event.target.value }))} />
+                  </div>
+                </div>
               </div>
             ) : (
               <EmptyState title="Distribution unavailable" description="Distribution data will appear when this cohort can be loaded." />
             )}
           </SectionCard>
-          <SectionCard title="Distribution Ledger">
+          <SectionCard
+            title="Invoice / Receipt Workbench"
+            action={(
+              <div className="section-action-row">
+                <Button variant="outlined" size="small" onClick={() => openInvoiceEditor()}>Create invoice</Button>
+                <Button variant="outlined" size="small" onClick={createBatchInvoices}>Create batch invoices</Button>
+              </div>
+            )}
+          >
+            <div className="cohort-finance-strip">
+              <DetailField label="Invoice Drafts" value={invoiceDrafts.length} />
+              <DetailField label="With PDF" value={invoiceDrafts.filter((invoice) => invoice.pdfUrl).length} />
+              <DetailField label="Receipts" value={invoiceDrafts.filter((invoice) => invoice.receiptUrl).length} />
+              <DetailField label="Open Balance" value={money(invoiceDrafts.reduce((sum, invoice) => sum + Math.max(Number(invoice.totalAmount ?? 0) - Number(invoice.paidAmount ?? 0), 0), 0))} />
+            </div>
+            <div className="invoice-workbench">
+              {invoiceDrafts.map((invoice) => (
+                <div className="invoice-workbench-row" key={invoice.id}>
+                  <div className="invoice-workbench-title">
+                    <strong>{invoice.invoiceNumber ?? invoice.id.slice(-8)}</strong>
+                    <span>{formatProperDisplay(invoice.organization?.name ?? invoice.registration?.organization?.name ?? invoice.registration?.primaryContactName ?? "Cohort invoice")}</span>
+                  </div>
+                  <StatusChip value={invoice.status} />
+                  <DetailField label="Total" value={money(invoice.totalAmount)} />
+                  <DetailField label="Paid" value={money(invoice.paidAmount)} />
+                  <DetailField label="QB" value={formatStatusLabel(invoice.quickBooksSyncStatus ?? "NOT_SYNCED")} />
+                  <RowActionMenu
+                    actions={[
+                      { label: "Edit invoice", onClick: () => openInvoiceEditor(invoice) },
+                      { label: invoice.pdfUrl ? "Regenerate PDF" : "Generate PDF", onClick: () => void generateInvoiceDocument(invoice) },
+                      ...(invoice.pdfUrl ? [{ label: "Open PDF", onClick: () => window.open(invoice.pdfUrl, "_blank", "noreferrer") }] : []),
+                      { label: "Send invoice", onClick: () => void sendInvoiceDocument(invoice) },
+                      { label: invoice.receiptUrl ? "Regenerate receipt" : "Generate receipt", onClick: () => void generateInvoiceDocument(invoice, true) },
+                      ...(invoice.receiptUrl ? [{ label: "Open receipt", onClick: () => window.open(invoice.receiptUrl, "_blank", "noreferrer") }, { label: "Send receipt", onClick: () => void sendInvoiceDocument(invoice, true) }] : [])
+                    ]}
+                  />
+                </div>
+              ))}
+              {invoiceDrafts.length === 0 && <EmptyState title="No invoice drafts yet" description="Create one invoice or batch-create drafts for unpaid registrations." />}
+            </div>
+          </SectionCard>
+          <SectionCard
+            title="Payout Ledger"
+            action={<Button variant="outlined" size="small" onClick={() => { setEditingPayout(null); setPayoutDialogOpen(true); }}>Create payout</Button>}
+          >
             <div className="distribution-ledger">
               {distributionLedgerRows.map((row) => (
                 <div className="distribution-ledger-row" key={row.id}>
@@ -1305,6 +1771,15 @@ export function CohortDetailClient({ id }: { id: string }) {
                   </div>
                   <StatusChip value={row.status} />
                   <strong className={row.amount < 0 ? "is-outgoing" : "is-incoming"}>{row.amount < 0 ? "-" : "+"}{money(Math.abs(row.amount))}</strong>
+                  {row.kind === "payout" && row.source && (
+                    <RowActionMenu
+                      actions={[
+                        { label: "Edit payout", onClick: () => { setEditingPayout(row.source); setPayoutDialogOpen(true); } },
+                        ...(row.source.attachmentUrl ? [{ label: "Open proof", onClick: () => window.open(row.source.attachmentUrl, "_blank", "noreferrer") }] : []),
+                        { label: "Cancel payout", onClick: () => void cancelPayout(row.source) }
+                      ]}
+                    />
+                  )}
                 </div>
               ))}
               {distributionLedgerRows.length === 0 && <EmptyState title="No ledger activity yet" description="Incoming payments and outgoing TL payouts will appear here." />}
@@ -1363,6 +1838,38 @@ export function CohortDetailClient({ id }: { id: string }) {
         onClose={() => setPaymentDetail(null)}
         onChanged={async () => {
           notifySuccess("Payment updated");
+          await load();
+        }}
+        onError={notifyError}
+      />
+      <InvoiceEditorDialog
+        cohortId={id}
+        invoice={editingInvoice}
+        seedRegistration={invoiceSeedRegistration}
+        registrations={registrations}
+        open={invoiceDialogOpen}
+        onClose={() => {
+          setInvoiceDialogOpen(false);
+          setEditingInvoice(null);
+          setInvoiceSeedRegistration(null);
+        }}
+        onSaved={async () => {
+          notifySuccess(editingInvoice ? "Invoice updated" : "Invoice created");
+          await load();
+        }}
+        onError={notifyError}
+      />
+      <PayoutEditorDialog
+        cohortId={id}
+        payout={editingPayout}
+        payments={payments}
+        open={payoutDialogOpen}
+        onClose={() => {
+          setPayoutDialogOpen(false);
+          setEditingPayout(null);
+        }}
+        onSaved={async () => {
+          notifySuccess(editingPayout ? "Payout updated" : "Payout created");
           await load();
         }}
         onError={notifyError}

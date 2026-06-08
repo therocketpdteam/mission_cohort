@@ -1137,6 +1137,14 @@ a {
 }
 
 @media (max-width: 900px) {
+  .finance-command-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .invoice-workbench-row {
+    grid-template-columns: minmax(0, 1fr) 112px repeat(3, minmax(82px, 0.45fr)) 44px;
+  }
+
   .jotform-preview-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -2631,14 +2639,15 @@ a {
 
 .distribution-ledger-row {
   display: grid;
-  grid-template-columns: 68px minmax(0, 1fr) 130px 120px;
+  grid-template-columns: 68px minmax(0, 1fr) 130px 120px 44px;
   border: 1px solid var(--color-slate-200);
   border-radius: 10px;
   background: var(--color-slate-50);
   padding: 10px;
 }
 
-.distribution-ledger-row > strong:last-child {
+.distribution-ledger-row > strong.is-incoming,
+.distribution-ledger-row > strong.is-outgoing {
   justify-self: end;
 }
 
@@ -2675,7 +2684,7 @@ a {
 
 .cohort-finance-strip {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
   margin-bottom: 12px;
   border: 1px solid var(--color-slate-200);
@@ -2690,6 +2699,110 @@ a {
 
 .distribution-card-main {
   grid-column: span 3;
+}
+
+.finance-command-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(300px, 0.45fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.finance-command-main {
+  display: grid;
+  min-width: 0;
+  gap: 14px;
+}
+
+.finance-settings-panel {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  border: 1px solid var(--color-slate-200);
+  border-radius: 12px;
+  background: var(--color-slate-50);
+  padding: 14px;
+}
+
+.finance-settings-grid,
+.finance-dialog-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.section-action-row,
+.section-inline-header,
+.finance-upload-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.section-inline-header {
+  justify-content: space-between;
+}
+
+.invoice-workbench {
+  display: grid;
+  gap: 8px;
+}
+
+.invoice-workbench-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) 112px repeat(3, minmax(96px, 0.55fr)) 44px;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid var(--color-slate-200);
+  border-radius: 10px;
+  background: var(--color-white);
+  padding: 10px;
+}
+
+.invoice-workbench-title {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.invoice-workbench-title strong,
+.invoice-workbench-title span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.invoice-workbench-title strong {
+  color: var(--color-primary-900);
+}
+
+.invoice-workbench-title span {
+  color: var(--color-slate-500);
+  font-size: 0.82rem;
+  font-weight: 750;
+}
+
+.invoice-line-editor {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0;
+  border: 1px solid var(--color-slate-200);
+  border-radius: 12px;
+  background: var(--color-slate-50);
+  padding: 12px;
+}
+
+.invoice-line-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) 92px 120px auto;
+  gap: 8px;
+  align-items: end;
+}
+
+.finance-upload-row {
+  margin-top: 12px;
 }
 
 .quick-view-grid {
@@ -3039,6 +3152,9 @@ a {
 .app-shell.is-night .session-material-links a,
 .app-shell.is-night .participant-bulk-bar,
 .app-shell.is-night .cohort-finance-strip,
+.app-shell.is-night .finance-settings-panel,
+.app-shell.is-night .invoice-line-editor,
+.app-shell.is-night .invoice-workbench-row,
 .app-shell.is-night .readiness-summary,
 .app-shell.is-night .readiness-row,
 .app-shell.is-night .readiness-manual-task,
@@ -3053,6 +3169,14 @@ a {
 .app-shell.is-night .comms-attachment-row,
 .app-shell.is-night .comms-recipient-row {
   background: #0c1725;
+}
+
+.app-shell.is-night .invoice-workbench-title strong {
+  color: #e5eef8;
+}
+
+.app-shell.is-night .invoice-workbench-title span {
+  color: #9fb2c8;
 }
 
 .app-shell.is-night .comms-stat-card strong,
@@ -4002,6 +4126,18 @@ a {
 }
 
 @media (max-width: 620px) {
+  .finance-command-grid,
+  .finance-settings-grid,
+  .finance-dialog-grid,
+  .invoice-workbench-row,
+  .invoice-line-row {
+    grid-template-columns: 1fr;
+  }
+
+  .invoice-workbench-row {
+    align-items: start;
+  }
+
   .app-topbar {
     display: grid;
     grid-template-columns: 42px minmax(0, 1fr);
