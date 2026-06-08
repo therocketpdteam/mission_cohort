@@ -161,6 +161,18 @@ function communicationIssueLabel(communication: AdminRow) {
   return null;
 }
 
+function taskTemplateName(task: AdminRow) {
+  if (task.category === "PAYMENT_FOLLOW_UP") {
+    return "Payment Reminder";
+  }
+
+  if (task.category === "SUPPORTING_DOCUMENTS") {
+    return "Supporting Documents Request";
+  }
+
+  return "Participant List Request";
+}
+
 function resourceHref(resource: AdminRow) {
   if (resource.url) {
     return resource.url;
@@ -831,6 +843,8 @@ export function CohortDetailClient({ id }: { id: string }) {
   const [registrationDetail, setRegistrationDetail] = useState<AdminRow | null>(null);
   const [registrationThread, setRegistrationThread] = useState<AdminRow[]>([]);
   const [registrationThreadLoading, setRegistrationThreadLoading] = useState(false);
+  const [sendingRegistrationTaskId, setSendingRegistrationTaskId] = useState("");
+  const [completingRegistrationTaskId, setCompletingRegistrationTaskId] = useState("");
   const [participantDetail, setParticipantDetail] = useState<AdminRow | null>(null);
   const [participantSelection, setParticipantSelection] = useState<GridRowSelectionModel>({ type: "include", ids: new Set() });
   const [bulkParticipantStatus, setBulkParticipantStatus] = useState("REGISTERED");
@@ -897,6 +911,57 @@ export function CohortDetailClient({ id }: { id: string }) {
       setRegistrationDetail(await adminApi<AdminRow>(`/api/registrations?id=${row.id}`));
     } catch (error) {
       notifyError((error as Error).message);
+    }
+  }
+
+  async function sendRegistrationTaskMessage(task: AdminRow) {
+    const registrationId = registrationDetail?.id ?? task.registrationId ?? task.registration?.id;
+
+    if (!registrationId) {
+      notifyError("This follow-up is not linked to a registration POC.");
+      return;
+    }
+
+    const templateName = taskTemplateName(task);
+    const template = templates.find((item) => item.active && item.name === templateName) ?? templates.find((item) => item.active && item.type === "FOLLOW_UP");
+
+    if (!template?.id) {
+      notifyError("No active pre-made template is available for this follow-up.");
+      return;
+    }
+
+    setSendingRegistrationTaskId(task.id);
+
+    try {
+      await adminApi("/api/communications", {
+        method: "PATCH",
+        body: { action: "sendTemplateToRegistrations", templateId: template.id, registrationIds: [registrationId] }
+      });
+      notifySuccess(`Sent ${template.name} to ${formatProperDisplay(registrationDetail?.primaryContactName ?? "the POC")}.`);
+      if (registrationDetail?.id) {
+        await openRegistrationDetail(registrationDetail);
+      }
+    } catch (error) {
+      notifyError((error as Error).message);
+    } finally {
+      setSendingRegistrationTaskId("");
+    }
+  }
+
+  async function completeRegistrationTask(task: AdminRow) {
+    setCompletingRegistrationTaskId(task.id);
+
+    try {
+      await adminApi("/api/operations/tasks", { method: "PATCH", body: { id: task.id, action: "complete" } });
+      notifySuccess("Follow-up marked complete.");
+      if (registrationDetail?.id) {
+        await openRegistrationDetail(registrationDetail);
+      }
+      await load();
+    } catch (error) {
+      notifyError((error as Error).message);
+    } finally {
+      setCompletingRegistrationTaskId("");
     }
   }
 
@@ -2079,7 +2144,15 @@ export function CohortDetailClient({ id }: { id: string }) {
                               .join(" · ")}
                           </span>
                         </div>
-                        <StatusChip value={task.priority ?? task.status} />
+                        <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap justifyContent="flex-end">
+                          <StatusChip value={task.priority ?? task.status} />
+                          <Button size="small" variant="outlined" onClick={() => sendRegistrationTaskMessage(task)} disabled={Boolean(sendingRegistrationTaskId || completingRegistrationTaskId)}>
+                            {sendingRegistrationTaskId === task.id ? "Sending" : "Send POC"}
+                          </Button>
+                          <Button size="small" variant="text" onClick={() => completeRegistrationTask(task)} disabled={Boolean(sendingRegistrationTaskId || completingRegistrationTaskId)}>
+                            {completingRegistrationTaskId === task.id ? "Saving" : "Complete"}
+                          </Button>
+                        </Stack>
                       </div>
                     ))}
                 </div>

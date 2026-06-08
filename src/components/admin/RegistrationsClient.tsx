@@ -99,6 +99,18 @@ function communicationIssueLabel(communication: AdminRow) {
   return null;
 }
 
+function taskTemplateName(task: AdminRow) {
+  if (task.category === "PAYMENT_FOLLOW_UP") {
+    return "Payment Reminder";
+  }
+
+  if (task.category === "SUPPORTING_DOCUMENTS") {
+    return "Supporting Documents Request";
+  }
+
+  return "Participant List Request";
+}
+
 function emptyRegistration() {
   return {
     primaryContactName: "",
@@ -294,17 +306,25 @@ function RegistrationDetailDialog({
   registration,
   open,
   onClose,
-  onChanged
+  onChanged,
+  templates,
+  onSuccess,
+  onError
 }: {
   registration: AdminRow | null;
   open: boolean;
   onClose: () => void;
   onChanged: () => Promise<void>;
+  templates: AdminRow[];
+  onSuccess: (message: string) => void;
+  onError: (message: string) => void;
 }) {
   const [participant, setParticipant] = useState({ firstName: "", lastName: "", email: "", title: "", phone: "" });
   const [thread, setThread] = useState<AdminRow[]>([]);
   const [threadLoading, setThreadLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sendingTaskId, setSendingTaskId] = useState("");
+  const [completingTaskId, setCompletingTaskId] = useState("");
 
   useEffect(() => {
     if (open) {
@@ -437,6 +457,56 @@ function RegistrationDetailDialog({
     }
   }
 
+  async function sendFollowUp(task: AdminRow) {
+    if (!registration?.id) {
+      setError("Registration is required before sending a follow-up.");
+      return;
+    }
+
+    const templateName = taskTemplateName(task);
+    const template = templates.find((item) => item.active && item.name === templateName) ?? templates.find((item) => item.active && item.type === "FOLLOW_UP");
+
+    if (!template?.id) {
+      setError("No active pre-made template is available for this follow-up.");
+      return;
+    }
+
+    setSendingTaskId(task.id);
+    setError(null);
+
+    try {
+      await adminApi("/api/communications", {
+        method: "PATCH",
+        body: { action: "sendTemplateToRegistrations", templateId: template.id, registrationIds: [registration.id] }
+      });
+      onSuccess(`Sent ${template.name} to ${formatProperDisplay(registration.primaryContactName ?? "the POC")}.`);
+      await onChanged();
+    } catch (sendError) {
+      const message = (sendError as Error).message;
+      setError(message);
+      onError(message);
+    } finally {
+      setSendingTaskId("");
+    }
+  }
+
+  async function completeFollowUp(task: AdminRow) {
+    setCompletingTaskId(task.id);
+    setError(null);
+
+    try {
+      await adminApi("/api/operations/tasks", { method: "PATCH", body: { id: task.id, action: "complete" } });
+      onSuccess("Follow-up marked complete.");
+      await onChanged();
+    } catch (completeError) {
+      const message = (completeError as Error).message;
+      setError(message);
+      onError(message);
+    } finally {
+      setCompletingTaskId("");
+    }
+  }
+
   return (
     <QuickViewDrawer
       open={open}
@@ -501,7 +571,15 @@ function RegistrationDetailDialog({
                             .join(" · ")}
                         </span>
                       </div>
-                      <StatusChip value={task.priority ?? task.status} />
+                      <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap justifyContent="flex-end">
+                        <StatusChip value={task.priority ?? task.status} />
+                        <Button size="small" variant="outlined" onClick={() => sendFollowUp(task)} disabled={Boolean(sendingTaskId || completingTaskId)}>
+                          {sendingTaskId === task.id ? "Sending" : "Send POC"}
+                        </Button>
+                        <Button size="small" variant="text" onClick={() => completeFollowUp(task)} disabled={Boolean(sendingTaskId || completingTaskId)}>
+                          {completingTaskId === task.id ? "Saving" : "Complete"}
+                        </Button>
+                      </Stack>
                     </div>
                   ))}
               </div>
@@ -1019,8 +1097,11 @@ export function RegistrationsClient() {
       <RegistrationDetailDialog
         open={detailOpen}
         registration={detail}
+        templates={templates}
         onClose={() => { setDetailOpen(false); setDetail(null); }}
         onChanged={reloadDetail}
+        onSuccess={notifySuccess}
+        onError={notifyError}
       />
       <Dialog open={Boolean(pendingLifecycleAction)} onClose={() => setPendingLifecycleAction(null)} fullWidth maxWidth="sm">
         <DialogTitle>
