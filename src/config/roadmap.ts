@@ -71,8 +71,8 @@ export const roadmapCards: RoadmapCard[] = [
       { title: "KPI/date filter layer", status: "done", note: "Dashboard snapshots support persisted date presets.", priority: "high" },
       { title: "Cohort readiness", status: "done", note: "Readiness rows highlight cohort operations and blockers.", priority: "high" },
       { title: "Agenda", status: "done", note: "Upcoming sessions are shown as agenda rows.", priority: "medium" },
-      { title: "Revenue watch", status: "in_progress", note: "Finance summary exists; production finance migration must be completed.", priority: "high" },
-      { title: "Attention items", status: "in_progress", note: "Communications and operations issues are surfaced, but need tighter triage rules.", priority: "medium" },
+      { title: "Revenue watch", status: "in_progress", note: "Finance schema is healthy; continue QA on calculations and empty states.", priority: "high" },
+      { title: "Attention items", status: "done", note: "Dashboard counts unreviewed communication issues and open operations tasks.", priority: "medium" },
       { title: "Playwright visual audit coverage", status: "in_progress", note: "Audit exists and can run against prod; reporting is being refined.", priority: "high" }
     ]
   },
@@ -97,15 +97,15 @@ export const roadmapCards: RoadmapCard[] = [
     title: "Jotform Intake",
     summary: "Webhook intake, review, mapping, replay, payment parsing, and submission history.",
     ownerArea: "Integrations",
-    nextAction: "Apply production migration, then restore full revision metadata in the review queue.",
+    nextAction: "Keep hardening shared-form URL routing and reduce mapping ambiguity on real submissions.",
     items: [
       { title: "Webhook connection", status: "done", note: "Protected webhook URL and secret rotation are available.", priority: "high" },
-      { title: "Review queue", status: "in_progress", note: "Queue is restored using legacy-safe fields until migration lands.", priority: "high" },
+      { title: "Review queue", status: "done", note: "Queue shows incoming submissions, processed state, readiness, and replay actions.", priority: "high" },
       { title: "Mapping wizard", status: "in_progress", note: "Cleaner UI exists; keep removing provider noise and ambiguous fields.", priority: "high" },
       { title: "URL routing", status: "in_progress", note: "URL rules and single-route fallback exist; shared-form edge cases remain.", priority: "high" },
       { title: "Replay", status: "done", note: "Held submissions can be replayed after mapping.", priority: "high" },
       { title: "Payment mapping", status: "done", note: "Explicit payment status and amount mapping are handled.", priority: "high" },
-      { title: "Revision/history support", status: "blocked", note: "Code is present, but production DB migration must be applied.", priority: "high" },
+      { title: "Revision/history support", status: "done", note: "Production schema is healthy and linked Jotform revisions can be stored.", priority: "high" },
       { title: "Remaining routing edge cases", status: "planned", note: "Need clearer handling when Jotform sends generic source URLs.", priority: "medium" }
     ]
   },
@@ -116,11 +116,11 @@ export const roadmapCards: RoadmapCard[] = [
     ownerArea: "Operations",
     nextAction: "Deepen POC timeline and participant history inside quick views after the roster table cleanup.",
     items: [
-      { title: "Registration quick view", status: "in_progress", note: "Primary rows open detail; supporting data still needs cleanup.", priority: "high" },
-      { title: "POC communication context", status: "planned", note: "Outbound history is planned for registration-side context.", priority: "high" },
+      { title: "Registration quick view", status: "in_progress", note: "Primary rows open detail with roster, Jotform, POC history, and finance context.", priority: "high" },
+      { title: "POC communication context", status: "done", note: "Registration detail links outbound history back to Communications.", priority: "high" },
       { title: "Roster/payment filters", status: "in_progress", note: "Core filters exist; continue standardizing across views.", priority: "medium" },
       { title: "Participant history", status: "planned", note: "Match by email across cohorts for context after the participant identity drawer is finished.", priority: "medium" },
-      { title: "Bulk actions", status: "in_progress", note: "Participant bulk controls exist; expand to registration operations.", priority: "medium" },
+      { title: "Bulk actions", status: "in_progress", note: "Registration bulk status/send/archive actions exist; participant-side workflows still need polish.", priority: "medium" },
       { title: "Attachments", status: "planned", note: "Needs private storage flow connected to communications.", priority: "medium" }
     ]
   },
@@ -129,13 +129,14 @@ export const roadmapCards: RoadmapCard[] = [
     title: "Communications",
     summary: "Email templates, scheduled/manual sends, delivery telemetry, and message issue visibility.",
     ownerArea: "Communications",
-    nextAction: "QA recipient-level issue review and plan future inbound reply sync once outbound operations are stable.",
+    nextAction: "Verify live SendGrid environment variables, then run a real send/resend/issue-review smoke test.",
     items: [
       { title: "Templates", status: "done", note: "Template management exists.", priority: "high" },
-      { title: "Scheduled/manual emails", status: "in_progress", note: "All-cohort outbox exists with message and recipient-level resend actions.", priority: "high" },
-      { title: "SendGrid delivery/open/error telemetry", status: "done", note: "Recipient timelines expose sent, delivered, open, click, bounce, and failure events.", priority: "high" },
+      { title: "Scheduled/manual emails", status: "in_progress", note: "All-cohort outbox and resend actions exist; live sending depends on SendGrid env readiness.", priority: "high" },
+      { title: "Recipient issue review", status: "done", note: "Failed/bounced recipients can be reviewed with notes and removed from the active queue.", priority: "high" },
+      { title: "SendGrid delivery/open/error telemetry", status: "in_progress", note: "Recipient timelines support events; production webhook key is still a health warning.", priority: "high" },
       { title: "Dashboard issue surfacing", status: "done", note: "Dashboard issue counts now track unreviewed failed/bounced recipients.", priority: "medium" },
-      { title: "Outbound attachments", status: "in_progress", note: "Per-message attachments can be uploaded, removed, and included in send/resend.", priority: "high" },
+      { title: "Outbound attachments", status: "in_progress", note: "Per-message attachments can be uploaded and removed; real send QA depends on SendGrid readiness.", priority: "high" },
       { title: "Future inbound reply sync", status: "planned", note: "Explicitly future scope.", priority: "low" }
     ]
   },
@@ -144,15 +145,15 @@ export const roadmapCards: RoadmapCard[] = [
     title: "Finance / Distribution",
     summary: "Payments, invoice drafts, receipts, TL distribution, and project return visibility.",
     ownerArea: "Finance",
-    nextAction: "Apply the finance migration in production so invoice/distribution endpoints stop returning 500.",
+    nextAction: "Finish the user-facing invoice, receipt, and payout workflows now that production schema/storage are healthy.",
     items: [
       { title: "Payment snapshot", status: "done", note: "Payment summary is available on dashboard/cohort surfaces.", priority: "high" },
-      { title: "Invoice drafts", status: "blocked", note: "Code exists; production finance tables need migration.", priority: "high" },
-      { title: "PDF invoices/receipts", status: "blocked", note: "Generation exists but depends on invoice tables and storage readiness.", priority: "high" },
+      { title: "Invoice drafts", status: "in_progress", note: "Production tables are healthy; UI and send workflow need completion.", priority: "high" },
+      { title: "PDF invoices/receipts", status: "in_progress", note: "Storage is healthy; polish templates, receipt states, and one-click send.", priority: "high" },
       { title: "QuickBooks reference sync", status: "planned", note: "References/status are the v1 sync target.", priority: "medium" },
-      { title: "Distribution calculator", status: "blocked", note: "Code exists; production distribution table needs migration.", priority: "high" },
-      { title: "Payout ledger", status: "blocked", note: "Depends on distribution payout table in production.", priority: "high" },
-      { title: "Production migration status", status: "blocked", note: "Must be resolved before finance can be considered usable.", priority: "high" }
+      { title: "Distribution calculator", status: "in_progress", note: "Production ledger tables are healthy; calculation QA and UX polish remain.", priority: "high" },
+      { title: "Payout ledger", status: "in_progress", note: "Payout table is healthy; operational entry/reconciliation flow needs completion.", priority: "high" },
+      { title: "Production migration status", status: "done", note: "Finance and distribution schema checks are healthy in System Health.", priority: "high" }
     ]
   },
   {
@@ -162,9 +163,9 @@ export const roadmapCards: RoadmapCard[] = [
     ownerArea: "Platform",
     nextAction: "Clarify each provider’s done definition and expose connection health consistently.",
     items: [
-      { title: "Supabase auth/storage", status: "in_progress", note: "Auth works; storage buckets and limits need production verification.", priority: "high" },
+      { title: "Supabase auth/storage", status: "done", note: "Auth configuration and public/private storage buckets are healthy in production.", priority: "high" },
       { title: "SendGrid", status: "in_progress", note: "Outbound/events exist; operational health needs continued QA.", priority: "high" },
-      { title: "Jotform", status: "in_progress", note: "Intake works with mapping/replay; routing and history migration remain.", priority: "high" },
+      { title: "Jotform", status: "in_progress", note: "Intake, mapping, replay, and revision schema work; shared-form routing edge cases remain.", priority: "high" },
       { title: "Google Calendar", status: "planned", note: "Calendar invite creation/sync needs full end-to-end verification.", priority: "medium" },
       { title: "QuickBooks", status: "planned", note: "References/status first; full invoice sync later.", priority: "medium" },
       { title: "CRM handoff", status: "planned", note: "Outbound contact/registration sync is scoped.", priority: "medium" },
@@ -181,7 +182,7 @@ export const roadmapCards: RoadmapCard[] = [
       { title: "Operational reports", status: "in_progress", note: "Report surfaces exist and need sharper metrics.", priority: "medium" },
       { title: "Cohort comparison", status: "planned", note: "Comparison controls are planned for cohort charts.", priority: "medium" },
       { title: "Registration evolution", status: "in_progress", note: "Chart exists; needs subtler styling and filters.", priority: "medium" },
-      { title: "Finance summaries", status: "blocked", note: "Depends on finance migration and distribution correctness.", priority: "high" },
+      { title: "Finance summaries", status: "in_progress", note: "Finance schema is healthy; summary correctness and report UX need QA.", priority: "high" },
       { title: "Export/share flows", status: "planned", note: "Shared report links exist; exports need definition.", priority: "low" }
     ]
   },
@@ -196,9 +197,9 @@ export const roadmapCards: RoadmapCard[] = [
       { title: "Playwright audit", status: "in_progress", note: "Audit exists and reports layout/API issues; sandbox permissions affect local runs.", priority: "high" },
       { title: "Production audit", status: "in_progress", note: "Prod app can be checked with live credentials and curl/API probes.", priority: "high" },
       { title: "System Health readiness panel", status: "done", note: "Settings now reports schema, storage, and integration readiness.", priority: "high" },
-      { title: "Migrations/deploy process", status: "in_progress", note: "Runbook and readiness checks exist; actual production migration access still required.", priority: "high" },
-      { title: "Error visibility", status: "in_progress", note: "Schema lag now returns controlled migration-required states in priority workflows.", priority: "medium" },
-      { title: "Environment readiness", status: "in_progress", note: "System Health surfaces missing env and bucket readiness.", priority: "medium" }
+      { title: "Migrations/deploy process", status: "done", note: "Vercel build patches and readiness checks keep production schema drift visible.", priority: "high" },
+      { title: "Error visibility", status: "done", note: "Schema lag returns controlled migration-required states in priority workflows.", priority: "medium" },
+      { title: "Environment readiness", status: "in_progress", note: "System Health is live; SendGrid, Google Calendar, and QuickBooks still show env warnings.", priority: "medium" }
     ]
   }
 ];

@@ -9,7 +9,7 @@ import {
   SendOutlined,
   VisibilityOutlined
 } from "@/components/ui/icons";
-import { Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem, Stack, Tab, Tabs, TextField, Typography } from "@/components/ui/primitives";
+import { Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem, Stack, Tab, Tabs, TextField, Typography } from "@/components/ui/primitives";
 import { GridColDef } from "./common";
 import { ChangeEvent, useEffect, useMemo, useState } from "react";
 import { adminApi, uploadAdminFile } from "@/lib/adminApi";
@@ -136,7 +136,11 @@ export function CommunicationsClient() {
   const [editing, setEditing] = useState<AdminRow | null>(null);
   const [previewTemplate, setPreviewTemplate] = useState<AdminRow | null>(null);
   const [messageDetail, setMessageDetail] = useState<AdminRow | null>(null);
+  const [reviewTarget, setReviewTarget] = useState<{ communicationId: string; recipientEmail: string; subject?: string; latestEvent?: string | null } | null>(null);
+  const [reviewNote, setReviewNote] = useState("");
+  const [reviewingIssue, setReviewingIssue] = useState(false);
   const [uploadingAttachment, setUploadingAttachment] = useState(false);
+  const [communicationHealthWarnings, setCommunicationHealthWarnings] = useState<string[]>([]);
   const { notifySuccess, notifyError, snackbar } = useNotifier();
 
   async function load(nextCohortId = selectedCohortId) {
@@ -161,6 +165,16 @@ export function CommunicationsClient() {
     if (search) {
       setMessageSearch(search);
     }
+    adminApi<AdminRow>("/api/system-health")
+      .then((health) => {
+        const integrationChecks = (health.groups ?? []).find((group: AdminRow) => group.key === "integrations")?.checks ?? [];
+        setCommunicationHealthWarnings(
+          integrationChecks
+            .filter((check: AdminRow) => ["sendgrid", "sendgridWebhook"].includes(String(check.key)) && check.status !== "healthy")
+            .map((check: AdminRow) => `${check.label}: ${check.detail}`)
+        );
+      })
+      .catch(() => setCommunicationHealthWarnings([]));
     load("").catch((error) => {
       notifyError(error.message);
       setLoading(false);
@@ -261,17 +275,39 @@ export function CommunicationsClient() {
     }
   }
 
-  async function reviewIssue(communicationId: string, recipientEmail: string) {
+  function openReviewIssue(input: { communicationId: string; recipientEmail: string; subject?: string; latestEvent?: string | null }) {
+    setReviewTarget(input);
+    setReviewNote("");
+  }
+
+  async function reviewIssue() {
+    if (!reviewTarget) {
+      return;
+    }
+
+    setReviewingIssue(true);
     try {
-      const result = await adminApi<AdminRow>("/api/communications", { method: "PATCH", body: { action: "reviewRecipientIssue", communicationId, recipientEmail } });
+      const result = await adminApi<AdminRow>("/api/communications", {
+        method: "PATCH",
+        body: {
+          action: "reviewRecipientIssue",
+          communicationId: reviewTarget.communicationId,
+          recipientEmail: reviewTarget.recipientEmail,
+          reviewNote: reviewNote.trim() || undefined
+        }
+      });
       if (result?.migrationRequired) {
         notifyError(result.message ?? "Production migration is required before issues can be reviewed.");
         return;
       }
       notifySuccess("Issue marked reviewed");
+      setReviewTarget(null);
+      setReviewNote("");
       await refreshAfterMutation(null);
     } catch (error) {
       notifyError((error as Error).message);
+    } finally {
+      setReviewingIssue(false);
     }
   }
 
@@ -422,7 +458,16 @@ export function CommunicationsClient() {
           <RowActionMenu
             actions={[
               { label: "Resend to recipient", icon: <SendOutlined fontSize="small" />, onClick: () => sendToRecipient(params.row.communicationId, params.row.recipientEmail) },
-              { label: "Mark reviewed", icon: <CheckCircleOutline fontSize="small" />, onClick: () => reviewIssue(params.row.communicationId, params.row.recipientEmail) },
+              {
+                label: "Mark reviewed",
+                icon: <CheckCircleOutline fontSize="small" />,
+                onClick: () => openReviewIssue({
+                  communicationId: String(params.row.communicationId),
+                  recipientEmail: String(params.row.recipientEmail),
+                  subject: params.row.subject,
+                  latestEvent: params.row.latestEvent
+                })
+              },
               ...(params.row.related?.registrationHref ? [{ label: "Open registration", icon: <VisibilityOutlined fontSize="small" />, onClick: () => { window.location.href = params.row.related.registrationHref; } }] : []),
               ...(params.row.related?.participantHref ? [{ label: "Open participant", icon: <VisibilityOutlined fontSize="small" />, onClick: () => { window.location.href = params.row.related.participantHref; } }] : [])
             ]}
@@ -479,6 +524,12 @@ export function CommunicationsClient() {
         }
       />
 
+      {communicationHealthWarnings.length > 0 && (
+        <Alert severity="warning">
+          {communicationHealthWarnings.join(" ")}
+        </Alert>
+      )}
+
       <div className="comms-summary-grid">
         <CommunicationsStat label="Scheduled" value={scheduledMessages} helper="Messages queued across the current filter" tone="primary" />
         <CommunicationsStat label="Sent" value={sentMessages} helper="Messages already delivered or attempted" tone="success" />
@@ -490,7 +541,7 @@ export function CommunicationsClient() {
       <SectionCard
         title="Message Workspace"
         action={
-          <TextField select label="Cohort" value={selectedCohortId} onChange={(event) => load(event.target.value)} sx={{ width: 300 }}>
+          <TextField select label="Cohort" value={selectedCohortId} onChange={(event) => load(event.target.value)} sx={{ width: 300, maxWidth: "100%" }}>
             <MenuItem value="">All cohorts</MenuItem>
             {cohorts.map((cohort) => (
               <MenuItem value={cohort.id} key={cohort.id}>
@@ -510,9 +561,9 @@ export function CommunicationsClient() {
         {activeTab < 2 ? (
           <>
             <CompactFilterBar resultCount={activeTab === 1 ? filteredIssues.length : filteredMessages.length}>
-              <TextField label={activeTab === 1 ? "Search issues" : "Search messages"} value={messageSearch} onChange={(event) => setMessageSearch(event.target.value)} />
+              <TextField label={activeTab === 1 ? "Search issues" : "Search messages"} value={messageSearch} onChange={(event) => setMessageSearch(event.target.value)} sx={{ width: 280, maxWidth: "100%" }} />
               {activeTab === 0 && (
-                <TextField select label="Status" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} sx={{ width: 190 }}>
+                <TextField select label="Status" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} sx={{ width: 190, maxWidth: "100%" }}>
                   <MenuItem value="">All statuses</MenuItem>
                   {communicationStatuses.map((status) => <MenuItem value={status} key={status}>{formatStatusLabel(status)}</MenuItem>)}
                 </TextField>
@@ -577,6 +628,13 @@ export function CommunicationsClient() {
       >
         {messageDetail ? (
           <Stack spacing={1.5}>
+            <div className="comms-message-hero">
+              <span>Message</span>
+              <strong title={messageDetail.subject}>{messageDetail.subject || "Untitled message"}</strong>
+              <p title={[messageDetail.cohort?.title, messageDetail.session?.title, messageDetail.template?.name].filter(Boolean).join(" · ")}>
+                {[messageDetail.cohort?.title, messageDetail.session?.title, messageDetail.template?.name ?? "Custom"].filter(Boolean).join(" · ")}
+              </p>
+            </div>
             <div className="comms-detail-grid">
               <div>
                 <span>Cohort</span>
@@ -647,7 +705,9 @@ export function CommunicationsClient() {
                       ))}
                     </div>
                     <ActionGroup>
-                      {recipient.needsReview ? <Button variant="outlined" size="small" startIcon={<CheckCircleOutline />} onClick={() => reviewIssue(messageDetail.id, recipient.recipientEmail)}>Review</Button> : null}
+                      {recipient.related?.registrationHref ? <Button href={recipient.related.registrationHref} variant="text" size="small">Registration</Button> : null}
+                      {recipient.related?.participantHref ? <Button href={recipient.related.participantHref} variant="text" size="small">Participant</Button> : null}
+                      {recipient.needsReview ? <Button variant="outlined" size="small" startIcon={<CheckCircleOutline />} onClick={() => openReviewIssue({ communicationId: messageDetail.id, recipientEmail: recipient.recipientEmail, subject: messageDetail.subject, latestEvent: recipient.latestEvent })}>Review</Button> : null}
                       <Button variant="outlined" size="small" startIcon={<SendOutlined />} onClick={() => sendToRecipient(messageDetail.id, recipient.recipientEmail)}>Resend</Button>
                     </ActionGroup>
                   </div>
@@ -704,6 +764,38 @@ export function CommunicationsClient() {
         </DialogContent>
         <DialogActions>
           <Button variant="outlined" onClick={() => setMergeFieldsOpen(false)}>Close</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={Boolean(reviewTarget)} onClose={() => setReviewTarget(null)} fullWidth maxWidth="sm">
+        <DialogTitle>Mark recipient issue reviewed</DialogTitle>
+        <DialogContent>
+          <Stack spacing={1.5}>
+            <Alert severity="info">
+              This clears the recipient from the active Issues queue. The SendGrid event remains in the message timeline for audit.
+            </Alert>
+            <div className="comms-review-target">
+              <span>Recipient</span>
+              <strong title={reviewTarget?.recipientEmail}>{reviewTarget?.recipientEmail}</strong>
+              <p title={reviewTarget?.subject ?? ""}>
+                {[reviewTarget?.latestEvent ? formatStatusLabel(String(reviewTarget.latestEvent)) : "", reviewTarget?.subject].filter(Boolean).join(" · ")}
+              </p>
+            </div>
+            <TextField
+              label="Review note"
+              multiline
+              minRows={3}
+              value={reviewNote}
+              onChange={(event) => setReviewNote(event.target.value)}
+              helperText="Optional, but useful when the issue was handled outside Mission Control."
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button variant="outlined" onClick={() => setReviewTarget(null)} disabled={reviewingIssue}>Cancel</Button>
+          <Button startIcon={<CheckCircleOutline />} onClick={reviewIssue} disabled={reviewingIssue}>
+            {reviewingIssue ? "Saving" : "Mark reviewed"}
+          </Button>
         </DialogActions>
       </Dialog>
 

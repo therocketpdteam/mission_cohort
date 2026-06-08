@@ -2854,6 +2854,49 @@ a {
   gap: 10px;
 }
 
+.comms-message-hero,
+.comms-review-target {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+  border: 1px solid rgba(20, 121, 201, 0.22);
+  border-radius: 10px;
+  background:
+    linear-gradient(135deg, rgba(20, 121, 201, 0.08), transparent 58%),
+    var(--color-white);
+  padding: 12px;
+}
+
+.comms-message-hero span,
+.comms-review-target span {
+  color: var(--color-slate-500);
+  font-size: 0.72rem;
+  font-weight: 820;
+  text-transform: uppercase;
+}
+
+.comms-message-hero strong,
+.comms-review-target strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-primary-900);
+  font-size: 1.02rem;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.comms-message-hero p,
+.comms-review-target p {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--color-slate-500);
+  font-size: 0.78rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .comms-detail-grid > div,
 .comms-preview-block {
   display: grid;
@@ -3002,6 +3045,8 @@ a {
 .app-shell.is-night .distribution-ledger-row,
 .app-shell.is-night .quick-view-list-row,
 .app-shell.is-night .comms-stat-card,
+.app-shell.is-night .comms-message-hero,
+.app-shell.is-night .comms-review-target,
 .app-shell.is-night .comms-detail-grid > div,
 .app-shell.is-night .comms-preview-block,
 .app-shell.is-night .comms-preview-frame,
@@ -3011,6 +3056,8 @@ a {
 }
 
 .app-shell.is-night .comms-stat-card strong,
+.app-shell.is-night .comms-message-hero strong,
+.app-shell.is-night .comms-review-target strong,
 .app-shell.is-night .comms-detail-grid strong,
 .app-shell.is-night .comms-preview-block strong,
 .app-shell.is-night .comms-attachment-row strong,
@@ -3020,6 +3067,10 @@ a {
 
 .app-shell.is-night .comms-stat-card span,
 .app-shell.is-night .comms-stat-card p,
+.app-shell.is-night .comms-message-hero span,
+.app-shell.is-night .comms-message-hero p,
+.app-shell.is-night .comms-review-target span,
+.app-shell.is-night .comms-review-target p,
 .app-shell.is-night .comms-workspace-head > span,
 .app-shell.is-night .comms-detail-grid span,
 .app-shell.is-night .comms-preview-block > span,

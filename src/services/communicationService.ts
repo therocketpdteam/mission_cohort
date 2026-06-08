@@ -463,8 +463,8 @@ async function resolveCommunicationRecipients(communication: {
   const cohort = await prisma.cohort.findUnique({
     where: { id: communication.cohortId },
     include: {
-      registrations: { include: { participants: true } },
-      participants: true
+      registrations: { where: { archivedAt: null }, include: { participants: true } },
+      participants: { where: { registration: { archivedAt: null } } }
     }
   });
 
@@ -677,7 +677,7 @@ export async function sendTemplateToParticipant(input: { templateId: string; par
 
 export async function sendTemplateToRegistrations(input: { templateId: string; registrationIds: string[] }) {
   const registrations = await prisma.registration.findMany({
-    where: { id: { in: input.registrationIds } },
+    where: { id: { in: input.registrationIds }, archivedAt: null },
     include: { cohort: { include: { presenter: true } }, organization: true }
   });
   const results = [];
