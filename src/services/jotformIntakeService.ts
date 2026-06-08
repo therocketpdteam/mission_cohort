@@ -153,5 +153,30 @@ export async function replayJotformWebhookEvent(id: string) {
     throw Object.assign(new Error("Only Jotform webhook events can be replayed here"), { code: "BAD_REQUEST", status: 400 });
   }
 
+  const mappings = await listActiveJotformFormMappings();
+  const preview = previewJotformRegistrationPayload(event.payload as Record<string, unknown>, mappings);
+  const missingRequiredFields = [
+    !preview.formId ? "Jotform form ID" : "",
+    !preview.submissionId ? "submission ID" : "",
+    !preview.primaryContactName ? "primary contact name" : "",
+    !preview.primaryContactEmail ? "primary contact email" : "",
+    !preview.organizationName ? "organization name" : "",
+    !preview.cohortSlug && !preview.normalized?.registration?.cohortId ? "cohort routing" : ""
+  ].filter(Boolean);
+
+  if (preview.formId && !preview.hasMapping) {
+    throw Object.assign(
+      new Error("This Jotform needs a saved mapping before replay. Review the submission, confirm field mapping, then replay it."),
+      { code: "MAPPING_REQUIRED", status: 400 }
+    );
+  }
+
+  if (missingRequiredFields.length > 0) {
+    throw Object.assign(
+      new Error(`Review missing ${missingRequiredFields.join(", ")} before replaying this Jotform submission.`),
+      { code: "REPLAY_NOT_READY", status: 400, missingRequiredFields }
+    );
+  }
+
   return processRegistrationWebhook(event.payload as Record<string, any>, { existingEventId: event.id });
 }

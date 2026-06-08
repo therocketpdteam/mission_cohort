@@ -97,16 +97,16 @@ export const roadmapCards: RoadmapCard[] = [
     title: "Jotform Intake",
     summary: "Webhook intake, review, mapping, replay, payment parsing, and submission history.",
     ownerArea: "Integrations",
-    nextAction: "Keep hardening shared-form URL routing and reduce mapping ambiguity on real submissions.",
+    nextAction: "Run a live replay smoke test on a previously held shared-form submission, then tune any provider-specific field labels that still feel ambiguous.",
     items: [
       { title: "Webhook connection", status: "done", note: "Protected webhook URL and secret rotation are available.", priority: "high" },
       { title: "Review queue", status: "done", note: "Queue shows incoming submissions, processed state, readiness, and replay actions.", priority: "high" },
-      { title: "Mapping wizard", status: "in_progress", note: "Cleaner UI exists; keep removing provider noise and ambiguous fields.", priority: "high" },
-      { title: "URL routing", status: "in_progress", note: "URL rules and single-route fallback exist; shared-form edge cases remain.", priority: "high" },
-      { title: "Replay", status: "done", note: "Held submissions can be replayed after mapping.", priority: "high" },
+      { title: "Mapping wizard", status: "done", note: "Wizard has routing, confirmed mappings, readiness checks, and clean field previews.", priority: "high" },
+      { title: "URL routing", status: "done", note: "Shared forms can route by landing page URL with a single-route fallback and replay blocking when route data is incomplete.", priority: "high" },
+      { title: "Replay", status: "done", note: "Held submissions can be replayed after mapping, with clearer blockers for missing route/contact/organization data.", priority: "high" },
       { title: "Payment mapping", status: "done", note: "Explicit payment status and amount mapping are handled.", priority: "high" },
       { title: "Revision/history support", status: "done", note: "Production schema is healthy and linked Jotform revisions can be stored.", priority: "high" },
-      { title: "Remaining routing edge cases", status: "planned", note: "Need clearer handling when Jotform sends generic source URLs.", priority: "medium" }
+      { title: "Remaining routing edge cases", status: "in_progress", note: "Need live QA on provider-specific source URLs and older pending submissions.", priority: "medium" }
     ]
   },
   {

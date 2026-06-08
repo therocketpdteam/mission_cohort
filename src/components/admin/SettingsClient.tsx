@@ -461,6 +461,45 @@ function JotformMappingWizard({
     setLandingPageRoutes((current) => current.map((route, routeIndex) => routeIndex === index ? { ...route, [field]: value } : route));
   }
 
+  function replayReadinessIssues() {
+    const issues: string[] = [];
+
+    if (routingMode === "default" && !defaultCohortId) {
+      issues.push("route");
+    }
+
+    if (routingMode === "url") {
+      const detectedUrl = cleanJotformDisplay(preview.landingPageUrl);
+      const replayRoute = detectedUrl ? matchedLandingPageRoute(detectedUrl, landingPageRoutes) : undefined;
+
+      if (!detectedUrl || !replayRoute) {
+        issues.push("route");
+      }
+    }
+
+    if (routingMode === "slug") {
+      const mappedSlug = fieldSample(fieldOptions, getFieldMapValue(fieldMap, "cohortSlug")) || preview.cohortSlug;
+
+      if (!mappedSlug) {
+        issues.push("route");
+      }
+    }
+
+    if (!preview.primaryContactName || !preview.primaryContactEmail) {
+      issues.push("POC");
+    }
+
+    if (!preview.organizationName) {
+      issues.push("organization");
+    }
+
+    if (!preview.participantCount && !preview.parsedParticipantCount && participants.length === 0) {
+      issues.push("participants");
+    }
+
+    return issues;
+  }
+
   async function save({ replayAfterSave = false } = {}) {
     if (!event) {
       return;
@@ -502,6 +541,15 @@ function JotformMappingWizard({
       const mappedSlug = fieldSample(fieldOptions, getFieldMapValue(fieldMap, "cohortSlug")) || preview.cohortSlug;
       if (!mappedSlug) {
         setError("This submission does not include a cohort slug. Use URL routing or one default cohort before replaying.");
+        return;
+      }
+    }
+
+    if (replayAfterSave) {
+      const readinessIssues = replayReadinessIssues();
+
+      if (readinessIssues.length > 0) {
+        setError(`Save & Replay still needs ${readinessIssues.join(", ")} before importing this submission.`);
         return;
       }
     }
@@ -571,6 +619,7 @@ function JotformMappingWizard({
   const cleanRoutes = cleanLandingPageRoutes(landingPageRoutes);
   const matchedRoute = routingMode === "url" ? matchedLandingPageRoute(preview.landingPageUrl ?? "", landingPageRoutes) : undefined;
   const matchedRouteCohort = matchedRoute ? cohorts.find((cohort) => cohort.id === matchedRoute.cohortId) : undefined;
+  const replayBlockingLabels = new Set(["Route", "POC", "Organization", "Participants"]);
   const readinessChecks = [
     {
       label: "Route",
@@ -589,6 +638,8 @@ function JotformMappingWizard({
     { label: "Payment", ready: Boolean(registration.paymentStatus || registration.totalAmount || payment.status || payment.amount), detail: `${payment.status || registration.paymentStatus || "No status"} · ${payment.amount || registration.totalAmount ? formatCurrency(payment.amount ?? registration.totalAmount) : "$0"}` },
     { label: "Source", ready: Boolean(preview.landingPageUrl || registration.utmSource || registration.utmCampaign), detail: preview.landingPageUrl || registration.utmCampaign || registration.utmSource || "No source captured" }
   ];
+  const replayBlockers = readinessChecks.filter((item) => replayBlockingLabels.has(item.label) && !item.ready);
+  const canSaveAndReplay = Boolean(event) && event?.reviewStatus !== "PROCESSED" && replayBlockers.length === 0;
 
   return (
     <Dialog open={Boolean(event)} onClose={onClose} fullWidth maxWidth="xl" PaperProps={{ className: "jotform-mapping-dialog", sx: { minHeight: "82vh" } }}>
@@ -863,6 +914,11 @@ function JotformMappingWizard({
                 <Alert severity="info">
                   Saving stores this form mapping for future submissions. Save & Replay will immediately reprocess this held submission using the selected fields.
                 </Alert>
+                {replayBlockers.length > 0 && (
+                  <Alert severity="warning">
+                    Replay is paused until {replayBlockers.map((item) => item.label.toLowerCase()).join(", ")} {replayBlockers.length === 1 ? "is" : "are"} ready.
+                  </Alert>
+                )}
                 <Paper variant="outlined" sx={{ p: 1.5 }}>
                   <Typography variant="h4" sx={{ mb: 1 }}>Import readiness checklist</Typography>
                   <Grid container spacing={1}>
@@ -911,7 +967,7 @@ function JotformMappingWizard({
         ) : (
           <Stack direction="row" flexWrap="wrap" useFlexGap gap={1}>
             <Button variant="outlined" size="small" onClick={() => save()} disabled={saving}>{saving ? "Saving" : "Save Mapping"}</Button>
-            <Button size="small" onClick={() => save({ replayAfterSave: true })} disabled={saving || event?.reviewStatus === "PROCESSED"}>
+            <Button size="small" onClick={() => save({ replayAfterSave: true })} disabled={saving || !canSaveAndReplay}>
               {saving ? "Working" : "Save & Replay"}
             </Button>
           </Stack>
@@ -940,6 +996,8 @@ function JotformSubmissionRow({
   const revision = row.revision ?? {};
   const organization = formatProperDisplay(preview.organizationName) || "Unknown organization";
   const contact = formatProperDisplay(preview.primaryContactName) || preview.primaryContactEmail || "Unknown POC";
+  const canReplay = Boolean(readiness.canReplay) && status !== "PROCESSED";
+  const replayButtonLabel = status === "PROCESSED" ? "Imported" : canReplay ? "Replay" : "Map first";
 
   return (
     <Paper variant="outlined" sx={{ overflow: "hidden" }}>
@@ -966,7 +1024,7 @@ function JotformSubmissionRow({
         <Grid size={{ xs: 12, md: 1.5 }}>
           <Stack direction="row" flexWrap="wrap" useFlexGap gap={0.75} justifyContent={{ xs: "flex-start", md: "flex-end" }} onClick={(event) => event.stopPropagation()}>
             <Button size="small" variant="outlined" startIcon={<EditOutlined />} onClick={() => onReview(row)}>Map</Button>
-            <Button size="small" variant="outlined" startIcon={<ReplayOutlined />} disabled={status === "PROCESSED"} onClick={() => onReplay(row)}>Replay</Button>
+            <Button size="small" variant="outlined" startIcon={<ReplayOutlined />} disabled={!canReplay} onClick={() => onReplay(row)}>{replayButtonLabel}</Button>
             <IconButton size="small" onClick={() => setExpanded((current) => !current)} aria-label={expanded ? "Collapse" : "Expand"}>
               {expanded ? <ExpandLessOutlined fontSize="small" /> : <ExpandMoreOutlined fontSize="small" />}
             </IconButton>
@@ -978,6 +1036,11 @@ function JotformSubmissionRow({
           {(readiness.recommendedAction || row.errorMessage) && (
             <Alert severity={status === "FAILED" ? "error" : status === "PROCESSED" ? "success" : "info"}>
               {row.errorMessage || readiness.recommendedAction}
+            </Alert>
+          )}
+          {Array.isArray(readiness.missingRequiredFields) && readiness.missingRequiredFields.length > 0 && (
+            <Alert severity="warning">
+              Missing before replay: {readiness.missingRequiredFields.join(", ")}.
             </Alert>
           )}
           <Grid container spacing={1.5}>
@@ -1021,7 +1084,7 @@ function JotformSubmissionRow({
           )}
           <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
             <Button size="small" startIcon={<EditOutlined />} onClick={() => onReview(row)}>Review & Map Fields</Button>
-            <Button size="small" variant="outlined" startIcon={<ReplayOutlined />} disabled={status === "PROCESSED"} onClick={() => onReplay(row)}>Replay Submission</Button>
+            <Button size="small" variant="outlined" startIcon={<ReplayOutlined />} disabled={!canReplay} onClick={() => onReplay(row)}>{canReplay ? "Replay Submission" : replayButtonLabel}</Button>
           </Stack>
         </Stack>
       </Collapse>
