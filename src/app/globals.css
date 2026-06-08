@@ -93,6 +93,64 @@ a {
   grid-template-columns: 236px minmax(0, 1fr);
 }
 
+.app-version-prompt {
+  position: fixed;
+  z-index: 80;
+  bottom: 18px;
+  left: 18px;
+  display: grid;
+  max-width: min(360px, calc(100vw - 36px));
+  gap: 3px;
+  border: 1px solid rgba(20, 121, 201, 0.28);
+  border-radius: 12px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(232, 245, 252, 0.98));
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.18);
+  color: var(--color-primary-900);
+  cursor: pointer;
+  padding: 13px 15px;
+  text-align: left;
+}
+
+.app-version-prompt:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 22px 48px rgba(15, 23, 42, 0.22);
+}
+
+.app-version-prompt:focus-visible {
+  outline: 3px solid rgba(32, 199, 217, 0.42);
+  outline-offset: 2px;
+}
+
+.app-version-prompt strong {
+  font-size: 0.92rem;
+  font-weight: 900;
+}
+
+.app-version-prompt span {
+  color: var(--color-slate-500);
+  font-size: 0.82rem;
+  font-weight: 750;
+}
+
+.app-shell.is-night .app-version-prompt {
+  border-color: rgba(32, 199, 217, 0.34);
+  background:
+    linear-gradient(135deg, rgba(12, 23, 37, 0.98), rgba(11, 36, 53, 0.98));
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.34);
+  color: #e5eef8;
+}
+
+.app-shell.is-night .app-version-prompt span {
+  color: #9fb2c8;
+}
+
+.app-shell.is-compact .app-version-prompt {
+  bottom: 14px;
+  left: 14px;
+  padding: 10px 12px;
+}
+
 .app-sidebar {
   position: sticky;
   top: 0;
