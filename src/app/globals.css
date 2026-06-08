@@ -2797,6 +2797,58 @@ a {
   gap: 12px;
 }
 
+.session-readiness-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+  border: 1px solid var(--color-slate-200);
+  border-radius: 10px;
+  background: var(--color-slate-50);
+  padding: 10px;
+}
+
+.cohort-material-bank {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 12px;
+  border: 1px solid rgba(20, 121, 201, 0.16);
+  border-radius: 10px;
+  background: rgba(20, 121, 201, 0.05);
+  padding: 9px 10px;
+}
+
+.cohort-material-bank > span {
+  color: var(--color-primary-700);
+  font-size: 0.76rem;
+  font-weight: 900;
+}
+
+.cohort-material-bank > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.cohort-material-bank a,
+.cohort-material-bank div > span {
+  max-width: 180px;
+  overflow: hidden;
+  border: 1px solid rgba(20, 121, 201, 0.18);
+  border-radius: 999px;
+  background: var(--color-white);
+  color: var(--color-primary-700);
+  padding: 3px 8px;
+  font-size: 0.72rem;
+  font-weight: 850;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .session-checklist {
   display: grid;
   gap: 10px;
@@ -2806,7 +2858,7 @@ a {
 .session-check-row {
   position: relative;
   display: grid;
-  grid-template-columns: 72px minmax(180px, 1.15fr) 44px repeat(5, 44px) 54px;
+  grid-template-columns: 72px minmax(220px, 1fr) 82px 118px 118px 54px;
   gap: 10px;
   align-items: center;
   min-width: 0;
@@ -2897,6 +2949,28 @@ a {
   cursor: pointer;
   font-size: 0.74rem;
   font-weight: 850;
+}
+
+.session-email-summary,
+.session-material-summary {
+  width: 100%;
+  min-width: 0;
+  justify-content: flex-start;
+  padding-inline: 8px;
+}
+
+.session-email-summary span,
+.session-material-summary span {
+  min-width: 0;
+  overflow: hidden;
+  color: currentColor;
+  font-size: 0.72rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-material-cell {
+  min-width: 0;
 }
 
 .session-check svg {
@@ -3633,7 +3707,11 @@ a {
 .app-shell.is-night .registration-hero,
 .app-shell.is-night .registration-detail-tile,
 .app-shell.is-night .participant-hero,
-.app-shell.is-night .participant-detail-tile {
+.app-shell.is-night .participant-detail-tile,
+.app-shell.is-night .session-readiness-strip,
+.app-shell.is-night .cohort-material-bank,
+.app-shell.is-night .cohort-material-bank a,
+.app-shell.is-night .cohort-material-bank div > span {
   border-color: rgba(148, 163, 184, 0.22);
   background:
     radial-gradient(circle at top right, rgba(32, 199, 217, 0.11), transparent 42%),
@@ -3641,6 +3719,12 @@ a {
 }
 
 .app-shell.is-night .participant-hero span {
+  color: #7dd3fc;
+}
+
+.app-shell.is-night .cohort-material-bank > span,
+.app-shell.is-night .cohort-material-bank a,
+.app-shell.is-night .cohort-material-bank div > span {
   color: #7dd3fc;
 }
 
@@ -4465,13 +4549,7 @@ a {
   }
 
   .session-check-row {
-    grid-template-columns: 68px minmax(180px, 1fr) repeat(3, 44px) 54px;
-  }
-
-  .session-check-row > span:nth-child(6),
-  .session-check-row > span:nth-child(7),
-  .session-check-row > span:nth-child(8) {
-    display: none;
+    grid-template-columns: 68px minmax(180px, 1fr) 78px 108px 108px 54px;
   }
 }
 
@@ -4574,11 +4652,16 @@ a {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .session-check-row {
-    grid-template-columns: 62px minmax(0, 1fr) 44px 48px;
+  .session-readiness-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .session-check-row > span:nth-child(n+4):nth-child(-n+8) {
+  .session-check-row {
+    grid-template-columns: 62px minmax(0, 1fr) 44px 106px 48px;
+  }
+
+  .session-check-row > span:nth-child(5),
+  .session-check-row > .session-material-cell {
     display: none;
   }
 
@@ -4710,13 +4793,20 @@ a {
     grid-template-columns: 1fr;
   }
 
+  .session-readiness-strip,
+  .cohort-material-bank {
+    grid-template-columns: 1fr;
+  }
+
   .session-check-row {
     grid-template-columns: 58px minmax(0, 1fr) 42px;
     gap: 8px;
     padding: 8px;
   }
 
-  .session-check-row > span:nth-child(n+3):nth-child(-n+8) {
+  .session-check-row > span:nth-child(n+3):nth-child(-n+5),
+  .session-check-row > .session-check,
+  .session-check-row > .session-material-cell {
     display: none;
   }
 

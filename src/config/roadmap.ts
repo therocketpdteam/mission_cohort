@@ -86,9 +86,9 @@ export const roadmapCards: RoadmapCard[] = [
       { title: "Lifecycle statuses", status: "done", note: "Operational status derives from readiness and session dates.", priority: "high" },
       { title: "Cohort thumbnails", status: "done", note: "Thumbnails upload and appear in cohort/dashboard contexts.", priority: "medium" },
       { title: "Overview/readiness", status: "done", note: "Basics and readiness are centered in Overview.", priority: "high" },
-      { title: "Sessions checklist", status: "in_progress", note: "Checklist exists; material/session attachment flow needs final polish.", priority: "high" },
+      { title: "Sessions checklist", status: "done", note: "Overview uses a compact readiness checklist for calendar, default emails, and session materials.", priority: "high" },
       { title: "Registration/participant quick views", status: "in_progress", note: "Rows are clickable; history and edit affordances continue to improve.", priority: "high" },
-      { title: "Materials/session resources", status: "planned", note: "Needs a clear attachment-to-email flow.", priority: "medium" },
+      { title: "Materials/session resources", status: "in_progress", note: "Materials can be added directly to sessions and shown in the session checklist; attachment-to-email automation is next.", priority: "medium" },
       { title: "Publish-readiness workflow", status: "in_progress", note: "Checklist exists; automation and completion rules need tightening.", priority: "high" }
     ]
   },

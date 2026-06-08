@@ -821,6 +821,7 @@ export function CohortDetailClient({ id }: { id: string }) {
   const [editingSession, setEditingSession] = useState<AdminRow | null>(null);
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
   const [resourceDialogOpen, setResourceDialogOpen] = useState(false);
+  const [resourceSeedSession, setResourceSeedSession] = useState<AdminRow | null>(null);
   const [chartMode, setChartMode] = useState<"count" | "amount">("count");
   const [compareCohortId, setCompareCohortId] = useState("");
   const [thumbnailUploading, setThumbnailUploading] = useState(false);
@@ -996,6 +997,13 @@ export function CohortDetailClient({ id }: { id: string }) {
 
     return [...incoming, ...payouts].sort((a, b) => new Date(b.date ?? 0).getTime() - new Date(a.date ?? 0).getTime());
   }, [distribution, payments]);
+  const cohortLevelMaterials = useMemo(() => resources.filter((resource) => !resource.sessionId), [resources]);
+  const sessionReadinessStats = useMemo(() => {
+    const calendarReady = sessions.filter((session) => session.calendarInviteStatus === "CREATED" || session.calendarInviteStatus === "UPDATED").length;
+    const emailReady = sessions.filter((session) => sessionEmailTypes.every((template) => sessionEmailStatus(session.id, template.type) !== "NOT_SCHEDULED")).length;
+    const materialReady = sessions.filter((session) => resources.some((resource) => resource.sessionId === session.id)).length;
+    return { calendarReady, emailReady, materialReady };
+  }, [communications, resources, sessions]);
 
   function sessionEmailStatus(sessionId: string, type: string) {
     const communication = communications.find((item) => item.sessionId === sessionId && item.template?.type === type);
@@ -1013,6 +1021,21 @@ export function CohortDetailClient({ id }: { id: string }) {
     } catch (error) {
       notifyError((error as Error).message);
     }
+  }
+
+  function sessionEmailSummary(sessionId: string) {
+    const scheduled = sessionEmailTypes.filter((template) => sessionEmailStatus(sessionId, template.type) !== "NOT_SCHEDULED");
+    return {
+      scheduled: scheduled.length,
+      total: sessionEmailTypes.length,
+      ready: scheduled.length === sessionEmailTypes.length,
+      label: `${scheduled.length}/${sessionEmailTypes.length} emails`
+    };
+  }
+
+  function openMaterialDialog(session?: AdminRow | null) {
+    setResourceSeedSession(session ?? null);
+    setResourceDialogOpen(true);
   }
 
   async function sendParticipantMessage(participant: AdminRow) {
@@ -1402,6 +1425,7 @@ export function CohortDetailClient({ id }: { id: string }) {
         }
       });
       notifySuccess("Material added");
+      setResourceSeedSession(null);
       await load();
     } catch (error) {
       notifyError((error as Error).message);
@@ -1528,21 +1552,46 @@ export function CohortDetailClient({ id }: { id: string }) {
             title="Sessions"
             action={
               <div className="action-group">
-                <Button variant="outlined" startIcon={<AddIcon />} onClick={() => setResourceDialogOpen(true)}>Add Material</Button>
+                <Button variant="outlined" startIcon={<AddIcon />} onClick={() => openMaterialDialog()}>Add Material</Button>
                 <Button startIcon={<AddIcon />} onClick={() => setSessionDialogOpen(true)}>Add Session</Button>
               </div>
             }
           >
+            <div className="session-readiness-strip">
+              <DetailField label="Sessions" value={sessions.length} />
+              <DetailField label="Calendar Ready" value={`${sessionReadinessStats.calendarReady}/${sessions.length}`} />
+              <DetailField label="Email Ready" value={`${sessionReadinessStats.emailReady}/${sessions.length}`} />
+              <DetailField label="With Materials" value={`${sessionReadinessStats.materialReady}/${sessions.length}`} />
+            </div>
+            {cohortLevelMaterials.length > 0 && (
+              <div className="cohort-material-bank" aria-label="Cohort-level materials">
+                <span>Cohort materials</span>
+                <div>
+                  {cohortLevelMaterials.map((resource) => {
+                    const href = resourceHref(resource);
+                    return href ? (
+                      <a href={href} target="_blank" rel="noreferrer" key={resource.id} title={resource.title}>
+                        {resource.title}
+                      </a>
+                    ) : (
+                      <span key={resource.id} title={resource.title}>{resource.title}</span>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             <div className="session-checklist" role="table" aria-label="Session checklist">
               <div className="session-check-row session-check-header" role="row">
                 <span>Date</span>
                 <span>Session</span>
-                <span>Cal</span>
-                {sessionEmailTypes.map((template) => <span key={template.type} title={template.label}>{template.label}</span>)}
+                <span>Calendar</span>
+                <span>Emails</span>
+                <span>Materials</span>
                 <span>Actions</span>
               </div>
               {sessions.map((session) => {
                 const sessionMaterials = resources.filter((resource) => resource.sessionId === session.id);
+                const emailSummary = sessionEmailSummary(session.id);
 
                 return (
                 <div className="session-check-row" role="row" key={session.id}>
@@ -1575,12 +1624,36 @@ export function CohortDetailClient({ id }: { id: string }) {
                       notifyError((error as Error).message);
                     }
                   })}
-                  {sessionEmailTypes.map((template) => (
-                    <span key={`${session.id}-${template.type}`}>{renderSessionEmailCell(template.type, session.id)}</span>
-                  ))}
+                  <button
+                    type="button"
+                    className={`session-check session-email-summary ${emailSummary.ready ? "is-done" : "is-missing"}`}
+                    title={emailSummary.ready ? "All default session emails exist" : "Create default session emails"}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      if (!emailSummary.ready) void createSessionEmailSchedule(session.id);
+                    }}
+                  >
+                    {emailSummary.ready ? <CheckCircleOutline /> : <CancelOutlined />}
+                    <span>{emailSummary.label}</span>
+                  </button>
+                  <div className="session-material-cell">
+                    <button
+                      type="button"
+                      className={`session-check session-material-summary ${sessionMaterials.length > 0 ? "is-done" : "is-missing"}`}
+                      title={sessionMaterials.length > 0 ? `${sessionMaterials.length} material${sessionMaterials.length === 1 ? "" : "s"}` : "Add session material"}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        openMaterialDialog(session);
+                      }}
+                    >
+                      {sessionMaterials.length > 0 ? <CheckCircleOutline /> : <CancelOutlined />}
+                      <span>{sessionMaterials.length || "Add"}</span>
+                    </button>
+                  </div>
                   <RowActionMenu
                     actions={[
                       { label: "Edit session", icon: <EditOutlined fontSize="small" />, onClick: () => { setEditingSession(session); setSessionDialogOpen(true); } },
+                      { label: "Add material", icon: <AddIcon fontSize="small" />, onClick: () => openMaterialDialog(session) },
                       {
                         label: "Generate ICS",
                         icon: <CalendarMonthOutlined fontSize="small" />,
@@ -1859,11 +1932,11 @@ export function CohortDetailClient({ id }: { id: string }) {
         onSubmit={saveTask}
       />
       <MutationDialog
-        title="Add Material"
+        title={resourceSeedSession ? `Add Material: ${resourceSeedSession.title}` : "Add Material"}
         open={resourceDialogOpen}
         fields={resourceFieldsForSessions(sessions)}
-        initialValues={{ type: "LINK", visibility: "ADMIN_ONLY" }}
-        onClose={() => setResourceDialogOpen(false)}
+        initialValues={{ type: "LINK", visibility: "ADMIN_ONLY", sessionId: resourceSeedSession?.id ?? "" }}
+        onClose={() => { setResourceDialogOpen(false); setResourceSeedSession(null); }}
         onSubmit={saveResource}
       />
       <PaymentDetailDialog
