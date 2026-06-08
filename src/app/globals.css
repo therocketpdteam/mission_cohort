@@ -1061,12 +1061,83 @@ a {
   line-height: 1.1;
 }
 
+.registration-roster-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.registration-roster-cell > div {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.registration-roster-cell strong,
+.registration-roster-cell span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.registration-roster-cell strong {
+  color: var(--color-primary-900);
+  font-size: 0.8rem;
+  font-weight: 760;
+  line-height: 1.2;
+}
+
+.registration-roster-cell span:not(.registration-health-dot) {
+  color: var(--color-slate-500);
+  font-size: 0.72rem;
+  font-weight: 560;
+}
+
+.registration-health-dot {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--color-slate-400);
+  box-shadow: 0 0 0 3px rgba(100, 116, 139, 0.14);
+}
+
+.registration-health-dot.is-success {
+  background: #16a34a;
+  box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.14);
+}
+
+.registration-health-dot.is-warning {
+  background: #f59e0b;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.16);
+}
+
+.registration-health-dot.is-error {
+  background: #dc2626;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.14);
+}
+
 .app-shell.is-compact .app-table-main {
   font-weight: 720;
 }
 
 .app-shell.is-compact .app-table-sub {
   font-size: 0.68rem;
+}
+
+.app-shell.is-compact .registration-detail {
+  gap: 10px;
+}
+
+.app-shell.is-compact .registration-hero,
+.app-shell.is-compact .registration-detail-tile {
+  padding: 9px;
+}
+
+.app-shell.is-compact .registration-section-heading h3 {
+  font-size: 0.88rem;
 }
 
 .jotform-mapping-dialog .ui-field,
@@ -1950,6 +2021,144 @@ a {
   justify-content: flex-end;
   border-top: 1px solid var(--color-slate-200);
   border-bottom: 0;
+}
+
+.registration-detail {
+  display: grid;
+  gap: 14px;
+}
+
+.registration-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  min-width: 0;
+  border: 1px solid rgba(20, 121, 201, 0.16);
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at top right, rgba(32, 199, 217, 0.16), transparent 42%),
+    linear-gradient(135deg, rgba(20, 121, 201, 0.08), rgba(255, 255, 255, 0.96));
+  padding: 14px;
+}
+
+.registration-hero > div:first-child {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.registration-kicker {
+  color: var(--color-primary-700);
+  font-size: 0.72rem;
+  font-weight: 820;
+}
+
+.registration-hero h3 {
+  margin: 0;
+  color: var(--color-primary-900);
+  font-size: 1.15rem;
+  font-weight: 920;
+  line-height: 1.12;
+}
+
+.registration-hero p {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--color-slate-500);
+  font-size: 0.82rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.registration-hero-status {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.registration-detail-section {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  border-top: 1px solid var(--color-slate-200);
+  padding-top: 14px;
+}
+
+.registration-section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.registration-section-heading > div {
+  min-width: 0;
+}
+
+.registration-section-heading h3 {
+  margin: 0;
+  color: var(--color-primary-900);
+  font-size: 0.96rem;
+  font-weight: 850;
+}
+
+.registration-section-heading p {
+  margin: 3px 0 0;
+  color: var(--color-slate-500);
+  font-size: 0.78rem;
+}
+
+.registration-detail-tile {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  border: 1px solid var(--color-slate-200);
+  border-radius: 10px;
+  background: var(--color-slate-50);
+  padding: 10px;
+}
+
+.registration-detail-tile span {
+  color: var(--color-slate-500);
+  font-size: 0.72rem;
+  font-weight: 740;
+}
+
+.registration-detail-tile strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-primary-900);
+  font-size: 0.86rem;
+  font-weight: 760;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.registration-detail-tile.is-success {
+  border-color: rgba(22, 163, 74, 0.24);
+  background: rgba(22, 163, 74, 0.06);
+}
+
+.registration-detail-tile.is-warning {
+  border-color: rgba(245, 158, 11, 0.26);
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.registration-detail-tile.is-error {
+  border-color: rgba(220, 38, 38, 0.22);
+  background: rgba(220, 38, 38, 0.06);
+}
+
+.registration-add-participant {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
+  gap: 8px;
+  align-items: end;
 }
 
 .ui-stepper,
@@ -3272,6 +3481,28 @@ a {
   color: #e5eef8;
 }
 
+.app-shell.is-night .registration-roster-cell strong,
+.app-shell.is-night .registration-hero h3,
+.app-shell.is-night .registration-section-heading h3,
+.app-shell.is-night .registration-detail-tile strong {
+  color: #e5eef8;
+}
+
+.app-shell.is-night .registration-roster-cell span:not(.registration-health-dot),
+.app-shell.is-night .registration-hero p,
+.app-shell.is-night .registration-section-heading p,
+.app-shell.is-night .registration-detail-tile span {
+  color: #9fb0c5;
+}
+
+.app-shell.is-night .registration-hero,
+.app-shell.is-night .registration-detail-tile {
+  border-color: rgba(148, 163, 184, 0.22);
+  background:
+    radial-gradient(circle at top right, rgba(32, 199, 217, 0.11), transparent 42%),
+    #0c1725;
+}
+
 .app-shell.is-night .invoice-workbench-title span {
   color: #9fb2c8;
 }
@@ -4211,6 +4442,19 @@ a {
   }
 
   .quick-view-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .registration-hero,
+  .registration-section-heading {
+    flex-direction: column;
+  }
+
+  .registration-hero-status {
+    justify-content: flex-start;
+  }
+
+  .registration-add-participant {
     grid-template-columns: 1fr;
   }
 

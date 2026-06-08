@@ -116,11 +116,11 @@ export const roadmapCards: RoadmapCard[] = [
     ownerArea: "Operations",
     nextAction: "Deepen POC timeline and participant history inside quick views after the roster table cleanup.",
     items: [
-      { title: "Registration quick view", status: "in_progress", note: "Primary rows open detail with roster, Jotform, POC history, and finance context.", priority: "high" },
+      { title: "Registration quick view", status: "done", note: "Primary rows open an operational drawer with roster, Jotform revisions, POC history, and finance/source context.", priority: "high" },
       { title: "POC communication context", status: "done", note: "Registration detail links outbound history back to Communications.", priority: "high" },
-      { title: "Roster/payment filters", status: "in_progress", note: "Core filters exist; continue standardizing across views.", priority: "medium" },
+      { title: "Roster/payment filters", status: "done", note: "Payment, roster, cohort, organization, source, and archive filters use the shared compact filter pattern.", priority: "medium" },
       { title: "Participant history", status: "planned", note: "Match by email across cohorts for context after the participant identity drawer is finished.", priority: "medium" },
-      { title: "Bulk actions", status: "in_progress", note: "Registration bulk status/send/archive actions exist; participant-side workflows still need polish.", priority: "medium" },
+      { title: "Bulk actions", status: "done", note: "Registration bulk confirm/cancel/archive/restore/status/send actions are available from the list.", priority: "medium" },
       { title: "Attachments", status: "planned", note: "Needs private storage flow connected to communications.", priority: "medium" }
     ]
   },

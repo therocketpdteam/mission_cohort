@@ -15,11 +15,7 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  Divider,
   Grid,
-  List,
-  ListItem,
-  ListItemText,
   MenuItem,
   Stack,
   TextField,
@@ -36,6 +32,7 @@ import {
   EmptyState,
   PageHeader,
   PageStack,
+  QuickViewDrawer,
   RowActionMenu,
   SectionCard,
   SourcePill,
@@ -57,6 +54,38 @@ const visibilityOptions = [
 
 function money(value: unknown) {
   return `$${Number(value ?? 0).toLocaleString()}`;
+}
+
+function splitName(name?: string | null) {
+  const parts = String(name ?? "").trim().split(/\s+/).filter(Boolean);
+  return {
+    firstName: parts[0] ?? "",
+    lastName: parts.slice(1).join(" ") || parts[0] || ""
+  };
+}
+
+function rosterHealth(registration: AdminRow) {
+  const expected = Number(registration.participantCount ?? 0);
+  const actual = Number(registration.participants?.length ?? registration._count?.participants ?? 0);
+  const status = String(registration.participantListStatus ?? "");
+
+  if (status === "COMPLETE" && (!expected || actual >= expected)) {
+    return { tone: "success", label: "Roster complete", helper: `${actual}/${expected || actual} participants` };
+  }
+
+  if (actual > 0 && expected > 0 && actual < expected) {
+    return { tone: "warning", label: "Roster partial", helper: `${actual}/${expected} participants` };
+  }
+
+  if (actual === 0 && expected <= 1) {
+    return { tone: "warning", label: "Needs participant", helper: "Can use POC as participant" };
+  }
+
+  if (actual === 0) {
+    return { tone: "error", label: "Roster missing", helper: `${expected || "Unknown"} expected` };
+  }
+
+  return { tone: "warning", label: formatStatusLabel(status || "NEEDED"), helper: `${actual}/${expected || actual} participants` };
 }
 
 function communicationIssueLabel(communication: AdminRow) {
@@ -370,144 +399,209 @@ function RegistrationDetailDialog({
     return [participantText, paymentText].filter(Boolean).join(" · ");
   }
 
+  const health = registration ? rosterHealth(registration) : null;
+  const participantTotal = registration?.participants?.length ?? 0;
+  const canUsePocAsParticipant = Boolean(registration?.primaryContactEmail && participantTotal === 0 && Number(registration?.participantCount ?? 0) <= 1);
+
+  async function addPocAsParticipant() {
+    if (!registration?.primaryContactEmail) {
+      setError("POC email is required");
+      return;
+    }
+
+    const name = splitName(registration.primaryContactName);
+    try {
+      await adminApi("/api/participants", {
+        method: "POST",
+        body: {
+          firstName: name.firstName || "Participant",
+          lastName: name.lastName || "Participant",
+          email: registration.primaryContactEmail,
+          phone: registration.primaryContactPhone ?? "",
+          registrationId: registration.id,
+          cohortId: registration.cohortId,
+          organizationId: registration.organizationId
+        }
+      });
+      await adminApi("/api/registrations", {
+        method: "PATCH",
+        body: {
+          id: registration.id,
+          participantCount: Math.max(1, Number(registration.participantCount ?? 0)),
+          participantListStatus: "COMPLETE"
+        }
+      });
+      await onChanged();
+    } catch (addError) {
+      setError((addError as Error).message);
+    }
+  }
+
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="lg">
-      <DialogTitle>Registration Detail</DialogTitle>
-      <DialogContent>
-        {registration ? (
-          <Stack spacing={3}>
-            {error && <Alert severity="error">{error}</Alert>}
-            <Grid container spacing={2}>
-              {[
-                ["POC", registration.primaryContactName],
-                ["Email", registration.primaryContactEmail],
-                ["Phone", registration.primaryContactPhone ?? "-"],
-                ["Cohort", registration.cohort?.title ?? "-"],
-                ["Organization", registration.organization?.name ?? "-"],
-                ["Participants", `${registration.participants?.length ?? 0} of ${registration.participantCount ?? 0}`],
-                ["Payment", registration.paymentStatus],
-                ["Amount", money(registration.totalAmount)],
-                ["Invoice", registration.invoiceNumber ?? "-"],
-                ["PO", registration.purchaseOrderNumber ?? "-"],
-                ["Docs", registration.supportingDocumentStatus],
-                ["QB Invoice", registration.quickBooksInvoiceRef ?? "-"],
-                ["QB Status", registration.quickBooksInvoiceStatus ?? "UNKNOWN"],
-                ["QB Sync", registration.quickBooksSyncStatus ?? "NOT SYNCED"],
-                ["Source", formatRegistrationSource(registration)],
-                ["UTM Source", registration.utmSource ?? "-"],
-                ["UTM Medium", registration.utmMedium ?? "-"],
-                ["UTM Campaign", registration.utmCampaign ?? "-"],
-                ["Landing Page", registration.landingPageUrl ?? "-"],
-                ["Referrer", registration.referrerUrl ?? "-"]
-              ].map(([label, value]) => (
-                <Grid size={{ xs: 12, sm: 6, lg: 3 }} key={label}>
-                  <Typography variant="body2" color="text.secondary">{label}</Typography>
-                  <Typography>
-                    {["POC", "Organization"].includes(label) ? formatProperDisplay(String(value ?? "")) : ["Payment", "Docs", "QB Status", "QB Sync", "Source"].includes(label) ? formatStatusLabel(String(value ?? "")) : value}
-                  </Typography>
-                </Grid>
-              ))}
-            </Grid>
-            <Stack direction="row" flexWrap="wrap" useFlexGap gap={1}>
-              <Button variant="outlined" onClick={syncQuickBooks}>Sync QuickBooks</Button>
-              <Button variant="outlined" color="warning" onClick={voidQuickBooksInvoice}>Void QB Invoice</Button>
-              {registration.quickBooksSyncError && <Typography color="error.main">{registration.quickBooksSyncError}</Typography>}
-            </Stack>
-            <Divider />
-            <Stack spacing={1}>
-              <Typography variant="h3">Jotform Revision Timeline</Typography>
-              {(registration.webhookEvents ?? []).length > 0 ? (
-                <List dense>
-                  {(registration.webhookEvents ?? []).map((event: AdminRow) => (
-                    <ListItem key={event.id} divider>
-                      <ListItemText
-                        primary={`Revision ${event.revisionNumber ?? "-"} · ${formatStatusLabel(event.status)}`}
-                        secondary={`${event.processedAt || event.createdAt ? new Date(event.processedAt ?? event.createdAt).toLocaleString() : ""}${revisionSummary(event) ? ` · ${revisionSummary(event)}` : ""}${event.errorMessage ? ` · ${event.errorMessage}` : ""}`}
-                      />
-                    </ListItem>
-                  ))}
-                </List>
-              ) : (
-                <EmptyState title="No Jotform revisions yet" description="Jotform imports and resubmissions linked to this registration will appear here." />
-              )}
-            </Stack>
-            <Divider />
-            <Stack spacing={1}>
-              <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={1}>
-                <Typography variant="h3">POC Communication History</Typography>
-                {registration.primaryContactEmail ? (
-                  <Button href={`/communications?search=${encodeURIComponent(registration.primaryContactEmail)}`} variant="outlined" size="small">
-                    Open in Communications
-                  </Button>
-                ) : null}
-              </Stack>
-              {threadLoading ? (
-                <Typography color="text.secondary">Loading communication history...</Typography>
-              ) : thread.length > 0 ? (
-                <List dense>
-                  {thread.map((communication) => (
-                    <ListItem key={communication.id} divider>
-                      <ListItemText
-                        primary={communication.subject ?? "Email event"}
-                        secondary={`${communication.cohort?.title ?? "Mission Control"} · ${formatStatusLabel(communication.status)}${communication.emailSummary?.lastEmailEvent ? ` · ${formatStatusLabel(communication.emailSummary.lastEmailEvent)}` : ""}${communicationIssueLabel(communication) ? ` · ${communicationIssueLabel(communication)}` : ""}${communication.attachments?.length ? ` · ${communication.attachments.length} attachment${communication.attachments.length === 1 ? "" : "s"}` : ""}`}
-                      />
-                      <Typography variant="caption" color="text.secondary">{communication.sentAt || communication.createdAt ? new Date(communication.sentAt ?? communication.createdAt).toLocaleDateString() : ""}</Typography>
-                    </ListItem>
-                  ))}
-                </List>
-              ) : (
-                <EmptyState title="No POC emails yet" description="Manual and automatic outbound emails to this POC will appear here with delivery and open signals." />
-              )}
-            </Stack>
-            <Divider />
-            <Stack spacing={1}>
-              <Typography variant="h3">Team Participants</Typography>
-              <List dense>
+    <QuickViewDrawer
+      open={open}
+      onClose={onClose}
+      title={registration ? formatProperDisplay(registration.primaryContactName) || "Registration detail" : "Registration detail"}
+      actions={
+        registration ? (
+          <>
+            <Button variant="outlined" onClick={syncQuickBooks}>Sync QuickBooks</Button>
+            <Button variant="outlined" color="warning" onClick={voidQuickBooksInvoice}>Void QB Invoice</Button>
+            <Button onClick={onClose}>Done</Button>
+          </>
+        ) : null
+      }
+    >
+      {registration ? (
+        <div className="registration-detail">
+          {error && <Alert severity="error">{error}</Alert>}
+          <section className="registration-hero">
+            <div>
+              <span className="registration-kicker">{registration.organization?.name ? formatProperDisplay(registration.organization.name) : "Registration"}</span>
+              <h3>{formatProperDisplay(registration.primaryContactName)}</h3>
+              <p title={registration.cohort?.title ?? ""}>{registration.cohort?.title ?? "No cohort assigned"}</p>
+            </div>
+            <div className="registration-hero-status">
+              <StatusChip value={registration.paymentStatus} />
+              <StatusChip value={health?.label} />
+            </div>
+          </section>
+
+          <div className="quick-view-grid">
+            <DetailTile label="POC email" value={registration.primaryContactEmail} />
+            <DetailTile label="POC phone" value={registration.primaryContactPhone ?? "-"} />
+            <DetailTile label="Payment" value={`${formatStatusLabel(registration.paymentStatus)} · ${money(registration.totalAmount)}`} />
+            <DetailTile label="Roster" value={health?.helper ?? "-"} tone={health?.tone} />
+            <DetailTile label="Invoice" value={registration.invoiceNumber ?? "No invoice"} />
+            <DetailTile label="PO" value={registration.purchaseOrderNumber ?? "No PO"} />
+            <DetailTile label="Source" value={formatRegistrationSource(registration)} />
+            <DetailTile label="Landing page" value={registration.landingPageUrl ?? "-"} />
+          </div>
+
+          {registration.quickBooksSyncError && <Alert severity="error">{registration.quickBooksSyncError}</Alert>}
+
+          <section className="registration-detail-section">
+            <div className="registration-section-heading">
+              <div>
+                <h3>Team Roster</h3>
+                <p>{health?.label} · {health?.helper}</p>
+              </div>
+              {canUsePocAsParticipant ? (
+                <Button size="small" variant="outlined" onClick={addPocAsParticipant}>Use POC as participant</Button>
+              ) : null}
+            </div>
+            {(registration.participants ?? []).length > 0 ? (
+              <div className="quick-view-list">
                 {(registration.participants ?? []).map((row: AdminRow) => (
-                  <ListItem
-                    key={row.id}
-                    divider
-                    sx={{ alignItems: "center", gap: 1.5 }}
-                  >
-                    <ListItemText
-                      primary={formatProperDisplay(`${row.firstName} ${row.lastName}`)}
-                      secondary={`${row.email}${row.title ? ` • ${row.title}` : ""}`}
-                      sx={{ minWidth: 0 }}
-                    />
+                  <div className="quick-view-list-row" key={row.id}>
+                    <div>
+                      <strong>{formatProperDisplay(`${row.firstName} ${row.lastName}`)}</strong>
+                      <span>{[row.email, row.title].filter(Boolean).join(" · ") || "No contact details"}</span>
+                    </div>
                     <Button size="small" variant="text" color="error" startIcon={<DeleteOutline />} onClick={() => removeParticipant(row.id)}>Remove</Button>
-                  </ListItem>
+                  </div>
                 ))}
-              </List>
-              {(registration.participants ?? []).length === 0 && (
-                <EmptyState title="No participant details yet" description="If Jotform only sent a participant count, add names and emails here when the roster arrives." />
-              )}
-            </Stack>
-            <Grid container spacing={2}>
-              <Grid size={{ xs: 12, md: 2 }}>
-                <TextField fullWidth label="First name" value={participant.firstName} onChange={(event) => setParticipant((current) => ({ ...current, firstName: event.target.value }))} />
-              </Grid>
-              <Grid size={{ xs: 12, md: 2 }}>
-                <TextField fullWidth label="Last name" value={participant.lastName} onChange={(event) => setParticipant((current) => ({ ...current, lastName: event.target.value }))} />
-              </Grid>
-              <Grid size={{ xs: 12, md: 3 }}>
-                <TextField fullWidth label="Email" type="email" value={participant.email} onChange={(event) => setParticipant((current) => ({ ...current, email: event.target.value }))} />
-              </Grid>
-              <Grid size={{ xs: 12, md: 3 }}>
-                <TextField fullWidth label="Title" value={participant.title} onChange={(event) => setParticipant((current) => ({ ...current, title: event.target.value }))} />
-              </Grid>
-              <Grid size={{ xs: 12, md: 2 }}>
-                <Button fullWidth sx={{ height: "100%" }} startIcon={<AddIcon />} onClick={addParticipant}>Add</Button>
-              </Grid>
-            </Grid>
-          </Stack>
-        ) : (
-          <Typography color="text.secondary">Loading registration detail.</Typography>
-        )}
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>Close</Button>
-      </DialogActions>
-    </Dialog>
+              </div>
+            ) : (
+              <EmptyState title="No participant details yet" description="For one-person registrations, use the POC as the participant. For teams, add roster names when they arrive." />
+            )}
+            <div className="registration-add-participant">
+              <TextField label="First name" value={participant.firstName} onChange={(event) => setParticipant((current) => ({ ...current, firstName: event.target.value }))} />
+              <TextField label="Last name" value={participant.lastName} onChange={(event) => setParticipant((current) => ({ ...current, lastName: event.target.value }))} />
+              <TextField label="Email" type="email" value={participant.email} onChange={(event) => setParticipant((current) => ({ ...current, email: event.target.value }))} />
+              <TextField label="Title" value={participant.title} onChange={(event) => setParticipant((current) => ({ ...current, title: event.target.value }))} />
+              <Button startIcon={<AddIcon />} onClick={addParticipant}>Add</Button>
+            </div>
+          </section>
+
+          <section className="registration-detail-section">
+            <div className="registration-section-heading">
+              <div>
+                <h3>POC Communication History</h3>
+                <p>Outbound messages, attachments, and delivery signals.</p>
+              </div>
+              {registration.primaryContactEmail ? (
+                <Button href={`/communications?search=${encodeURIComponent(registration.primaryContactEmail)}`} variant="outlined" size="small">
+                  Open in Communications
+                </Button>
+              ) : null}
+            </div>
+            {threadLoading ? (
+              <Typography color="text.secondary">Loading communication history...</Typography>
+            ) : thread.length > 0 ? (
+              <div className="quick-view-list">
+                {thread.map((communication) => (
+                  <div className="quick-view-list-row" key={communication.id}>
+                    <div>
+                      <strong title={communication.subject}>{communication.subject ?? "Email event"}</strong>
+                      <span title={communication.cohort?.title ?? ""}>
+                        {`${communication.cohort?.title ?? "Mission Control"} · ${formatStatusLabel(communication.status)}${communication.emailSummary?.lastEmailEvent ? ` · ${formatStatusLabel(communication.emailSummary.lastEmailEvent)}` : ""}${communicationIssueLabel(communication) ? ` · ${communicationIssueLabel(communication)}` : ""}${communication.attachments?.length ? ` · ${communication.attachments.length} attachment${communication.attachments.length === 1 ? "" : "s"}` : ""}`}
+                      </span>
+                    </div>
+                    <span>{communication.sentAt || communication.createdAt ? new Date(communication.sentAt ?? communication.createdAt).toLocaleDateString() : ""}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <EmptyState title="No POC emails yet" description="Manual and automatic outbound emails to this POC will appear here with delivery and open signals." />
+            )}
+          </section>
+
+          <section className="registration-detail-section">
+            <div className="registration-section-heading">
+              <div>
+                <h3>Jotform Revision Timeline</h3>
+                <p>Imports and resubmissions linked to this registration.</p>
+              </div>
+            </div>
+            {(registration.webhookEvents ?? []).length > 0 ? (
+              <div className="quick-view-list">
+                {(registration.webhookEvents ?? []).map((event: AdminRow) => (
+                  <div className="quick-view-list-row" key={event.id}>
+                    <div>
+                      <strong>{`Revision ${event.revisionNumber ?? "-"} · ${formatStatusLabel(event.status)}`}</strong>
+                      <span>{`${event.processedAt || event.createdAt ? new Date(event.processedAt ?? event.createdAt).toLocaleString() : ""}${revisionSummary(event) ? ` · ${revisionSummary(event)}` : ""}${event.errorMessage ? ` · ${event.errorMessage}` : ""}`}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <EmptyState title="No Jotform revisions yet" description="Jotform imports and resubmissions linked to this registration will appear here." />
+            )}
+          </section>
+
+          <section className="registration-detail-section">
+            <div className="registration-section-heading">
+              <div>
+                <h3>Finance And Source Context</h3>
+                <p>Invoice, QuickBooks, and attribution details.</p>
+              </div>
+            </div>
+            <div className="quick-view-grid">
+              <DetailTile label="Docs" value={formatStatusLabel(registration.supportingDocumentStatus)} />
+              <DetailTile label="QB invoice" value={registration.quickBooksInvoiceRef ?? "-"} />
+              <DetailTile label="QB status" value={formatStatusLabel(registration.quickBooksInvoiceStatus ?? "UNKNOWN")} />
+              <DetailTile label="QB sync" value={formatStatusLabel(registration.quickBooksSyncStatus ?? "NOT SYNCED")} />
+              <DetailTile label="UTM source" value={registration.utmSource ?? "-"} />
+              <DetailTile label="UTM medium" value={registration.utmMedium ?? "-"} />
+              <DetailTile label="UTM campaign" value={registration.utmCampaign ?? "-"} />
+              <DetailTile label="Referrer" value={registration.referrerUrl ?? "-"} />
+            </div>
+          </section>
+        </div>
+      ) : (
+        <Typography color="text.secondary">Loading registration detail.</Typography>
+      )}
+    </QuickViewDrawer>
+  );
+}
+
+function DetailTile({ label, value, tone }: { label: string; value?: unknown; tone?: string }) {
+  return (
+    <div className={`registration-detail-tile${tone ? ` is-${tone}` : ""}`}>
+      <span>{label}</span>
+      <strong title={String(value ?? "-")}>{value == null || value === "" ? "-" : String(value)}</strong>
+    </div>
   );
 }
 
@@ -530,6 +624,8 @@ export function RegistrationsClient() {
   const [paymentStatus, setPaymentStatus] = useState("");
   const [rosterStatus, setRosterStatus] = useState("");
   const [source, setSource] = useState("");
+  const [cohortId, setCohortId] = useState("");
+  const [organizationId, setOrganizationId] = useState("");
   const [visibility, setVisibility] = useState("active");
   const [pendingLifecycleAction, setPendingLifecycleAction] = useState<{ action: "archive" | "restore" | "delete"; row: AdminRow } | null>(null);
   const { notifySuccess, notifyError, snackbar } = useNotifier();
@@ -576,9 +672,11 @@ export function RegistrationsClient() {
           row.primaryContactEmail,
           row.primaryContactPhone,
           row.cohort?.title,
+          row.cohort?.shortName,
           row.organization?.name,
           row.invoiceNumber,
-          row.purchaseOrderNumber
+          row.purchaseOrderNumber,
+          row.externalSubmissionId
         ]
           .join(" ")
           .toLowerCase()
@@ -587,14 +685,16 @@ export function RegistrationsClient() {
         const matchRoster = rosterStatus ? row.participantListStatus === rosterStatus : true;
         const sourceLabel = formatRegistrationSource(row);
         const matchSource = source ? sourceLabel === source : true;
+        const matchCohort = cohortId ? row.cohortId === cohortId : true;
+        const matchOrganization = organizationId ? row.organizationId === organizationId : true;
         const matchVisibility = visibility === "archived"
           ? Boolean(row.archivedAt)
           : visibility === "active"
             ? !row.archivedAt
             : true;
-        return matchSearch && matchPayment && matchRoster && matchSource && matchVisibility;
+        return matchSearch && matchPayment && matchRoster && matchSource && matchCohort && matchOrganization && matchVisibility;
       }),
-    [rows, search, paymentStatus, rosterStatus, source, visibility]
+    [rows, search, paymentStatus, rosterStatus, source, cohortId, organizationId, visibility]
   );
 
   const sourceOptions = useMemo(
@@ -712,41 +812,55 @@ export function RegistrationsClient() {
     {
       field: "primaryContactName",
       headerName: "POC",
-      flex: 1.15,
-      minWidth: 190,
+      flex: 1.2,
+      minWidth: 210,
       renderCell: (params) => (
-        <Box sx={{ minWidth: 0 }}>
-          <Typography fontWeight={800} noWrap>{formatProperDisplay(params.row.primaryContactName)}</Typography>
-          <Typography variant="caption" color="text.secondary" noWrap>
+        <div className="app-table-identity">
+          <span className="app-table-main" title={formatProperDisplay(params.row.primaryContactName)}>{formatProperDisplay(params.row.primaryContactName)}</span>
+          <span className="app-table-sub" title={params.row.primaryContactEmail}>
             {params.row.archivedAt ? `Archived · ${params.row.primaryContactEmail}` : params.row.primaryContactEmail}
-          </Typography>
-        </Box>
+          </span>
+        </div>
       )
     },
-    { field: "organization", headerName: "Organization", flex: 1.05, minWidth: 180, valueGetter: (_value, row) => formatProperDisplay(row.organization?.name ?? "") },
-    { field: "cohort", headerName: "Cohort", flex: 1, minWidth: 170, valueGetter: (_value, row) => row.cohort?.title ?? "" },
+    {
+      field: "context",
+      headerName: "Organization / Cohort",
+      flex: 1.35,
+      minWidth: 250,
+      renderCell: (params) => (
+        <div className="app-table-context">
+          <span className="app-table-main" title={formatProperDisplay(params.row.organization?.name ?? "")}>{formatProperDisplay(params.row.organization?.name ?? "") || "-"}</span>
+          <span className="app-table-sub" title={params.row.cohort?.title ?? ""}>{params.row.cohort?.title ?? "No cohort"}</span>
+        </div>
+      )
+    },
     {
       field: "roster",
-      headerName: "Qty / Roster",
-      width: 156,
-      renderCell: (params) => (
-        <Stack direction="row" spacing={0.75} alignItems="center" sx={{ minWidth: 0 }}>
-          <Typography variant="body2" fontWeight={800} noWrap>{params.row.participantCount ?? 0} seats</Typography>
-          <StatusChip value={params.row.participantListStatus} />
-        </Stack>
-      )
+      headerName: "Roster",
+      width: 168,
+      renderCell: (params) => {
+        const health = rosterHealth(params.row);
+        return (
+          <div className="registration-roster-cell" title={`${health.label} · ${health.helper}`}>
+            <span className={`registration-health-dot is-${health.tone}`} />
+            <div>
+              <strong>{health.label}</strong>
+              <span>{health.helper}</span>
+            </div>
+          </div>
+        );
+      }
     },
-    { field: "paymentStatus", headerName: "Payment", width: 112, renderCell: (params) => <StatusChip value={params.value} /> },
     {
-      field: "invoicePo",
-      headerName: "Invoice / PO",
-      flex: 0.75,
-      minWidth: 130,
+      field: "payment",
+      headerName: "Payment",
+      width: 152,
       renderCell: (params) => (
-        <Box sx={{ minWidth: 0 }}>
-          <Typography variant="caption" noWrap>{params.row.invoiceNumber || "No invoice"}</Typography>
-          <Typography variant="caption" color="text.secondary" display="block" noWrap>{params.row.purchaseOrderNumber || "No PO"}</Typography>
-        </Box>
+        <div className="app-table-status-stack">
+          <StatusChip value={params.row.paymentStatus} />
+          <span className="app-table-sub" title={money(params.row.totalAmount)}>{money(params.row.totalAmount)}</span>
+        </div>
       )
     },
     {
@@ -785,7 +899,24 @@ export function RegistrationsClient() {
         description="The POC-first operations hub for team registrations, payment status, supporting documents, and participant rosters."
         action={<ToolbarButton onClick={() => setDialogOpen(true)}>Add Registration</ToolbarButton>}
       />
-      <CompactFilterBar resultCount={filteredRows.length}>
+      <CompactFilterBar
+        resultCount={filteredRows.length}
+        advanced={(
+          <>
+            <TextField select label="Organization" value={organizationId} onChange={(event) => setOrganizationId(event.target.value)}>
+              <MenuItem value="">All organizations</MenuItem>
+              {organizations.map((organization) => <MenuItem value={organization.id} key={organization.id}>{formatProperDisplay(organization.name)}</MenuItem>)}
+            </TextField>
+            <TextField select label="Source" value={source} onChange={(event) => setSource(event.target.value)}>
+              <MenuItem value="">All sources</MenuItem>
+              {sourceOptions.map((value) => <MenuItem value={value} key={value}>{value}</MenuItem>)}
+            </TextField>
+            <TextField select label="Visibility" value={visibility} onChange={(event) => setVisibility(event.target.value)}>
+              {visibilityOptions.map((option) => <MenuItem value={option.value} key={option.value}>{option.label}</MenuItem>)}
+            </TextField>
+          </>
+        )}
+      >
         <TextField label="Search" value={search} onChange={(event) => setSearch(event.target.value)} />
         <TextField select label="Payment status" value={paymentStatus} onChange={(event) => setPaymentStatus(event.target.value)} sx={{ minWidth: 220 }}>
           <MenuItem value="">All payment statuses</MenuItem>
@@ -795,12 +926,9 @@ export function RegistrationsClient() {
           <MenuItem value="">All rosters</MenuItem>
           {rosterStatuses.map((value) => <MenuItem value={value} key={value}>{formatStatusLabel(value)}</MenuItem>)}
         </TextField>
-        <TextField select label="Source" value={source} onChange={(event) => setSource(event.target.value)} sx={{ minWidth: 180 }}>
-          <MenuItem value="">All sources</MenuItem>
-          {sourceOptions.map((value) => <MenuItem value={value} key={value}>{value}</MenuItem>)}
-        </TextField>
-        <TextField select label="Visibility" value={visibility} onChange={(event) => setVisibility(event.target.value)} sx={{ minWidth: 190 }}>
-          {visibilityOptions.map((option) => <MenuItem value={option.value} key={option.value}>{option.label}</MenuItem>)}
+        <TextField select label="Cohort" value={cohortId} onChange={(event) => setCohortId(event.target.value)} sx={{ minWidth: 220 }}>
+          <MenuItem value="">All cohorts</MenuItem>
+          {cohorts.map((cohort) => <MenuItem value={cohort.id} key={cohort.id}>{cohort.title}</MenuItem>)}
         </TextField>
       </CompactFilterBar>
       <SectionCard title="Registration Management">
