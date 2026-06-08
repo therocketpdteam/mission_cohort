@@ -2,7 +2,7 @@ import { CommunicationStatus, InvoiceDraftStatus, RecipientScope } from "@prisma
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { dateInput, moneyInput, positiveIntInput } from "@/lib/validators";
-import { buildSimplePdf } from "./pdfService";
+import { buildInvoicePdf } from "./pdfService";
 import { uploadAppFile } from "./storageService";
 import { addCommunicationAttachment, getSystemUserId, sendCommunication } from "./communicationService";
 
@@ -191,28 +191,34 @@ export async function updateInvoiceDraft(id: string, input: z.input<typeof invoi
   });
 }
 
-function invoicePdfLines(invoice: Awaited<ReturnType<typeof createInvoiceDraft>> | Awaited<ReturnType<typeof updateInvoiceDraft>>, receipt = false) {
+function invoicePdfInput(invoice: Awaited<ReturnType<typeof createInvoiceDraft>> | Awaited<ReturnType<typeof updateInvoiceDraft>>, receipt = false) {
   const organization = invoice.organization ?? invoice.registration?.organization;
-  return [
-    `Invoice #: ${invoice.invoiceNumber ?? invoice.id.slice(-8)}`,
-    `Status: ${receipt ? "PAID RECEIPT" : invoice.status}`,
-    `Organization: ${organization?.name ?? "-"}`,
-    `Cohort: ${invoice.cohort.title}`,
-    `PO Number: ${invoice.purchaseOrderNumber ?? "-"}`,
-    `Issue Date: ${formatDate(invoice.issueDate)}`,
-    `Due Date: ${formatDate(invoice.dueDate)}`,
-    "",
-    "Line Items",
-    ...invoice.lineItems.map((item) => `${item.description} | Qty ${item.quantity} | ${money(item.unitAmount)} | ${money(item.totalAmount)}`),
-    "",
-    `Subtotal: ${money(invoice.subtotalAmount)}`,
-    `Tax: ${money(invoice.taxAmount)}`,
-    `Total: ${money(invoice.totalAmount)}`,
-    `Paid: ${money(invoice.paidAmount)}`,
-    `Balance: ${money(Number(invoice.totalAmount) - Number(invoice.paidAmount))}`,
-    "",
-    invoice.notes ? `Notes: ${invoice.notes}` : ""
-  ].filter(Boolean);
+  const balanceAmount = Math.max(Number(invoice.totalAmount) - Number(invoice.paidAmount), 0);
+
+  return {
+    documentType: receipt ? "receipt" as const : "invoice" as const,
+    invoiceNumber: invoice.invoiceNumber ?? invoice.id.slice(-8),
+    status: String(invoice.status),
+    organizationName: organization?.name ?? "Organization",
+    contactName: invoice.registration?.billingContactName ?? invoice.registration?.primaryContactName,
+    contactEmail: invoice.registration?.billingContactEmail ?? invoice.registration?.primaryContactEmail,
+    cohortTitle: invoice.cohort.title,
+    purchaseOrderNumber: invoice.purchaseOrderNumber,
+    issueDate: formatDate(invoice.issueDate),
+    dueDate: formatDate(invoice.dueDate),
+    lineItems: invoice.lineItems.map((item) => ({
+      description: item.description,
+      quantity: Number(item.quantity ?? 0),
+      unitAmount: money(item.unitAmount),
+      totalAmount: money(item.totalAmount)
+    })),
+    subtotalAmount: money(invoice.subtotalAmount),
+    taxAmount: money(invoice.taxAmount),
+    totalAmount: money(invoice.totalAmount),
+    paidAmount: money(invoice.paidAmount),
+    balanceAmount: money(balanceAmount),
+    notes: invoice.notes
+  };
 }
 
 export async function generateInvoicePdf(id: string, receipt = false) {
@@ -225,7 +231,7 @@ export async function generateInvoicePdf(id: string, receipt = false) {
     throw Object.assign(new Error("Invoice draft not found."), { code: "NOT_FOUND", status: 404 });
   }
 
-  const pdf = buildSimplePdf(receipt ? "RocketPD Receipt" : "RocketPD Invoice", invoicePdfLines(invoice, receipt));
+  const pdf = buildInvoicePdf(invoicePdfInput(invoice, receipt));
   const upload = await uploadAppFile({
     purpose: receipt ? "receipt" : "invoice",
     fileName: `${receipt ? "receipt" : "invoice"}-${invoice.invoiceNumber ?? invoice.id}.pdf`,
