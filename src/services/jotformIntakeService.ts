@@ -63,6 +63,10 @@ export async function listJotformIntakeEvents() {
         processedAt: true,
         status: true,
         errorMessage: true,
+        registrationId: true,
+        externalSubmissionId: true,
+        revisionNumber: true,
+        normalizedSummary: true,
         createdAt: true
       }
     }),
@@ -71,8 +75,12 @@ export async function listJotformIntakeEvents() {
 
   return events.map((event) => {
     const preview = previewJotformRegistrationPayload(event.payload as Record<string, unknown>, mappings);
-    const normalizedSummary: Record<string, unknown> = {};
-    const revisionNumber = Number(normalizedSummary.revisionNumber ?? 0);
+    const normalizedSummary = (
+      event.normalizedSummary && typeof event.normalizedSummary === "object" && !Array.isArray(event.normalizedSummary)
+        ? event.normalizedSummary
+        : {}
+    ) as Record<string, unknown>;
+    const revisionNumber = Number(event.revisionNumber ?? normalizedSummary.revisionNumber ?? 0);
     const isRevision = revisionNumber > 1 || Boolean(normalizedSummary.updatedExistingRegistration);
     const needsMapping = Boolean(preview.formId) && !preview.hasMapping;
     const missingRequiredFields = [
@@ -101,6 +109,8 @@ export async function listJotformIntakeEvents() {
         : "Already imported into Mission Control."
       : needsMapping
         ? "Review this submission, confirm the form mapping, then replay it."
+        : normalizedSummary.preservedExistingParticipants
+          ? "Updated the registration while preserving the existing participant roster because this revision did not include roster rows."
         : hasParticipantErrors
           ? "Replay will import the registration and valid participants, then flag the roster lines that need follow-up."
           : missingRequiredFields.length > 0
@@ -120,8 +130,8 @@ export async function listJotformIntakeEvents() {
         recommendedAction
       },
       revision: {
-        registrationId: null,
-        externalSubmissionId: preview.submissionId,
+        registrationId: event.registrationId,
+        externalSubmissionId: event.externalSubmissionId ?? preview.submissionId,
         revisionNumber: revisionNumber || null,
         isRevision,
         processedAt: event.processedAt,

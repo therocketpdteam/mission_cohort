@@ -268,26 +268,30 @@ export async function processRegistrationWebhook(payload: Record<string, any>, o
         })
       : await prisma.registration.create({ data: registrationData });
 
-    if (existingRegistration) {
+    const shouldReplaceParticipants = !existingRegistration || participantsInput.length > 0;
+
+    if (existingRegistration && shouldReplaceParticipants) {
       await prisma.participant.deleteMany({ where: { registrationId: registration.id } });
     }
 
-    const participants = await Promise.all(
-      participantsInput.map((participant: Record<string, unknown>) =>
-        prisma.participant.create({
-          data: {
-            registrationId: registration.id,
-            cohortId: registration.cohortId,
-            organizationId: organization.id,
-            firstName: stringValue(participant.firstName, "Participant"),
-            lastName: stringValue(participant.lastName, "-"),
-            email: stringValue(participant.email),
-            title: stringValue(participant.title) || undefined,
-            phone: stringValue(participant.phone) || undefined
-          }
-        })
-      )
-    );
+    const participants = shouldReplaceParticipants
+      ? await Promise.all(
+          participantsInput.map((participant: Record<string, unknown>) =>
+            prisma.participant.create({
+              data: {
+                registrationId: registration.id,
+                cohortId: registration.cohortId,
+                organizationId: organization.id,
+                firstName: stringValue(participant.firstName, "Participant"),
+                lastName: stringValue(participant.lastName, "-"),
+                email: stringValue(participant.email),
+                title: stringValue(participant.title) || undefined,
+                phone: stringValue(participant.phone) || undefined
+              }
+            })
+          )
+        )
+      : existingRegistration.participants;
 
     const payment =
       paymentAmount > 0
@@ -346,7 +350,8 @@ export async function processRegistrationWebhook(payload: Record<string, any>, o
           ...normalizedSummary,
           cohortId: registration.cohortId,
           revisionNumber,
-          updatedExistingRegistration: Boolean(existingRegistration)
+          updatedExistingRegistration: Boolean(existingRegistration),
+          preservedExistingParticipants: Boolean(existingRegistration && !shouldReplaceParticipants)
         } as Prisma.InputJsonValue : undefined,
         status: WebhookProcessingStatus.PROCESSED,
         processedAt: new Date(),
