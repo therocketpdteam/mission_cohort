@@ -232,6 +232,9 @@ export async function getRegistrationById(id: string) {
       organization: true,
       participants: true,
       paymentRecords: true,
+      operationsTasks: {
+        orderBy: [{ status: "asc" }, { priority: "desc" }, { createdAt: "desc" }]
+      },
       webhookEvents: {
         where: { source: "jotform" },
         orderBy: { createdAt: "desc" },

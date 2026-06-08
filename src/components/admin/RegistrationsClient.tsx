@@ -483,6 +483,36 @@ function RegistrationDetailDialog({
           <section className="registration-detail-section">
             <div className="registration-section-heading">
               <div>
+                <h3>Open Follow-Ups</h3>
+                <p>Operational tasks created from intake, roster, payment, and document readiness.</p>
+              </div>
+            </div>
+            {(registration.operationsTasks ?? []).filter((task: AdminRow) => task.status !== "COMPLETED").length > 0 ? (
+              <div className="quick-view-list">
+                {(registration.operationsTasks ?? [])
+                  .filter((task: AdminRow) => task.status !== "COMPLETED")
+                  .map((task: AdminRow) => (
+                    <div className="quick-view-list-row" key={task.id}>
+                      <div>
+                        <strong>{task.title}</strong>
+                        <span>
+                          {[formatStatusLabel(task.category), task.description, task.dueDate ? new Date(task.dueDate).toLocaleDateString() : ""]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </span>
+                      </div>
+                      <StatusChip value={task.priority ?? task.status} />
+                    </div>
+                  ))}
+              </div>
+            ) : (
+              <EmptyState title="No open follow-ups" description="Roster, payment, and document follow-ups attached to this registration will appear here." />
+            )}
+          </section>
+
+          <section className="registration-detail-section">
+            <div className="registration-section-heading">
+              <div>
                 <h3>Team Roster</h3>
                 <p>{health?.label} · {health?.helper}</p>
               </div>
