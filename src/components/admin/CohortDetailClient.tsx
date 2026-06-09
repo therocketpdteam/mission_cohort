@@ -27,6 +27,8 @@ import type { CSSProperties } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { adminApi, uploadAdminFile } from "@/lib/adminApi";
 import { formatProperDisplay, formatStatusLabel } from "@/lib/formatting";
+import { RosterWorkbench } from "./RosterWorkbench";
+import type { ParsedRosterParticipant } from "@/lib/rosterParser";
 import {
   AdminRow,
   AppDataGrid,
@@ -962,6 +964,38 @@ export function CohortDetailClient({ id }: { id: string }) {
       notifyError((error as Error).message);
     } finally {
       setCompletingRegistrationTaskId("");
+    }
+  }
+
+  async function importRegistrationRoster(participants: ParsedRosterParticipant[]) {
+    if (!registrationDetail?.id) {
+      return;
+    }
+
+    try {
+      await Promise.all(participants.map((row) => adminApi("/api/participants", {
+        method: "POST",
+        body: {
+          ...row,
+          registrationId: registrationDetail.id,
+          cohortId: registrationDetail.cohortId,
+          organizationId: registrationDetail.organizationId
+        }
+      })));
+
+      const projectedCount = (registrationDetail.participants?.length ?? 0) + participants.length;
+      if (projectedCount > Number(registrationDetail.participantCount ?? 0)) {
+        await adminApi("/api/registrations", {
+          method: "PATCH",
+          body: { id: registrationDetail.id, participantCount: projectedCount }
+        });
+      }
+
+      notifySuccess(`${participants.length} participant${participants.length === 1 ? "" : "s"} imported.`);
+      await openRegistrationDetail(registrationDetail);
+      await load();
+    } catch (error) {
+      notifyError((error as Error).message);
     }
   }
 
@@ -2128,6 +2162,13 @@ export function CohortDetailClient({ id }: { id: string }) {
             </div>
             <SectionCard title="Notes">
               <Typography color="text.secondary">{registrationDetail.notes ?? "No notes captured yet."}</Typography>
+            </SectionCard>
+            <SectionCard title="Team Roster">
+              <RosterWorkbench
+                registration={registrationDetail}
+                existingParticipants={registrationDetail.participants ?? []}
+                onImport={importRegistrationRoster}
+              />
             </SectionCard>
             <SectionCard title="Open Follow-Ups">
               {(registrationDetail.operationsTasks ?? []).filter((task: AdminRow) => task.status !== "COMPLETED").length > 0 ? (

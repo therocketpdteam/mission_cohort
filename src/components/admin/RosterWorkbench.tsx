@@ -1,0 +1,99 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { Button, Stack, TextField, Typography } from "@/components/ui/primitives";
+import { parseRosterText, type ParsedRosterParticipant } from "@/lib/rosterParser";
+import { formatProperDisplay } from "@/lib/formatting";
+import { AdminRow, EmptyState, StatusChip } from "./common";
+
+type RosterWorkbenchProps = {
+  registration: AdminRow;
+  existingParticipants?: AdminRow[];
+  onImport: (participants: ParsedRosterParticipant[]) => Promise<void>;
+};
+
+export function RosterWorkbench({ registration, existingParticipants = [], onImport }: RosterWorkbenchProps) {
+  const [rosterText, setRosterText] = useState("");
+  const [importing, setImporting] = useState(false);
+  const parsed = useMemo(() => parseRosterText(rosterText), [rosterText]);
+  const existingEmails = useMemo(
+    () => new Set(existingParticipants.map((participant) => String(participant.email ?? "").toLowerCase()).filter(Boolean)),
+    [existingParticipants]
+  );
+  const newParticipants = parsed.participants.filter((participant) => !existingEmails.has(participant.email));
+  const duplicateCount = parsed.participants.length - newParticipants.length;
+  const expected = Number(registration.participantCount ?? 0);
+  const projectedTotal = existingParticipants.length + newParticipants.length;
+
+  async function importRoster() {
+    if (newParticipants.length === 0 || importing) {
+      return;
+    }
+
+    setImporting(true);
+    try {
+      await onImport(newParticipants);
+      setRosterText("");
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  return (
+    <div className="roster-workbench">
+      <div className="registration-section-heading">
+        <div>
+          <h3>Roster Workbench</h3>
+          <p>Paste names and emails from a message, spreadsheet, or CSV.</p>
+        </div>
+        <StatusChip value={projectedTotal >= expected && expected > 0 ? "COMPLETE" : projectedTotal > 0 ? "PARTIAL" : "NEEDED"} />
+      </div>
+      <TextField
+        label="Paste roster"
+        multiline
+        minRows={5}
+        value={rosterText}
+        onChange={(event) => setRosterText(event.target.value)}
+        placeholder={"Ada Lovelace, ada@example.com\nGrace Hopper, grace@example.com, Math Coach"}
+        helperText="Accepted: Full Name, email; First, Last, email; tab-separated spreadsheet rows; or Full Name email@example.com."
+      />
+      <div className="roster-workbench-summary">
+        <span>{existingParticipants.length} saved</span>
+        <span>{newParticipants.length} ready to add</span>
+        <span>{duplicateCount} already exists</span>
+        <span>{parsed.errors.length} needs review</span>
+      </div>
+      {parsed.errors.length > 0 && (
+        <div className="roster-workbench-errors">
+          {parsed.errors.slice(0, 4).map((error) => <span key={error}>{error}</span>)}
+          {parsed.errors.length > 4 && <span>{parsed.errors.length - 4} more lines need review.</span>}
+        </div>
+      )}
+      {newParticipants.length > 0 ? (
+        <div className="quick-view-list">
+          {newParticipants.slice(0, 6).map((participant) => (
+            <div className="quick-view-list-row" key={participant.email}>
+              <div>
+                <strong>{formatProperDisplay(`${participant.firstName} ${participant.lastName}`)}</strong>
+                <span>{[participant.email, participant.title, participant.phone].filter(Boolean).join(" · ")}</span>
+              </div>
+            </div>
+          ))}
+          {newParticipants.length > 6 && (
+            <Typography color="text.secondary">{newParticipants.length - 6} more participants ready to import.</Typography>
+          )}
+        </div>
+      ) : rosterText.trim() ? (
+        <EmptyState title="No new participants detected" description="Fix any line warnings or remove people already saved on this registration." />
+      ) : null}
+      <Stack direction="row" flexWrap="wrap" useFlexGap gap={1} justifyContent="space-between" alignItems="center">
+        <Typography color="text.secondary">
+          {expected ? `${projectedTotal}/${expected} projected roster` : `${projectedTotal} projected participants`}
+        </Typography>
+        <Button size="small" onClick={importRoster} disabled={newParticipants.length === 0 || importing}>
+          {importing ? "Importing" : `Import ${newParticipants.length || ""}`.trim()}
+        </Button>
+      </Stack>
+    </div>
+  );
+}

@@ -25,6 +25,8 @@ import { GridColDef, GridRowParams, GridRowSelectionModel } from "./common";
 import { useEffect, useMemo, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
 import { formatProperDisplay, formatRegistrationSource, formatStatusLabel } from "@/lib/formatting";
+import { RosterWorkbench } from "./RosterWorkbench";
+import type { ParsedRosterParticipant } from "@/lib/rosterParser";
 import {
   AdminRow,
   AppDataGrid,
@@ -369,6 +371,39 @@ function RegistrationDetailDialog({
     }
   }
 
+  async function importRoster(participants: ParsedRosterParticipant[]) {
+    if (!registration) {
+      return;
+    }
+
+    try {
+      await Promise.all(participants.map((row) => adminApi("/api/participants", {
+        method: "POST",
+        body: {
+          ...row,
+          registrationId: registration.id,
+          cohortId: registration.cohortId,
+          organizationId: registration.organizationId
+        }
+      })));
+
+      const projectedCount = (registration.participants?.length ?? 0) + participants.length;
+      if (projectedCount > Number(registration.participantCount ?? 0)) {
+        await adminApi("/api/registrations", {
+          method: "PATCH",
+          body: { id: registration.id, participantCount: projectedCount }
+        });
+      }
+
+      onSuccess(`${participants.length} participant${participants.length === 1 ? "" : "s"} imported.`);
+      await onChanged();
+    } catch (importError) {
+      const message = (importError as Error).message;
+      setError(message);
+      onError(message);
+    }
+  }
+
   async function removeParticipant(id: string) {
     try {
       await adminApi(`/api/participants?id=${id}`, { method: "DELETE" });
@@ -620,6 +655,11 @@ function RegistrationDetailDialog({
               <TextField label="Title" value={participant.title} onChange={(event) => setParticipant((current) => ({ ...current, title: event.target.value }))} />
               <Button startIcon={<AddIcon />} onClick={addParticipant}>Add</Button>
             </div>
+            <RosterWorkbench
+              registration={registration}
+              existingParticipants={registration.participants ?? []}
+              onImport={importRoster}
+            />
           </section>
 
           <section className="registration-detail-section">
