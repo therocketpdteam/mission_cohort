@@ -1,4 +1,4 @@
-import { ParticipantListStatus } from "@prisma/client";
+import { OperationsTaskCategory, OperationsTaskStatus, ParticipantListStatus } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { participantCreateSchema, participantUpdateSchema } from "@/validators/participant";
@@ -30,6 +30,38 @@ async function syncRegistrationParticipantListStatus(registrationId: string) {
     where: { id: registrationId },
     data: { participantListStatus: status }
   });
+
+  if (status === ParticipantListStatus.COMPLETE) {
+    await prisma.operationsTask.updateMany({
+      where: {
+        registrationId,
+        category: OperationsTaskCategory.PARTICIPANT_LIST,
+        status: { in: [OperationsTaskStatus.OPEN, OperationsTaskStatus.IN_PROGRESS] }
+      },
+      data: {
+        status: OperationsTaskStatus.COMPLETED,
+        completedAt: new Date(),
+        description: `Roster completed automatically at ${actualCount}/${registration.participantCount || actualCount} participants.`
+      }
+    });
+  } else if (status === ParticipantListStatus.NEEDED || status === ParticipantListStatus.PARTIAL) {
+    await prisma.operationsTask.updateMany({
+      where: {
+        registrationId,
+        category: OperationsTaskCategory.PARTICIPANT_LIST,
+        status: OperationsTaskStatus.COMPLETED
+      },
+      data: {
+        status: OperationsTaskStatus.OPEN,
+        completedAt: null,
+        description: status === ParticipantListStatus.PARTIAL
+          ? `Roster is partial at ${actualCount}/${registration.participantCount} participants.`
+          : "Registration still needs a participant roster."
+      }
+    });
+  }
+
+  return { status, actualCount, expectedCount: registration.participantCount };
 }
 
 export async function addParticipant(input: z.input<typeof participantCreateSchema>) {
@@ -42,7 +74,7 @@ export async function addParticipant(input: z.input<typeof participantCreateSche
     description: "Participant added",
     metadata: { cohortId: participant.cohortId, registrationId: participant.registrationId }
   });
-  void syncRegistrationParticipantListStatus(participant.registrationId);
+  await syncRegistrationParticipantListStatus(participant.registrationId);
   void queueParticipantCrmSync(participant.id, "participant.created").catch(() => undefined);
   return participant;
 }
@@ -56,7 +88,7 @@ export async function updateParticipant(id: string, input: z.input<typeof partic
 
 export async function removeParticipant(id: string) {
   const participant = await prisma.participant.delete({ where: { id } });
-  void syncRegistrationParticipantListStatus(participant.registrationId);
+  await syncRegistrationParticipantListStatus(participant.registrationId);
   return participant;
 }
 

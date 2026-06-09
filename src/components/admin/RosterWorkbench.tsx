@@ -24,6 +24,8 @@ export function RosterWorkbench({ registration, existingParticipants = [], onImp
   const duplicateCount = parsed.participants.length - newParticipants.length;
   const expected = Number(registration.participantCount ?? 0);
   const projectedTotal = existingParticipants.length + newParticipants.length;
+  const savedComplete = expected > 0 && existingParticipants.length >= expected;
+  const savedPartial = expected > 0 && existingParticipants.length > 0 && existingParticipants.length < expected;
 
   async function importRoster() {
     if (newParticipants.length === 0 || importing) {
@@ -44,10 +46,26 @@ export function RosterWorkbench({ registration, existingParticipants = [], onImp
       <div className="registration-section-heading">
         <div>
           <h3>Roster Workbench</h3>
-          <p>Paste names and emails from a message, spreadsheet, or CSV.</p>
+          <p>
+            {savedComplete
+              ? "Roster is complete. New valid rows can still be added if the team grows."
+              : savedPartial
+                ? "Roster is partial. Paste the remaining names and emails when they arrive."
+                : "Paste names and emails from a message, spreadsheet, or CSV."}
+          </p>
         </div>
         <StatusChip value={projectedTotal >= expected && expected > 0 ? "COMPLETE" : projectedTotal > 0 ? "PARTIAL" : "NEEDED"} />
       </div>
+      {savedComplete && (
+        <div className="roster-workbench-state is-complete">
+          Roster complete at {existingParticipants.length}/{expected} participants. Related participant-list follow-ups close automatically.
+        </div>
+      )}
+      {savedPartial && (
+        <div className="roster-workbench-state is-partial">
+          Roster partial at {existingParticipants.length}/{expected} participants. The participant-list follow-up stays open until the count is complete.
+        </div>
+      )}
       <TextField
         label="Paste roster"
         multiline
