@@ -21,8 +21,6 @@ import {
   AppDataGrid,
   CompactFilterBar,
   EmptyState,
-  FieldConfig,
-  MutationDialog,
   PageHeader,
   PageStack,
   QuickViewDrawer,
@@ -44,17 +42,51 @@ const templateTypes = [
   "CUSTOM"
 ];
 
-const templateFields: FieldConfig[] = [
-  { name: "name", label: "Template name", required: true },
-  { name: "subject", label: "Subject", required: true },
-  { name: "type", label: "Type", type: "select", options: templateTypes.map((value) => ({ label: formatStatusLabel(value), value })) },
-  { name: "active", label: "Active", type: "checkbox" },
-  { name: "bodyHtml", label: "Body HTML", type: "textarea", required: true },
-  { name: "bodyText", label: "Body text", type: "textarea" }
-];
-
 const tabs = ["Outbox", "Issues", "Templates"] as const;
 const communicationStatuses = ["DRAFT", "SCHEDULED", "SENDING", "SENT", "FAILED", "CANCELLED"];
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function textToEmailHtml(value: string) {
+  const blocks = value
+    .split(/\n{2,}/)
+    .map((block) => block.trim())
+    .filter(Boolean);
+
+  if (blocks.length === 0) {
+    return "<p></p>";
+  }
+
+  return blocks
+    .map((block) => `<p>${escapeHtml(block).replace(/\n/g, "<br />")}</p>`)
+    .join("");
+}
+
+function htmlToTemplateText(value: string) {
+  return value
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n\n")
+    .replace(/<[^>]*>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, "\"")
+    .replace(/&#39;/g, "'")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function templateText(template?: AdminRow | null) {
+  return String(template?.bodyText || htmlToTemplateText(String(template?.bodyHtml ?? "")) || "");
+}
 
 function formatDate(value?: string | Date | null, empty = "Not scheduled") {
   if (!value) {
@@ -128,6 +160,139 @@ function recipientSearchText(row: AdminRow) {
     row.related?.displayName,
     row.related?.organizationName
   ].join(" ").toLowerCase();
+}
+
+function TemplateEditorDialog({
+  open,
+  editing,
+  onClose,
+  onSubmit
+}: {
+  open: boolean;
+  editing: AdminRow | null;
+  onClose: () => void;
+  onSubmit: (values: AdminRow) => Promise<void>;
+}) {
+  const [values, setValues] = useState<AdminRow>({ type: "CUSTOM", active: true, bodyText: "" });
+  const [saving, setSaving] = useState(false);
+  const [activeField, setActiveField] = useState<"subject" | "bodyText">("bodyText");
+  const bodyText = String(values.bodyText ?? "");
+  const renderedSubject = renderMergeFields(String(values.subject ?? ""), sampleMergeContext, true);
+  const renderedBody = renderMergeFields(bodyText, sampleMergeContext, true);
+  const warnings = [...renderedSubject.warnings, ...renderedBody.warnings];
+
+  useEffect(() => {
+    if (open) {
+      setValues(editing ? { ...editing, bodyText: templateText(editing) } : { type: "CUSTOM", active: true, bodyText: "" });
+      setActiveField("bodyText");
+    }
+  }, [editing, open]);
+
+  function setValue(field: string, value: unknown) {
+    setValues((current) => ({ ...current, [field]: value }));
+  }
+
+  function insertMergeField(field: string) {
+    const token = `{{${field}}}`;
+    setValues((current) => {
+      const currentValue = String(current[activeField] ?? "");
+      const separator = currentValue && !currentValue.endsWith(" ") && !currentValue.endsWith("\n") ? " " : "";
+      return { ...current, [activeField]: `${currentValue}${separator}${token}` };
+    });
+  }
+
+  async function save() {
+    const subject = String(values.subject ?? "").trim();
+    const text = bodyText.trim();
+
+    if (!String(values.name ?? "").trim() || !subject || !text) {
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await onSubmit({
+        ...values,
+        name: String(values.name ?? "").trim(),
+        subject,
+        bodyText: text,
+        bodyHtml: textToEmailHtml(text),
+        type: values.type || "CUSTOM",
+        active: Boolean(values.active)
+      });
+      onClose();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onClose={onClose} fullWidth maxWidth="lg">
+      <DialogTitle>{editing ? "Edit template" : "Create template"}</DialogTitle>
+      <DialogContent>
+        <div className="template-editor">
+          <div className="template-editor-form">
+            <div className="template-editor-grid">
+              <TextField label="Template name" value={values.name ?? ""} onChange={(event) => setValue("name", event.target.value)} required />
+              <TextField select label="Type" value={values.type ?? "CUSTOM"} onChange={(event) => setValue("type", event.target.value)}>
+                {templateTypes.map((value) => <MenuItem value={value} key={value}>{formatStatusLabel(value)}</MenuItem>)}
+              </TextField>
+            </div>
+            <TextField
+              label="Subject"
+              value={values.subject ?? ""}
+              onFocus={() => setActiveField("subject")}
+              onChange={(event) => setValue("subject", event.target.value)}
+              required
+            />
+            <TextField
+              label="Email body"
+              multiline
+              minRows={10}
+              value={bodyText}
+              onFocus={() => setActiveField("bodyText")}
+              onChange={(event) => setValue("bodyText", event.target.value)}
+              helperText="Write this like a normal email. Blank lines become paragraph breaks."
+              required
+            />
+            <label className="template-editor-active">
+              <input type="checkbox" checked={Boolean(values.active)} onChange={(event) => setValue("active", event.target.checked)} />
+              <span>Active template</span>
+            </label>
+          </div>
+          <aside className="template-editor-side">
+            <div>
+              <h3>Merge fields</h3>
+              <p>Click a field to insert it into the {activeField === "subject" ? "subject" : "email body"}.</p>
+            </div>
+            <div className="comms-field-cloud">
+              {mergeFields.map((field) => (
+                <button className="template-merge-token" type="button" key={field} onClick={() => insertMergeField(field)}>
+                  {`{{${field}}}`}
+                </button>
+              ))}
+            </div>
+            <div className="template-preview">
+              <span>Preview</span>
+              <strong>{renderedSubject.output || "Subject preview"}</strong>
+              <div className="comms-preview-frame" dangerouslySetInnerHTML={{ __html: textToEmailHtml(renderedBody.output || "Email body preview") }} />
+            </div>
+            {warnings.length > 0 && (
+              <div className="template-editor-warnings">
+                {Array.from(new Set(warnings)).map((warning) => <span key={warning}>{warning}</span>)}
+              </div>
+            )}
+          </aside>
+        </div>
+      </DialogContent>
+      <DialogActions>
+        <Button variant="outlined" onClick={onClose} disabled={saving}>Cancel</Button>
+        <Button onClick={save} disabled={saving || !String(values.name ?? "").trim() || !String(values.subject ?? "").trim() || !bodyText.trim()}>
+          {saving ? "Saving" : "Save template"}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
 }
 
 export function CommunicationsClient() {
@@ -211,8 +376,7 @@ export function CommunicationsClient() {
 
     return {
       subject: renderMergeFields(previewTemplate.subject ?? "", sampleMergeContext, true),
-      html: renderMergeFields(previewTemplate.bodyHtml ?? "", sampleMergeContext, true),
-      text: renderMergeFields(previewTemplate.bodyText ?? "", sampleMergeContext, true)
+      text: renderMergeFields(templateText(previewTemplate), sampleMergeContext, true)
     };
   }, [previewTemplate]);
 
@@ -571,7 +735,7 @@ export function CommunicationsClient() {
         action={
           <ActionGroup>
             <Button variant="outlined" startIcon={<EmailOutlined />} onClick={() => setMergeFieldsOpen(true)}>Merge Fields</Button>
-            <ToolbarButton onClick={() => setDialogOpen(true)}>Create Template</ToolbarButton>
+            <ToolbarButton onClick={() => { setEditing(null); setDialogOpen(true); }}>Create Template</ToolbarButton>
           </ActionGroup>
         }
       />
@@ -828,9 +992,9 @@ export function CommunicationsClient() {
             </div>
             <div className="comms-preview-block">
               <span>Rendered email</span>
-              <div className="comms-preview-frame" dangerouslySetInnerHTML={{ __html: preview.html.output }} />
+              <div className="comms-preview-frame" dangerouslySetInnerHTML={{ __html: textToEmailHtml(preview.text.output) }} />
             </div>
-            {[...preview.subject.warnings, ...preview.html.warnings, ...preview.text.warnings].map((warning) => (
+            {[...preview.subject.warnings, ...preview.text.warnings].map((warning) => (
               <Typography key={warning} color="warning.main" variant="body2">{warning}</Typography>
             ))}
           </Stack>
@@ -883,11 +1047,9 @@ export function CommunicationsClient() {
         </DialogActions>
       </Dialog>
 
-      <MutationDialog
-        title={editing ? "Edit Template" : "Create Template"}
+      <TemplateEditorDialog
         open={dialogOpen}
-        fields={templateFields}
-        initialValues={editing ?? { type: "CUSTOM", active: true }}
+        editing={editing}
         onClose={() => { setDialogOpen(false); setEditing(null); }}
         onSubmit={save}
       />
