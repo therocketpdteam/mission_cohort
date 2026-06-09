@@ -44,6 +44,7 @@ const templateTypes = [
 
 const tabs = ["Outbox", "Issues", "Templates"] as const;
 const communicationStatuses = ["DRAFT", "SCHEDULED", "SENDING", "SENT", "FAILED", "CANCELLED"];
+const recipientScopes = ["ALL_PARTICIPANTS", "PRIMARY_CONTACTS", "BILLING_CONTACTS", "CUSTOM"];
 
 function escapeHtml(value: string) {
   return value
@@ -128,6 +129,15 @@ function messageBodyPreview(message?: AdminRow | null) {
     text: { output: "", warnings: [] as string[] },
     html: String(message?.bodyHtml ?? "")
   };
+}
+
+function parseRecipientEmails(value: string) {
+  return Array.from(new Set(
+    value
+      .split(/[\s,;]+/)
+      .map((email) => email.trim().toLowerCase())
+      .filter(Boolean)
+  ));
 }
 
 function formatDate(value?: string | Date | null, empty = "Not scheduled") {
@@ -337,6 +347,187 @@ function TemplateEditorDialog({
   );
 }
 
+function ComposeMessageDialog({
+  open,
+  cohorts,
+  templates,
+  defaultCohortId,
+  onClose,
+  onSubmit
+}: {
+  open: boolean;
+  cohorts: AdminRow[];
+  templates: AdminRow[];
+  defaultCohortId?: string;
+  onClose: () => void;
+  onSubmit: (values: AdminRow, action: "draft" | "schedule" | "send") => Promise<void>;
+}) {
+  const [values, setValues] = useState<AdminRow>({
+    cohortId: "",
+    sessionId: "",
+    templateId: "",
+    recipientScope: "ALL_PARTICIPANTS",
+    recipientEmailsText: "",
+    subject: "",
+    bodyText: "",
+    scheduledFor: ""
+  });
+  const [savingAction, setSavingAction] = useState<"draft" | "schedule" | "send" | null>(null);
+  const selectedCohort = cohorts.find((cohort) => cohort.id === values.cohortId);
+  const selectedTemplate = templates.find((template) => template.id === values.templateId);
+  const bodyText = String(values.bodyText ?? "");
+  const renderedSubject = renderMergeFields(String(values.subject ?? ""), sampleMergeContext, true);
+  const renderedBody = renderMergeFields(bodyText, sampleMergeContext, true);
+  const warnings = [...renderedSubject.warnings, ...renderedBody.warnings];
+  const customEmails = parseRecipientEmails(String(values.recipientEmailsText ?? ""));
+
+  useEffect(() => {
+    if (open) {
+      setValues({
+        cohortId: defaultCohortId ?? "",
+        sessionId: "",
+        templateId: "",
+        recipientScope: "ALL_PARTICIPANTS",
+        recipientEmailsText: "",
+        subject: "",
+        bodyText: "",
+        scheduledFor: ""
+      });
+      setSavingAction(null);
+    }
+  }, [defaultCohortId, open]);
+
+  function setValue(field: string, value: unknown) {
+    setValues((current) => ({ ...current, [field]: value }));
+  }
+
+  function applyTemplate(templateId: string) {
+    const template = templates.find((item) => item.id === templateId);
+    setValues((current) => ({
+      ...current,
+      templateId,
+      subject: template?.subject ?? current.subject ?? "",
+      bodyText: templateText(template) || String(current.bodyText ?? "")
+    }));
+  }
+
+  async function submit(action: "draft" | "schedule" | "send") {
+    setSavingAction(action);
+    try {
+      await onSubmit(values, action);
+      onClose();
+    } finally {
+      setSavingAction(null);
+    }
+  }
+
+  const canSave =
+    Boolean(values.cohortId) &&
+    Boolean(String(values.subject ?? "").trim()) &&
+    Boolean(bodyText.trim()) &&
+    (values.recipientScope !== "CUSTOM" || customEmails.length > 0);
+  const canSchedule = canSave && Boolean(values.scheduledFor);
+
+  return (
+    <Dialog open={open} onClose={onClose} fullWidth maxWidth="lg">
+      <DialogTitle>Create message</DialogTitle>
+      <DialogContent>
+        <div className="compose-message-editor">
+          <div className="compose-message-form">
+            <div className="compose-message-grid">
+              <TextField select label="Cohort" value={values.cohortId ?? ""} onChange={(event) => setValue("cohortId", event.target.value)} required>
+                <MenuItem value="">Choose cohort</MenuItem>
+                {cohorts.map((cohort) => <MenuItem value={cohort.id} key={cohort.id}>{cohort.title}</MenuItem>)}
+              </TextField>
+              <TextField select label="Session" value={values.sessionId ?? ""} onChange={(event) => setValue("sessionId", event.target.value)}>
+                <MenuItem value="">All sessions</MenuItem>
+                {(selectedCohort?.sessions ?? []).map((session: AdminRow) => (
+                  <MenuItem value={session.id} key={session.id}>{session.title}</MenuItem>
+                ))}
+              </TextField>
+            </div>
+            <div className="compose-message-grid">
+              <TextField select label="Audience" value={values.recipientScope ?? "ALL_PARTICIPANTS"} onChange={(event) => setValue("recipientScope", event.target.value)}>
+                {recipientScopes.map((scope) => <MenuItem value={scope} key={scope}>{formatStatusLabel(scope)}</MenuItem>)}
+              </TextField>
+              <TextField select label="Template" value={values.templateId ?? ""} onChange={(event) => applyTemplate(event.target.value)}>
+                <MenuItem value="">No template</MenuItem>
+                {templates.filter((template) => template.active).map((template) => <MenuItem value={template.id} key={template.id}>{template.name}</MenuItem>)}
+              </TextField>
+            </div>
+            {values.recipientScope === "CUSTOM" && (
+              <TextField
+                label="Custom recipients"
+                value={values.recipientEmailsText ?? ""}
+                onChange={(event) => setValue("recipientEmailsText", event.target.value)}
+                helperText="Separate emails with commas, spaces, or new lines."
+                multiline
+                minRows={2}
+                required
+              />
+            )}
+            <TextField label="Subject" value={values.subject ?? ""} onChange={(event) => setValue("subject", event.target.value)} required />
+            <TextField
+              label="Email body"
+              multiline
+              minRows={8}
+              value={bodyText}
+              onChange={(event) => setValue("bodyText", event.target.value)}
+              helperText={selectedTemplate ? `Started from ${selectedTemplate.name}. Edits here affect only this message.` : "Write the message like a normal email."}
+              required
+            />
+            <TextField
+              label="Schedule for"
+              type="datetime-local"
+              value={values.scheduledFor ?? ""}
+              onChange={(event) => setValue("scheduledFor", event.target.value)}
+              InputLabelProps={{ shrink: true }}
+              helperText="Optional. Required only when scheduling."
+            />
+          </div>
+          <aside className="compose-message-side">
+            <div className="compose-message-context">
+              <span>Context</span>
+              <strong title={selectedCohort?.title ?? ""}>{selectedCohort?.title ?? "Choose a cohort"}</strong>
+              <p title={selectedTemplate?.name ?? ""}>
+                {[selectedTemplate?.name, values.recipientScope ? formatStatusLabel(String(values.recipientScope)) : ""].filter(Boolean).join(" · ") || "Template and audience will appear here."}
+              </p>
+            </div>
+            <div className="template-preview">
+              <span>Preview</span>
+              <strong>{renderedSubject.output || "Subject preview"}</strong>
+              <div className="comms-preview-frame comms-message-body-frame" dangerouslySetInnerHTML={{ __html: textToEmailHtml(renderedBody.output || "Email body preview") }} />
+            </div>
+            {customEmails.length > 0 && (
+              <div className="compose-recipient-summary">
+                <span>Custom recipients</span>
+                <strong>{customEmails.length}</strong>
+              </div>
+            )}
+            {warnings.length > 0 && (
+              <div className="template-editor-warnings">
+                {Array.from(new Set(warnings)).map((warning) => <span key={warning}>{warning}</span>)}
+              </div>
+            )}
+          </aside>
+        </div>
+      </DialogContent>
+      <DialogActions>
+        <Button variant="outlined" onClick={onClose} disabled={Boolean(savingAction)}>Cancel</Button>
+        <Button variant="outlined" onClick={() => submit("draft")} disabled={!canSave || Boolean(savingAction)}>
+          {savingAction === "draft" ? "Saving" : "Save draft"}
+        </Button>
+        <Button variant="outlined" onClick={() => submit("schedule")} disabled={!canSchedule || Boolean(savingAction)}>
+          {savingAction === "schedule" ? "Scheduling" : "Schedule"}
+        </Button>
+        <Button onClick={() => submit("send")} disabled={!canSave || Boolean(savingAction)}>
+          {savingAction === "send" ? "Sending" : "Send now"}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
 export function CommunicationsClient() {
   const [templates, setTemplates] = useState<AdminRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -347,6 +538,7 @@ export function CommunicationsClient() {
   const [activeTab, setActiveTab] = useState(0);
   const [messageSearch, setMessageSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [composeOpen, setComposeOpen] = useState(false);
   const [mergeFieldsOpen, setMergeFieldsOpen] = useState(false);
   const [editing, setEditing] = useState<AdminRow | null>(null);
   const [previewTemplate, setPreviewTemplate] = useState<AdminRow | null>(null);
@@ -594,6 +786,45 @@ export function CommunicationsClient() {
     }
   }
 
+  async function createMessage(values: AdminRow, action: "draft" | "schedule" | "send") {
+    const bodyText = String(values.bodyText ?? "").trim();
+    const scheduledFor = values.scheduledFor ? new Date(String(values.scheduledFor)).toISOString() : undefined;
+    const recipientScope = String(values.recipientScope ?? "ALL_PARTICIPANTS");
+    const recipientEmails = recipientScope === "CUSTOM" ? parseRecipientEmails(String(values.recipientEmailsText ?? "")) : undefined;
+
+    try {
+      const communication = await adminApi<AdminRow>("/api/communications", {
+        method: "POST",
+        body: {
+          cohortId: values.cohortId,
+          sessionId: values.sessionId || undefined,
+          templateId: values.templateId || undefined,
+          subject: String(values.subject ?? "").trim(),
+          bodyHtml: textToEmailHtml(bodyText),
+          bodyText,
+          scheduledFor: action === "schedule" ? scheduledFor : undefined,
+          status: action === "schedule" ? "SCHEDULED" : "DRAFT",
+          recipientScope,
+          recipientEmails
+        }
+      });
+
+      if (action === "send") {
+        await adminApi("/api/communications", { method: "PATCH", body: { id: communication.id, action: "send" } });
+        notifySuccess("Message created and sent");
+      } else {
+        notifySuccess(action === "schedule" ? "Message scheduled" : "Draft created");
+      }
+
+      await load(selectedCohortId);
+      setActiveTab(0);
+      setStatusFilter("");
+    } catch (error) {
+      notifyError((error as Error).message);
+      throw error;
+    }
+  }
+
   async function attachResource(resource: AdminRow) {
     if (!messageDetail) {
       return;
@@ -824,6 +1055,7 @@ export function CommunicationsClient() {
         action={
           <ActionGroup>
             <Button variant="outlined" startIcon={<EmailOutlined />} onClick={() => setMergeFieldsOpen(true)}>Merge Fields</Button>
+            <ToolbarButton onClick={() => setComposeOpen(true)}>Create Message</ToolbarButton>
             <ToolbarButton onClick={() => { setEditing(null); setDialogOpen(true); }}>Create Template</ToolbarButton>
           </ActionGroup>
         }
@@ -1164,6 +1396,14 @@ export function CommunicationsClient() {
         editing={editing}
         onClose={() => { setDialogOpen(false); setEditing(null); }}
         onSubmit={save}
+      />
+      <ComposeMessageDialog
+        open={composeOpen}
+        cohorts={cohorts}
+        templates={templates}
+        defaultCohortId={selectedCohortId}
+        onClose={() => setComposeOpen(false)}
+        onSubmit={createMessage}
       />
       <Box>{snackbar}</Box>
     </PageStack>

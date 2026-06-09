@@ -37,7 +37,8 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    return ok(await createCommunicationDraft(await request.json()), { status: 201 });
+    const user = await requireUser();
+    return ok(await createCommunicationDraft({ ...(await request.json()), createdById: user.id }), { status: 201 });
   } catch (error) {
     return handleApiError(error);
   }

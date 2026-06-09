@@ -3686,6 +3686,74 @@ a {
   padding-top: 4px;
 }
 
+.compose-message-editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(300px, 0.75fr);
+  gap: 18px;
+  min-width: 0;
+  padding-top: 4px;
+}
+
+.compose-message-form,
+.compose-message-side {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.compose-message-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.compose-message-side {
+  border: 1px solid var(--color-slate-200);
+  border-radius: 14px;
+  background: var(--color-slate-50);
+  padding: 14px;
+}
+
+.compose-message-context,
+.compose-recipient-summary {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  border: 1px solid var(--color-slate-200);
+  border-radius: 10px;
+  background: var(--color-white);
+  padding: 10px;
+}
+
+.compose-message-context span,
+.compose-recipient-summary span {
+  color: var(--color-slate-500);
+  font-size: 0.72rem;
+  font-weight: 820;
+  text-transform: uppercase;
+}
+
+.compose-message-context strong,
+.compose-recipient-summary strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-primary-900);
+  font-size: 0.94rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compose-message-context p {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--color-slate-500);
+  font-size: 0.78rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .template-editor-form,
 .template-editor-side,
 .template-preview {
@@ -3871,6 +3939,10 @@ a {
     grid-template-columns: 1fr;
   }
 
+  .compose-message-editor {
+    grid-template-columns: 1fr;
+  }
+
   .comms-recipient-row {
     grid-template-columns: minmax(0, 1fr);
     align-items: stretch;
@@ -3880,7 +3952,8 @@ a {
 @media (max-width: 720px) {
   .comms-summary-grid,
   .comms-detail-grid,
-  .template-editor-grid {
+  .template-editor-grid,
+  .compose-message-grid {
     grid-template-columns: 1fr;
   }
 }
@@ -3910,6 +3983,9 @@ a {
 .app-shell.is-night .comms-preview-frame,
 .app-shell.is-night .comms-message-body-frame,
 .app-shell.is-night .template-editor-side,
+.app-shell.is-night .compose-message-side,
+.app-shell.is-night .compose-message-context,
+.app-shell.is-night .compose-recipient-summary,
 .app-shell.is-night .comms-material-row,
 .app-shell.is-night .comms-attachment-row,
 .app-shell.is-night .comms-recipient-row {
@@ -3987,6 +4063,8 @@ a {
 .app-shell.is-night .comms-review-target strong,
 .app-shell.is-night .comms-detail-grid strong,
 .app-shell.is-night .comms-preview-block strong,
+.app-shell.is-night .compose-message-context strong,
+.app-shell.is-night .compose-recipient-summary strong,
 .app-shell.is-night .comms-material-row strong,
 .app-shell.is-night .comms-attachment-row strong,
 .app-shell.is-night .comms-recipient-row strong {
@@ -4002,6 +4080,9 @@ a {
 .app-shell.is-night .comms-workspace-head > span,
 .app-shell.is-night .comms-detail-grid span,
 .app-shell.is-night .comms-preview-block > span,
+.app-shell.is-night .compose-message-context span,
+.app-shell.is-night .compose-message-context p,
+.app-shell.is-night .compose-recipient-summary span,
 .app-shell.is-night .comms-material-row span,
 .app-shell.is-night .comms-attachment-row span,
 .app-shell.is-night .comms-recipient-row span {
