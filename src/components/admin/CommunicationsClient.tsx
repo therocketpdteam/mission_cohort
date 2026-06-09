@@ -88,6 +88,48 @@ function templateText(template?: AdminRow | null) {
   return String(template?.bodyText || htmlToTemplateText(String(template?.bodyHtml ?? "")) || "");
 }
 
+function templatePurpose(type?: string | null) {
+  switch (type) {
+    case "REGISTRATION_CONFIRMATION":
+      return "Confirms a new registration with the POC.";
+    case "WEEK_BEFORE_REMINDER":
+      return "Session reminder sent about one week before.";
+    case "DAY_BEFORE_REMINDER":
+      return "Session reminder sent about 24 hours before.";
+    case "HOUR_BEFORE_REMINDER":
+      return "Session reminder sent about 60 minutes before.";
+    case "FOLLOW_UP":
+      return "General follow-up for roster, documents, or next steps.";
+    case "PAYMENT_REMINDER":
+      return "Payment follow-up for unpaid or pending registrations.";
+    default:
+      return "Custom operational email.";
+  }
+}
+
+function templateUpdatedLabel(template: AdminRow) {
+  return formatDate(template.updatedAt ?? template.createdAt, "No update date");
+}
+
+function bodySnippet(value: string, fallback = "No email body yet") {
+  return value.replace(/\s+/g, " ").trim() || fallback;
+}
+
+function messageBodyPreview(message?: AdminRow | null) {
+  const text = templateText(message);
+  if (text) {
+    return {
+      text: renderMergeFields(text, sampleMergeContext, true),
+      html: ""
+    };
+  }
+
+  return {
+    text: { output: "", warnings: [] as string[] },
+    html: String(message?.bodyHtml ?? "")
+  };
+}
+
 function formatDate(value?: string | Date | null, empty = "Not scheduled") {
   if (!value) {
     return empty;
@@ -379,9 +421,20 @@ export function CommunicationsClient() {
       text: renderMergeFields(templateText(previewTemplate), sampleMergeContext, true)
     };
   }, [previewTemplate]);
+  const messagePreview = useMemo(() => messageBodyPreview(messageDetail), [messageDetail]);
 
   const selectedCohort = cohorts.find((cohort) => cohort.id === selectedCohortId);
   const activeTemplates = templates.filter((template) => template.active).length;
+  const templateUsageCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    communications.forEach((communication) => {
+      const templateId = communication.templateId ?? communication.template?.id;
+      if (templateId) {
+        counts.set(String(templateId), (counts.get(String(templateId)) ?? 0) + 1);
+      }
+    });
+    return counts;
+  }, [communications]);
   const issueRows = communications.flatMap((communication) => communication.issueRows ?? []);
   const filteredMessages = communications.filter((row) => {
     const matchStatus = statusFilter ? row.status === statusFilter : true;
@@ -691,16 +744,52 @@ export function CommunicationsClient() {
       field: "name",
       headerName: "Template",
       flex: 1.25,
-      minWidth: 240,
+      minWidth: 260,
+      renderCell: (params) => {
+        const type = formatStatusLabel(String(params.row.type ?? "Custom"));
+        const usageCount = templateUsageCounts.get(String(params.row.id)) ?? 0;
+        const helper = `${type} · ${usageCount} message${usageCount === 1 ? "" : "s"} · Updated ${templateUpdatedLabel(params.row)}`;
+        return (
+          <div className="app-table-identity">
+            <span className="app-table-main" title={params.row.name}>{params.row.name}</span>
+            <span className="app-table-sub" title={helper}>{helper}</span>
+          </div>
+        );
+      }
+    },
+    {
+      field: "content",
+      headerName: "Content",
+      flex: 1.7,
+      minWidth: 330,
+      renderCell: (params) => {
+        const subject = String(params.row.subject ?? "No subject");
+        const snippet = bodySnippet(templateText(params.row));
+        return (
+          <div className="app-table-context">
+            <span className="app-table-main" title={subject}>{subject}</span>
+            <span className="app-table-sub" title={snippet}>{snippet}</span>
+          </div>
+        );
+      }
+    },
+    {
+      field: "active",
+      headerName: "Status",
+      width: 132,
+      renderCell: (params) => <StatusChip value={params.value ? "Active" : "Inactive"} />
+    },
+    {
+      field: "purpose",
+      headerName: "Purpose",
+      flex: 0.9,
+      minWidth: 220,
       renderCell: (params) => (
-        <div className="app-table-identity">
-          <span className="app-table-main" title={params.row.name}>{params.row.name}</span>
-          <span className="app-table-sub" title={formatStatusLabel(String(params.row.type ?? ""))}>{formatStatusLabel(String(params.row.type ?? ""))}</span>
-        </div>
+        <span className="app-table-sub" title={templatePurpose(String(params.row.type ?? ""))}>
+          {templatePurpose(String(params.row.type ?? ""))}
+        </span>
       )
     },
-    { field: "subject", headerName: "Subject", flex: 1.4, minWidth: 280 },
-    { field: "active", headerName: "Active", width: 112, renderCell: (params) => <StatusChip value={params.value} /> },
     {
       field: "actions",
       headerName: "Actions",
@@ -885,6 +974,29 @@ export function CommunicationsClient() {
                 <DeliverySummary row={messageDetail} />
               </div>
             </div>
+
+            <SectionCard title="Email Body">
+              {messagePreview.text.output ? (
+                <>
+                  <div
+                    className="comms-preview-frame comms-message-body-frame"
+                    dangerouslySetInnerHTML={{ __html: textToEmailHtml(messagePreview.text.output) }}
+                  />
+                  {messagePreview.text.warnings.length > 0 && (
+                    <div className="template-editor-warnings">
+                      {Array.from(new Set(messagePreview.text.warnings)).map((warning) => <span key={warning}>{warning}</span>)}
+                    </div>
+                  )}
+                </>
+              ) : messagePreview.html ? (
+                <div
+                  className="comms-preview-frame comms-message-body-frame"
+                  dangerouslySetInnerHTML={{ __html: messagePreview.html }}
+                />
+              ) : (
+                <Typography color="text.secondary">This message does not have an email body yet.</Typography>
+              )}
+            </SectionCard>
 
             <SectionCard title="Materials">
               <div className="comms-material-picker">

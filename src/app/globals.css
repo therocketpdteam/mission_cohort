@@ -3659,6 +3659,19 @@ a {
   color: var(--color-slate-900);
 }
 
+.comms-message-body-frame {
+  border: 1px solid var(--color-slate-200);
+  line-height: 1.55;
+}
+
+.comms-message-body-frame p {
+  margin: 0 0 12px;
+}
+
+.comms-message-body-frame p:last-child {
+  margin-bottom: 0;
+}
+
 .comms-field-cloud {
   display: flex;
   flex-wrap: wrap;
@@ -3895,6 +3908,7 @@ a {
 .app-shell.is-night .comms-detail-grid > div,
 .app-shell.is-night .comms-preview-block,
 .app-shell.is-night .comms-preview-frame,
+.app-shell.is-night .comms-message-body-frame,
 .app-shell.is-night .template-editor-side,
 .app-shell.is-night .comms-material-row,
 .app-shell.is-night .comms-attachment-row,
