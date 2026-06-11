@@ -2,7 +2,7 @@
 
 This file is the source of truth for Mission Control UI work. Read it before changing any page, component, theme token, table, form, modal, or workflow surface.
 
-Mission Control is an internal RocketPD operations console. It should feel like RocketPD: clean, modern, education-forward, confident, warm, and professional. It is not a generic SaaS dashboard and it is not a marketing landing page. It must stay dense enough for daily operations while carrying the RocketPD visual language through color, spacing, typography, button hierarchy, and page structure.
+Mission Control is an internal RocketPD operations console. It should feel like a high-performance aerospace command system: precise, modern, calm, premium, education-forward, and operational. It is not a generic SaaS dashboard and it is not a marketing landing page. It must stay dense enough for daily operations while carrying the Mission Control identity through color, spacing, typography, button hierarchy, and page structure.
 
 ## Implementation Rules
 
@@ -41,7 +41,7 @@ Mission Control should feel:
 Avoid:
 
 - Generic gray SaaS look.
-- Too many competing blues.
+- Too many competing blues or leftover Rocket Blue/Cyan dominance.
 - Flat default buttons.
 - Cramped cards.
 - Overlapping CTAs.
@@ -49,70 +49,80 @@ Avoid:
 - Tiny secondary actions floating beside large primary actions.
 - Raw JSON, all-caps enums, or developer-first labels in normal admin flows.
 
-## Color Palette / Design Tokens
+## Mission Control Identity Tokens
 
 Use these tokens throughout the app.
 
-Primary Navy:
+Core Surfaces:
 
-- `--color-primary-900: #071D33`
-- `--color-primary-800: #0B2A45`
-- `--color-primary-700: #123C5A`
+- `--color-surface: #F8F9FA`
+- `--color-surface-dim: #D9DADB`
+- `--color-surface-bright: #F8F9FA`
+- `--color-surface-container-lowest: #FFFFFF`
+- `--color-surface-container-low: #F3F4F5`
+- `--color-surface-container: #EDEEEF`
+- `--color-surface-container-high: #E7E8E9`
+- `--color-surface-container-highest: #E1E3E4`
 
-Rocket Blue:
+Text And Strokes:
 
-- `--color-blue-600: #1479C9`
-- `--color-blue-500: #1E9BDE`
-- `--color-blue-100: #E8F5FC`
+- `--color-on-surface: #191C1D`
+- `--color-on-surface-variant: #47464F`
+- `--color-outline: #787680`
+- `--color-outline-variant: #C8C5D0`
+- `--color-surface-tint: #5C588E`
 
-Cyan Accent:
+Deep Space:
 
-- `--color-cyan-500: #20C7D9`
-- `--color-cyan-100: #E6FAFC`
+- `--color-primary-900: #110B3F`
+- `--color-primary-800: #262254`
+- `--color-primary-700: #444174`
+- `--color-deep-space: #262254`
 
-Warm Highlight:
+Ignition Amber:
 
-- `--color-orange-500: #F59E0B`
-- `--color-orange-100: #FFF3D6`
+- `--color-ignition-amber: #FBBF24`
+- `--color-blue-600: #FBBF24`
+- `--color-blue-500: #FFC329`
+- `--color-orange-500: #FBBF24`
 
-Success:
+Orbit Purple:
+
+- `--color-orbit-purple: #9333EA`
+- `--color-cyan-500: #9333EA`
+- `--color-cyan-100: #F0DBFF`
+- `--color-blue-100: #E3DFFF`
+
+Semantic States:
 
 - `--color-success-600: #16A34A`
 - `--color-success-100: #DCFCE7`
-
-Warning:
-
 - `--color-warning-600: #D97706`
 - `--color-warning-100: #FEF3C7`
-
-Danger:
-
 - `--color-danger-600: #DC2626`
 - `--color-danger-100: #FEE2E2`
 
-Neutral:
+Legacy Token Mapping:
 
-- `--color-white: #FFFFFF`
-- `--color-slate-50: #F8FAFC`
-- `--color-slate-100: #F1F5F9`
-- `--color-slate-200: #E2E8F0`
-- `--color-slate-500: #64748B`
-- `--color-slate-700: #334155`
-- `--color-slate-900: #0F172A`
+- Existing `--color-slate-*`, `--color-blue-*`, and `--color-cyan-*` tokens are implementation aliases. They should resolve to the Mission Control Identity palette above.
+- Do not introduce new hard-coded old Rocket Blue/Cyan colors in page CSS. Use semantic tokens.
 
 Background rules:
 
-- Main app background: `#F8FAFC`.
-- Main cards: `#FFFFFF`.
-- Important header/hero areas: navy gradient from `#071D33` to `#123C5A`.
-- Primary CTAs: Rocket Blue.
-- Accent highlights: Cyan or Orange, but never both competing in the same component unless one is very subtle.
-- Use navy for confidence and hierarchy, blue for action, cyan for light operational emphasis, orange for attention or warm highlights.
+- Main app background: `#F8F9FA`.
+- Main cards: `#FFFFFF` or `--color-surface-container-lowest`.
+- Grouped areas: use the surface container scale, not arbitrary grays.
+- Important navigation/header/hero areas: Deep Space gradients from `#110B3F` to `#262254`.
+- Primary CTAs: Ignition Amber with Deep Space text.
+- Progress, comparison, and specialized data accents: Orbit Purple.
+- Use amber for action and high-visibility launch states. Do not use amber as general decoration.
 
 ## Typography
 
-- Use DM Sans through the global `--font-app` token, with `ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif` as the fallback stack. Do not make builds depend on a live font-network fetch.
-- Headings should be dark navy and confident.
+- Use Plus Jakarta Sans for page titles, headings, card titles, sidebar labels, overlines, button labels, and high-level numeric displays.
+- Use Inter for body copy, tables, forms, filters, dropdown menus, dense admin rows, and helper text.
+- Expose both fonts through `--font-heading` and `--font-body`. Do not make local QA depend on a live font-network fetch; if Google font loading is added later, it must keep `pnpm build` reliable in restricted environments.
+- Headings should be Deep Space, confident, and compact.
 - Body text should remain readable, compact, and calm.
 - Avoid oversized marketing-style type inside operational tools.
 - Preserve `letter-spacing: 0`; do not use negative tracking.
@@ -124,28 +134,29 @@ Use the shared Mission Control button system as the source for these variants.
 
 Primary Button:
 
-- Background: `#1479C9`.
-- Text: white.
-- Hover: `#0B67AD`.
-- Border radius: `12px`.
+- Background: `#FBBF24`.
+- Text: `#110B3F`.
+- Hover: `#F9BD22`.
+- Border radius: `8px`.
 - Height: `40px` minimum.
-- Font weight: `600`.
+- Font family: Plus Jakarta Sans.
+- Font weight: `800`.
 - Use for the main action on a screen or modal only.
 
 Secondary Button:
 
-- Background: white.
-- Text: `#123C5A`.
-- Border: `1px solid #CBD5E1`.
-- Hover background: `#F1F5F9`.
+- Background: transparent or white.
+- Text: `#262254`.
+- Border: `1px solid #262254`.
+- Hover background: `#EDEEEF`.
 - Use for supporting actions.
 
 Outline Button:
 
 - Background: transparent or white.
-- Text: `#1479C9`.
-- Border: `1px solid #1479C9`.
-- Hover background: `#E8F5FC`.
+- Text: `#262254`.
+- Border: `1px solid rgba(38, 34, 84, 0.24)`.
+- Hover background: `#EDEEEF`.
 - Use for lower-priority but still visible actions.
 
 Ghost Button:
@@ -205,24 +216,24 @@ Recommended class/layout pattern:
 
 Cards:
 
-- Background: white.
-- Border: `1px solid #E2E8F0`.
-- Border radius: `16px`.
-- Shadow: soft, subtle only.
+- Background: `#FFFFFF` or `--color-surface-container-lowest`.
+- Border: `1px solid rgba(38, 34, 84, 0.10)`.
+- Border radius: `8px`.
+- Shadow: soft blue-tinted ambient shadow only.
 - Padding: `20px` to `24px`.
 - Use consistent internal spacing.
 
 Important cards:
 
-- May use a subtle top border or left accent border using Rocket Blue or Cyan.
+- May use a subtle top border or left accent border using Deep Space, Orbit Purple, or Ignition Amber when the state is action-oriented.
 - Avoid heavy gradients inside dense admin cards.
 
 Dashboard stat cards:
 
-- Use white background.
-- Icon circle using `#E8F5FC` or `#E6FAFC`.
-- Number in `#071D33`.
-- Label in `#64748B`.
+- Use white or `surface-container-lowest` background.
+- Icon circle using `#E3DFFF` or a very soft Orbit Purple tint.
+- Number in Deep Space.
+- Label in `#47464F`.
 - Optional trend badge in success/warning colors.
 - Cards in the same row should be equal height.
 
@@ -248,7 +259,7 @@ Form rules:
 
 - Inputs must have `40px` minimum height.
 - Label above input, not placeholder-only.
-- Focus ring should use Rocket Blue.
+- Focus ring should use Ignition Amber for high visibility.
 - Error text should use danger red.
 - Helper text should use slate-500.
 - Form sections should be grouped in cards or clear fieldsets.
@@ -261,7 +272,7 @@ Form rules:
 Rules:
 
 - Table headers should be subtle, not heavy.
-- DM Sans gets visually dense when over-weighted. Table headers should stay around medium-bold weight, and body cells should favor regular/medium weights unless the value is the row’s primary scan target.
+- Plus Jakarta Sans can feel heavy in dense areas. Table headers should stay around medium-bold weight, and body cells should use Inter with regular/medium weights unless the value is the row’s primary scan target.
 - Column sizing must be semantic, not equal-width by accident. Identity columns such as participant, cohort, organization, or message subject get the most room; status, date, money, and action columns stay compact and stable.
 - Prefer identity/context cells over extra columns. For example, show participant name with email/title as subtext, or organization with cohort as subtext, instead of splitting every detail into its own table column.
 - Row hover background: `#F8FAFC`.
