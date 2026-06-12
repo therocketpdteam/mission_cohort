@@ -2,7 +2,7 @@
 
 This file is the source of truth for Mission Control UI work. Read it before changing any page, component, theme token, table, form, modal, or workflow surface.
 
-Mission Control is an internal RocketPD operations console. It should feel like a high-performance aerospace command system: precise, modern, calm, premium, education-forward, and operational. It is not a generic SaaS dashboard and it is not a marketing landing page. It must stay dense enough for daily operations while carrying the Mission Control identity through color, spacing, typography, button hierarchy, and page structure.
+Mission Control is an internal RocketPD cohort operations console. It should feel like a precise Mission Cohort control surface: modern, calm, dense, professional, and easy to scan for daily internal work. It is not a generic SaaS dashboard and it is not a marketing landing page. It must stay dense enough for operations while carrying the Mission Cohort identity through color, spacing, typography, button hierarchy, and page structure.
 
 ## Implementation Rules
 
@@ -36,12 +36,14 @@ Mission Control should feel:
 - Modern but not flashy.
 - Education-centered.
 - Action-oriented for internal admin users.
-- Operational, confident, and easy to scan.
+- Operational, minimal, and easy to scan.
+- Similar in discipline to Linear/Stripe-style developer tools: quiet surfaces, clear type, exact borders, and purple only where it helps action or orientation.
 
 Avoid:
 
 - Generic gray SaaS look.
 - Too many competing blues or leftover Rocket Blue/Cyan dominance.
+- Amber/deep-space action styling from older design passes.
 - Flat default buttons.
 - Cramped cards.
 - Overlapping CTAs.
@@ -49,49 +51,46 @@ Avoid:
 - Tiny secondary actions floating beside large primary actions.
 - Raw JSON, all-caps enums, or developer-first labels in normal admin flows.
 
-## Mission Control Identity Tokens
+## Mission Cohort Console Tokens
 
 Use these tokens throughout the app.
 
 Core Surfaces:
 
-- `--color-surface: #F8F9FA`
-- `--color-surface-dim: #D9DADB`
-- `--color-surface-bright: #F8F9FA`
+- `--color-surface: #F7F9FB`
+- `--color-surface-dim: #D8DADC`
+- `--color-surface-bright: #F7F9FB`
 - `--color-surface-container-lowest: #FFFFFF`
-- `--color-surface-container-low: #F3F4F5`
-- `--color-surface-container: #EDEEEF`
-- `--color-surface-container-high: #E7E8E9`
-- `--color-surface-container-highest: #E1E3E4`
+- `--color-surface-container-low: #F2F4F6`
+- `--color-surface-container: #ECEEF0`
+- `--color-surface-container-high: #E6E8EA`
+- `--color-surface-container-highest: #E0E3E5`
 
 Text And Strokes:
 
-- `--color-on-surface: #191C1D`
-- `--color-on-surface-variant: #47464F`
+- `--color-on-surface: #191C1E`
+- `--color-on-surface-variant: #4A4455`
 - `--color-outline: #787680`
-- `--color-outline-variant: #C8C5D0`
-- `--color-surface-tint: #5C588E`
+- `--color-outline-variant: #CCC3D8`
+- `--color-surface-tint: #732EE4`
 
-Deep Space:
+Primary Purple:
 
-- `--color-primary-900: #110B3F`
-- `--color-primary-800: #262254`
-- `--color-primary-700: #444174`
-- `--color-deep-space: #262254`
+- `--color-primary-900: #25005A`
+- `--color-primary-800: #5A00C6`
+- `--color-primary-700: #630ED4`
+- `--color-blue-600: #7C3AED`
+- `--color-blue-500: #8B5CF6`
+- `--color-blue-100: #EADDFF`
+- `--color-cyan-500: #7C3AED`
+- `--color-cyan-100: #EDE0FF`
 
-Ignition Amber:
+Secondary And Tertiary:
 
-- `--color-ignition-amber: #FBBF24`
-- `--color-blue-600: #FBBF24`
-- `--color-blue-500: #FFC329`
-- `--color-orange-500: #FBBF24`
-
-Orbit Purple:
-
-- `--color-orbit-purple: #9333EA`
-- `--color-cyan-500: #9333EA`
-- `--color-cyan-100: #F0DBFF`
-- `--color-blue-100: #E3DFFF`
+- `--color-secondary: #565E74`
+- `--color-secondary-container: #DAE2FD`
+- `--color-orange-500: #A15100`
+- `--color-orange-100: #FFDCC6`
 
 Semantic States:
 
@@ -104,25 +103,24 @@ Semantic States:
 
 Legacy Token Mapping:
 
-- Existing `--color-slate-*`, `--color-blue-*`, and `--color-cyan-*` tokens are implementation aliases. They should resolve to the Mission Control Identity palette above.
+- Existing `--color-slate-*`, `--color-blue-*`, and `--color-cyan-*` tokens are implementation aliases. They should resolve to the Mission Cohort Console palette above.
 - Do not introduce new hard-coded old Rocket Blue/Cyan colors in page CSS. Use semantic tokens.
 
 Background rules:
 
-- Main app background: `#F8F9FA`.
+- Main app background: `#F7F9FB`.
 - Main cards: `#FFFFFF` or `--color-surface-container-lowest`.
 - Grouped areas: use the surface container scale, not arbitrary grays.
-- Important navigation/header/hero areas: Deep Space gradients from `#110B3F` to `#262254`.
-- Primary CTAs: Ignition Amber with Deep Space text.
-- Progress, comparison, and specialized data accents: Orbit Purple.
-- Use amber for action and high-visibility launch states. Do not use amber as general decoration.
+- Navigation/header areas: light surface with purple active states by default; night mode uses dark purple surfaces.
+- Primary CTAs and active navigation: Mission Cohort purple with white text.
+- Progress, comparison, and specialized data accents: purple first, then muted secondary/tertiary tones.
+- Use purple sparingly. It should orient the user, not decorate every surface.
 
 ## Typography
 
-- Use Plus Jakarta Sans for page titles, headings, card titles, sidebar labels, overlines, button labels, and high-level numeric displays.
-- Use Inter for body copy, tables, forms, filters, dropdown menus, dense admin rows, and helper text.
-- Expose both fonts through `--font-heading` and `--font-body`. Do not make local QA depend on a live font-network fetch; if Google font loading is added later, it must keep `pnpm build` reliable in restricted environments.
-- Headings should be Deep Space, confident, and compact.
+- Use Inter for headings, labels, body copy, tables, forms, filters, dropdown menus, dense admin rows, and helper text.
+- Expose Inter through `--font-heading` and `--font-body`. Do not make local QA depend on a live font-network fetch; if Google font loading is added later, it must keep `pnpm build` reliable in restricted environments.
+- Headings should be confident and compact.
 - Body text should remain readable, compact, and calm.
 - Avoid oversized marketing-style type inside operational tools.
 - Preserve `letter-spacing: 0`; do not use negative tracking.
@@ -134,29 +132,29 @@ Use the shared Mission Control button system as the source for these variants.
 
 Primary Button:
 
-- Background: `#FBBF24`.
-- Text: `#110B3F`.
-- Hover: `#F9BD22`.
+- Background: `#7C3AED` or `#630ED4`.
+- Text: `#FFFFFF`.
+- Hover: `#5A00C6`.
 - Border radius: `8px`.
 - Height: `40px` minimum.
-- Font family: Plus Jakarta Sans.
-- Font weight: `800`.
+- Font family: Inter.
+- Font weight: `700`.
 - Use for the main action on a screen or modal only.
 
 Secondary Button:
 
 - Background: transparent or white.
-- Text: `#262254`.
-- Border: `1px solid #262254`.
-- Hover background: `#EDEEEF`.
+- Text: `#191C1E`.
+- Border: `1px solid #CCC3D8`.
+- Hover background: `#ECEEF0`.
 - Use for supporting actions.
 
 Outline Button:
 
 - Background: transparent or white.
-- Text: `#262254`.
-- Border: `1px solid rgba(38, 34, 84, 0.24)`.
-- Hover background: `#EDEEEF`.
+- Text: `#4A4455`.
+- Border: `1px solid #CCC3D8`.
+- Hover background: `#ECEEF0`.
 - Use for lower-priority but still visible actions.
 
 Ghost Button:
@@ -217,23 +215,23 @@ Recommended class/layout pattern:
 Cards:
 
 - Background: `#FFFFFF` or `--color-surface-container-lowest`.
-- Border: `1px solid rgba(38, 34, 84, 0.10)`.
-- Border radius: `8px`.
-- Shadow: soft blue-tinted ambient shadow only.
+- Border: `1px solid #CCC3D8` or the shared outline variant.
+- Border radius: `12px` for dashboard/module panels and `8px` for compact controls.
+- Shadow: minimal. Prefer borders and tonal layering over elevation.
 - Padding: `20px` to `24px`.
 - Use consistent internal spacing.
 
 Important cards:
 
-- May use a subtle top border or left accent border using Deep Space, Orbit Purple, or Ignition Amber when the state is action-oriented.
+- May use a subtle top border or left accent border using Mission Cohort purple when the state is action-oriented.
 - Avoid heavy gradients inside dense admin cards.
 
 Dashboard stat cards:
 
 - Use white or `surface-container-lowest` background.
-- Icon circle using `#E3DFFF` or a very soft Orbit Purple tint.
-- Number in Deep Space.
-- Label in `#47464F`.
+- Icon circle using `#EADDFF` or a very soft purple tint.
+- Number in `#191C1E`.
+- Label in `#4A4455`.
 - Optional trend badge in success/warning colors.
 - Cards in the same row should be equal height.
 
@@ -259,7 +257,7 @@ Form rules:
 
 - Inputs must have `40px` minimum height.
 - Label above input, not placeholder-only.
-- Focus ring should use Ignition Amber for high visibility.
+- Focus ring should use Mission Cohort purple with a soft translucent halo.
 - Error text should use danger red.
 - Helper text should use slate-500.
 - Form sections should be grouped in cards or clear fieldsets.
@@ -272,7 +270,7 @@ Form rules:
 Rules:
 
 - Table headers should be subtle, not heavy.
-- Plus Jakarta Sans can feel heavy in dense areas. Table headers should stay around medium-bold weight, and body cells should use Inter with regular/medium weights unless the value is the row’s primary scan target.
+- Table headers should stay around medium-bold weight, and body cells should use Inter with regular/medium weights unless the value is the row’s primary scan target.
 - Column sizing must be semantic, not equal-width by accident. Identity columns such as participant, cohort, organization, or message subject get the most room; status, date, money, and action columns stay compact and stable.
 - Prefer identity/context cells over extra columns. For example, show participant name with email/title as subtext, or organization with cohort as subtext, instead of splitting every detail into its own table column.
 - Row hover background: `#F8FAFC`.

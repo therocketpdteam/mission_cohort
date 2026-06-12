@@ -44,6 +44,14 @@ function titleFromPath(pathname: string) {
   return current?.label ?? "Mission Control";
 }
 
+function subtitleFromPath(pathname: string) {
+  if (pathname === "/dashboard") {
+    return "Operational snapshot across active cohorts.";
+  }
+
+  return "";
+}
+
 function breadcrumbsFor(pathname: string, labels: Record<string, string> = {}) {
   const parts = pathname.split("/").filter(Boolean);
   return ["Mission Control", ...parts.map((part, index) => {
@@ -62,6 +70,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<{ firstName?: string; lastName?: string; email?: string; role?: string } | null>(null);
   const [breadcrumbLabels, setBreadcrumbLabels] = useState<Record<string, string>>({});
   const title = titleFromPath(pathname);
+  const subtitle = subtitleFromPath(pathname);
   const crumbs = useMemo(() => breadcrumbsFor(pathname, breadcrumbLabels), [breadcrumbLabels, pathname]);
 
   useEffect(() => {
@@ -126,8 +135,8 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className={`app-shell is-${density} is-${themeMode}`}>
       <aside className={`app-sidebar ${mobileOpen ? "is-open" : ""}`}>
         <div className="app-brand">
-          <p className="app-brand-title">RocketPD</p>
-          <p className="app-brand-subtitle">Mission Control</p>
+          <p className="app-brand-title">Mission Cohort</p>
+          <p className="app-brand-subtitle">Internal Ops</p>
         </div>
         <nav className="app-nav" aria-label="Admin navigation">
           {navItems.map((item) => {
@@ -150,11 +159,15 @@ export function AppShell({ children }: { children: ReactNode }) {
           </IconButton>
           <div className="app-topbar-title">
             <h1>{title}</h1>
-            <div className="app-breadcrumbs">
-              {crumbs.map((crumb, index) => (
-                <span key={`${crumb}-${index}`}>{index > 0 ? `/ ${crumb}` : crumb}</span>
-              ))}
-            </div>
+            {subtitle ? (
+              <p className="app-topbar-subtitle">{subtitle}</p>
+            ) : (
+              <div className="app-breadcrumbs">
+                {crumbs.map((crumb, index) => (
+                  <span key={`${crumb}-${index}`}>{index > 0 ? `/ ${crumb}` : crumb}</span>
+                ))}
+              </div>
+            )}
           </div>
           <div className="app-view-controls" aria-label="View controls">
             <div className="app-density-toggle" aria-label="Density">

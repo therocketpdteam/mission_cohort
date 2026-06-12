@@ -1,13 +1,12 @@
 "use client";
 
 import {
-  AddIcon,
   ArticleOutlined,
-  CalendarMonthOutlined,
   DashboardOutlined,
   EmailOutlined,
   GroupsOutlined,
   InsightsOutlined,
+  MoreHorizIcon,
   SendOutlined
 } from "@/components/ui/icons";
 import {
@@ -22,14 +21,12 @@ import {
 import Link from "next/link";
 import type { Route } from "next";
 import type { ReactNode } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
 import { formatProperDisplay, formatStatusLabel } from "@/lib/formatting";
 import {
   AdminRow,
-  DateBadge,
   DetailField,
-  DonutChart,
   EmptyState,
   LoadingState,
   MetadataPill,
@@ -47,48 +44,11 @@ type MetricConfig = {
 };
 
 const metrics: ReadonlyArray<MetricConfig> = [
-  { key: "activeCohorts", label: "Active cohorts", href: "/cohorts", helper: "Published or running now", icon: <DashboardOutlined /> },
-  { key: "upcomingSessions", label: "Upcoming sessions", href: "/cohorts", helper: "Upcoming delivery dates", icon: <CalendarMonthOutlined /> },
-  { key: "openRegistrations", label: "Open registrations", href: "/registrations", helper: "New or confirmed records", icon: <ArticleOutlined /> },
-  { key: "totalParticipants", label: "Participants", href: "/participants", helper: "Rostered participants", icon: <GroupsOutlined /> },
-  { key: "pendingPayments", label: "Payments to watch", href: "/registrations", helper: "Pending money", icon: <InsightsOutlined /> },
-  { key: "communicationIssues", label: "Email issues", href: "/communications", helper: "Delivery issues", icon: <EmailOutlined /> }
+  { key: "activeCohorts", label: "Active cohorts", href: "/cohorts", helper: "Published or running now", icon: <GroupsOutlined /> },
+  { key: "totalParticipants", label: "Total participants", href: "/participants", helper: "Rostered participants", icon: <DashboardOutlined /> },
+  { key: "revenueCollected", label: "Revenue collected", href: "/registrations", helper: "Paid payment records", icon: <InsightsOutlined /> },
+  { key: "outstanding", label: "Outstanding", href: "/registrations", helper: "Pending, invoiced, or past due", icon: <ArticleOutlined /> }
 ];
-
-const quickActions: ReadonlyArray<[string, Route]> = [
-  ["Create Cohort", "/cohorts"],
-  ["Add Registration", "/registrations"],
-  ["Create Email Template", "/communications"]
-];
-
-type DashboardSelectOption = {
-  value: string;
-  label: string;
-};
-
-function cohortThumbnail(row?: AdminRow | null) {
-  return row?.thumbnailUrl ?? row?.cohort?.thumbnailUrl ?? undefined;
-}
-
-function cohortInitials(label?: string) {
-  return String(label ?? "Cohort")
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join("") || "C";
-}
-
-function DashboardRowThumb({ row, label }: { row?: AdminRow | null; label?: string }) {
-  const thumbnail = cohortThumbnail(row);
-  const title = label ?? row?.title ?? row?.cohort?.title ?? "Cohort";
-
-  return (
-    <span className="dashboard-row-thumb" title={title} aria-label={title}>
-      {thumbnail ? <img src={thumbnail} alt="" /> : <span>{cohortInitials(title)}</span>}
-    </span>
-  );
-}
 
 function taskTemplateName(task: AdminRow) {
   if (task.category === "PAYMENT_FOLLOW_UP") {
@@ -110,69 +70,41 @@ function shortDate(value?: string) {
   return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date(value));
 }
 
+function formatMoney(value: number) {
+  return `$${Math.round(value).toLocaleString()}`;
+}
+
+function relativeTime(value?: string) {
+  if (!value) {
+    return "";
+  }
+  const timestamp = new Date(value).getTime();
+  if (!Number.isFinite(timestamp)) {
+    return "";
+  }
+  const diff = Date.now() - timestamp;
+  const minute = 60_000;
+  const hour = 60 * minute;
+  const day = 24 * hour;
+
+  if (diff < hour) {
+    const minutes = Math.max(1, Math.round(diff / minute));
+    return `${minutes} minute${minutes === 1 ? "" : "s"} ago`;
+  }
+  if (diff < day) {
+    const hours = Math.round(diff / hour);
+    return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  }
+  const days = Math.round(diff / day);
+  return days === 1 ? "Yesterday" : `${days} days ago`;
+}
+
 function timeText(value?: string) {
   if (!value) {
     return "";
   }
 
   return new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" }).format(new Date(value));
-}
-
-function DashboardSelect({
-  label,
-  value,
-  options,
-  onChange,
-  className = ""
-}: {
-  label: string;
-  value: string;
-  options: ReadonlyArray<DashboardSelectOption>;
-  onChange: (value: string) => void;
-  className?: string;
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  const selected = options.find((option) => option.value === value) ?? options[0];
-
-  useEffect(() => {
-    function close(event: MouseEvent) {
-      if (!ref.current?.contains(event.target as Node)) {
-        setOpen(false);
-      }
-    }
-
-    document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
-  }, []);
-
-  return (
-    <div className={`dashboard-select ${className}`} ref={ref}>
-      <span className="dashboard-select-label">{label}</span>
-      <button type="button" className="dashboard-select-trigger" onClick={() => setOpen((current) => !current)} aria-expanded={open} title={String(selected?.label ?? "Select")}>
-        <span>{selected?.label ?? "Select"}</span>
-        <span aria-hidden="true">⌄</span>
-      </button>
-      {open && (
-        <div className="dashboard-select-menu">
-          {options.map((option) => (
-            <button
-              type="button"
-              className={`dashboard-select-option ${option.value === value ? "is-selected" : ""}`}
-              key={option.value}
-              title={option.label}
-              onClick={() => {
-                onChange(option.value);
-                setOpen(false);
-              }}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
 }
 
 function DashboardPanel({
@@ -204,70 +136,28 @@ function DashboardPanel({
             {actionLabel}
           </Button>
         )}
+        {!href && actionLabel && <span className="dashboard-panel-date">{actionLabel}</span>}
       </div>
       <div className={`dashboard-panel-body ${scroll ? "dashboard-panel-body-scroll" : ""}`}>{children}</div>
     </section>
   );
 }
 
-function DashboardToolbar() {
-  return (
-    <div className="dashboard-toolbar">
-      <div className="dashboard-toolbar-copy">
-        <span>Command center</span>
-        <strong>Live operational snapshot</strong>
-      </div>
-      <div className="dashboard-toolbar-actions">
-        {quickActions.map(([label, href]) => (
-          <Button component={Link} href={href} startIcon={<AddIcon />} variant={label === "Create Cohort" ? "contained" : "outlined"} key={label}>
-            {label}
-          </Button>
-        ))}
-      </div>
-    </div>
-  );
-}
+function MetricGrid({ data, finance }: { data: AdminRow | null; finance: AdminRow }) {
+  const values: Record<string, string | number> = {
+    activeCohorts: data?.metrics?.activeCohorts ?? "-",
+    totalParticipants: data?.metrics?.totalParticipants ?? "-",
+    revenueCollected: formatMoney(finance.collected),
+    outstanding: formatMoney(finance.outstanding)
+  };
 
-function DashboardHero({
-  data,
-  readinessCount
-}: {
-  data: AdminRow | null;
-  readinessCount: number;
-}) {
-  const activeCohorts = Number(data?.metrics?.activeCohorts ?? 0);
-  const upcomingSessions = Number(data?.metrics?.upcomingSessions ?? 0);
-  const pendingPayments = Number(data?.metrics?.pendingPayments ?? 0);
-  const openTasks = Number(data?.metrics?.openOperationsTasks ?? 0);
-  const needsAttention = readinessCount > 0 || pendingPayments > 0 || openTasks > 0;
-
-  return (
-    <section className="dashboard-hero">
-      <div className="dashboard-hero-copy">
-        <p className="dashboard-eyebrow">Mission Control</p>
-        <h1>{needsAttention ? "Today needs a focused pass." : "Everything is tracking cleanly."}</h1>
-        <p>
-          {activeCohorts} active cohort{activeCohorts === 1 ? "" : "s"}, {upcomingSessions} upcoming session{upcomingSessions === 1 ? "" : "s"}, {pendingPayments} payment item{pendingPayments === 1 ? "" : "s"} to watch, and {openTasks} open operation{openTasks === 1 ? "" : "s"}.
-        </p>
-      </div>
-      <div className="dashboard-hero-status">
-        <span className={`dashboard-status-orb ${needsAttention ? "is-warning" : "is-success"}`} />
-        <p className="dashboard-eyebrow">Operational state</p>
-        <strong>{needsAttention ? "Needs attention" : "On track"}</strong>
-        <span>{readinessCount} readiness queue{readinessCount === 1 ? "" : "s"}</span>
-      </div>
-    </section>
-  );
-}
-
-function MetricGrid({ data }: { data: AdminRow | null }) {
   return (
     <section className="dashboard-metric-grid" aria-label="Dashboard metrics">
       {metrics.map((metric) => (
         <Link href={metric.href} className="dashboard-metric-card" key={metric.key}>
-          <span className="dashboard-metric-icon">{metric.icon}</span>
+          <span className={`dashboard-metric-icon dashboard-metric-icon-${metric.key}`}>{metric.icon}</span>
           <span className="dashboard-metric-label">{metric.label}</span>
-          <strong>{data?.metrics?.[metric.key] ?? "-"}</strong>
+          <strong className={metric.key === "outstanding" ? "is-danger" : ""}>{values[metric.key]}</strong>
           <span className="dashboard-metric-helper">{metric.helper}</span>
         </Link>
       ))}
@@ -285,23 +175,26 @@ function PriorityPanel({
   onOpen: (row: AdminRow) => void;
 }) {
   return (
-    <DashboardPanel title="Priority Work" eyebrow="Cohort readiness" href="/cohorts" actionLabel="View cohorts" className="dashboard-panel-priority dashboard-panel-command" scroll>
-      <div className="dashboard-priority-list">
+    <DashboardPanel title="Cohort Readiness" href="/cohorts" actionLabel="View cohorts" className="dashboard-panel-readiness">
+      <div className="dashboard-readiness-table" role="table" aria-label="Cohort readiness">
+        <div className="dashboard-readiness-head" role="row">
+          <span>Cohort name</span>
+          <span>Zoom ready</span>
+          <span>Emails</span>
+          <span>Presenter</span>
+          <span>Status</span>
+        </div>
         {rows.map((row) => (
-          <div className="dashboard-priority-row" key={row.cohort.id}>
-            <DateBadge value={row.nextSession?.startTime} />
+          <button className="dashboard-readiness-row" type="button" key={row.cohort.id} onClick={() => onOpen(row)}>
             <div className="dashboard-row-main">
               <strong title={row.cohort.title}>{row.cohort.title}</strong>
-              <span>
-                {row.tasks.length} open task{row.tasks.length === 1 ? "" : "s"} · {row.registrationCount} registrations · {row.nextSession ? `Next ${shortDate(row.nextSession.startTime)}` : "No upcoming session"}
-              </span>
+              <span>{row.nextSession ? `Starts ${shortDate(row.nextSession.startTime)}` : "No upcoming session"}</span>
             </div>
-            <StatusChip value={row.tasks.length ? "Needs Attention" : "On Track"} />
-            <Button size="small" variant="outlined" onClick={() => onOpen(row)}>
-              Details
-            </Button>
-            <DashboardRowThumb row={row.cohort} label={row.cohort.title} />
-          </div>
+            <ReadinessCell ready={!row.tasks.some((task: AdminRow) => task.category === "SESSION_RESOURCES" || task.category === "OTHER")} label={!row.tasks.some((task: AdminRow) => task.category === "SESSION_RESOURCES" || task.category === "OTHER") ? "Configured" : "Required"} />
+            <ReadinessCell ready={!row.tasks.some((task: AdminRow) => task.category === "REMINDER_EMAILS" || task.category === "PARTICIPANT_LIST")} label={!row.tasks.some((task: AdminRow) => task.category === "REMINDER_EMAILS" || task.category === "PARTICIPANT_LIST") ? "Scheduled" : "Required"} muted={row.tasks.some((task: AdminRow) => task.category === "PARTICIPANT_LIST")} />
+            <ReadinessCell ready={!row.tasks.some((task: AdminRow) => task.category === "SUPPORTING_DOCUMENTS")} label={!row.tasks.some((task: AdminRow) => task.category === "SUPPORTING_DOCUMENTS") ? "Confirmed" : "Pending"} />
+            <StatusChip value={row.tasks.length ? "Action required" : "Ready"} />
+          </button>
         ))}
       </div>
       {!loading && rows.length === 0 && (
@@ -311,25 +204,120 @@ function PriorityPanel({
   );
 }
 
+function ReadinessCell({ ready, label, muted = false }: { ready: boolean; label: string; muted?: boolean }) {
+  return (
+    <span className="dashboard-readiness-cell">
+      <i className={ready ? "is-ready" : muted ? "is-muted" : "is-risk"} />
+      {label}
+    </span>
+  );
+}
+
 function TodayPanel({ loading, sessions }: { loading: boolean; sessions: AdminRow[] }) {
   return (
-    <DashboardPanel title="Upcoming Sessions" eyebrow="Agenda" href="/cohorts" actionLabel="View cohorts" className="dashboard-panel-command" scroll>
-      <div className="dashboard-agenda-list">
-        {sessions.slice(0, 6).map((session) => (
-          <div className="dashboard-agenda-row" key={session.id}>
-            <div className="dashboard-agenda-date">
-              <strong>{shortDate(session.startTime)}</strong>
-              <span>{timeText(session.startTime)}</span>
-            </div>
+    <DashboardPanel title="Today's Agenda" actionLabel={new Date().toLocaleDateString()} className="dashboard-panel-agenda">
+      <div className="dashboard-agenda-timeline">
+        {sessions.slice(0, 4).map((session, index) => (
+          <div className="dashboard-agenda-item" key={session.id}>
+            <span className={`dashboard-agenda-dot ${index === 0 ? "is-active" : ""}`} />
             <div className="dashboard-row-main">
+              <span>{timeText(session.startTime)}</span>
               <strong title={session.title}>{session.title}</strong>
               <span>{session.cohort?.title ?? "Cohort"}</span>
             </div>
-            <DashboardRowThumb row={session} label={session.cohort?.title ?? session.title} />
+            {index === 0 && <Button size="small" variant="text" component={Link} href="/cohorts">Open</Button>}
           </div>
         ))}
       </div>
       {!loading && sessions.length === 0 && <EmptyState title="No upcoming sessions" description="Upcoming cohort sessions will appear here." />}
+    </DashboardPanel>
+  );
+}
+
+function PaymentSnapshot({ finance }: { finance: AdminRow }) {
+  return (
+    <DashboardPanel title="Payment Snapshot" className="dashboard-panel-payment">
+      <div className="dashboard-payment-bars">
+        <PaymentBar label="Collected" amount={finance.collected} total={finance.total} tone="primary" />
+        <PaymentBar label="Pending" amount={finance.pending} total={finance.total} tone="secondary" />
+        <PaymentBar label="Past Due" amount={finance.pastDue} total={finance.total} tone="danger" />
+      </div>
+      <div className="dashboard-payment-footer">
+        <div>
+          <strong>{formatMoney(finance.total)}</strong>
+          <span>Total pipeline</span>
+        </div>
+        <div>
+          <strong>{finance.total ? `${Math.round((finance.outstanding / finance.total) * 1000) / 10}%` : "0%"}</strong>
+          <span>Outstanding rate</span>
+        </div>
+      </div>
+    </DashboardPanel>
+  );
+}
+
+function PaymentBar({ label, amount, total, tone }: { label: string; amount: number; total: number; tone: "primary" | "secondary" | "danger" }) {
+  const percent = total > 0 ? Math.round((amount / total) * 100) : 0;
+  return (
+    <div className="dashboard-payment-bar">
+      <div>
+        <span className={tone === "danger" ? "is-danger" : ""}>{label}</span>
+        <strong className={tone === "danger" ? "is-danger" : ""}>{formatMoney(amount)} <small>({percent}%)</small></strong>
+      </div>
+      <i><b className={`is-${tone}`} style={{ width: `${Math.min(100, percent)}%` }} /></i>
+    </div>
+  );
+}
+
+function RecentActivityPanel({ data, onOpenRegistration }: { data: AdminRow | null; onOpenRegistration: (id: string) => void }) {
+  const activities = [
+    ...(data?.recentRegistrations ?? []).slice(0, 3).map((registration: AdminRow) => ({
+      id: `registration-${registration.id}`,
+      icon: <GroupsOutlined />,
+      title: `${formatProperDisplay(registration.primaryContactName)} registered for ${registration.cohort?.title ?? "a cohort"}`,
+      subtitle: relativeTime(registration.createdAt),
+      onClick: () => onOpenRegistration(registration.id)
+    })),
+    ...(data?.communicationIssues ?? []).slice(0, 2).map((issue: AdminRow) => ({
+      id: `issue-${issue.id}`,
+      icon: <EmailOutlined />,
+      title: `${formatStatusLabel(issue.eventType)} email issue`,
+      subtitle: [issue.communication?.cohort?.title, relativeTime(issue.createdAt)].filter(Boolean).join(" · "),
+      href: "/communications" as Route
+    })),
+    ...(data?.recentActivity ?? []).slice(0, 3).map((activity: AdminRow) => ({
+      id: `activity-${activity.id}`,
+      icon: <MoreHorizIcon />,
+      title: activity.description ?? `${formatStatusLabel(activity.action)} ${formatProperDisplay(activity.entityType)}`,
+      subtitle: relativeTime(activity.createdAt)
+    }))
+  ].slice(0, 6);
+
+  return (
+    <DashboardPanel title="Recent Activity" href="/reports" actionLabel="View all" className="dashboard-panel-activity">
+      <div className="dashboard-activity-list">
+        {activities.map((activity) => {
+          const content = (
+            <>
+              <span className="dashboard-activity-icon">{activity.icon}</span>
+              <div className="dashboard-row-main">
+                <strong>{activity.title}</strong>
+                <span>{activity.subtitle}</span>
+              </div>
+            </>
+          );
+
+          if ("onClick" in activity && activity.onClick) {
+            return <button type="button" className="dashboard-activity-item" key={activity.id} onClick={activity.onClick}>{content}</button>;
+          }
+
+          if ("href" in activity && activity.href) {
+            return <Link className="dashboard-activity-item" key={activity.id} href={activity.href}>{content}</Link>;
+          }
+
+          return <div className="dashboard-activity-item" key={activity.id}>{content}</div>;
+        })}
+      </div>
     </DashboardPanel>
   );
 }
@@ -340,8 +328,6 @@ export function DashboardClient() {
   const [loading, setLoading] = useState(true);
   const [readinessCohort, setReadinessCohort] = useState<AdminRow | null>(null);
   const [recentRegistration, setRecentRegistration] = useState<AdminRow | null>(null);
-  const [paymentFilter, setPaymentFilter] = useState("ALL");
-  const [paymentCohortFilter, setPaymentCohortFilter] = useState("ALL");
   const [sendingTaskId, setSendingTaskId] = useState("");
   const { notifySuccess, notifyError, snackbar } = useNotifier();
 
@@ -400,43 +386,28 @@ export function DashboardClient() {
       .slice(0, 6);
   }, [data]);
 
-  const paymentCohorts = useMemo(
-    () => Array.from(new Map((data?.paymentRecordsSnapshot ?? []).map((payment: AdminRow) => [payment.cohortId, payment.cohort?.title ?? "Cohort"])).entries()),
-    [data]
-  );
-  const paymentCohortOptions = useMemo<DashboardSelectOption[]>(
-    () => [
-      { value: "ALL", label: "All cohorts" },
-      ...paymentCohorts.map(([id, title]) => ({ value: String(id), label: String(title) }))
-    ],
-    [paymentCohorts]
-  );
-  const paymentStatusOptions = useMemo<DashboardSelectOption[]>(
-    () => [
-      { value: "ALL", label: "All statuses" },
-      ...(data?.paymentStatusSnapshot ?? []).map((payment: AdminRow) => ({ value: String(payment.status), label: formatStatusLabel(payment.status) }))
-    ],
-    [data]
-  );
+  const financeSummary = useMemo(() => {
+    return (data?.paymentRecordsSnapshot ?? []).reduce(
+      (summary: AdminRow, payment: AdminRow) => {
+        const amount = Number(payment.amount ?? 0);
+        const status = String(payment.status ?? "").toUpperCase();
+        summary.total += amount;
 
-  const paymentChartRows = useMemo(() => {
-    const filtered = (data?.paymentRecordsSnapshot ?? []).filter((payment: AdminRow) => {
-      const matchesStatus = paymentFilter === "ALL" || payment.status === paymentFilter;
-      const matchesCohort = paymentCohortFilter === "ALL" || payment.cohortId === paymentCohortFilter;
-      return matchesStatus && matchesCohort;
-    });
-    const grouped = new Map<string, AdminRow>();
+        if (status === "PAID") {
+          summary.collected += amount;
+        } else if (status === "OVERDUE" || status === "FAILED") {
+          summary.pastDue += amount;
+          summary.outstanding += amount;
+        } else {
+          summary.pending += amount;
+          summary.outstanding += amount;
+        }
 
-    for (const payment of filtered) {
-      const key = payment.status ?? "UNKNOWN";
-      const current = grouped.get(key) ?? { label: formatStatusLabel(key), amount: 0, count: 0 };
-      current.amount += Number(payment.amount ?? 0);
-      current.count += 1;
-      grouped.set(key, current);
-    }
-
-    return Array.from(grouped.values());
-  }, [data, paymentCohortFilter, paymentFilter]);
+        return summary;
+      },
+      { total: 0, collected: 0, pending: 0, pastDue: 0, outstanding: 0 }
+    );
+  }, [data]);
 
   async function openRecentRegistration(id: string) {
     try {
@@ -479,40 +450,17 @@ export function DashboardClient() {
 
   return (
     <PageStack className="dashboard-page">
-      <DashboardToolbar />
-      <DashboardHero data={data} readinessCount={readinessRows.length} />
-      <MetricGrid data={data} />
+      <MetricGrid data={data} finance={financeSummary} />
       {loading && <LoadingState label="Loading dashboard" />}
 
       <section className="dashboard-command-grid">
-        <PriorityPanel loading={loading} rows={readinessRows} onOpen={setReadinessCohort} />
         <TodayPanel loading={loading} sessions={data?.upcomingSessions ?? []} />
+        <PaymentSnapshot finance={financeSummary} />
       </section>
 
-      <section className="dashboard-insights-grid">
-        <DashboardPanel title="Payment Snapshot" eyebrow="Revenue watch" href="/registrations" actionLabel="View registrations">
-          <div className="dashboard-filter-row">
-            <DashboardSelect label="Cohort" value={paymentCohortFilter} options={paymentCohortOptions} onChange={setPaymentCohortFilter} className="dashboard-select-wide" />
-            <DashboardSelect label="Status" value={paymentFilter} options={paymentStatusOptions} onChange={setPaymentFilter} className="dashboard-select-status" />
-          </div>
-          <DonutChart rows={paymentChartRows} />
-        </DashboardPanel>
-
-        <DashboardPanel title="Recent Registrations" eyebrow="New arrivals" href="/registrations" actionLabel="Open list" className="dashboard-panel-command" scroll>
-          <div className="dashboard-compact-list">
-            {(data?.recentRegistrations ?? []).slice(0, 8).map((registration: AdminRow) => (
-              <button className="dashboard-compact-row is-clickable" type="button" key={registration.id} onClick={() => openRecentRegistration(registration.id)}>
-                <div className="dashboard-row-main">
-                  <strong>{formatProperDisplay(registration.primaryContactName)}</strong>
-                  <span>{formatProperDisplay(registration.organization?.name ?? "Organization")} · {registration.cohort?.title ?? "Cohort"}</span>
-                </div>
-                <StatusChip value={registration.status} />
-                <DashboardRowThumb row={registration} label={registration.cohort?.title ?? "Cohort"} />
-              </button>
-            ))}
-          </div>
-          {!loading && (data?.recentRegistrations ?? []).length === 0 && <EmptyState title="No recent registrations" description="New registrations will appear here as they arrive." />}
-        </DashboardPanel>
+      <section className="dashboard-lower-grid">
+        <PriorityPanel loading={loading} rows={readinessRows} onOpen={setReadinessCohort} />
+        <RecentActivityPanel data={data} onOpenRegistration={openRecentRegistration} />
       </section>
 
       <Dialog open={Boolean(readinessCohort)} onClose={() => setReadinessCohort(null)} fullWidth maxWidth="md">
