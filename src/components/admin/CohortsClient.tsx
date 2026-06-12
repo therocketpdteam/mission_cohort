@@ -1,6 +1,6 @@
 "use client";
 
-import { AddIcon } from "@/components/ui/icons";
+import { AddIcon, MoreHorizIcon } from "@/components/ui/icons";
 import { ArchiveOutlined, CalendarMonthOutlined, GroupsOutlined, InsightsOutlined } from "@/components/ui/icons";
 import { EditOutlined } from "@/components/ui/icons";
 import { VisibilityOutlined } from "@/components/ui/icons";
@@ -32,16 +32,12 @@ import { formatProperDisplay, formatStatusLabel } from "@/lib/formatting";
 import {
   AdminRow,
   AppDataGrid,
-  CompactFilterBar,
   EmptyState,
   FieldConfig,
   MutationDialog,
-  PageHeader,
   PageStack,
   RowActionMenu,
-  SectionCard,
   StatusChip,
-  TableShell,
   ToolbarButton,
   useNotifier
 } from "./common";
@@ -116,6 +112,10 @@ function cohortFinanceSummary(row: AdminRow) {
 
 function money(value: unknown) {
   return `$${Number(value ?? 0).toLocaleString()}`;
+}
+
+function statusCount(rows: AdminRow[], value: string) {
+  return rows.filter((row) => row.status === value).length;
 }
 
 function CreateCohortWizard({
@@ -558,12 +558,24 @@ export function CohortsClient() {
     [rows, search, status, presenterId]
   );
 
+  const filterPills = [
+    { label: "All", value: "", count: rows.length },
+    ...statusOptions.map((value) => ({ label: formatStatusLabel(value), value, count: statusCount(rows, value) }))
+  ];
+
   const columns: GridColDef[] = [
+    {
+      field: "open",
+      headerName: "",
+      width: 42,
+      sortable: false,
+      renderCell: () => <span className="cohort-row-chevron" aria-hidden="true">›</span>
+    },
     {
       field: "title",
       headerName: "Cohort",
-      flex: 3.4,
-      minWidth: 420,
+      flex: 4.2,
+      minWidth: 460,
       renderCell: (params) => (
         <div className="cohort-cell">
           {params.row.thumbnailUrl && <img className="cohort-cell-thumb" src={params.row.thumbnailUrl} alt="" />}
@@ -576,21 +588,20 @@ export function CohortsClient() {
     {
       field: "presenter",
       headerName: "Presenter",
-      flex: 0.65,
-      minWidth: 128,
+      flex: 0.95,
+      minWidth: 144,
       valueGetter: (_value, row) => formatProperDisplay(`${row.presenter?.firstName ?? ""} ${row.presenter?.lastName ?? ""}`)
     },
-    { field: "status", headerName: "Status", width: 128, renderCell: (params) => <StatusChip value={params.value} /> },
     {
       field: "dates",
       headerName: "Dates",
-      width: 144,
+      width: 156,
       valueGetter: (_value, row) => `${formatDate(row.startDate)} - ${formatDate(row.endDate)}`
     },
     {
       field: "counts",
       headerName: "Quick View",
-      width: 230,
+      width: 248,
       renderCell: (params) => {
         const finance = cohortFinanceSummary(params.row);
         return (
@@ -609,6 +620,7 @@ export function CohortsClient() {
       );
       }
     },
+    { field: "status", headerName: "Status", width: 136, renderCell: (params) => <StatusChip value={params.value} /> },
     {
       field: "actions",
       headerName: "Actions",
@@ -677,15 +689,34 @@ export function CohortsClient() {
   }
 
   return (
-    <PageStack>
-      <PageHeader
-        title="Cohorts"
-        description="Create cohorts, sessions, presenters, and delivery timelines from one operations workspace."
-        action={<ToolbarButton onClick={() => setWizardOpen(true)}>Create Cohort</ToolbarButton>}
-      />
-      <CompactFilterBar
-        resultCount={filteredRows.length}
-        advanced={
+    <PageStack className="cohort-console-page">
+      <header className="cohort-console-header">
+        <div>
+          <h1>Cohorts</h1>
+          <p>Create cohorts, sessions, presenters, and delivery timelines from one operations workspace.</p>
+        </div>
+        <ToolbarButton onClick={() => setWizardOpen(true)}>Create Cohort</ToolbarButton>
+      </header>
+
+      <section className="cohort-console-filters" aria-label="Cohort filters">
+        <div className="cohort-console-filter-label">
+          <MoreHorizIcon fontSize="small" />
+          <span>Filters</span>
+        </div>
+        <div className="cohort-console-filter-pills">
+          {filterPills.map((pill) => (
+            <button
+              type="button"
+              className={`cohort-filter-pill ${status === pill.value ? "is-active" : ""} ${pill.value === "CANCELLED" ? "is-danger" : ""}`}
+              key={pill.value || "all"}
+              onClick={() => setStatus(pill.value)}
+            >
+              <span>{pill.label}</span>
+              <strong>{pill.count}</strong>
+            </button>
+          ))}
+        </div>
+        <div className="cohort-console-more-filter">
           <TextField select label="Presenter" value={presenterId} onChange={(event) => setPresenterId(event.target.value)} sx={{ minWidth: 220 }}>
             <MenuItem value="">All presenters</MenuItem>
             {presenters.map((presenter) => (
@@ -694,30 +725,21 @@ export function CohortsClient() {
               </MenuItem>
             ))}
           </TextField>
-        }
-      >
-        <TextField label="Search" value={search} onChange={(event) => setSearch(event.target.value)} />
-          <TextField select label="Status" value={status} onChange={(event) => setStatus(event.target.value)} sx={{ minWidth: 220 }}>
-            <MenuItem value="">All statuses</MenuItem>
-            {statusOptions.map((value) => (
-              <MenuItem value={value} key={value}>
-                {formatStatusLabel(value)}
-              </MenuItem>
-            ))}
-          </TextField>
-      </CompactFilterBar>
-      <SectionCard title="Cohort List">
-        <TableShell>
-          <AppDataGrid
-            rows={filteredRows}
-            columns={columns}
-            loading={loading}
-            initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
-            onRowClick={(params) => router.push(`/cohorts/${params.id}`)}
-          />
-        </TableShell>
+        </div>
+        <TextField className="cohort-console-search" label="Search cohorts" value={search} onChange={(event) => setSearch(event.target.value)} />
+      </section>
+
+      <section className="cohort-console-table" aria-label="Cohort list">
+        <AppDataGrid
+          rows={filteredRows}
+          columns={columns}
+          loading={loading}
+          pageSizeOptions={[10, 25, 50, 100]}
+          initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
+          onRowClick={(params) => router.push(`/cohorts/${params.id}`)}
+        />
         {!loading && filteredRows.length === 0 && <EmptyState title="No cohorts found" description="Create a cohort or adjust the filters." />}
-      </SectionCard>
+      </section>
       <CreateCohortWizard
         open={wizardOpen}
         presenters={presenters}

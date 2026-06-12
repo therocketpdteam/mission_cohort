@@ -600,7 +600,7 @@ export function AppDataGrid<R extends AdminRow = AdminRow>({
       </div>
       <div className="table-footer">
         <span>
-          {rows.length === 0 ? "No rows" : `${page * pageSize + 1}-${Math.min(rows.length, (page + 1) * pageSize)} of ${rows.length}`}
+          {rows.length === 0 ? "No rows" : `Showing ${page * pageSize + 1}-${Math.min(rows.length, (page + 1) * pageSize)} of ${rows.length} records`}
         </span>
         <div className="table-pager">
           <TextField select label="Rows" value={String(pageSize)} onChange={(event) => setPageSize(Number(event.target.value))} style={{ minWidth: 110 }}>

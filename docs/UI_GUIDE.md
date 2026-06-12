@@ -286,6 +286,15 @@ Rules:
 - Primary table rows should open the most useful quick view/edit surface when a detail target exists. Keep secondary data, supporting docs, long notes, and audit context out of the primary table and inside the drawer/modal.
 - Primary tables should use a small set of high-value columns. If a column repeats the same value on every row, move it into a compact defaults/info panel above the list.
 
+List Console Pattern:
+
+- Primary operational list pages should use the Mission Cohort console pattern when possible: page title/actions, one subtle filter rail, then one bordered table surface.
+- Filter rails should start with a small `Filters` label, then pill controls for high-value statuses or segments, then a fixed-width app-styled search control aligned to the right.
+- Filter pills may show compact counts in a small inset badge. Active pills use the primary purple border/background; risk/destructive pills may use the danger tone.
+- The main table surface should be a single white/container panel with a 12px radius, outline-variant border, subtle table header, and clear row dividers.
+- Row identity columns get the most width. Rows may include a small chevron affordance on the left when clicking opens the record.
+- Footer copy should read like `Showing 1-10 of 43 records`, with pagination controls kept compact and aligned right.
+
 ## Filters And Dropdowns
 
 - Filters are controls, not the page content. Use `CompactFilterBar` for normal admin screens instead of a bulky standalone `Filters` card.
