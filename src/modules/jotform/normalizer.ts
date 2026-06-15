@@ -31,6 +31,113 @@ type JotformTargetField = {
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const emailInTextPattern = /[^\s<>,;]+@[^\s<>,;]+\.[^\s<>,;]+/;
+const usStateNames = [
+  "Alabama",
+  "Alaska",
+  "Arizona",
+  "Arkansas",
+  "California",
+  "Colorado",
+  "Connecticut",
+  "Delaware",
+  "District Of Columbia",
+  "Florida",
+  "Georgia",
+  "Hawaii",
+  "Idaho",
+  "Illinois",
+  "Indiana",
+  "Iowa",
+  "Kansas",
+  "Kentucky",
+  "Louisiana",
+  "Maine",
+  "Maryland",
+  "Massachusetts",
+  "Michigan",
+  "Minnesota",
+  "Mississippi",
+  "Missouri",
+  "Montana",
+  "Nebraska",
+  "Nevada",
+  "New Hampshire",
+  "New Jersey",
+  "New Mexico",
+  "New York",
+  "North Carolina",
+  "North Dakota",
+  "Ohio",
+  "Oklahoma",
+  "Oregon",
+  "Pennsylvania",
+  "Rhode Island",
+  "South Carolina",
+  "South Dakota",
+  "Tennessee",
+  "Texas",
+  "Utah",
+  "Vermont",
+  "Virginia",
+  "Washington",
+  "West Virginia",
+  "Wisconsin",
+  "Wyoming"
+];
+const usStateAbbreviations = [
+  "AL",
+  "AK",
+  "AZ",
+  "AR",
+  "CA",
+  "CO",
+  "CT",
+  "DE",
+  "DC",
+  "FL",
+  "GA",
+  "HI",
+  "ID",
+  "IL",
+  "IN",
+  "IA",
+  "KS",
+  "KY",
+  "LA",
+  "ME",
+  "MD",
+  "MA",
+  "MI",
+  "MN",
+  "MS",
+  "MO",
+  "MT",
+  "NE",
+  "NV",
+  "NH",
+  "NJ",
+  "NM",
+  "NY",
+  "NC",
+  "ND",
+  "OH",
+  "OK",
+  "OR",
+  "PA",
+  "RI",
+  "SC",
+  "SD",
+  "TN",
+  "TX",
+  "UT",
+  "VT",
+  "VA",
+  "WA",
+  "WV",
+  "WI",
+  "WY"
+];
+const streetSuffixPattern = /\b(?:street|st|road|rd|avenue|ave|boulevard|blvd|drive|dr|lane|ln|way|circle|cir|court|ct|place|pl|parkway|pkwy|highway|hwy|terrace|ter|trail|trl|loop|plaza|square|sq)\b\.?/i;
 
 export const jotformTargetFields: JotformTargetField[] = [
   { target: "formId", label: "Jotform form ID", category: "Form", aliases: ["formID", "formId", "form_id", "form ID"] },
@@ -166,6 +273,53 @@ export function parseJotformAddress(value: unknown): ParsedAddress {
       state: readAddressPart(labeled, ["State", "Province"]),
       zip: readAddressPart(labeled, ["Zip Code", "ZIP Code", "Postal Code", "Zip", "Postal"])
     };
+  }
+
+  const countryTrimmedText = text
+    .replace(/\b(?:United States Of America|United States|USA|US)\b\.?$/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const statePattern = [...usStateNames, ...usStateAbbreviations]
+    .sort((a, b) => b.length - a.length)
+    .map((state) => state.replace(/\s+/g, "\\s+"))
+    .join("|");
+  const unlabeledMatch = countryTrimmedText.match(new RegExp(`^(.+?)\\s+(${statePattern})\\s+(\\d{5}(?:-\\d{4})?)$`, "i"));
+
+  if (unlabeledMatch?.[1] && unlabeledMatch[2] && unlabeledMatch[3]) {
+    const beforeState = unlabeledMatch[1].trim();
+    const state = unlabeledMatch[2].replace(/\s+/g, " ").trim();
+    const zip = unlabeledMatch[3].trim();
+    const streetMatches = Array.from(beforeState.matchAll(new RegExp(streetSuffixPattern.source, "gi")));
+    const lastStreetMatch = streetMatches.at(-1);
+
+    if (lastStreetMatch?.index != null) {
+      const suffixEnd = lastStreetMatch.index + lastStreetMatch[0].length;
+      const addressLine1 = beforeState.slice(0, suffixEnd).trim();
+      const city = beforeState.slice(suffixEnd).trim();
+
+      if (addressLine1 && city) {
+        return {
+          addressLine1,
+          addressLine2: "",
+          city,
+          state,
+          zip
+        };
+      }
+    }
+
+    const words = beforeState.split(/\s+/).filter(Boolean);
+    const fallbackCityWordCount = Math.min(words.length - 1, 2);
+
+    if (fallbackCityWordCount > 0) {
+      return {
+        addressLine1: words.slice(0, -fallbackCityWordCount).join(" "),
+        addressLine2: "",
+        city: words.slice(-fallbackCityWordCount).join(" "),
+        state,
+        zip
+      };
+    }
   }
 
   const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);

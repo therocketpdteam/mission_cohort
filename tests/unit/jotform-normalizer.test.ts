@@ -98,6 +98,30 @@ test("parses structured and formatted Jotform address fields", () => {
   });
 });
 
+test("parses unlabeled Jotform address strings with country suffixes", () => {
+  assert.deepEqual(parseJotformAddress("8053 N Sundial Way  Boise Idaho 83714 United States"), {
+    addressLine1: "8053 N Sundial Way",
+    addressLine2: "",
+    city: "Boise",
+    state: "Idaho",
+    zip: "83714"
+  });
+  assert.deepEqual(parseJotformAddress("1 School Street  Wilmington VT 05363 United States"), {
+    addressLine1: "1 School Street",
+    addressLine2: "",
+    city: "Wilmington",
+    state: "VT",
+    zip: "05363"
+  });
+  assert.deepEqual(parseJotformAddress("4120 Clinton Pkwy  Lawrence KS 66047-2004 United States"), {
+    addressLine1: "4120 Clinton Pkwy",
+    addressLine2: "",
+    city: "Lawrence",
+    state: "KS",
+    zip: "66047-2004"
+  });
+});
+
 test("splits mapped Jotform organization address into reportable geography", () => {
   const normalized = normalizeJotformRegistrationPayload(
     {
