@@ -420,6 +420,13 @@ function JotformMappingWizard({
   const organization = normalized.organization ?? {};
   const payment = normalized.payment ?? {};
   const participants = Array.isArray(normalized.participants) ? normalized.participants : [];
+  const parsedLocation = [
+    organization.addressLine1,
+    organization.addressLine2,
+    organization.city,
+    organization.state,
+    organization.zip
+  ].filter(Boolean);
   const fieldOptions: JotformFieldOption[] = Array.isArray(preview.fieldOptions) ? preview.fieldOptions : [];
   const targetFields: JotformTargetField[] = Array.isArray(preview.targetFields) ? preview.targetFields : [];
   const groupedTargets = useMemo(() => {
@@ -692,6 +699,10 @@ function JotformMappingWizard({
                 <Grid size={{ xs: 12, md: 3 }}><InfoTile label="Submission ID" value={preview.submissionId} /></Grid>
                 <Grid size={{ xs: 12, md: 3 }}><InfoTile label="POC" value={formatProperDisplay(preview.primaryContactName) || preview.primaryContactEmail} /></Grid>
                 <Grid size={{ xs: 12, md: 3 }}><InfoTile label="Organization" value={formatProperDisplay(preview.organizationName)} /></Grid>
+                <Grid size={{ xs: 12, md: 3 }}><InfoTile label="City" value={organization.city} /></Grid>
+                <Grid size={{ xs: 12, md: 3 }}><InfoTile label="State" value={organization.state} /></Grid>
+                <Grid size={{ xs: 12, md: 3 }}><InfoTile label="ZIP" value={organization.zip} /></Grid>
+                <Grid size={{ xs: 12, md: 3 }}><InfoTile label="Address" value={organization.addressLine1} /></Grid>
                 <Grid size={{ xs: 12, md: 3 }}><InfoTile label="Cohort Route" value={preview.cohortSlug || registration.cohortId || "Needs routing"} /></Grid>
                 <Grid size={{ xs: 12, md: 3 }}><InfoTile label="Participants" value={`${preview.parsedParticipantCount ?? 0}${preview.participantCount ? ` / ${preview.participantCount}` : ""}`} /></Grid>
                 <Grid size={{ xs: 12, md: 3 }}><InfoTile label="Payment" value={[registration.paymentMethod, registration.paymentStatus].filter(Boolean).join(" / ")} /></Grid>
@@ -857,6 +868,25 @@ function JotformMappingWizard({
                   </Grid>
                 </Paper>
 
+                {parsedLocation.length > 0 && (
+                  <Paper variant="outlined" sx={{ p: 1.5 }}>
+                    <Stack spacing={1.25}>
+                      <Box>
+                        <Typography variant="h4">Parsed organization location</Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          Mission Control splits the single Jotform Address field into reportable location fields during import and replay.
+                        </Typography>
+                      </Box>
+                      <Grid container spacing={1.25}>
+                        <Grid size={{ xs: 12, md: 3 }}><InfoTile label="Address" value={organization.addressLine1} /></Grid>
+                        <Grid size={{ xs: 12, md: 3 }}><InfoTile label="City" value={organization.city} /></Grid>
+                        <Grid size={{ xs: 12, md: 3 }}><InfoTile label="State" value={organization.state} /></Grid>
+                        <Grid size={{ xs: 12, md: 3 }}><InfoTile label="ZIP" value={organization.zip} /></Grid>
+                      </Grid>
+                    </Stack>
+                  </Paper>
+                )}
+
                 <Accordion>
                   <AccordionSummary expandIcon={<ExpandMoreOutlined />}>
                     <Box>
@@ -905,6 +935,9 @@ function JotformMappingWizard({
                 <div className="jotform-preview-grid">
                   <PreviewTile label="Registration POC" value={[formatProperDisplay(registration.primaryContactName), registration.primaryContactEmail].filter(Boolean).join(" - ")} />
                   <PreviewTile label="Organization" value={formatProperDisplay(organization.name)} />
+                  <PreviewTile label="City" value={organization.city} />
+                  <PreviewTile label="State" value={organization.state} />
+                  <PreviewTile label="ZIP" value={organization.zip} />
                   <PreviewTile label="Cohort route" value={preview.cohortSlug || registration.cohortId || "Selected by mapping"} />
                   <PreviewTile label="Participant roster" value={`${participants.length} parsed from submission`} />
                   <PreviewTile label="Payment record" value={`${payment.method || registration.paymentMethod || "Unknown"} / ${payment.status || registration.paymentStatus || "Unknown"}`} />

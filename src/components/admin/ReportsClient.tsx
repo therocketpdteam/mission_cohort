@@ -137,6 +137,7 @@ function RegistrationReportPreview({ report, columns }: { report: AdminRow; colu
     filters.paymentStatus && `Payment: ${formatStatusLabel(filters.paymentStatus)}`,
     filters.rosterStatus && `Roster: ${formatStatusLabel(filters.rosterStatus)}`,
     filters.cityState && `Location: ${filters.cityState}`,
+    filters.city && `City: ${filters.city}`,
     filters.state && `State: ${filters.state}`,
     filters.zip && `ZIP: ${filters.zip}`,
     filters.source && `Source: ${filters.source}`,
@@ -213,6 +214,7 @@ export function ReportsClient() {
   const [paymentStatus, setPaymentStatus] = useState("");
   const [rosterStatus, setRosterStatus] = useState("");
   const [cityStateFilter, setCityStateFilter] = useState("");
+  const [cityFilter, setCityFilter] = useState("");
   const [stateFilter, setStateFilter] = useState("");
   const [zipFilter, setZipFilter] = useState("");
   const [dateFrom, setDateFrom] = useState("");
@@ -244,6 +246,7 @@ export function ReportsClient() {
   async function loadLocationOptions(cohortId: string) {
     if (!cohortId) {
       setLocationOptions({ states: [], zips: [], cities: [] });
+      setCityFilter("");
       setStateFilter("");
       setZipFilter("");
       return;
@@ -333,6 +336,7 @@ export function ReportsClient() {
     if (paymentStatus) params.set("paymentStatus", paymentStatus);
     if (rosterStatus) params.set("rosterStatus", rosterStatus);
     if (cityStateFilter) params.set("cityState", cityStateFilter);
+    if (cityFilter) params.set("city", cityFilter);
     if (stateFilter) params.set("state", stateFilter);
     if (zipFilter) params.set("zip", zipFilter);
     if (dateFrom) params.set("dateFrom", dateFrom);
@@ -399,6 +403,7 @@ export function ReportsClient() {
               onChange={(event) => {
                 const nextCohortId = event.target.value;
                 setSelectedCohortId(nextCohortId);
+                setCityFilter("");
                 setStateFilter("");
                 setZipFilter("");
                 load(nextCohortId);
@@ -424,7 +429,11 @@ export function ReportsClient() {
               <MenuItem value="">All roster statuses</MenuItem>
               {rosterStatuses.map((value) => <MenuItem value={value} key={value}>{formatStatusLabel(value)}</MenuItem>)}
             </TextField>
-            <TextField label="City / location search" value={cityStateFilter} onChange={(event) => setCityStateFilter(event.target.value)} placeholder="Rapid City, South Dakota, or 57701" fullWidth />
+            <TextField label="Location keyword" value={cityStateFilter} onChange={(event) => setCityStateFilter(event.target.value)} placeholder="Rapid City, South Dakota, or 57701" fullWidth />
+            <TextField select label="City" value={cityFilter} onChange={(event) => setCityFilter(event.target.value)} fullWidth disabled={!selectedCohortId || locationOptions.cities.length === 0}>
+              <MenuItem value="">{selectedCohortId ? "All cities" : "Choose a cohort first"}</MenuItem>
+              {locationOptions.cities.map((value) => <MenuItem value={value} key={value}>{value}</MenuItem>)}
+            </TextField>
             <TextField select label="State" value={stateFilter} onChange={(event) => setStateFilter(event.target.value)} fullWidth disabled={!selectedCohortId || locationOptions.states.length === 0}>
               <MenuItem value="">{selectedCohortId ? "All states" : "Choose a cohort first"}</MenuItem>
               {locationOptions.states.map((value) => <MenuItem value={value} key={value}>{value}</MenuItem>)}

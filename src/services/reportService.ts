@@ -22,6 +22,7 @@ type CohortRegistrationReportInput = {
   paymentStatus?: string;
   rosterStatus?: string;
   cityState?: string;
+  city?: string;
   state?: string;
   zip?: string;
   dateFrom?: string;
@@ -207,6 +208,7 @@ export async function getCohortRegistrationReport(input: CohortRegistrationRepor
   }
 
   const cityState = input.cityState?.trim();
+  const city = input.city?.trim();
   const state = input.state?.trim();
   const zip = input.zip?.trim();
   const andFilters: Prisma.RegistrationWhereInput[] = [];
@@ -256,9 +258,10 @@ export async function getCohortRegistrationReport(input: CohortRegistrationRepor
     const geography = registrationGeography(registration, mappings);
     const searchableLocation = [geography.city, geography.state, geography.zip].join(" ").toLowerCase();
     const textMatches = cityState ? searchableLocation.includes(cityState.toLowerCase()) : true;
+    const cityMatches = city ? geography.city.toLowerCase() === city.toLowerCase() : true;
     const stateMatches = state ? geography.state.toLowerCase() === state.toLowerCase() : true;
     const zipMatches = zip ? geography.zip.toLowerCase() === zip.toLowerCase() : true;
-    return textMatches && stateMatches && zipMatches;
+    return textMatches && cityMatches && stateMatches && zipMatches;
   };
   const registrations = cohort.registrations.filter(matchesLocation);
   const summary = registrations.reduce(
@@ -274,7 +277,7 @@ export async function getCohortRegistrationReport(input: CohortRegistrationRepor
       acc.totalSold += totalAmount;
       acc.paidAmount += paidAmount;
       acc.pendingAmount += Math.max(totalAmount - paidAmount, 0);
-      if (cityState || state || zip) acc.geographicMatches += 1;
+      if (cityState || city || state || zip) acc.geographicMatches += 1;
       else {
         const geography = registrationGeography(registration, mappings);
         if (geography.city || geography.state || geography.zip) acc.geographicMatches += 1;
@@ -324,6 +327,7 @@ export async function getCohortRegistrationReport(input: CohortRegistrationRepor
       paymentStatus: input.paymentStatus || "",
       rosterStatus: input.rosterStatus || "",
       cityState: cityState || "",
+      city: city || "",
       state: state || "",
       zip: zip || "",
       dateFrom: input.dateFrom || "",

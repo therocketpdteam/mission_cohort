@@ -34,6 +34,7 @@ export async function GET(request: Request) {
         paymentStatus: url.searchParams.get("paymentStatus") ?? undefined,
         rosterStatus: url.searchParams.get("rosterStatus") ?? undefined,
         cityState: url.searchParams.get("cityState") ?? undefined,
+        city: url.searchParams.get("city") ?? undefined,
         state: url.searchParams.get("state") ?? undefined,
         zip: url.searchParams.get("zip") ?? undefined,
         dateFrom: url.searchParams.get("dateFrom") ?? undefined,
