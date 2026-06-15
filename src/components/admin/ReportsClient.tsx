@@ -19,9 +19,11 @@ const visibilityOptions = [
   { value: "active", label: "Active registrations" },
   { value: "all", label: "Include archived" }
 ];
-const defaultColumns = ["organization", "cityState", "pocName", "participants", "amount", "paymentStatus", "rosterStatus", "createdAt"];
+const defaultColumns = ["organization", "city", "state", "pocName", "participants", "amount", "paymentStatus", "rosterStatus", "createdAt"];
 const columnOptions = [
   { key: "organization", label: "Organization" },
+  { key: "city", label: "City" },
+  { key: "state", label: "State" },
   { key: "cityState", label: "City / State" },
   { key: "pocName", label: "POC name" },
   { key: "participants", label: "Participants" },
@@ -60,6 +62,10 @@ function reportCell(row: AdminRow, column: string) {
   switch (column) {
     case "organization":
       return formatProperDisplay(row.organization);
+    case "city":
+      return row.city || "-";
+    case "state":
+      return row.state || "-";
     case "cityState":
       return cityState(row);
     case "pocName":
@@ -466,6 +472,12 @@ export function ReportsClient() {
           <Button onClick={() => window.print()}>Download PDF</Button>
         </DialogActions>
       </Dialog>
+
+      {reportData && (
+        <div className="registration-report-print-root" aria-hidden="true">
+          <RegistrationReportPreview report={reportData} columns={safeSelectedColumns} />
+        </div>
+      )}
 
       {snackbar}
     </PageStack>

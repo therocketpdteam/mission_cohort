@@ -2962,6 +2962,10 @@ h6,
   background: var(--color-surface-container-lowest);
 }
 
+.registration-report-print-root {
+  display: none;
+}
+
 .registration-report-print-header {
   display: flex;
   align-items: flex-start;
@@ -3183,30 +3187,90 @@ h6,
     visibility: hidden !important;
   }
 
-  .registration-report-print,
-  .registration-report-print * {
+  .registration-report-print-root,
+  .registration-report-print-root * {
     visibility: visible !important;
   }
 
-  .registration-report-print {
+  .registration-report-print-root {
     position: absolute;
     inset: 0;
-    display: block;
+    display: block !important;
     width: 100%;
     background: #ffffff !important;
     color: #191c1e !important;
-    padding: 24px;
+  }
+
+  .registration-report-print-root .registration-report-print {
+    display: block;
+    padding: 0;
+  }
+
+  .registration-report-print-root .registration-report-print > * + * {
+    margin-top: 18px;
+  }
+
+  .registration-report-print-root .status-chip {
+    border: 1px solid #ccc3d8;
+    background: #ffffff !important;
+    color: #191c1e !important;
   }
 
   .registration-report-summary-grid,
   .registration-report-breakdowns {
+    display: grid;
     break-inside: avoid;
     page-break-inside: avoid;
   }
 
+  .registration-report-summary-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .registration-report-breakdowns {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .registration-report-tile,
+  .registration-report-breakdown,
+  .registration-report-filter-summary,
+  .registration-report-insight > p {
+    border-color: #ccc3d8 !important;
+    background: #ffffff !important;
+    box-shadow: none !important;
+  }
+
   .registration-report-table {
+    width: 100%;
+    table-layout: auto;
+    border-collapse: collapse;
     border-radius: 0;
-    font-size: 10px;
+    font-size: 9px;
+  }
+
+  .registration-report-table th,
+  .registration-report-table td {
+    padding: 5px 6px;
+    border-color: #ccc3d8 !important;
+  }
+
+  .registration-report-table th {
+    background: #f2f4f6 !important;
+  }
+
+  .registration-report-print-header h1 {
+    font-size: 24px;
+  }
+
+  .registration-report-tile {
+    min-height: auto;
+    padding: 9px;
+  }
+
+  .registration-report-tile strong {
+    font-size: 16px;
   }
 
   .registration-report-table tr {
