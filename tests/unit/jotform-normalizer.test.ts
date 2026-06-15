@@ -20,6 +20,8 @@ const urlMapping = {
     primaryContactName: "Name",
     primaryContactEmail: "Email",
     organizationName: "Name of Organization",
+    organizationCity: "Organization City",
+    organizationState: "Organization State",
     participantCount: "How many participants will be joining?",
     paymentStatus: "Payment Status",
     totalAmount: "Total Cost",
@@ -46,6 +48,8 @@ test("normalizes a URL-routed Jotform registration with explicit payment status"
       Name: "Jane District",
       Email: "jane@example.com",
       "Name of Organization": "Rocket District",
+      "Organization City": "Rapid City",
+      "Organization State": "South Dakota",
       "How many participants will be joining?": "2",
       "Payment Status": "successful",
       "Total Cost": "$1,250.00",
@@ -59,6 +63,8 @@ test("normalizes a URL-routed Jotform registration with explicit payment status"
   assert.equal(normalized.routing.mappingId, "mapping-1");
   assert.equal(normalized.registration.paymentStatus, PaymentStatus.PAID);
   assert.equal(normalized.registration.totalAmount, 1250);
+  assert.equal(normalized.organization.city, "Rapid City");
+  assert.equal(normalized.organization.state, "South Dakota");
   assert.equal(normalized.registration.utmSource, "newsletter");
   assert.equal(normalized.participants.length, 2);
 });
