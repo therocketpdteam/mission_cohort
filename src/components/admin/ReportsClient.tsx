@@ -137,6 +137,8 @@ function RegistrationReportPreview({ report, columns }: { report: AdminRow; colu
     filters.paymentStatus && `Payment: ${formatStatusLabel(filters.paymentStatus)}`,
     filters.rosterStatus && `Roster: ${formatStatusLabel(filters.rosterStatus)}`,
     filters.cityState && `Location: ${filters.cityState}`,
+    filters.state && `State: ${filters.state}`,
+    filters.zip && `ZIP: ${filters.zip}`,
     filters.source && `Source: ${filters.source}`,
     filters.dateFrom && `From ${shortDate(filters.dateFrom)}`,
     filters.dateTo && `To ${shortDate(filters.dateTo)}`,
@@ -211,6 +213,8 @@ export function ReportsClient() {
   const [paymentStatus, setPaymentStatus] = useState("");
   const [rosterStatus, setRosterStatus] = useState("");
   const [cityStateFilter, setCityStateFilter] = useState("");
+  const [stateFilter, setStateFilter] = useState("");
+  const [zipFilter, setZipFilter] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [sourceFilter, setSourceFilter] = useState("");
@@ -221,6 +225,7 @@ export function ReportsClient() {
   const [reportLoading, setReportLoading] = useState(false);
   const [reports, setReports] = useState<AdminRow[]>([]);
   const [links, setLinks] = useState<AdminRow[]>([]);
+  const [locationOptions, setLocationOptions] = useState<{ states: string[]; zips: string[]; cities: string[] }>({ states: [], zips: [], cities: [] });
   const { notifySuccess, notifyError, snackbar } = useNotifier();
 
   const availableColumns = useMemo(() => columnOptions.filter((column) => audience === "internal" || !column.internalOnly), [audience]);
@@ -234,6 +239,22 @@ export function ReportsClient() {
     setCohorts(cohortRows);
     setReports(reportDataRows.reports ?? []);
     setLinks(reportDataRows.links ?? []);
+  }
+
+  async function loadLocationOptions(cohortId: string) {
+    if (!cohortId) {
+      setLocationOptions({ states: [], zips: [], cities: [] });
+      setStateFilter("");
+      setZipFilter("");
+      return;
+    }
+
+    const options = await adminApi<{ states?: string[]; zips?: string[]; cities?: string[] }>(`/api/reports?reportType=cohort_registration_options&cohortId=${cohortId}`);
+    setLocationOptions({
+      states: options.states ?? [],
+      zips: options.zips ?? [],
+      cities: options.cities ?? []
+    });
   }
 
   useEffect(() => {
@@ -312,6 +333,8 @@ export function ReportsClient() {
     if (paymentStatus) params.set("paymentStatus", paymentStatus);
     if (rosterStatus) params.set("rosterStatus", rosterStatus);
     if (cityStateFilter) params.set("cityState", cityStateFilter);
+    if (stateFilter) params.set("state", stateFilter);
+    if (zipFilter) params.set("zip", zipFilter);
     if (dateFrom) params.set("dateFrom", dateFrom);
     if (dateTo) params.set("dateTo", dateTo);
     if (sourceFilter) params.set("source", sourceFilter);
@@ -369,7 +392,20 @@ export function ReportsClient() {
       <SectionCard title="Cohort Registration Report Builder">
         <div className="registration-report-builder">
           <div className="registration-report-builder-grid">
-            <TextField select label="Cohort" value={selectedCohortId} onChange={(event) => { setSelectedCohortId(event.target.value); load(event.target.value); }} fullWidth>
+            <TextField
+              select
+              label="Cohort"
+              value={selectedCohortId}
+              onChange={(event) => {
+                const nextCohortId = event.target.value;
+                setSelectedCohortId(nextCohortId);
+                setStateFilter("");
+                setZipFilter("");
+                load(nextCohortId);
+                loadLocationOptions(nextCohortId).catch((error) => notifyError(error.message));
+              }}
+              fullWidth
+            >
               <MenuItem value="">Choose a cohort</MenuItem>
               {cohorts.map((cohort) => <MenuItem value={cohort.id} key={cohort.id}>{cohort.title}</MenuItem>)}
             </TextField>
@@ -388,7 +424,15 @@ export function ReportsClient() {
               <MenuItem value="">All roster statuses</MenuItem>
               {rosterStatuses.map((value) => <MenuItem value={value} key={value}>{formatStatusLabel(value)}</MenuItem>)}
             </TextField>
-            <TextField label="City / state" value={cityStateFilter} onChange={(event) => setCityStateFilter(event.target.value)} placeholder="Rapid City or South Dakota" fullWidth />
+            <TextField label="City / location search" value={cityStateFilter} onChange={(event) => setCityStateFilter(event.target.value)} placeholder="Rapid City, South Dakota, or 57701" fullWidth />
+            <TextField select label="State" value={stateFilter} onChange={(event) => setStateFilter(event.target.value)} fullWidth disabled={!selectedCohortId || locationOptions.states.length === 0}>
+              <MenuItem value="">{selectedCohortId ? "All states" : "Choose a cohort first"}</MenuItem>
+              {locationOptions.states.map((value) => <MenuItem value={value} key={value}>{value}</MenuItem>)}
+            </TextField>
+            <TextField select label="ZIP" value={zipFilter} onChange={(event) => setZipFilter(event.target.value)} fullWidth disabled={!selectedCohortId || locationOptions.zips.length === 0}>
+              <MenuItem value="">{selectedCohortId ? "All ZIP codes" : "Choose a cohort first"}</MenuItem>
+              {locationOptions.zips.map((value) => <MenuItem value={value} key={value}>{value}</MenuItem>)}
+            </TextField>
             <TextField label="Registered from" type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} fullWidth />
             <TextField label="Registered to" type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} fullWidth />
             <TextField label="Source / campaign" value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value)} fullWidth />

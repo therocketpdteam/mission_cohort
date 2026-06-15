@@ -1,6 +1,8 @@
 import { randomBytes } from "node:crypto";
 import { ParticipantListStatus, PaymentStatus, Prisma, RegistrationStatus, ReportShareStatus } from "@prisma/client";
+import { normalizeJotformRegistrationPayload } from "@/modules/jotform";
 import { prisma } from "@/lib/prisma";
+import { listActiveJotformFormMappings } from "@/services/jotformMappingService";
 
 const pendingPaymentStatuses = new Set<PaymentStatus>([
   PaymentStatus.PENDING,
@@ -20,6 +22,8 @@ type CohortRegistrationReportInput = {
   paymentStatus?: string;
   rosterStatus?: string;
   cityState?: string;
+  state?: string;
+  zip?: string;
   dateFrom?: string;
   dateTo?: string;
   source?: string;
@@ -51,6 +55,60 @@ function moneyNumber(value: unknown) {
 
 function sourceLabel(registration: { source?: string | null; utmSource?: string | null; utmCampaign?: string | null; externalSource?: string | null }) {
   return registration.utmCampaign || registration.utmSource || registration.source || registration.externalSource || "Unknown";
+}
+
+export async function getCohortRegistrationReportOptions(cohortId: string) {
+  const mappings = await listActiveJotformFormMappings();
+  const registrations = await prisma.registration.findMany({
+    where: { cohortId, archivedAt: null },
+    select: {
+      organization: {
+        select: {
+          city: true,
+          state: true,
+          zip: true
+        }
+      },
+      webhookEvents: {
+        where: { source: "jotform" },
+        orderBy: { createdAt: "desc" },
+        take: 3,
+        select: { payload: true }
+      }
+    }
+  });
+  const unique = (values: Array<string | null | undefined>) => Array.from(new Set(values.map((value) => value?.trim()).filter(Boolean) as string[])).sort((a, b) => a.localeCompare(b));
+  const geography = registrations.map((registration) => registrationGeography(registration, mappings));
+
+  return {
+    cities: unique(geography.map((item) => item.city)),
+    states: unique(geography.map((item) => item.state)),
+    zips: unique(geography.map((item) => item.zip))
+  };
+}
+
+function registrationGeography(
+  registration: {
+    organization: { city?: string | null; state?: string | null; zip?: string | null };
+    webhookEvents?: Array<{ payload: Prisma.JsonValue }>;
+  },
+  mappings: Awaited<ReturnType<typeof listActiveJotformFormMappings>>
+) {
+  const fallback = registration.webhookEvents
+    ?.map((event) => {
+      try {
+        return normalizeJotformRegistrationPayload(event.payload as Record<string, unknown>, mappings).organization;
+      } catch {
+        return null;
+      }
+    })
+    .find((organization) => organization?.city || organization?.state || organization?.zip);
+
+  return {
+    city: registration.organization.city || fallback?.city || "",
+    state: registration.organization.state || fallback?.state || "",
+    zip: registration.organization.zip || fallback?.zip || ""
+  };
 }
 
 export async function getCohortReport(cohortId?: string) {
@@ -149,13 +207,9 @@ export async function getCohortRegistrationReport(input: CohortRegistrationRepor
   }
 
   const cityState = input.cityState?.trim();
-  if (cityState) {
-    where.OR = [
-      { organization: { city: { contains: cityState, mode: "insensitive" } } },
-      { organization: { state: { contains: cityState, mode: "insensitive" } } },
-      { organization: { zip: { contains: cityState, mode: "insensitive" } } }
-    ];
-  }
+  const state = input.state?.trim();
+  const zip = input.zip?.trim();
+  const andFilters: Prisma.RegistrationWhereInput[] = [];
 
   const source = input.source?.trim();
   if (source) {
@@ -165,7 +219,11 @@ export async function getCohortRegistrationReport(input: CohortRegistrationRepor
       { utmCampaign: { contains: source, mode: "insensitive" } },
       { externalSource: { contains: source, mode: "insensitive" } }
     ];
-    where.AND = [...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []), { OR: sourceFilter }];
+    andFilters.push({ OR: sourceFilter });
+  }
+
+  if (andFilters.length > 0) {
+    where.AND = [...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []), ...andFilters];
   }
 
   const cohort = await prisma.cohort.findUnique({
@@ -174,7 +232,17 @@ export async function getCohortRegistrationReport(input: CohortRegistrationRepor
       registrations: {
         where,
         orderBy: { createdAt: "asc" },
-        include: { organization: true, participants: true, paymentRecords: true }
+        include: {
+          organization: true,
+          participants: true,
+          paymentRecords: true,
+          webhookEvents: {
+            where: { source: "jotform" },
+            orderBy: { createdAt: "desc" },
+            take: 3,
+            select: { payload: true }
+          }
+        }
       }
     }
   });
@@ -183,7 +251,16 @@ export async function getCohortRegistrationReport(input: CohortRegistrationRepor
     throw Object.assign(new Error("Cohort not found."), { code: "NOT_FOUND", status: 404 });
   }
 
-  const registrations = cohort.registrations;
+  const mappings = await listActiveJotformFormMappings();
+  const matchesLocation = (registration: (typeof cohort.registrations)[number]) => {
+    const geography = registrationGeography(registration, mappings);
+    const searchableLocation = [geography.city, geography.state, geography.zip].join(" ").toLowerCase();
+    const textMatches = cityState ? searchableLocation.includes(cityState.toLowerCase()) : true;
+    const stateMatches = state ? geography.state.toLowerCase() === state.toLowerCase() : true;
+    const zipMatches = zip ? geography.zip.toLowerCase() === zip.toLowerCase() : true;
+    return textMatches && stateMatches && zipMatches;
+  };
+  const registrations = cohort.registrations.filter(matchesLocation);
   const summary = registrations.reduce(
     (acc, registration) => {
       const totalAmount = moneyNumber(registration.totalAmount);
@@ -197,8 +274,11 @@ export async function getCohortRegistrationReport(input: CohortRegistrationRepor
       acc.totalSold += totalAmount;
       acc.paidAmount += paidAmount;
       acc.pendingAmount += Math.max(totalAmount - paidAmount, 0);
-      if (cityState) acc.geographicMatches += 1;
-      else if (registration.organization.city || registration.organization.state) acc.geographicMatches += 1;
+      if (cityState || state || zip) acc.geographicMatches += 1;
+      else {
+        const geography = registrationGeography(registration, mappings);
+        if (geography.city || geography.state || geography.zip) acc.geographicMatches += 1;
+      }
 
       return acc;
     },
@@ -244,6 +324,8 @@ export async function getCohortRegistrationReport(input: CohortRegistrationRepor
       paymentStatus: input.paymentStatus || "",
       rosterStatus: input.rosterStatus || "",
       cityState: cityState || "",
+      state: state || "",
+      zip: zip || "",
       dateFrom: input.dateFrom || "",
       dateTo: input.dateTo || "",
       source: source || "",
@@ -253,9 +335,7 @@ export async function getCohortRegistrationReport(input: CohortRegistrationRepor
     registrations: registrations.map((registration) => ({
       id: registration.id,
       organization: registration.organization.name,
-      city: registration.organization.city,
-      state: registration.organization.state,
-      zip: registration.organization.zip,
+      ...registrationGeography(registration, mappings),
       pocName: registration.primaryContactName,
       ...(audience === "internal" ? {
         pocEmail: registration.primaryContactEmail,

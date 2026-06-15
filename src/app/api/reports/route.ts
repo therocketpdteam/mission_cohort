@@ -1,11 +1,26 @@
 import { fail, handleApiError, ok } from "@/lib/api";
-import { createReportShareLink, getCohortRegistrationReport, getCohortReport, listReportShareLinks, revokeReportShareLink } from "@/services/reportService";
+import {
+  createReportShareLink,
+  getCohortRegistrationReport,
+  getCohortRegistrationReportOptions,
+  getCohortReport,
+  listReportShareLinks,
+  revokeReportShareLink
+} from "@/services/reportService";
 
 export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
     const cohortId = url.searchParams.get("cohortId") ?? undefined;
     const includeLinks = url.searchParams.get("includeLinks") === "true";
+
+    if (url.searchParams.get("reportType") === "cohort_registration_options") {
+      if (!cohortId) {
+        return fail("cohortId is required for cohort registration report options", "BAD_REQUEST", 400);
+      }
+
+      return ok(await getCohortRegistrationReportOptions(cohortId));
+    }
 
     if (url.searchParams.get("reportType") === "cohort_registration") {
       if (!cohortId) {
@@ -19,6 +34,8 @@ export async function GET(request: Request) {
         paymentStatus: url.searchParams.get("paymentStatus") ?? undefined,
         rosterStatus: url.searchParams.get("rosterStatus") ?? undefined,
         cityState: url.searchParams.get("cityState") ?? undefined,
+        state: url.searchParams.get("state") ?? undefined,
+        zip: url.searchParams.get("zip") ?? undefined,
         dateFrom: url.searchParams.get("dateFrom") ?? undefined,
         dateTo: url.searchParams.get("dateTo") ?? undefined,
         source: url.searchParams.get("source") ?? undefined,
