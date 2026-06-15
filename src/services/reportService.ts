@@ -152,7 +152,8 @@ export async function getCohortRegistrationReport(input: CohortRegistrationRepor
   if (cityState) {
     where.OR = [
       { organization: { city: { contains: cityState, mode: "insensitive" } } },
-      { organization: { state: { contains: cityState, mode: "insensitive" } } }
+      { organization: { state: { contains: cityState, mode: "insensitive" } } },
+      { organization: { zip: { contains: cityState, mode: "insensitive" } } }
     ];
   }
 
@@ -254,6 +255,7 @@ export async function getCohortRegistrationReport(input: CohortRegistrationRepor
       organization: registration.organization.name,
       city: registration.organization.city,
       state: registration.organization.state,
+      zip: registration.organization.zip,
       pocName: registration.primaryContactName,
       ...(audience === "internal" ? {
         pocEmail: registration.primaryContactEmail,

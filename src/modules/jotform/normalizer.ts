@@ -10,6 +10,13 @@ type ParsedParticipant = {
   phone?: string;
 };
 type FieldMap = Record<string, string>;
+type ParsedAddress = {
+  addressLine1: string;
+  addressLine2: string;
+  city: string;
+  state: string;
+  zip: string;
+};
 type LandingPageRoute = {
   pattern: string;
   cohortId: string;
@@ -39,6 +46,7 @@ export const jotformTargetFields: JotformTargetField[] = [
   { target: "organizationAddress", label: "Organization address", category: "Organization", aliases: ["billingAddress", "address", "Address"] },
   { target: "organizationCity", label: "Organization city", category: "Organization", aliases: ["organizationCity", "districtCity", "schoolCity", "city", "City"] },
   { target: "organizationState", label: "Organization state", category: "Organization", aliases: ["organizationState", "districtState", "schoolState", "state", "State"] },
+  { target: "organizationZip", label: "Organization ZIP", category: "Organization", aliases: ["organizationZip", "organizationPostalCode", "districtZip", "schoolZip", "zip", "Zip", "Zip Code", "postal", "postalCode"] },
   { target: "organizationPhone", label: "Organization phone", category: "Organization", aliases: ["organizationPhone", "phone", "Phone", "Phone Number"] },
   { target: "participantCount", label: "Participant count", category: "Registration", aliases: ["participantCount", "How many participants will be joining?", "Please select how many participants will be joining?", "q20_howMany", "numberOfParticipants", "participantsCount"] },
   { target: "paymentMethod", label: "Payment method", category: "Payment", aliases: ["paymentMethod", "Preferred method of payment?", "q46_preferredMethod", "method"] },
@@ -88,6 +96,107 @@ function readString(value: unknown): string {
   }
 
   return "";
+}
+
+function emptyAddress(): ParsedAddress {
+  return {
+    addressLine1: "",
+    addressLine2: "",
+    city: "",
+    state: "",
+    zip: ""
+  };
+}
+
+function readAddressPart(record: UnknownRecord, keys: string[]): string {
+  return readString(firstValue(record, keys));
+}
+
+export function parseJotformAddress(value: unknown): ParsedAddress {
+  if (!value) {
+    return emptyAddress();
+  }
+
+  if (typeof value === "object" && !Array.isArray(value)) {
+    const record = value as UnknownRecord;
+    const nested = parseJotformAddress(record.answer ?? record.value ?? record.prettyFormat ?? record.pretty);
+    return {
+      addressLine1: readAddressPart(record, ["addr_line1", "addrLine1", "addressLine1", "street", "streetAddress", "Street Address"]) || nested.addressLine1,
+      addressLine2: readAddressPart(record, ["addr_line2", "addrLine2", "addressLine2", "suite", "unit", "apartment", "Street Address Line 2"]) || nested.addressLine2,
+      city: readAddressPart(record, ["city", "City"]) || nested.city,
+      state: readAddressPart(record, ["state", "State", "province", "Province"]) || nested.state,
+      zip: readAddressPart(record, ["postal", "postalCode", "zip", "zipCode", "Zip", "Zip Code", "ZIP Code"]) || nested.zip
+    };
+  }
+
+  const text = readString(value);
+
+  if (!text) {
+    return emptyAddress();
+  }
+
+  const labeled = text
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/?[^>]+>/g, "\n")
+    .split(/\r?\n|,\s+(?=[A-Za-z][A-Za-z\s]{1,35}:)/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .reduce<UnknownRecord>((acc, part) => {
+      const separatorIndex = part.indexOf(":");
+
+      if (separatorIndex <= 0) {
+        return acc;
+      }
+
+      const key = part.slice(0, separatorIndex).trim();
+      const fieldValue = part.slice(separatorIndex + 1).trim();
+
+      if (key && fieldValue) {
+        acc[key] = fieldValue;
+      }
+
+      return acc;
+    }, {});
+
+  if (Object.keys(labeled).length > 0) {
+    return {
+      addressLine1: readAddressPart(labeled, ["Street Address", "Address Line 1", "Address", "addr_line1"]),
+      addressLine2: readAddressPart(labeled, ["Street Address Line 2", "Address Line 2", "Suite", "Unit", "addr_line2"]),
+      city: readAddressPart(labeled, ["City"]),
+      state: readAddressPart(labeled, ["State", "Province"]),
+      zip: readAddressPart(labeled, ["Zip Code", "ZIP Code", "Postal Code", "Zip", "Postal"])
+    };
+  }
+
+  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const normalizedLines = lines.length > 1 ? lines : text.split(",").map((line) => line.trim()).filter(Boolean);
+  const lastLine = normalizedLines.at(-1) ?? "";
+  const stateZipMatch = lastLine.match(/\b([A-Z]{2}|[A-Za-z][A-Za-z\s.]{2,})\s+(\d{5}(?:-\d{4})?)$/);
+
+  if (normalizedLines.length >= 2 && stateZipMatch) {
+    const city = lastLine.slice(0, stateZipMatch.index).replace(/,\s*$/, "").trim();
+    const addressLines = normalizedLines.slice(0, -1);
+    return {
+      addressLine1: addressLines[0] ?? "",
+      addressLine2: addressLines.slice(1).join(", "),
+      city,
+      state: stateZipMatch[1]?.trim() ?? "",
+      zip: stateZipMatch[2]?.trim() ?? ""
+    };
+  }
+
+  return {
+    ...emptyAddress(),
+    addressLine1: text
+  };
+}
+
+function formatParsedAddress(address: ParsedAddress): string {
+  return [
+    address.addressLine1,
+    address.addressLine2,
+    [address.city, address.state, address.zip].filter(Boolean).join(", ")
+  ].filter(Boolean).join("\n");
 }
 
 function readNumber(value: unknown): number {
@@ -303,10 +412,21 @@ function resolveLandingPageRoute(mapping: JotformFormMapping | undefined, landin
 
 function mappedFirstValue(flat: UnknownRecord, source: UnknownRecord, fieldMap: FieldMap, target: string, fallbackKeys: string[]): unknown {
   const mappedKey = readString(fieldMap[target]);
+  const mappedDirectKey = mappedKey
+    ? Object.keys(flat).find((candidate) => normalizeKey(candidate) === normalizeKey(mappedKey))
+    : "";
+  const mappedDirectValue = mappedDirectKey ? flat[mappedDirectKey] : undefined;
+  const mappedStructuredValue = mappedDirectValue && typeof mappedDirectValue === "object" && !Array.isArray(mappedDirectValue)
+    ? mappedDirectValue as UnknownRecord
+    : null;
   const mappedValue = mappedKey ? firstValue(flat, [mappedKey]) : undefined;
 
   if (mappedValue != null && readString(mappedValue)) {
     return mappedValue;
+  }
+
+  if (mappedStructuredValue && Object.keys(mappedStructuredValue).length > 0) {
+    return mappedStructuredValue;
   }
 
   return firstValue(source, fallbackKeys);
@@ -707,6 +827,12 @@ export function normalizeJotformRegistrationPayload(payload: UnknownRecord, mapp
   const primaryContactEmail = readString(mappedFirstValue(flat, registration, fieldMap, "primaryContactEmail", ["primaryContactEmail", "contactEmail", "registrantEmail", "q12_email", "Email", "email"]));
   const primaryContactPhone = readString(mappedFirstValue(flat, registration, fieldMap, "primaryContactPhone", ["primaryContactPhone", "contactPhone", "registrantPhone", "q13_billTo13", "Phone Number", "phone"]));
   const primaryContactTitle = readString(mappedFirstValue(flat, registration, fieldMap, "primaryContactTitle", ["primaryContactTitle", "contactTitle", "q63_title", "Title", "title"]));
+  const organizationAddressCandidate = mappedFirstValue(flat, organization, fieldMap, "organizationAddress", ["billingAddress", "address", "Address", "organizationAddress"]);
+  const parsedOrganizationAddress = parseJotformAddress(organizationAddressCandidate);
+  const organizationCity = readString(mappedFirstValue(flat, organization, fieldMap, "organizationCity", ["organizationCity", "districtCity", "schoolCity", "city", "City"])) || parsedOrganizationAddress.city;
+  const organizationState = readString(mappedFirstValue(flat, organization, fieldMap, "organizationState", ["organizationState", "districtState", "schoolState", "state", "State"])) || parsedOrganizationAddress.state;
+  const organizationZip = readString(mappedFirstValue(flat, organization, fieldMap, "organizationZip", ["organizationZip", "organizationPostalCode", "districtZip", "schoolZip", "zip", "Zip", "Zip Code", "postal", "postalCode"])) || parsedOrganizationAddress.zip;
+  const organizationBillingAddress = readString(organizationAddressCandidate) || formatParsedAddress(parsedOrganizationAddress);
   const declaredParticipantCount = readParticipantCount(mappedFirstValue(flat, registration, fieldMap, "participantCount", [
     "participantCount",
     "q20_howMany",
@@ -741,8 +867,11 @@ export function normalizeJotformRegistrationPayload(payload: UnknownRecord, mapp
       id: readString(firstValue(organization, ["organizationId", "orgId"])),
       name: readString(mappedFirstValue(flat, organization, fieldMap, "organizationName", ["Name of Organization", "q15_nameOf", "organizationName", "districtOrganizationName", "districtOrOrganizationName", "organization", "districtName", "DistrictName"])),
       type: readEnumValue(OrganizationType, firstValue(organization, ["organizationType", "type"]), OrganizationType.DISTRICT),
-      city: readString(mappedFirstValue(flat, organization, fieldMap, "organizationCity", ["organizationCity", "districtCity", "schoolCity", "city", "City"])),
-      state: readString(mappedFirstValue(flat, organization, fieldMap, "organizationState", ["organizationState", "districtState", "schoolState", "state", "State"])),
+      addressLine1: parsedOrganizationAddress.addressLine1,
+      addressLine2: parsedOrganizationAddress.addressLine2,
+      city: organizationCity,
+      state: organizationState,
+      zip: organizationZip,
       phone: readString(mappedFirstValue(flat, organization, fieldMap, "organizationPhone", ["phone", "Phone", "Phone Number"])),
       notes: readString(firstValue(organization, ["organizationNotes", "notes"]))
     },
@@ -756,7 +885,7 @@ export function normalizeJotformRegistrationPayload(payload: UnknownRecord, mapp
       primaryContactTitle,
       billingContactName: readString(firstValue(registration, ["billingContactName", "billingName"])),
       billingContactEmail: readString(firstValue(registration, ["billingContactEmail", "billingEmail"])),
-      billingAddress: readString(mappedFirstValue(flat, registration, fieldMap, "organizationAddress", ["billingAddress", "address"])),
+      billingAddress: organizationBillingAddress,
       paymentMethod: readPaymentMethod(mappedFirstValue(flat, payment, fieldMap, "paymentMethod", ["paymentMethod", "q46_preferredMethod", "method", "Preferred method of payment?"])),
       paymentStatus: readPaymentStatus(
         mappedFirstValue(flat, payment, fieldMap, "paymentStatus", ["paymentStatus", "status"]),

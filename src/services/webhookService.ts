@@ -59,6 +59,9 @@ function compactNormalizedSummary(normalized: Record<string, any>) {
     primaryContactName: stringValue(registration.primaryContactName),
     primaryContactEmail: stringValue(registration.primaryContactEmail),
     organizationName: stringValue(organization.name),
+    organizationCity: stringValue(organization.city),
+    organizationState: stringValue(organization.state),
+    organizationZip: stringValue(organization.zip),
     participantCount: numberValue(registration.participantCount),
     parsedParticipantCount: participants.length,
     paymentStatus: stringValue(payment.status ?? registration.paymentStatus),
@@ -185,8 +188,11 @@ export async function processRegistrationWebhook(payload: Record<string, any>, o
       update: {
         name: stringValue(organizationInput.name, "Webhook Organization"),
         type: (organizationInput.type as OrganizationType) ?? OrganizationType.OTHER,
+        addressLine1: stringValue(organizationInput.addressLine1) || undefined,
+        addressLine2: stringValue(organizationInput.addressLine2) || undefined,
         city: stringValue(organizationInput.city) || undefined,
         state: stringValue(organizationInput.state) || undefined,
+        zip: stringValue(organizationInput.zip) || undefined,
         phone: stringValue(organizationInput.phone) || undefined,
         notes: stringValue(organizationInput.notes) || undefined
       },
@@ -194,8 +200,11 @@ export async function processRegistrationWebhook(payload: Record<string, any>, o
         id: organizationId,
         name: stringValue(organizationInput.name, "Webhook Organization"),
         type: (organizationInput.type as OrganizationType) ?? OrganizationType.OTHER,
+        addressLine1: stringValue(organizationInput.addressLine1) || undefined,
+        addressLine2: stringValue(organizationInput.addressLine2) || undefined,
         city: stringValue(organizationInput.city) || undefined,
         state: stringValue(organizationInput.state) || undefined,
+        zip: stringValue(organizationInput.zip) || undefined,
         phone: stringValue(organizationInput.phone) || undefined,
         notes: stringValue(organizationInput.notes, "Created by registration webhook") || undefined
       }

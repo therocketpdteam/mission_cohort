@@ -3,6 +3,7 @@ import test from "node:test";
 import { PaymentStatus } from "@prisma/client";
 import {
   normalizeJotformRegistrationPayload,
+  parseJotformAddress,
   parseParticipantCsvText,
   previewJotformRegistrationPayload
 } from "../../src/modules/jotform/normalizer";
@@ -20,8 +21,10 @@ const urlMapping = {
     primaryContactName: "Name",
     primaryContactEmail: "Email",
     organizationName: "Name of Organization",
+    organizationAddress: "Organization Address",
     organizationCity: "Organization City",
     organizationState: "Organization State",
+    organizationZip: "Organization ZIP",
     participantCount: "How many participants will be joining?",
     paymentStatus: "Payment Status",
     totalAmount: "Total Cost",
@@ -67,6 +70,60 @@ test("normalizes a URL-routed Jotform registration with explicit payment status"
   assert.equal(normalized.organization.state, "South Dakota");
   assert.equal(normalized.registration.utmSource, "newsletter");
   assert.equal(normalized.participants.length, 2);
+});
+
+test("parses structured and formatted Jotform address fields", () => {
+  const structured = parseJotformAddress({
+    addr_line1: "123 Main St",
+    addr_line2: "Suite 4",
+    city: "Rapid City",
+    state: "SD",
+    postal: "57701"
+  });
+  const formatted = parseJotformAddress("Street Address: 900 School Rd, City: Fayetteville, State: AR, Zip Code: 72701");
+
+  assert.deepEqual(structured, {
+    addressLine1: "123 Main St",
+    addressLine2: "Suite 4",
+    city: "Rapid City",
+    state: "SD",
+    zip: "57701"
+  });
+  assert.deepEqual(formatted, {
+    addressLine1: "900 School Rd",
+    addressLine2: "",
+    city: "Fayetteville",
+    state: "AR",
+    zip: "72701"
+  });
+});
+
+test("splits mapped Jotform organization address into reportable geography", () => {
+  const normalized = normalizeJotformRegistrationPayload(
+    {
+      formID: "12345",
+      submissionID: "sub-address",
+      Name: "Kim Leader",
+      Email: "kim@example.com",
+      "Name of Organization": "Rapid City Schools",
+      "Organization Address": {
+        addr_line1: "300 Education Way",
+        city: "Rapid City",
+        state: "SD",
+        postal: "57701"
+      },
+      "How many participants will be joining?": "1",
+      "Total Cost": "500",
+      "Get Page URL": "https://rocketpd.com/cohorts/summer-leadership"
+    },
+    [urlMapping]
+  );
+
+  assert.equal(normalized.organization.addressLine1, "300 Education Way");
+  assert.equal(normalized.organization.city, "Rapid City");
+  assert.equal(normalized.organization.state, "SD");
+  assert.equal(normalized.organization.zip, "57701");
+  assert.match(normalized.registration.billingAddress, /300 Education Way/);
 });
 
 test("previews unmapped forms as needing mapping while hiding noisy fields", () => {

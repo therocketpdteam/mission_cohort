@@ -19,11 +19,12 @@ const visibilityOptions = [
   { value: "active", label: "Active registrations" },
   { value: "all", label: "Include archived" }
 ];
-const defaultColumns = ["organization", "city", "state", "pocName", "participants", "amount", "paymentStatus", "rosterStatus", "createdAt"];
+const defaultColumns = ["organization", "city", "state", "zip", "pocName", "participants", "amount", "paymentStatus", "rosterStatus", "createdAt"];
 const columnOptions = [
   { key: "organization", label: "Organization" },
   { key: "city", label: "City" },
   { key: "state", label: "State" },
+  { key: "zip", label: "ZIP" },
   { key: "cityState", label: "City / State" },
   { key: "pocName", label: "POC name" },
   { key: "participants", label: "Participants" },
@@ -66,6 +67,8 @@ function reportCell(row: AdminRow, column: string) {
       return row.city || "-";
     case "state":
       return row.state || "-";
+    case "zip":
+      return row.zip || "-";
     case "cityState":
       return cityState(row);
     case "pocName":
