@@ -1,11 +1,32 @@
 import { fail, handleApiError, ok } from "@/lib/api";
-import { createReportShareLink, getCohortReport, listReportShareLinks, revokeReportShareLink } from "@/services/reportService";
+import { createReportShareLink, getCohortRegistrationReport, getCohortReport, listReportShareLinks, revokeReportShareLink } from "@/services/reportService";
 
 export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
     const cohortId = url.searchParams.get("cohortId") ?? undefined;
     const includeLinks = url.searchParams.get("includeLinks") === "true";
+
+    if (url.searchParams.get("reportType") === "cohort_registration") {
+      if (!cohortId) {
+        return fail("cohortId is required for cohort registration reports", "BAD_REQUEST", 400);
+      }
+
+      return ok(await getCohortRegistrationReport({
+        cohortId,
+        audience: url.searchParams.get("audience") === "internal" ? "internal" : "thought_leader",
+        registrationStatus: url.searchParams.get("registrationStatus") ?? undefined,
+        paymentStatus: url.searchParams.get("paymentStatus") ?? undefined,
+        rosterStatus: url.searchParams.get("rosterStatus") ?? undefined,
+        cityState: url.searchParams.get("cityState") ?? undefined,
+        dateFrom: url.searchParams.get("dateFrom") ?? undefined,
+        dateTo: url.searchParams.get("dateTo") ?? undefined,
+        source: url.searchParams.get("source") ?? undefined,
+        includeArchived: url.searchParams.get("includeArchived") === "1",
+        columns: (url.searchParams.get("columns") ?? "").split(",").map((column) => column.trim()).filter(Boolean)
+      }));
+    }
+
     return ok({
       reports: await getCohortReport(cohortId),
       links: includeLinks ? await listReportShareLinks() : []

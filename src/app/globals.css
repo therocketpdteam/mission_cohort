@@ -2875,6 +2875,350 @@ h6,
   height: 36px;
 }
 
+.reports-page {
+  max-width: 1440px;
+}
+
+.registration-report-builder {
+  display: grid;
+  gap: 18px;
+}
+
+.registration-report-builder-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(150px, 1fr));
+  gap: 12px;
+  align-items: end;
+}
+
+.registration-report-columns {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.28fr) minmax(0, 1fr);
+  gap: 18px;
+  padding: 16px;
+  border: 1px solid var(--color-outline-variant);
+  border-radius: 12px;
+  background: var(--color-surface);
+}
+
+.registration-report-columns h3 {
+  margin: 0;
+  color: var(--color-on-surface);
+  font-size: 1rem;
+  font-weight: 750;
+}
+
+.registration-report-columns p {
+  margin: 5px 0 0;
+  color: var(--color-on-surface-variant);
+  font-size: 0.84rem;
+  line-height: 1.4;
+}
+
+.registration-report-column-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(150px, 1fr));
+  gap: 8px;
+}
+
+.registration-report-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 36px;
+  border: 1px solid var(--color-outline-variant);
+  border-radius: 999px;
+  background: var(--color-surface-container-lowest);
+  cursor: pointer;
+  padding: 7px 10px;
+}
+
+.registration-report-check input {
+  accent-color: var(--color-primary-700);
+}
+
+.registration-report-check span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-on-surface);
+  font-size: 0.82rem;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.registration-report-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.registration-report-print {
+  display: grid;
+  gap: 22px;
+  color: var(--color-on-surface);
+  background: var(--color-surface-container-lowest);
+}
+
+.registration-report-print-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--color-outline-variant);
+}
+
+.registration-report-print-header p {
+  margin: 0 0 5px;
+  color: var(--color-primary-700);
+  font-size: 0.76rem;
+  font-weight: 850;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.registration-report-print-header h1 {
+  margin: 0;
+  color: var(--color-on-surface);
+  font-size: 1.8rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.registration-report-print-header span {
+  display: inline-block;
+  margin-top: 6px;
+  color: var(--color-on-surface-variant);
+}
+
+.registration-report-filter-summary {
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--color-outline-variant);
+  border-radius: 10px;
+  background: var(--color-surface);
+  padding: 12px 14px;
+}
+
+.registration-report-filter-summary strong {
+  color: var(--color-on-surface);
+  font-size: 0.82rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.registration-report-filter-summary span {
+  color: var(--color-on-surface-variant);
+  line-height: 1.45;
+}
+
+.registration-report-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.registration-report-tile {
+  display: grid;
+  gap: 6px;
+  min-height: 92px;
+  border: 1px solid var(--color-outline-variant);
+  border-radius: 12px;
+  background: var(--color-surface-container-lowest);
+  padding: 14px;
+}
+
+.registration-report-tile span {
+  color: var(--color-on-surface-variant);
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.registration-report-tile strong {
+  align-self: end;
+  color: var(--color-on-surface);
+  font-size: 1.35rem;
+  font-weight: 750;
+}
+
+.registration-report-insight,
+.registration-report-table-wrap {
+  display: grid;
+  gap: 12px;
+}
+
+.registration-report-insight h2,
+.registration-report-table-wrap h2 {
+  margin: 0;
+  color: var(--color-on-surface);
+  font-size: 1.15rem;
+  font-weight: 750;
+}
+
+.registration-report-insight > p {
+  margin: 0;
+  border-left: 4px solid var(--color-primary-700);
+  border-radius: 8px;
+  background: var(--color-blue-100);
+  color: var(--color-on-surface);
+  line-height: 1.55;
+  padding: 14px 16px;
+}
+
+.registration-report-breakdowns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.registration-report-breakdown {
+  border: 1px solid var(--color-outline-variant);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.registration-report-breakdown h4 {
+  margin: 0;
+  border-bottom: 1px solid var(--color-outline-variant);
+  background: var(--color-surface);
+  color: var(--color-on-surface-variant);
+  font-size: 0.78rem;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  padding: 10px 12px;
+  text-transform: uppercase;
+}
+
+.registration-report-breakdown p {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--color-outline-variant);
+}
+
+.registration-report-breakdown p:last-child {
+  border-bottom: 0;
+}
+
+.registration-report-breakdown span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.registration-report-breakdown strong {
+  flex: 0 0 auto;
+  font-weight: 750;
+}
+
+.registration-report-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  overflow: hidden;
+  border: 1px solid var(--color-outline-variant);
+  border-radius: 12px;
+  font-size: 0.82rem;
+}
+
+.registration-report-table th,
+.registration-report-table td {
+  border-bottom: 1px solid var(--color-outline-variant);
+  padding: 10px 11px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.registration-report-table th {
+  background: var(--color-surface);
+  color: var(--color-on-surface-variant);
+  font-size: 0.7rem;
+  font-weight: 850;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.registration-report-table tr:last-child td {
+  border-bottom: 0;
+}
+
+@media (max-width: 1180px) {
+  .registration-report-builder-grid {
+    grid-template-columns: repeat(3, minmax(150px, 1fr));
+  }
+
+  .registration-report-column-grid {
+    grid-template-columns: repeat(3, minmax(150px, 1fr));
+  }
+
+  .registration-report-summary-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .registration-report-builder-grid,
+  .registration-report-columns,
+  .registration-report-column-grid,
+  .registration-report-breakdowns,
+  .registration-report-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .registration-report-print-header {
+    flex-direction: column;
+  }
+}
+
+@media print {
+  body * {
+    visibility: hidden !important;
+  }
+
+  .registration-report-print,
+  .registration-report-print * {
+    visibility: visible !important;
+  }
+
+  .registration-report-print {
+    position: absolute;
+    inset: 0;
+    display: block;
+    width: 100%;
+    background: #ffffff !important;
+    color: #191c1e !important;
+    padding: 24px;
+  }
+
+  .registration-report-summary-grid,
+  .registration-report-breakdowns {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .registration-report-table {
+    border-radius: 0;
+    font-size: 10px;
+  }
+
+  .registration-report-table tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  @page {
+    margin: 0.5in;
+  }
+}
+
 .cohort-overview-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

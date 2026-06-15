@@ -177,13 +177,13 @@ export const roadmapCards: RoadmapCard[] = [
     title: "Reports / Analytics",
     summary: "Operational reporting, comparison views, finance summaries, and sharing/exporting.",
     ownerArea: "Reporting",
-    nextAction: "Define the first must-have management report set after finance stabilizes.",
+    nextAction: "QA cohort registration PDF reports against live request examples, then add comparison and finance report templates.",
     items: [
-      { title: "Operational reports", status: "in_progress", note: "Report surfaces exist and need sharper metrics.", priority: "medium" },
+      { title: "Operational reports", status: "in_progress", note: "Cohort registration report builder now covers filtered registration lists, snapshots, and outreach insight.", priority: "medium" },
       { title: "Cohort comparison", status: "planned", note: "Comparison controls are planned for cohort charts.", priority: "medium" },
       { title: "Registration evolution", status: "in_progress", note: "Chart exists; needs subtler styling and filters.", priority: "medium" },
       { title: "Finance summaries", status: "in_progress", note: "Finance schema is healthy; summary correctness and report UX need QA.", priority: "high" },
-      { title: "Export/share flows", status: "planned", note: "Shared report links exist; exports need definition.", priority: "low" }
+      { title: "Export/share flows", status: "in_progress", note: "Shared report links exist; registration reports now support print/save-to-PDF export.", priority: "low" }
     ]
   },
   {
