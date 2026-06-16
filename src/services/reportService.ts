@@ -14,6 +14,8 @@ const openRosterStatuses = new Set<ParticipantListStatus>([
   ParticipantListStatus.PARTIAL
 ]);
 const internalReportColumns = new Set(["pocEmail", "pocPhone", "paymentMethod", "notes", "invoiceRefs", "participantNames"]);
+type ReportGeography = { city: string; state: string; zip: string };
+type GeographyFallbackMap = Map<string, ReportGeography>;
 
 type CohortRegistrationReportInput = {
   cohortId: string;
@@ -58,13 +60,86 @@ function sourceLabel(registration: { source?: string | null; utmSource?: string 
   return registration.utmCampaign || registration.utmSource || registration.source || registration.externalSource || "Unknown";
 }
 
+function normalizedLookupValue(value?: string | null) {
+  return value?.trim().toLowerCase() ?? "";
+}
+
+function geographyFallbackKeys(input: { cohortId?: string | null; organizationName?: string | null; primaryContactEmail?: string | null }) {
+  const cohortId = normalizedLookupValue(input.cohortId);
+  const organizationName = normalizedLookupValue(input.organizationName);
+  const primaryContactEmail = normalizedLookupValue(input.primaryContactEmail);
+  const keys = [];
+
+  if (cohortId && primaryContactEmail) {
+    keys.push(`${cohortId}|email:${primaryContactEmail}`);
+  }
+
+  if (cohortId && organizationName) {
+    keys.push(`${cohortId}|org:${organizationName}`);
+  }
+
+  return keys;
+}
+
+async function buildJotformGeographyFallbackMap(
+  cohortId: string,
+  mappings: Awaited<ReturnType<typeof listActiveJotformFormMappings>>
+): Promise<GeographyFallbackMap> {
+  const events = await prisma.webhookEvent.findMany({
+    where: { source: "jotform" },
+    orderBy: { createdAt: "desc" },
+    take: 1000,
+    select: { payload: true }
+  });
+  const fallbackMap: GeographyFallbackMap = new Map();
+
+  for (const event of events) {
+    try {
+      const normalized = normalizeJotformRegistrationPayload(event.payload as Record<string, unknown>, mappings);
+      const eventCohortId = normalized.routing.cohortId || normalized.registration.cohortId;
+
+      if (eventCohortId !== cohortId) {
+        continue;
+      }
+
+      const geography = {
+        city: normalized.organization.city || "",
+        state: normalized.organization.state || "",
+        zip: normalized.organization.zip || ""
+      };
+
+      if (!geography.city && !geography.state && !geography.zip) {
+        continue;
+      }
+
+      for (const key of geographyFallbackKeys({
+        cohortId: eventCohortId,
+        organizationName: normalized.organization.name,
+        primaryContactEmail: normalized.registration.primaryContactEmail
+      })) {
+        if (!fallbackMap.has(key)) {
+          fallbackMap.set(key, geography);
+        }
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return fallbackMap;
+}
+
 export async function getCohortRegistrationReportOptions(cohortId: string) {
   const mappings = await listActiveJotformFormMappings();
+  const fallbackMap = await buildJotformGeographyFallbackMap(cohortId, mappings);
   const registrations = await prisma.registration.findMany({
     where: { cohortId, archivedAt: null },
     select: {
+      cohortId: true,
+      primaryContactEmail: true,
       organization: {
         select: {
+          name: true,
           city: true,
           state: true,
           zip: true
@@ -79,7 +154,7 @@ export async function getCohortRegistrationReportOptions(cohortId: string) {
     }
   });
   const unique = (values: Array<string | null | undefined>) => Array.from(new Set(values.map((value) => value?.trim()).filter(Boolean) as string[])).sort((a, b) => a.localeCompare(b));
-  const geography = registrations.map((registration) => registrationGeography(registration, mappings));
+  const geography = registrations.map((registration) => registrationGeography(registration, mappings, fallbackMap));
 
   return {
     cities: unique(geography.map((item) => item.city)),
@@ -90,10 +165,13 @@ export async function getCohortRegistrationReportOptions(cohortId: string) {
 
 function registrationGeography(
   registration: {
-    organization: { city?: string | null; state?: string | null; zip?: string | null };
+    cohortId?: string | null;
+    primaryContactEmail?: string | null;
+    organization: { name?: string | null; city?: string | null; state?: string | null; zip?: string | null };
     webhookEvents?: Array<{ payload: Prisma.JsonValue }>;
   },
-  mappings: Awaited<ReturnType<typeof listActiveJotformFormMappings>>
+  mappings: Awaited<ReturnType<typeof listActiveJotformFormMappings>>,
+  fallbackMap?: GeographyFallbackMap
 ) {
   const fallback = registration.webhookEvents
     ?.map((event) => {
@@ -104,11 +182,18 @@ function registrationGeography(
       }
     })
     .find((organization) => organization?.city || organization?.state || organization?.zip);
+  const legacyFallback = geographyFallbackKeys({
+    cohortId: registration.cohortId,
+    organizationName: registration.organization.name,
+    primaryContactEmail: registration.primaryContactEmail
+  })
+    .map((key) => fallbackMap?.get(key))
+    .find((organization) => organization?.city || organization?.state || organization?.zip);
 
   return {
-    city: registration.organization.city || fallback?.city || "",
-    state: registration.organization.state || fallback?.state || "",
-    zip: registration.organization.zip || fallback?.zip || ""
+    city: registration.organization.city || fallback?.city || legacyFallback?.city || "",
+    state: registration.organization.state || fallback?.state || legacyFallback?.state || "",
+    zip: registration.organization.zip || fallback?.zip || legacyFallback?.zip || ""
   };
 }
 
@@ -254,8 +339,9 @@ export async function getCohortRegistrationReport(input: CohortRegistrationRepor
   }
 
   const mappings = await listActiveJotformFormMappings();
+  const fallbackMap = await buildJotformGeographyFallbackMap(input.cohortId, mappings);
   const matchesLocation = (registration: (typeof cohort.registrations)[number]) => {
-    const geography = registrationGeography(registration, mappings);
+    const geography = registrationGeography(registration, mappings, fallbackMap);
     const searchableLocation = [geography.city, geography.state, geography.zip].join(" ").toLowerCase();
     const textMatches = cityState ? searchableLocation.includes(cityState.toLowerCase()) : true;
     const cityMatches = city ? geography.city.toLowerCase() === city.toLowerCase() : true;
@@ -279,7 +365,7 @@ export async function getCohortRegistrationReport(input: CohortRegistrationRepor
       acc.pendingAmount += Math.max(totalAmount - paidAmount, 0);
       if (cityState || city || state || zip) acc.geographicMatches += 1;
       else {
-        const geography = registrationGeography(registration, mappings);
+        const geography = registrationGeography(registration, mappings, fallbackMap);
         if (geography.city || geography.state || geography.zip) acc.geographicMatches += 1;
       }
 
@@ -339,7 +425,7 @@ export async function getCohortRegistrationReport(input: CohortRegistrationRepor
     registrations: registrations.map((registration) => ({
       id: registration.id,
       organization: registration.organization.name,
-      ...registrationGeography(registration, mappings),
+      ...registrationGeography(registration, mappings, fallbackMap),
       pocName: registration.primaryContactName,
       ...(audience === "internal" ? {
         pocEmail: registration.primaryContactEmail,
