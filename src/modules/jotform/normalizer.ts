@@ -137,6 +137,8 @@ const usStateAbbreviations = [
   "WI",
   "WY"
 ];
+const usStateAbbreviationSet = new Set(usStateAbbreviations);
+const usStateCodeByName = new Map(usStateNames.map((name, index) => [name.toLowerCase(), usStateAbbreviations[index]]));
 const streetSuffixPattern = /\b(?:street|st|road|rd|avenue|ave|boulevard|blvd|drive|dr|lane|ln|way|circle|cir|court|ct|place|pl|parkway|pkwy|highway|hwy|terrace|ter|trail|trl|loop|plaza|square|sq)\b\.?/i;
 
 export const jotformTargetFields: JotformTargetField[] = [
@@ -219,7 +221,29 @@ function readAddressPart(record: UnknownRecord, keys: string[]): string {
   return readString(firstValue(record, keys));
 }
 
+export function normalizeUsStateCode(value: unknown): string {
+  const state = readString(value).replace(/\./g, "").replace(/\s+/g, " ").trim();
+
+  if (!state) {
+    return "";
+  }
+
+  const uppercase = state.toUpperCase();
+
+  if (usStateAbbreviationSet.has(uppercase)) {
+    return uppercase;
+  }
+
+  return usStateCodeByName.get(state.toLowerCase()) ?? "";
+}
+
 function splitUnlabeledStreetAndCity(beforeState: string, state: string, zip: string): ParsedAddress | null {
+  const stateCode = normalizeUsStateCode(state);
+
+  if (!stateCode) {
+    return null;
+  }
+
   const streetMatches = Array.from(beforeState.matchAll(new RegExp(streetSuffixPattern.source, "gi")));
   const lastStreetMatch = streetMatches.at(-1);
 
@@ -233,7 +257,7 @@ function splitUnlabeledStreetAndCity(beforeState: string, state: string, zip: st
         addressLine1,
         addressLine2: "",
         city,
-        state,
+        state: stateCode,
         zip
       };
     }
@@ -247,7 +271,7 @@ function splitUnlabeledStreetAndCity(beforeState: string, state: string, zip: st
       addressLine1: words.slice(0, -fallbackCityWordCount).join(" "),
       addressLine2: "",
       city: words.slice(-fallbackCityWordCount).join(" "),
-      state,
+      state: stateCode,
       zip
     };
   }
@@ -267,7 +291,7 @@ export function parseJotformAddress(value: unknown): ParsedAddress {
       addressLine1: readAddressPart(record, ["addr_line1", "addrLine1", "addressLine1", "street", "streetAddress", "Street Address"]) || nested.addressLine1,
       addressLine2: readAddressPart(record, ["addr_line2", "addrLine2", "addressLine2", "suite", "unit", "apartment", "Street Address Line 2"]) || nested.addressLine2,
       city: readAddressPart(record, ["city", "City"]) || nested.city,
-      state: readAddressPart(record, ["state", "State", "province", "Province"]) || nested.state,
+      state: normalizeUsStateCode(readAddressPart(record, ["state", "State", "province", "Province"])) || nested.state,
       zip: readAddressPart(record, ["postal", "postalCode", "zip", "zipCode", "Zip", "Zip Code", "ZIP Code"]) || nested.zip
     };
   }
@@ -306,7 +330,7 @@ export function parseJotformAddress(value: unknown): ParsedAddress {
       addressLine1: readAddressPart(labeled, ["Street Address", "Address Line 1", "Address", "addr_line1"]),
       addressLine2: readAddressPart(labeled, ["Street Address Line 2", "Address Line 2", "Suite", "Unit", "addr_line2"]),
       city: readAddressPart(labeled, ["City"]),
-      state: readAddressPart(labeled, ["State", "Province"]),
+      state: normalizeUsStateCode(readAddressPart(labeled, ["State", "Province"])),
       zip: readAddressPart(labeled, ["Zip Code", "ZIP Code", "Postal Code", "Zip", "Postal"])
     };
   }
@@ -354,12 +378,21 @@ export function parseJotformAddress(value: unknown): ParsedAddress {
 
   if (normalizedLines.length >= 2 && stateZipMatch) {
     const city = lastLine.slice(0, stateZipMatch.index).replace(/,\s*$/, "").trim();
+    const state = normalizeUsStateCode(stateZipMatch[1]);
+
+    if (!state) {
+      return {
+        ...emptyAddress(),
+        addressLine1: text
+      };
+    }
+
     const addressLines = normalizedLines.slice(0, -1);
     return {
       addressLine1: addressLines[0] ?? "",
       addressLine2: addressLines.slice(1).join(", "),
       city,
-      state: stateZipMatch[1]?.trim() ?? "",
+      state,
       zip: stateZipMatch[2]?.trim() ?? ""
     };
   }

@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { ParticipantListStatus, PaymentStatus, Prisma, RegistrationStatus, ReportShareStatus } from "@prisma/client";
-import { normalizeJotformRegistrationPayload } from "@/modules/jotform";
+import { normalizeJotformRegistrationPayload, normalizeUsStateCode } from "@/modules/jotform";
 import { prisma } from "@/lib/prisma";
 import { listActiveJotformFormMappings } from "@/services/jotformMappingService";
 
@@ -206,7 +206,7 @@ function registrationGeography(
 
   return {
     city: registration.organization.city || fallback?.city || legacyFallback?.city || "",
-    state: registration.organization.state || fallback?.state || legacyFallback?.state || "",
+    state: normalizeUsStateCode(registration.organization.state) || fallback?.state || legacyFallback?.state || "",
     zip: registration.organization.zip || fallback?.zip || legacyFallback?.zip || ""
   };
 }

@@ -3,6 +3,7 @@ import test from "node:test";
 import { PaymentStatus } from "@prisma/client";
 import {
   normalizeJotformRegistrationPayload,
+  normalizeUsStateCode,
   parseJotformAddress,
   parseParticipantCsvText,
   previewJotformRegistrationPayload
@@ -98,12 +99,19 @@ test("parses structured and formatted Jotform address fields", () => {
   });
 });
 
+test("validates and normalizes US states to two-letter codes", () => {
+  assert.equal(normalizeUsStateCode("New Hampshire"), "NH");
+  assert.equal(normalizeUsStateCode("ny"), "NY");
+  assert.equal(normalizeUsStateCode("N.Y."), "NY");
+  assert.equal(normalizeUsStateCode("Not A State"), "");
+});
+
 test("parses unlabeled Jotform address strings with country suffixes", () => {
   assert.deepEqual(parseJotformAddress("8053 N Sundial Way  Boise Idaho 83714 United States"), {
     addressLine1: "8053 N Sundial Way",
     addressLine2: "",
     city: "Boise",
-    state: "Idaho",
+    state: "ID",
     zip: "83714"
   });
   assert.deepEqual(parseJotformAddress("1 School Street  Wilmington VT 05363 United States"), {
@@ -124,7 +132,7 @@ test("parses unlabeled Jotform address strings with country suffixes", () => {
     addressLine1: "45 Harriman Hill Road",
     addressLine2: "",
     city: "Raymond",
-    state: "New Hampshire",
+    state: "NH",
     zip: "03077"
   });
   assert.deepEqual(parseJotformAddress("144-80 Barclay Ave Flushing, NY, 11355 United States"), {
