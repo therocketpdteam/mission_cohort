@@ -85,6 +85,11 @@ async function buildJotformGeographyFallbackMap(
   cohortId: string,
   mappings: Awaited<ReturnType<typeof listActiveJotformFormMappings>>
 ): Promise<GeographyFallbackMap> {
+  const cohort = await prisma.cohort.findUnique({
+    where: { id: cohortId },
+    select: { id: true, slug: true }
+  });
+  const cohortSlug = normalizedLookupValue(cohort?.slug);
   const events = await prisma.webhookEvent.findMany({
     where: { source: "jotform" },
     orderBy: { createdAt: "desc" },
@@ -97,8 +102,9 @@ async function buildJotformGeographyFallbackMap(
     try {
       const normalized = normalizeJotformRegistrationPayload(event.payload as Record<string, unknown>, mappings);
       const eventCohortId = normalized.routing.cohortId || normalized.registration.cohortId;
+      const eventCohortSlug = normalizedLookupValue(normalized.routing.cohortSlug || normalized.registration.cohortSlug);
 
-      if (eventCohortId !== cohortId) {
+      if (eventCohortId !== cohortId && (!cohortSlug || eventCohortSlug !== cohortSlug)) {
         continue;
       }
 
@@ -113,7 +119,7 @@ async function buildJotformGeographyFallbackMap(
       }
 
       for (const key of geographyFallbackKeys({
-        cohortId: eventCohortId,
+        cohortId,
         organizationName: normalized.organization.name,
         primaryContactEmail: normalized.registration.primaryContactEmail
       })) {
