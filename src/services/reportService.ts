@@ -78,6 +78,14 @@ function geographyFallbackKeys(input: { cohortId?: string | null; organizationNa
     keys.push(`${cohortId}|org:${organizationName}`);
   }
 
+  if (primaryContactEmail) {
+    keys.push(`email:${primaryContactEmail}`);
+  }
+
+  if (organizationName) {
+    keys.push(`org:${organizationName}`);
+  }
+
   return keys;
 }
 
@@ -104,7 +112,7 @@ async function buildJotformGeographyFallbackMap(
       const eventCohortId = normalized.routing.cohortId || normalized.registration.cohortId;
       const eventCohortSlug = normalizedLookupValue(normalized.routing.cohortSlug || normalized.registration.cohortSlug);
 
-      if (eventCohortId !== cohortId && (!cohortSlug || eventCohortSlug !== cohortSlug)) {
+      if (eventCohortId && eventCohortId !== cohortId && (!cohortSlug || eventCohortSlug !== cohortSlug)) {
         continue;
       }
 
