@@ -120,6 +120,20 @@ test("parses unlabeled Jotform address strings with country suffixes", () => {
     state: "KS",
     zip: "66047-2004"
   });
+  assert.deepEqual(parseJotformAddress("45 Harriman Hill Road Raymond, New Hampshire, 03077 United States"), {
+    addressLine1: "45 Harriman Hill Road",
+    addressLine2: "",
+    city: "Raymond",
+    state: "New Hampshire",
+    zip: "03077"
+  });
+  assert.deepEqual(parseJotformAddress("144-80 Barclay Ave Flushing, NY, 11355 United States"), {
+    addressLine1: "144-80 Barclay Ave",
+    addressLine2: "",
+    city: "Flushing",
+    state: "NY",
+    zip: "11355"
+  });
 });
 
 test("splits mapped Jotform organization address into reportable geography", () => {

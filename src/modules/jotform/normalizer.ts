@@ -219,6 +219,42 @@ function readAddressPart(record: UnknownRecord, keys: string[]): string {
   return readString(firstValue(record, keys));
 }
 
+function splitUnlabeledStreetAndCity(beforeState: string, state: string, zip: string): ParsedAddress | null {
+  const streetMatches = Array.from(beforeState.matchAll(new RegExp(streetSuffixPattern.source, "gi")));
+  const lastStreetMatch = streetMatches.at(-1);
+
+  if (lastStreetMatch?.index != null) {
+    const suffixEnd = lastStreetMatch.index + lastStreetMatch[0].length;
+    const addressLine1 = beforeState.slice(0, suffixEnd).trim();
+    const city = beforeState.slice(suffixEnd).replace(/^,\s*/, "").trim();
+
+    if (addressLine1 && city) {
+      return {
+        addressLine1,
+        addressLine2: "",
+        city,
+        state,
+        zip
+      };
+    }
+  }
+
+  const words = beforeState.split(/\s+/).filter(Boolean);
+  const fallbackCityWordCount = Math.min(words.length - 1, 2);
+
+  if (fallbackCityWordCount > 0) {
+    return {
+      addressLine1: words.slice(0, -fallbackCityWordCount).join(" "),
+      addressLine2: "",
+      city: words.slice(-fallbackCityWordCount).join(" "),
+      state,
+      zip
+    };
+  }
+
+  return null;
+}
+
 export function parseJotformAddress(value: unknown): ParsedAddress {
   if (!value) {
     return emptyAddress();
@@ -283,42 +319,31 @@ export function parseJotformAddress(value: unknown): ParsedAddress {
     .sort((a, b) => b.length - a.length)
     .map((state) => state.replace(/\s+/g, "\\s+"))
     .join("|");
+  const commaSeparatedMatch = countryTrimmedText.match(new RegExp(`^(.+?)\\s*,\\s*(${statePattern})\\s*,\\s*(\\d{5}(?:-\\d{4})?)$`, "i"));
+
+  if (commaSeparatedMatch?.[1] && commaSeparatedMatch[2] && commaSeparatedMatch[3]) {
+    const parsed = splitUnlabeledStreetAndCity(
+      commaSeparatedMatch[1].trim(),
+      commaSeparatedMatch[2].replace(/\s+/g, " ").trim(),
+      commaSeparatedMatch[3].trim()
+    );
+
+    if (parsed) {
+      return parsed;
+    }
+  }
+
   const unlabeledMatch = countryTrimmedText.match(new RegExp(`^(.+?)\\s+(${statePattern})\\s+(\\d{5}(?:-\\d{4})?)$`, "i"));
 
   if (unlabeledMatch?.[1] && unlabeledMatch[2] && unlabeledMatch[3]) {
-    const beforeState = unlabeledMatch[1].trim();
-    const state = unlabeledMatch[2].replace(/\s+/g, " ").trim();
-    const zip = unlabeledMatch[3].trim();
-    const streetMatches = Array.from(beforeState.matchAll(new RegExp(streetSuffixPattern.source, "gi")));
-    const lastStreetMatch = streetMatches.at(-1);
+    const parsed = splitUnlabeledStreetAndCity(
+      unlabeledMatch[1].trim(),
+      unlabeledMatch[2].replace(/\s+/g, " ").trim(),
+      unlabeledMatch[3].trim()
+    );
 
-    if (lastStreetMatch?.index != null) {
-      const suffixEnd = lastStreetMatch.index + lastStreetMatch[0].length;
-      const addressLine1 = beforeState.slice(0, suffixEnd).trim();
-      const city = beforeState.slice(suffixEnd).trim();
-
-      if (addressLine1 && city) {
-        return {
-          addressLine1,
-          addressLine2: "",
-          city,
-          state,
-          zip
-        };
-      }
-    }
-
-    const words = beforeState.split(/\s+/).filter(Boolean);
-    const fallbackCityWordCount = Math.min(words.length - 1, 2);
-
-    if (fallbackCityWordCount > 0) {
-      return {
-        addressLine1: words.slice(0, -fallbackCityWordCount).join(" "),
-        addressLine2: "",
-        city: words.slice(-fallbackCityWordCount).join(" "),
-        state,
-        zip
-      };
+    if (parsed) {
+      return parsed;
     }
   }
 
