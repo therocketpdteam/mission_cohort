@@ -70,6 +70,18 @@ function shortDate(value?: string) {
   return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date(value));
 }
 
+function agendaDate(value?: string) {
+  if (!value) {
+    return { month: "-", day: "-" };
+  }
+
+  const date = new Date(value);
+  return {
+    month: new Intl.DateTimeFormat("en-US", { month: "short" }).format(date),
+    day: new Intl.DateTimeFormat("en-US", { day: "numeric" }).format(date)
+  };
+}
+
 function formatMoney(value: number) {
   return `$${Math.round(value).toLocaleString()}`;
 }
@@ -105,6 +117,25 @@ function timeText(value?: string) {
   }
 
   return new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" }).format(new Date(value));
+}
+
+function presenterName(session: AdminRow) {
+  const presenter = session.cohort?.presenter;
+  return formatProperDisplay(`${presenter?.firstName ?? ""} ${presenter?.lastName ?? ""}`.trim()) || "Thought Leader";
+}
+
+function presenterInitials(name: string) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("") || "TL";
+}
+
+function presenterHeadshotUrl(session: AdminRow) {
+  const presenter = session.cohort?.presenter ?? {};
+  return presenter.headshotUrl || presenter.photoUrl || presenter.avatarUrl || presenter.imageUrl || presenter.profileImageUrl || "";
 }
 
 function DashboardPanel({
@@ -213,21 +244,33 @@ function ReadinessCell({ ready, label, muted = false }: { ready: boolean; label:
   );
 }
 
-function TodayPanel({ loading, sessions }: { loading: boolean; sessions: AdminRow[] }) {
+function FutureAgendaPanel({ loading, sessions }: { loading: boolean; sessions: AdminRow[] }) {
   return (
-    <DashboardPanel title="Today's Agenda" actionLabel={new Date().toLocaleDateString()} className="dashboard-panel-agenda">
+    <DashboardPanel title="Upcoming Agenda" eyebrow="Next live moments" actionLabel="Next 4 events" className="dashboard-panel-agenda">
       <div className="dashboard-agenda-timeline">
-        {sessions.slice(0, 4).map((session, index) => (
-          <div className="dashboard-agenda-item" key={session.id}>
-            <span className={`dashboard-agenda-dot ${index === 0 ? "is-active" : ""}`} />
-            <div className="dashboard-row-main">
-              <span>{timeText(session.startTime)}</span>
-              <strong title={session.title}>{session.title}</strong>
-              <span>{session.cohort?.title ?? "Cohort"}</span>
+        {sessions.slice(0, 4).map((session, index) => {
+          const date = agendaDate(session.startTime);
+          const name = presenterName(session);
+          const headshotUrl = presenterHeadshotUrl(session);
+
+          return (
+            <div className="dashboard-agenda-item" key={session.id}>
+              <span className={`dashboard-agenda-dot ${index === 0 ? "is-active" : ""}`} />
+              <div className="dashboard-agenda-date" aria-label={shortDate(session.startTime)}>
+                <strong>{date.day}</strong>
+                <span>{date.month}</span>
+              </div>
+              <div className="dashboard-row-main">
+                <span>{timeText(session.startTime)} · {name}</span>
+                <strong title={session.title}>{session.title}</strong>
+                <span title={session.cohort?.title}>{session.cohort?.title ?? "Cohort"}</span>
+              </div>
+              <span className="dashboard-presenter-avatar" title={name}>
+                {headshotUrl ? <img src={String(headshotUrl)} alt={name} /> : presenterInitials(name)}
+              </span>
             </div>
-            {index === 0 && <Button size="small" variant="text" component={Link} href="/cohorts">Open</Button>}
-          </div>
-        ))}
+          );
+        })}
       </div>
       {!loading && sessions.length === 0 && <EmptyState title="No upcoming sessions" description="Upcoming cohort sessions will appear here." />}
     </DashboardPanel>
@@ -454,7 +497,7 @@ export function DashboardClient() {
       {loading && <LoadingState label="Loading dashboard" />}
 
       <section className="dashboard-command-grid">
-        <TodayPanel loading={loading} sessions={data?.upcomingSessions ?? []} />
+        <FutureAgendaPanel loading={loading} sessions={data?.upcomingSessions ?? []} />
         <PaymentSnapshot finance={financeSummary} />
       </section>
 

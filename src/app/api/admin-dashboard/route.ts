@@ -131,7 +131,7 @@ export async function GET(request: Request) {
       where: { startTime: { gte: now } },
       orderBy: { startTime: "asc" },
       take: 6,
-      include: { cohort: true }
+      include: { cohort: { include: { presenter: true } } }
     }),
     prisma.registration.findMany({
       where: { archivedAt: null },
