@@ -135,7 +135,13 @@ function presenterInitials(name: string) {
 
 function presenterHeadshotUrl(session: AdminRow) {
   const presenter = session.cohort?.presenter ?? {};
-  return presenter.headshotUrl || presenter.photoUrl || presenter.avatarUrl || presenter.imageUrl || presenter.profileImageUrl || "";
+  return presenter.headshotUrl ||
+    presenter.photoUrl ||
+    presenter.avatarUrl ||
+    presenter.imageUrl ||
+    presenter.profileImageUrl ||
+    session.cohort?.thumbnailUrl ||
+    "";
 }
 
 function DashboardPanel({

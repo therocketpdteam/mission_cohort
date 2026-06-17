@@ -6196,7 +6196,19 @@ h6,
 }
 
 .dashboard-agenda-timeline {
+  position: relative;
   display: grid;
+}
+
+.dashboard-agenda-timeline::before {
+  position: absolute;
+  top: 12px;
+  bottom: 12px;
+  left: 13px;
+  width: 2px;
+  border-radius: 999px;
+  background: var(--dashboard-border);
+  content: "";
 }
 
 .dashboard-agenda-item {
@@ -6209,22 +6221,12 @@ h6,
   padding-left: 2px;
 }
 
-.dashboard-agenda-item:not(:last-child)::before {
-  position: absolute;
-  top: 27px;
-  bottom: -8px;
-  left: 11px;
-  width: 2px;
-  background: var(--dashboard-border);
-  content: "";
-}
-
 .dashboard-agenda-dot {
   position: relative;
   z-index: 1;
   width: 20px;
   height: 20px;
-  margin-top: 3px;
+  margin-left: 1px;
   border: 4px solid var(--dashboard-card);
   border-radius: 999px;
   background: var(--color-surface-container-highest);
