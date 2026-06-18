@@ -33,6 +33,32 @@ export type FieldConfig = {
   required?: boolean;
 };
 
+function formatInputDateValue(value: unknown, type: "date" | "datetime-local") {
+  if (value === null || value === undefined || value === "") {
+    return "";
+  }
+
+  const date = value instanceof Date ? value : new Date(String(value));
+  if (Number.isNaN(date.getTime())) {
+    return String(value);
+  }
+
+  const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return type === "date" ? localDate.toISOString().slice(0, 10) : localDate.toISOString().slice(0, 16);
+}
+
+function normalizeInitialFieldValues(fields: FieldConfig[], initialValues?: AdminRow) {
+  const normalized = { ...(initialValues ?? {}) };
+
+  fields.forEach((field) => {
+    if (field.type === "date" || field.type === "datetime-local") {
+      normalized[field.name] = formatInputDateValue(normalized[field.name], field.type);
+    }
+  });
+
+  return normalized;
+}
+
 export type GridRowParams<R extends AdminRow = AdminRow> = {
   row: R;
   id: string | number;
@@ -630,12 +656,12 @@ export function MutationDialog({
   onClose: () => void;
   onSubmit: (values: AdminRow) => Promise<void>;
 }) {
-  const [values, setValues] = useState<AdminRow>(initialValues ?? {});
+  const [values, setValues] = useState<AdminRow>(() => normalizeInitialFieldValues(fields, initialValues));
   const [saving, setSaving] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (open) setValues(initialValues ?? {});
+    if (open) setValues(normalizeInitialFieldValues(fields, initialValues));
   }, [initialValues, open]);
 
   function setValue(name: string, value: unknown) {
