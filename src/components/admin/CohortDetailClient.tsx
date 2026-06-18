@@ -1078,34 +1078,6 @@ export function CohortDetailClient({ id }: { id: string }) {
   const detailTabs = ["Overview", "Registrations", "Participants", "Communications", "Distribution"];
   const readinessItems = cohort?.readiness?.items ?? [];
   const sessionReadinessDetails = (cohort?.readiness?.sessionDetails ?? []) as AdminRow[];
-  const readinessScore = useMemo(() => {
-    const sessionChecks = sessionReadinessDetails.flatMap((session) => [
-      Boolean((session.calendar as AdminRow)?.ready),
-      Boolean((session.emails as AdminRow)?.ready),
-      Boolean((session.materials as AdminRow)?.ready)
-    ]);
-    const supportingChecks = readinessItems
-      .filter((item: AdminRow) => item.key === "sessions" || item.key === "manual-tasks")
-      .map((item: AdminRow) => Boolean(item.ready));
-    const checks = sessionChecks.length > 0 ? [...sessionChecks, ...supportingChecks] : readinessItems.map((item: AdminRow) => Boolean(item.ready));
-    const ready = checks.filter(Boolean).length;
-
-    return checks.length > 0 ? Math.round((ready / checks.length) * 100) : 0;
-  }, [readinessItems, sessionReadinessDetails]);
-  const readinessNextAction = useMemo(() => {
-    if (cohort?.readiness?.ready) {
-      return "Ready to publish. Give it one final operational review and send it live.";
-    }
-
-    const firstSessionBlocker = sessionReadinessDetails.find((session) => ((session.blockers ?? []) as string[]).length > 0);
-    const firstBlocker = ((firstSessionBlocker?.blockers ?? []) as string[])[0];
-
-    if (firstBlocker) {
-      return `${firstSessionBlocker?.title ?? "A session"}: ${firstBlocker}`;
-    }
-
-    return (readinessItems.find((item: AdminRow) => !item.ready)?.detail as string | undefined) ?? "Clear the remaining readiness blockers.";
-  }, [cohort?.readiness?.ready, readinessItems, sessionReadinessDetails]);
   const openReadinessTasks = useMemo(() => tasks.filter((task) =>
     !task.registrationId &&
     publishReadinessTaskCategories.includes(String(task.category ?? "")) &&
@@ -1785,98 +1757,86 @@ export function CohortDetailClient({ id }: { id: string }) {
                     Add Task
                   </Button>
                 </div>
-                <div className="readiness-command-grid">
-                  {sessionReadinessDetails.length > 0 && (
-                    <div className="readiness-session-detail" aria-label="Session readiness details">
-                      <div className="readiness-session-detail-header">
-                        <strong>Session automation status</strong>
-                        <span>{sessionReadinessDetails.filter((session) => session.ready).length}/{sessionReadinessDetails.length} ready</span>
-                      </div>
-                      <div className="readiness-session-detail-list">
-                        {sessionReadinessDetails.map((session) => {
-                          const blockers = (session.blockers ?? []) as string[];
-                          const emailDetail = session.emails as AdminRow;
-                          const calendarDetail = session.calendar as AdminRow;
-                          const materialDetail = session.materials as AdminRow;
+                {sessionReadinessDetails.length > 0 && (
+                  <div className="readiness-session-detail" aria-label="Session readiness details">
+                    <div className="readiness-session-detail-header">
+                      <strong>Session automation status</strong>
+                      <span>{sessionReadinessDetails.filter((session) => session.ready).length}/{sessionReadinessDetails.length} ready</span>
+                    </div>
+                    <div className="readiness-session-detail-list">
+                      {sessionReadinessDetails.map((session) => {
+                        const blockers = (session.blockers ?? []) as string[];
+                        const emailDetail = session.emails as AdminRow;
+                        const calendarDetail = session.calendar as AdminRow;
+                        const materialDetail = session.materials as AdminRow;
 
-                          return (
-                            <div className={`readiness-session-detail-row ${session.ready ? "is-ready" : "needs-work"}`} key={session.id || `${session.sessionNumber}-${session.title}`}>
-                              <div className="readiness-session-title">
-                                <span className="readiness-session-number">{String(session.sessionNumber ?? "").padStart(2, "0")}</span>
-                                <div>
-                                  <strong title={session.title}>{session.title}</strong>
-                                  <span>{formatTimeInZone(session.startTime, session.timezone) || "Time not set"}</span>
-                                </div>
+                        return (
+                          <div className={`readiness-session-detail-row ${session.ready ? "is-ready" : "needs-work"}`} key={session.id || `${session.sessionNumber}-${session.title}`}>
+                            <div className="readiness-session-title">
+                              <span className="readiness-session-number">{String(session.sessionNumber ?? "").padStart(2, "0")}</span>
+                              <div>
+                                <strong title={session.title}>{session.title}</strong>
+                                <span>{formatTimeInZone(session.startTime, session.timezone) || "Time not set"}</span>
                               </div>
-                              <div className="readiness-session-signals">
-                                <span className={calendarDetail?.ready ? "is-ready" : "needs-work"} title={calendarDetail?.detail}>
-                                  {calendarDetail?.detail ?? "Calendar unknown"}
-                                </span>
-                                <span className={emailDetail?.ready ? "is-ready" : "needs-work"} title={[...((emailDetail?.missing ?? []) as string[]), ...((emailDetail?.stale ?? []) as string[])].join(", ")}>
-                                  {emailDetail?.detail ?? "Emails unknown"}
-                                </span>
-                                <span className={materialDetail?.ready ? "is-ready" : "needs-work"} title={materialDetail?.detail}>
-                                  {materialDetail?.detail ?? "Materials unknown"}
-                                </span>
-                              </div>
-                              <span className={`session-check session-check-icon ${session.ready ? "is-done" : "is-missing"}`}>
-                                {session.ready ? <CheckCircleOutline /> : <CancelOutlined />}
-                              </span>
-                              {blockers.length > 0 && (
-                                <div className="readiness-session-blockers">
-                                  {blockers.slice(0, 3).map((blocker) => <span key={blocker}>{blocker}</span>)}
-                                  {blockers.length > 3 && <span>+{blockers.length - 3} more</span>}
-                                </div>
-                              )}
                             </div>
-                          );
-                        })}
-                      </div>
+                            <div className="readiness-session-signals">
+                              <span className={calendarDetail?.ready ? "is-ready" : "needs-work"} title={calendarDetail?.detail}>
+                                {calendarDetail?.detail ?? "Calendar unknown"}
+                              </span>
+                              <span className={emailDetail?.ready ? "is-ready" : "needs-work"} title={[...((emailDetail?.missing ?? []) as string[]), ...((emailDetail?.stale ?? []) as string[])].join(", ")}>
+                                {emailDetail?.detail ?? "Emails unknown"}
+                              </span>
+                              <span className={materialDetail?.ready ? "is-ready" : "needs-work"} title={materialDetail?.detail}>
+                                {materialDetail?.detail ?? "Materials unknown"}
+                              </span>
+                            </div>
+                            <span className={`session-check session-check-icon ${session.ready ? "is-done" : "is-missing"}`}>
+                              {session.ready ? <CheckCircleOutline /> : <CancelOutlined />}
+                            </span>
+                            {blockers.length > 0 && (
+                              <div className="readiness-session-blockers">
+                                {blockers.slice(0, 3).map((blocker) => <span key={blocker}>{blocker}</span>)}
+                                {blockers.length > 3 && <span>+{blockers.length - 3} more</span>}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+                <div className="readiness-task-card">
+                  <div className="readiness-task-card-header">
+                    <strong>Open Readiness Tasks</strong>
+                    <span>{openReadinessTasks.length}</span>
+                  </div>
+                  {openReadinessTasks.length > 0 ? (
+                    <div className="readiness-task-list" aria-label="Manual readiness tasks">
+                      {openReadinessTasks.map((task: AdminRow) => (
+                        <div className={`readiness-manual-task ${task.priority === "URGENT" || task.priority === "HIGH" ? "is-urgent" : ""}`} key={task.id}>
+                          <div>
+                            <span>{formatStatusLabel(task.category)}</span>
+                            <strong title={task.title}>{task.title}</strong>
+                            <small>{task.dueDate ? `Due ${new Date(task.dueDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : "No due date"}</small>
+                          </div>
+                          <Button
+                            variant="text"
+                            size="small"
+                            disabled={Boolean(completingCohortTaskId)}
+                            onClick={() => completeCohortTask(task)}
+                          >
+                            {completingCohortTaskId === task.id ? "Saving" : "Mark Done"}
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="readiness-empty-task">
+                      <CheckCircleOutline />
+                      <span>No open readiness tasks</span>
+                      <Button variant="text" size="small" onClick={() => setTaskDialogOpen(true)}>Add custom task</Button>
                     </div>
                   )}
-                  <aside className="readiness-side-rail">
-                    <div className="readiness-task-card">
-                      <div className="readiness-task-card-header">
-                        <strong>Open Readiness Tasks</strong>
-                        <span>{openReadinessTasks.length}</span>
-                      </div>
-                      {openReadinessTasks.length > 0 ? (
-                        <div className="readiness-task-list" aria-label="Manual readiness tasks">
-                          {openReadinessTasks.map((task: AdminRow) => (
-                            <div className={`readiness-manual-task ${task.priority === "URGENT" || task.priority === "HIGH" ? "is-urgent" : ""}`} key={task.id}>
-                              <div>
-                                <span>{formatStatusLabel(task.category)}</span>
-                                <strong title={task.title}>{task.title}</strong>
-                                <small>{task.dueDate ? `Due ${new Date(task.dueDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : "No due date"}</small>
-                              </div>
-                              <Button
-                                variant="text"
-                                size="small"
-                                disabled={Boolean(completingCohortTaskId)}
-                                onClick={() => completeCohortTask(task)}
-                              >
-                                {completingCohortTaskId === task.id ? "Saving" : "Mark Done"}
-                              </Button>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="readiness-empty-task">
-                          <CheckCircleOutline />
-                          <span>No open readiness tasks</span>
-                          <Button variant="text" size="small" onClick={() => setTaskDialogOpen(true)}>Add custom task</Button>
-                        </div>
-                      )}
-                    </div>
-                    <div className="readiness-score-card">
-                      <span>Readiness Score</span>
-                      <strong>{readinessScore}%</strong>
-                      <div className="readiness-score-track" aria-hidden="true">
-                        <span style={{ width: `${readinessScore}%` }} />
-                      </div>
-                      <p>{readinessNextAction}</p>
-                    </div>
-                  </aside>
                 </div>
               </div>
             </SectionCard>

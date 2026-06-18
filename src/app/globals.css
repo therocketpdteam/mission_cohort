@@ -3353,6 +3353,10 @@ h6,
   align-items: stretch;
 }
 
+.cohort-basics-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .cohort-metric-card,
 .cohort-revenue-card,
 .session-defaults-card {
@@ -3937,13 +3941,13 @@ h6,
 }
 
 .readiness-metric-grid {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
   gap: 12px;
 }
 
 .readiness-metric-card {
-  min-height: 92px;
-  padding: 14px;
+  min-height: 84px;
+  padding: 12px;
   border-color: color-mix(in srgb, var(--color-primary-fixed-dim) 54%, var(--color-outline-variant));
   border-radius: 12px;
 }
@@ -3960,8 +3964,8 @@ h6,
   display: grid;
   place-items: center;
   flex: 0 0 auto;
-  width: 46px;
-  height: 46px;
+  width: 40px;
+  height: 40px;
   border-radius: 10px;
 }
 
@@ -3984,7 +3988,7 @@ h6,
 
 .readiness-metric-card span {
   color: var(--color-on-surface);
-  font-size: 1.05rem;
+  font-size: 0.95rem;
   font-weight: 800;
 }
 
@@ -4035,13 +4039,6 @@ h6,
   min-width: 0;
 }
 
-.readiness-command-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(280px, 0.95fr);
-  gap: 16px;
-  align-items: start;
-}
-
 .readiness-session-detail {
   display: grid;
   gap: 0;
@@ -4071,15 +4068,15 @@ h6,
 .readiness-session-detail-list {
   display: grid;
   gap: 10px;
-  max-height: 430px;
+  max-height: 360px;
   overflow: auto;
   padding: 18px;
 }
 
 .readiness-session-detail-row {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) minmax(260px, auto) 26px;
-  gap: 12px;
+  grid-template-columns: minmax(180px, 1fr) auto;
+  gap: 10px;
   align-items: center;
   padding: 14px;
   border: 1px solid transparent;
@@ -4126,12 +4123,13 @@ h6,
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
+  min-width: 0;
 }
 
 .readiness-session-blockers {
   display: flex;
   flex-wrap: wrap;
-  grid-column: 2 / -1;
+  grid-column: 1 / -1;
   gap: 6px;
 }
 
@@ -4146,6 +4144,7 @@ h6,
   font-weight: 850;
   line-height: 1.25;
   text-transform: uppercase;
+  white-space: normal;
 }
 
 .readiness-session-signals span.is-ready {
@@ -4161,16 +4160,10 @@ h6,
   text-transform: none;
 }
 
-.readiness-side-rail {
-  display: grid;
-  gap: 16px;
-  min-width: 0;
-}
-
 .readiness-task-card {
   display: grid;
   gap: 14px;
-  padding: 18px;
+  padding: 14px;
   border: 1px solid color-mix(in srgb, var(--color-primary-fixed-dim) 54%, var(--color-outline-variant));
   border-radius: 14px;
   background: var(--color-surface-container-lowest);
@@ -4201,7 +4194,7 @@ h6,
 .readiness-task-list {
   display: grid;
   gap: 8px;
-  max-height: 238px;
+  max-height: 220px;
   min-height: 0;
   overflow-y: auto;
   padding-right: 4px;
@@ -4209,7 +4202,7 @@ h6,
 
 .readiness-manual-task {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 12px;
   align-items: center;
   min-width: 0;
@@ -4260,58 +4253,9 @@ h6,
   text-align: center;
 }
 
-.readiness-score-card {
-  display: grid;
-  gap: 12px;
-  padding: 20px;
-  border-radius: 14px;
-  background: linear-gradient(135deg, var(--color-primary-800), var(--color-blue-500));
-  color: var(--color-white);
-}
-
-.readiness-score-card > span {
-  font-size: 0.72rem;
-  font-weight: 850;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  opacity: 0.82;
-}
-
-.readiness-score-card strong {
-  color: var(--color-white);
-  font-size: clamp(2.2rem, 4vw, 3rem);
-  line-height: 1;
-}
-
-.readiness-score-track {
-  overflow: hidden;
-  height: 8px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.26);
-}
-
-.readiness-score-track span {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: var(--color-white);
-}
-
-.readiness-score-card p {
-  margin: 0;
-  color: rgba(255, 255, 255, 0.9);
-  font-size: 0.86rem;
-  font-weight: 750;
-  line-height: 1.5;
-}
-
 @media (max-width: 1180px) {
   .readiness-metric-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .readiness-command-grid {
-    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -4321,13 +4265,17 @@ h6,
   }
 
   .readiness-session-detail-row {
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .readiness-session-signals,
   .readiness-session-blockers {
     grid-column: 1 / -1;
     justify-content: flex-start;
+  }
+
+  .readiness-manual-task {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
