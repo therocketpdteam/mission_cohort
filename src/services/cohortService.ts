@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { cohortCreateSchema, cohortUpdateSchema } from "@/validators/cohort";
 import { logAuditEventAsync } from "./auditService";
 import { createDefaultSessionOperationsTasks } from "./operationsTaskService";
-import { withCohortLifecycle } from "./cohortLifecycle";
+import { getCohortReadiness, withCohortLifecycle } from "./cohortLifecycle";
 
 const nestedSessionCreateSchema = z.object({
   title: z.string().min(1),
@@ -111,6 +111,7 @@ export async function getCohortById(id: string) {
         orderBy: { sessionNumber: "asc" },
         include: { communications: { include: { template: true } } }
       },
+      operationsTasks: true,
       registrationForms: true,
       _count: { select: { registrations: true, participants: true, communications: true } }
     }
@@ -128,6 +129,7 @@ export async function listCohorts() {
         orderBy: { sessionNumber: "asc" },
         include: { communications: { include: { template: true } } }
       },
+      operationsTasks: { select: { category: true, registrationId: true, status: true } },
       registrations: { select: { totalAmount: true } },
       paymentRecords: { select: { amount: true, status: true } },
       _count: { select: { registrations: true, participants: true, sessions: true } }
@@ -138,6 +140,26 @@ export async function listCohorts() {
 }
 
 export async function publishCohort(id: string) {
+  const cohort = await prisma.cohort.findUnique({
+    where: { id },
+    include: {
+      sessions: {
+        include: { communications: { include: { template: true } } }
+      },
+      operationsTasks: { select: { category: true, registrationId: true, status: true } }
+    }
+  });
+
+  if (!cohort) {
+    throw Object.assign(new Error("Cohort not found"), { code: "NOT_FOUND", status: 404 });
+  }
+
+  const readiness = getCohortReadiness(cohort);
+  if (!readiness.ready) {
+    const blockers = readiness.items.filter((item) => !item.ready).map((item) => item.label).join(", ");
+    throw Object.assign(new Error(`Cohort is not ready to publish: ${blockers}`), { code: "COHORT_NOT_READY", status: 409 });
+  }
+
   return updateCohort(id, { status: CohortStatus.PUBLISHED });
 }
 

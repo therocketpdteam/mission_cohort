@@ -1,4 +1,4 @@
-import { ResourceType, ResourceVisibility } from "@prisma/client";
+import { OperationsTaskCategory, OperationsTaskStatus, ResourceType, ResourceVisibility } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 
@@ -20,7 +20,20 @@ const resourceSchema = z.object({
 
 export async function createResource(input: z.input<typeof resourceSchema>) {
   const data = resourceSchema.parse(input);
-  return prisma.cohortResource.create({ data });
+  const resource = await prisma.cohortResource.create({ data });
+
+  if (resource.sessionId) {
+    await prisma.operationsTask.updateMany({
+      where: {
+        sessionId: resource.sessionId,
+        category: OperationsTaskCategory.SESSION_RESOURCES,
+        status: { in: [OperationsTaskStatus.OPEN, OperationsTaskStatus.IN_PROGRESS] }
+      },
+      data: { status: OperationsTaskStatus.COMPLETED, completedAt: new Date() }
+    });
+  }
+
+  return resource;
 }
 
 export async function updateResource(id: string, input: Partial<z.input<typeof resourceSchema>>) {

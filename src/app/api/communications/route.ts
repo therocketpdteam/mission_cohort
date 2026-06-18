@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/auth";
 import {
   addCommunicationAttachment,
   attachResourceToCommunication,
+  createDefaultCohortSessionCommunications,
   createCommunicationDraft,
   createDefaultSessionCommunications,
   createPlannedSessionReminders,
@@ -82,6 +83,14 @@ export async function PATCH(request: Request) {
       }
 
       return ok(await createDefaultSessionCommunications(body.sessionId));
+    }
+
+    if (body.action === "createDefaultCohortSessionCommunications") {
+      if (!body.cohortId) {
+        return fail("cohortId is required", "BAD_REQUEST", 400);
+      }
+
+      return ok(await createDefaultCohortSessionCommunications(body.cohortId));
     }
 
     if (body.action === "sendTemplateToParticipant") {

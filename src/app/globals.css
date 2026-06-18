@@ -3952,6 +3952,17 @@ h6,
   padding-top: 10px;
 }
 
+.readiness-action-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+  gap: 8px;
+}
+
+.readiness-action-grid .ui-button {
+  justify-content: center;
+  min-width: 0;
+}
+
 .readiness-task-list {
   display: grid;
   gap: 8px;
@@ -3995,6 +4006,14 @@ h6,
   color: var(--color-slate-500);
   font-size: 0.76rem;
   font-weight: 750;
+}
+
+.readiness-task-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 0;
 }
 
 .distribution-ledger {

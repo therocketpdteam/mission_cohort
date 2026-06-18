@@ -1,4 +1,4 @@
-import { CommunicationStatus, EmailEventType, Prisma, RecipientScope, Role, TemplateType } from "@prisma/client";
+import { CommunicationStatus, EmailEventType, OperationsTaskCategory, OperationsTaskStatus, Prisma, RecipientScope, Role, TemplateType } from "@prisma/client";
 import { z } from "zod";
 import { env } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
@@ -816,7 +816,40 @@ export async function createDefaultSessionCommunications(sessionId: string) {
     }));
   }
 
+  await prisma.operationsTask.updateMany({
+    where: {
+      sessionId,
+      category: OperationsTaskCategory.REMINDER_EMAILS,
+      status: { in: [OperationsTaskStatus.OPEN, OperationsTaskStatus.IN_PROGRESS] }
+    },
+    data: { status: OperationsTaskStatus.COMPLETED, completedAt: new Date() }
+  });
+
   return records;
+}
+
+export async function createDefaultCohortSessionCommunications(cohortId: string) {
+  const sessions = await prisma.cohortSession.findMany({
+    where: { cohortId },
+    orderBy: { sessionNumber: "asc" }
+  });
+  const results = [];
+
+  for (const session of sessions) {
+    const created = await createDefaultSessionCommunications(session.id);
+    results.push({
+      sessionId: session.id,
+      sessionTitle: session.title,
+      created: created.length
+    });
+  }
+
+  return {
+    cohortId,
+    total: sessions.length,
+    created: results.reduce((sum, result) => sum + result.created, 0),
+    results
+  };
 }
 
 export async function getRecipientCommunicationSummary(emails: string[]) {

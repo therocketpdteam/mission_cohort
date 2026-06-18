@@ -1,4 +1,4 @@
-import { CalendarInviteStatus, IntegrationConnectionStatus, IntegrationProvider } from "@prisma/client";
+import { CalendarInviteStatus, IntegrationConnectionStatus, IntegrationProvider, OperationsTaskCategory, OperationsTaskStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { exchangeGoogleCalendarCode, generateSessionIcs, getGoogleCalendarConnectUrl, upsertGoogleCalendarEvent } from "@/modules/calendar";
 import { getDecryptedIntegrationConnection, upsertIntegrationConnection } from "@/services/integrationService";
@@ -88,6 +88,15 @@ export async function createCalendarInvitePlaceholder(sessionId?: string, mode: 
         data: { calendarInviteStatus: CalendarInviteStatus.CREATED }
       });
 
+      await prisma.operationsTask.updateMany({
+        where: {
+          sessionId: session.id,
+          category: OperationsTaskCategory.CALENDAR_INVITE,
+          status: { in: [OperationsTaskStatus.OPEN, OperationsTaskStatus.IN_PROGRESS] }
+        },
+        data: { status: OperationsTaskStatus.COMPLETED, completedAt: new Date() }
+      });
+
       return { provider: "google", status: "created", event: calendarEvent };
     }
 
@@ -109,6 +118,15 @@ export async function createCalendarInvitePlaceholder(sessionId?: string, mode: 
     await prisma.cohortSession.update({
       where: { id: session.id },
       data: { calendarInviteStatus: CalendarInviteStatus.CREATED }
+    });
+
+    await prisma.operationsTask.updateMany({
+      where: {
+        sessionId: session.id,
+        category: OperationsTaskCategory.CALENDAR_INVITE,
+        status: { in: [OperationsTaskStatus.OPEN, OperationsTaskStatus.IN_PROGRESS] }
+      },
+      data: { status: OperationsTaskStatus.COMPLETED, completedAt: new Date() }
     });
 
     return {

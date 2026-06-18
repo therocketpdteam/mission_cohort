@@ -1,4 +1,4 @@
-import { CalendarInviteStatus, CohortStatus, CommunicationStatus, TemplateType } from "@prisma/client";
+import { CalendarInviteStatus, CohortStatus, CommunicationStatus, OperationsTaskCategory, OperationsTaskStatus, TemplateType } from "@prisma/client";
 
 const requiredSessionTemplateTypes = [
   TemplateType.REGISTRATION_CONFIRMATION,
@@ -23,6 +23,11 @@ type LifecycleSession = {
 type LifecycleCohort = {
   status?: CohortStatus | string | null;
   sessions?: LifecycleSession[];
+  operationsTasks?: Array<{
+    category?: OperationsTaskCategory | string | null;
+    registrationId?: string | null;
+    status?: OperationsTaskStatus | string | null;
+  }> | null;
 };
 
 export type CohortReadinessItem = {
@@ -51,8 +56,22 @@ function sessionHasRequiredCommunications(session: LifecycleSession) {
 export function getCohortReadiness(cohort: LifecycleCohort) {
   const sessions = cohort.sessions ?? [];
   const readyCalendarStatuses: Array<CalendarInviteStatus | string> = [CalendarInviteStatus.CREATED, CalendarInviteStatus.UPDATED];
-  const calendarReady = sessions.length > 0 && sessions.every((session) => readyCalendarStatuses.includes(session.calendarInviteStatus ?? ""));
-  const communicationsReady = sessions.length > 0 && sessions.every(sessionHasRequiredCommunications);
+  const readyCalendarCount = sessions.filter((session) => readyCalendarStatuses.includes(session.calendarInviteStatus ?? "")).length;
+  const readyCommunicationCount = sessions.filter(sessionHasRequiredCommunications).length;
+  const openTaskStatuses: Array<OperationsTaskStatus | string> = [OperationsTaskStatus.OPEN, OperationsTaskStatus.IN_PROGRESS];
+  const publishReadinessTaskCategories: Array<OperationsTaskCategory | string> = [
+    OperationsTaskCategory.CALENDAR_INVITE,
+    OperationsTaskCategory.REMINDER_EMAILS,
+    OperationsTaskCategory.SESSION_RESOURCES
+  ];
+  const openManualTasks = (cohort.operationsTasks ?? []).filter((task) =>
+    !task.registrationId &&
+    openTaskStatuses.includes(task.status ?? "") &&
+    publishReadinessTaskCategories.includes(task.category ?? "")
+  ).length;
+  const calendarReady = sessions.length > 0 && readyCalendarCount === sessions.length;
+  const communicationsReady = sessions.length > 0 && readyCommunicationCount === sessions.length;
+  const manualTasksReady = openManualTasks === 0;
 
   const items: CohortReadinessItem[] = [
     {
@@ -65,13 +84,23 @@ export function getCohortReadiness(cohort: LifecycleCohort) {
       key: "calendar",
       label: "Calendar invites ready",
       ready: calendarReady,
-      detail: calendarReady ? "Every session has a calendar invite" : "Create or sync calendar invites for every session"
+      detail: sessions.length > 0
+        ? `${readyCalendarCount}/${sessions.length} session invite${sessions.length === 1 ? "" : "s"} ready`
+        : "Add sessions before preparing invites"
     },
     {
       key: "communications",
       label: "Session emails ready",
       ready: communicationsReady,
-      detail: communicationsReady ? "Required session emails exist" : "Create default session communications for every session"
+      detail: sessions.length > 0
+        ? `${readyCommunicationCount}/${sessions.length} session${sessions.length === 1 ? "" : "s"} have required emails`
+        : "Add sessions before scheduling emails"
+    },
+    {
+      key: "manual-tasks",
+      label: "Manual tasks cleared",
+      ready: manualTasksReady,
+      detail: manualTasksReady ? "No open readiness tasks" : `${openManualTasks} open manual task${openManualTasks === 1 ? "" : "s"}`
     }
   ];
 

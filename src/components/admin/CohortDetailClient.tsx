@@ -87,6 +87,8 @@ const taskFields: FieldConfig[] = [
   { name: "ownerName", label: "Owner" }
 ];
 
+const publishReadinessTaskCategories = ["CALENDAR_INVITE", "REMINDER_EMAILS", "SESSION_RESOURCES"];
+
 function resourceFieldsForSessions(sessions: AdminRow[]): FieldConfig[] {
   return [
   { name: "title", label: "Title", required: true },
@@ -861,6 +863,9 @@ export function CohortDetailClient({ id }: { id: string }) {
   const [calendarHealth, setCalendarHealth] = useState<AdminRow | null>(null);
   const [calendarProvider, setCalendarProvider] = useState<"ics" | "google">("ics");
   const [preparingInvites, setPreparingInvites] = useState(false);
+  const [creatingSessionEmails, setCreatingSessionEmails] = useState(false);
+  const [publishingCohort, setPublishingCohort] = useState(false);
+  const [completingCohortTaskId, setCompletingCohortTaskId] = useState("");
   const { notifySuccess, notifyError, snackbar } = useNotifier();
 
   async function load() {
@@ -1072,6 +1077,11 @@ export function CohortDetailClient({ id }: { id: string }) {
   const compareCohort = allCohorts.find((item) => item.id === compareCohortId);
   const detailTabs = ["Overview", "Registrations", "Participants", "Communications", "Distribution"];
   const readinessItems = cohort?.readiness?.items ?? [];
+  const openReadinessTasks = useMemo(() => tasks.filter((task) =>
+    !task.registrationId &&
+    publishReadinessTaskCategories.includes(String(task.category ?? "")) &&
+    (task.status === "OPEN" || task.status === "IN_PROGRESS")
+  ), [tasks]);
   const filteredRegistrations = useMemo(() => registrations.filter((registration) => {
     const paymentMatch = !registrationPaymentFilter || registration.paymentStatus === registrationPaymentFilter;
     const rosterMatch = !registrationRosterFilter || registration.participantListStatus === registrationRosterFilter;
@@ -1137,6 +1147,22 @@ export function CohortDetailClient({ id }: { id: string }) {
     }
   }
 
+  async function createAllMissingSessionEmailSchedules() {
+    setCreatingSessionEmails(true);
+    try {
+      const result = await adminApi<AdminRow>("/api/communications", {
+        method: "PATCH",
+        body: { action: "createDefaultCohortSessionCommunications", cohortId: id }
+      });
+      notifySuccess(`${result.created ?? 0} missing session emails created`);
+      await load();
+    } catch (error) {
+      notifyError((error as Error).message);
+    } finally {
+      setCreatingSessionEmails(false);
+    }
+  }
+
   async function prepareAllCalendarInvites() {
     setPreparingInvites(true);
     try {
@@ -1176,6 +1202,34 @@ export function CohortDetailClient({ id }: { id: string }) {
       } catch {
         notifyError((error as Error).message);
       }
+    }
+  }
+
+  async function completeCohortTask(task: AdminRow) {
+    setCompletingCohortTaskId(task.id);
+
+    try {
+      await adminApi("/api/operations/tasks", { method: "PATCH", body: { id: task.id, action: "complete" } });
+      notifySuccess("Readiness task marked complete");
+      await load();
+    } catch (error) {
+      notifyError((error as Error).message);
+    } finally {
+      setCompletingCohortTaskId("");
+    }
+  }
+
+  async function publishReadyCohort() {
+    setPublishingCohort(true);
+
+    try {
+      await adminApi(`/api/cohorts/${id}`, { method: "PATCH", body: { action: "publish" } });
+      notifySuccess("Cohort published");
+      await load();
+    } catch (error) {
+      notifyError((error as Error).message);
+    } finally {
+      setPublishingCohort(false);
     }
   }
 
@@ -1657,19 +1711,62 @@ export function CohortDetailClient({ id }: { id: string }) {
                     </div>
                   ))}
                 </div>
-                <div className="readiness-task-strip">
-                  <span>{tasks.filter((task) => task.status !== "COMPLETED").length} open manual tasks</span>
-                  <Button variant="outlined" size="small" onClick={() => setTaskDialogOpen(true)}>Add Task</Button>
+                <div className="readiness-action-grid">
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    startIcon={<CalendarMonthOutlined />}
+                    disabled={preparingInvites || sessions.length === 0}
+                    onClick={prepareAllCalendarInvites}
+                  >
+                    {preparingInvites ? "Preparing" : "Prepare Invites"}
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    startIcon={<SendOutlined />}
+                    disabled={creatingSessionEmails || sessions.length === 0}
+                    onClick={createAllMissingSessionEmailSchedules}
+                  >
+                    {creatingSessionEmails ? "Creating" : "Create Emails"}
+                  </Button>
+                  <Button variant="outlined" size="small" startIcon={<AddIcon />} onClick={() => openMaterialDialog()}>
+                    Add Material
+                  </Button>
+                  <Button variant="outlined" size="small" onClick={() => setTaskDialogOpen(true)}>
+                    Add Task
+                  </Button>
+                  <Button
+                    size="small"
+                    disabled={!cohort?.readiness?.ready || publishingCohort}
+                    onClick={publishReadyCohort}
+                  >
+                    {publishingCohort ? "Publishing" : "Publish Cohort"}
+                  </Button>
                 </div>
-                {tasks.length > 0 && (
+                <div className="readiness-task-strip">
+                  <span>{openReadinessTasks.length} open manual tasks</span>
+                  <span>{cohort?.readiness?.ready ? "Ready to publish" : "Clear blockers above"}</span>
+                </div>
+                {openReadinessTasks.length > 0 && (
                   <div className="readiness-task-list" aria-label="Manual readiness tasks">
-                    {tasks.map((task: AdminRow) => (
+                    {openReadinessTasks.map((task: AdminRow) => (
                       <div className="readiness-manual-task" key={task.id}>
                         <div>
                           <strong title={task.title}>{task.title}</strong>
                           <span>{formatStatusLabel(task.category)} · {task.dueDate ? new Date(task.dueDate).toLocaleDateString("en-US") : "No due date"}</span>
                         </div>
-                        <StatusChip value={task.status} />
+                        <div className="readiness-task-actions">
+                          <StatusChip value={task.status} />
+                          <Button
+                            variant="text"
+                            size="small"
+                            disabled={Boolean(completingCohortTaskId)}
+                            onClick={() => completeCohortTask(task)}
+                          >
+                            {completingCohortTaskId === task.id ? "Saving" : "Done"}
+                          </Button>
+                        </div>
                       </div>
                     ))}
                   </div>

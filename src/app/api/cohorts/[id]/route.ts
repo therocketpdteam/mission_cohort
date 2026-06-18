@@ -1,5 +1,5 @@
 import { fail, handleApiError, ok } from "@/lib/api";
-import { getCohortById, updateCohort } from "@/services/cohortService";
+import { getCohortById, publishCohort, updateCohort } from "@/services/cohortService";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -19,7 +19,12 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
-    return ok(await updateCohort(id, await request.json()));
+    const body = await request.json();
+    if (body.action === "publish") {
+      return ok(await publishCohort(id));
+    }
+
+    return ok(await updateCohort(id, body));
   } catch (error) {
     return handleApiError(error);
   }
