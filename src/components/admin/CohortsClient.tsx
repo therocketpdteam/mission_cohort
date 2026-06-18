@@ -29,6 +29,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { adminApi, uploadAdminFile } from "@/lib/adminApi";
 import { formatProperDisplay, formatStatusLabel } from "@/lib/formatting";
+import { dateTimeInputInZoneToIso } from "@/lib/timezones";
 import {
   AdminRow,
   AppDataGrid,
@@ -70,8 +71,8 @@ function slugify(value: string) {
     .replace(/^-|-$/g, "");
 }
 
-function combineDateTime(date: string, time: string) {
-  return `${date}T${time || "09:00"}:00`;
+function combineDateTime(date: string, time: string, timezone: string) {
+  return dateTimeInputInZoneToIso(`${date}T${time || "09:00"}`, timezone);
 }
 
 function addWeeks(date: string, weeks: number) {
@@ -336,8 +337,8 @@ function CreateCohortWizard({
           shortName,
           slug,
           presenterId: presenter?.id,
-          startDate: combineDateTime(firstSession.date, firstSession.startTime),
-          endDate: combineDateTime(lastSession.date, lastSession.endTime),
+          startDate: combineDateTime(firstSession.date, firstSession.startTime, firstSession.timezone),
+          endDate: combineDateTime(lastSession.date, lastSession.endTime, lastSession.timezone),
           defaultTimezone: firstSession.timezone,
           pricePerParticipant: 0,
           cohortType: "LIVE_VIRTUAL",
@@ -345,8 +346,8 @@ function CreateCohortWizard({
           sessions: sessions.map((session, index) => ({
             title: session.title,
             sessionNumber: index + 1,
-            startTime: combineDateTime(session.date, session.startTime),
-            endTime: combineDateTime(session.date, session.endTime),
+            startTime: combineDateTime(session.date, session.startTime, session.timezone),
+            endTime: combineDateTime(session.date, session.endTime, session.timezone),
             timezone: session.timezone
           }))
         }

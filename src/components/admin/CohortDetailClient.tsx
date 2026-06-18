@@ -27,6 +27,7 @@ import type { CSSProperties } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { adminApi, uploadAdminFile } from "@/lib/adminApi";
 import { formatProperDisplay, formatStatusLabel } from "@/lib/formatting";
+import { formatDateTimeInZone, formatTimeInZone } from "@/lib/timezones";
 import { RosterWorkbench } from "./RosterWorkbench";
 import type { ParsedRosterParticipant } from "@/lib/rosterParser";
 import {
@@ -1367,8 +1368,8 @@ export function CohortDetailClient({ id }: { id: string }) {
   const sessionColumns: GridColDef[] = [
     { field: "sessionNumber", headerName: "#", width: 80 },
     { field: "title", headerName: "Title", flex: 1, minWidth: 220 },
-    { field: "startTime", headerName: "Start", width: 180, valueFormatter: (value) => value ? new Date(value).toLocaleString() : "" },
-    { field: "endTime", headerName: "End", width: 180, valueFormatter: (value) => value ? new Date(value).toLocaleString() : "" },
+    { field: "startTime", headerName: "Start", width: 180, valueFormatter: (value, row) => formatDateTimeInZone(value, row?.timezone) },
+    { field: "endTime", headerName: "End", width: 180, valueFormatter: (value, row) => formatDateTimeInZone(value, row?.timezone) },
     { field: "meetingUrl", headerName: "Meeting URL", flex: 1, minWidth: 200 },
     { field: "location", headerName: "Location", width: 180 },
     { field: "calendarInviteStatus", headerName: "Calendar", width: 150, renderCell: (params) => <StatusChip value={params.value} /> },
@@ -1758,10 +1759,12 @@ export function CohortDetailClient({ id }: { id: string }) {
 
                 return (
                 <div className="session-check-row" role="row" key={session.id}>
-                  <DateBadge value={session.startTime} />
+                  <DateBadge value={session.startTime} timeZone={session.timezone} />
                   <div className="session-title-cell">
                     <strong title={session.title}>{session.sessionNumber}. {session.title}</strong>
-                    <span title={session.description}>{session.startTime ? new Date(session.startTime).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "No time"} - {session.endTime ? new Date(session.endTime).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "No end"}</span>
+                    <span title={session.description}>
+                      {formatTimeInZone(session.startTime, session.timezone) || "No time"} - {formatTimeInZone(session.endTime, session.timezone) || "No end"}
+                    </span>
                     {sessionMaterials.length > 0 && (
                       <div className="session-material-links">
                         {sessionMaterials.slice(0, 3).map((resource: AdminRow) => {

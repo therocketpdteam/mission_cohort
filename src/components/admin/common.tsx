@@ -22,6 +22,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { formatProperDisplay, formatRegistrationSource, formatStatusLabel } from "@/lib/formatting";
 import { uploadAdminFile } from "@/lib/adminApi";
+import { dateTimeInputInZoneToIso, dateToDateInput, dateToDateTimeInputInZone, formatDateInZone } from "@/lib/timezones";
 
 export type AdminRow = Record<string, any>;
 
@@ -34,25 +35,31 @@ export type FieldConfig = {
 };
 
 function formatInputDateValue(value: unknown, type: "date" | "datetime-local") {
-  if (value === null || value === undefined || value === "") {
-    return "";
-  }
-
-  const date = value instanceof Date ? value : new Date(String(value));
-  if (Number.isNaN(date.getTime())) {
-    return String(value);
-  }
-
-  const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
-  return type === "date" ? localDate.toISOString().slice(0, 10) : localDate.toISOString().slice(0, 16);
+  return type === "date" ? dateToDateInput(value) : dateToDateTimeInputInZone(value);
 }
 
 function normalizeInitialFieldValues(fields: FieldConfig[], initialValues?: AdminRow) {
   const normalized = { ...(initialValues ?? {}) };
 
   fields.forEach((field) => {
-    if (field.type === "date" || field.type === "datetime-local") {
+    if (field.type === "date") {
       normalized[field.name] = formatInputDateValue(normalized[field.name], field.type);
+    }
+
+    if (field.type === "datetime-local") {
+      normalized[field.name] = dateToDateTimeInputInZone(normalized[field.name], normalized.timezone);
+    }
+  });
+
+  return normalized;
+}
+
+function normalizeSubmitFieldValues(fields: FieldConfig[], values: AdminRow) {
+  const normalized = { ...values };
+
+  fields.forEach((field) => {
+    if (field.type === "datetime-local") {
+      normalized[field.name] = dateTimeInputInZoneToIso(normalized[field.name], normalized.timezone);
     }
   });
 
@@ -307,11 +314,11 @@ export function SourcePill({ row }: { row: AdminRow }) {
   );
 }
 
-export function DateBadge({ value, emptyLabel = "No date" }: { value?: string | Date | null; emptyLabel?: string }) {
+export function DateBadge({ value, emptyLabel = "No date", timeZone }: { value?: string | Date | null; emptyLabel?: string; timeZone?: string | null }) {
   const date = value ? new Date(value) : null;
   const valid = date && Number.isFinite(date.getTime());
-  const month = valid ? new Intl.DateTimeFormat("en-US", { month: "short" }).format(date) : "";
-  const day = valid ? new Intl.DateTimeFormat("en-US", { day: "numeric" }).format(date) : "";
+  const month = valid ? formatDateInZone(date, timeZone, { month: "short" }) : "";
+  const day = valid ? formatDateInZone(date, timeZone, { day: "numeric" }) : "";
 
   return (
     <span className="metadata-pill" style={{ minWidth: 58, justifyContent: "center" }}>
@@ -699,11 +706,12 @@ export function MutationDialog({
     setSaving(true);
     setSubmitError(null);
     try {
-      const payload = fields.reduce<AdminRow>((current, field) => {
+      const rawPayload = fields.reduce<AdminRow>((current, field) => {
         const value = values[field.name];
         current[field.name] = value === null ? undefined : value;
         return current;
       }, {});
+      const payload = normalizeSubmitFieldValues(fields, rawPayload);
       await onSubmit(payload);
       onClose();
     } catch (error) {
