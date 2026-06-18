@@ -262,6 +262,172 @@ export const IconButton = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTM
   );
 });
 
+function padDatePart(value: number) {
+  return String(value).padStart(2, "0");
+}
+
+function validDateParts(month: number, day: number, year: number) {
+  if (year < 1900 || month < 1 || month > 12 || day < 1 || day > 31) {
+    return false;
+  }
+
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}
+
+function formatDateInputDisplay(value: unknown) {
+  if (value == null || value === "") {
+    return "";
+  }
+
+  const text = String(value);
+  const isoMatch = /^(\d{4})-(\d{2})-(\d{2})/.exec(text);
+  if (isoMatch) {
+    return `${isoMatch[2]}/${isoMatch[3]}/${isoMatch[1]}`;
+  }
+
+  return text;
+}
+
+function formatTimeInputDisplay(hours: number, minutes: number) {
+  const period = hours >= 12 ? "PM" : "AM";
+  const hour12 = hours % 12 || 12;
+  return `${hour12}:${padDatePart(minutes)} ${period}`;
+}
+
+function formatDateTimeInputDisplay(value: unknown) {
+  if (value == null || value === "") {
+    return "";
+  }
+
+  const text = String(value);
+  const localMatch = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(text);
+  if (localMatch) {
+    return `${localMatch[2]}/${localMatch[3]}/${localMatch[1]} ${formatTimeInputDisplay(Number(localMatch[4]), Number(localMatch[5]))}`;
+  }
+
+  const date = new Date(text);
+  if (Number.isFinite(date.getTime())) {
+    return `${padDatePart(date.getMonth() + 1)}/${padDatePart(date.getDate())}/${date.getFullYear()} ${formatTimeInputDisplay(date.getHours(), date.getMinutes())}`;
+  }
+
+  return text;
+}
+
+function parseDateDisplay(value: string) {
+  const match = /^\s*(\d{1,2})\/(\d{1,2})\/(\d{4})\s*$/.exec(value);
+  if (!match) {
+    return null;
+  }
+
+  const month = Number(match[1]);
+  const day = Number(match[2]);
+  const year = Number(match[3]);
+  if (!validDateParts(month, day, year)) {
+    return null;
+  }
+
+  return `${year}-${padDatePart(month)}-${padDatePart(day)}`;
+}
+
+function parseDateTimeDisplay(value: string) {
+  const match = /^\s*(\d{1,2})\/(\d{1,2})\/(\d{4})[\s,]+(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?\s*$/i.exec(value);
+  if (!match) {
+    return null;
+  }
+
+  const date = parseDateDisplay(`${match[1]}/${match[2]}/${match[3]}`);
+  if (!date) {
+    return null;
+  }
+
+  let hours = Number(match[4]);
+  const minutes = Number(match[5] ?? 0);
+  const period = match[6]?.toUpperCase();
+  if (minutes < 0 || minutes > 59) {
+    return null;
+  }
+
+  if (period) {
+    if (hours < 1 || hours > 12) {
+      return null;
+    }
+    hours = period === "PM" && hours !== 12 ? hours + 12 : hours;
+    hours = period === "AM" && hours === 12 ? 0 : hours;
+  } else if (hours < 0 || hours > 23) {
+    return null;
+  }
+
+  return `${date}T${padDatePart(hours)}:${padDatePart(minutes)}`;
+}
+
+function emitInputValue(onChange: ((event: any) => void) | undefined, value: string) {
+  onChange?.({ target: { value }, currentTarget: { value } });
+}
+
+function AppDateInput({
+  id,
+  value,
+  onChange,
+  onBlur,
+  required,
+  disabled,
+  name,
+  className,
+  style,
+  type
+}: InputHTMLAttributes<HTMLInputElement> & { type: "date" | "datetime-local"; onChange?: (event: any) => void }) {
+  const isDateTime = type === "datetime-local";
+  const [displayValue, setDisplayValue] = useState(() => isDateTime ? formatDateTimeInputDisplay(value) : formatDateInputDisplay(value));
+
+  useEffect(() => {
+    setDisplayValue(isDateTime ? formatDateTimeInputDisplay(value) : formatDateInputDisplay(value));
+  }, [isDateTime, value]);
+
+  function parse(valueToParse: string) {
+    return isDateTime ? parseDateTimeDisplay(valueToParse) : parseDateDisplay(valueToParse);
+  }
+
+  return (
+    <input
+      id={id}
+      className={className}
+      name={name}
+      value={displayValue}
+      required={required}
+      disabled={disabled}
+      style={style}
+      type="text"
+      inputMode="numeric"
+      placeholder={isDateTime ? "MM/DD/YYYY 2:30 PM" : "MM/DD/YYYY"}
+      title={isDateTime ? "Use MM/DD/YYYY h:mm AM/PM" : "Use MM/DD/YYYY"}
+      onChange={(event) => {
+        const nextValue = event.currentTarget.value;
+        setDisplayValue(nextValue);
+        if (nextValue.trim() === "") {
+          emitInputValue(onChange, "");
+          return;
+        }
+
+        const parsed = parse(nextValue);
+        if (parsed) {
+          emitInputValue(onChange, parsed);
+        }
+      }}
+      onBlur={(event) => {
+        const parsed = parse(event.currentTarget.value);
+        if (parsed) {
+          setDisplayValue(isDateTime ? formatDateTimeInputDisplay(parsed) : formatDateInputDisplay(parsed));
+          emitInputValue(onChange, parsed);
+        } else {
+          setDisplayValue(isDateTime ? formatDateTimeInputDisplay(value) : formatDateInputDisplay(value));
+        }
+        onBlur?.(event);
+      }}
+    />
+  );
+}
+
 export function TextField({
   label,
   select,
@@ -355,6 +521,14 @@ export function TextField({
         </span>
       ) : multiline ? (
         <textarea id={id} className="ui-input ui-textarea" rows={minRows} {...(props as TextareaHTMLAttributes<HTMLTextAreaElement>)} />
+      ) : props.type === "date" || props.type === "datetime-local" ? (
+        <AppDateInput
+          id={id}
+          className="ui-input"
+          {...(props as InputHTMLAttributes<HTMLInputElement>)}
+          type={props.type}
+          onChange={props.onChange}
+        />
       ) : (
         <input
           id={id}

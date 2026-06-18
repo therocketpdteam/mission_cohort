@@ -264,6 +264,7 @@ Form rules:
 - Long forms should use section headings and spacing.
 - Creation/edit wizards should reduce decisions where possible and use smart defaults.
 - Dropdown options should be human-readable and show sample context when mapping external data.
+- Date and datetime fields must use the app-owned US display format, not native browser date rendering. Display dates as `MM/DD/YYYY` and session/date-time values as `MM/DD/YYYY h:mm AM/PM`; submit values may still be normalized to ISO for APIs.
 
 ## Tables and Lists
 
