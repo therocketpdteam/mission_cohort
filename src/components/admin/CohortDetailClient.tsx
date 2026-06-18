@@ -1,7 +1,7 @@
 "use client";
 
 import { AddIcon } from "@/components/ui/icons";
-import { ArticleOutlined, CalendarMonthOutlined, EmailOutlined, GroupsOutlined, InsightsOutlined } from "@/components/ui/icons";
+import { CalendarMonthOutlined, EmailOutlined, GroupsOutlined, InsightsOutlined } from "@/components/ui/icons";
 import { CancelOutlined, CheckCircleOutline, SendOutlined } from "@/components/ui/icons";
 import { EditOutlined } from "@/components/ui/icons";
 import {
@@ -86,8 +86,6 @@ const taskFields: FieldConfig[] = [
   { name: "dueDate", label: "Due date", type: "datetime-local" },
   { name: "ownerName", label: "Owner" }
 ];
-
-const publishReadinessTaskCategories = ["CALENDAR_INVITE", "REMINDER_EMAILS", "SESSION_RESOURCES"];
 
 function resourceFieldsForSessions(sessions: AdminRow[]): FieldConfig[] {
   return [
@@ -860,12 +858,10 @@ export function CohortDetailClient({ id }: { id: string }) {
   const [editingPayout, setEditingPayout] = useState<AdminRow | null>(null);
   const [distributionSettings, setDistributionSettings] = useState({ commissionPercent: "30", tlSharePercent: "70", tlName: "", notes: "" });
   const [financeHealth, setFinanceHealth] = useState<FinanceHealth | null>(null);
-  const [calendarHealth, setCalendarHealth] = useState<AdminRow | null>(null);
   const [calendarProvider, setCalendarProvider] = useState<"ics" | "google">("ics");
   const [preparingInvites, setPreparingInvites] = useState(false);
   const [creatingSessionEmails, setCreatingSessionEmails] = useState(false);
   const [publishingCohort, setPublishingCohort] = useState(false);
-  const [completingCohortTaskId, setCompletingCohortTaskId] = useState("");
   const { notifySuccess, notifyError, snackbar } = useNotifier();
 
   async function load() {
@@ -901,7 +897,6 @@ export function CohortDetailClient({ id }: { id: string }) {
     setTasks(taskRows);
     setResources(resourceRows);
     setActivity(activityRows);
-    adminApi<AdminRow>("/api/calendar").then(setCalendarHealth).catch(() => setCalendarHealth(null));
     setLoading(false);
   }
 
@@ -1077,12 +1072,6 @@ export function CohortDetailClient({ id }: { id: string }) {
   const compareCohort = allCohorts.find((item) => item.id === compareCohortId);
   const detailTabs = ["Overview", "Registrations", "Participants", "Communications", "Distribution"];
   const readinessItems = cohort?.readiness?.items ?? [];
-  const sessionReadinessDetails = (cohort?.readiness?.sessionDetails ?? []) as AdminRow[];
-  const openReadinessTasks = useMemo(() => tasks.filter((task) =>
-    !task.registrationId &&
-    publishReadinessTaskCategories.includes(String(task.category ?? "")) &&
-    (task.status === "OPEN" || task.status === "IN_PROGRESS")
-  ), [tasks]);
   const filteredRegistrations = useMemo(() => registrations.filter((registration) => {
     const paymentMatch = !registrationPaymentFilter || registration.paymentStatus === registrationPaymentFilter;
     const rosterMatch = !registrationRosterFilter || registration.participantListStatus === registrationRosterFilter;
@@ -1123,12 +1112,6 @@ export function CohortDetailClient({ id }: { id: string }) {
     return [...incoming, ...payouts].sort((a, b) => new Date(b.date ?? 0).getTime() - new Date(a.date ?? 0).getTime());
   }, [distribution, payments]);
   const cohortLevelMaterials = useMemo(() => resources.filter((resource) => !resource.sessionId), [resources]);
-  const sessionReadinessStats = useMemo(() => {
-    const calendarReady = sessions.filter((session) => session.calendarInviteStatus === "CREATED" || session.calendarInviteStatus === "UPDATED").length;
-    const emailReady = sessions.filter((session) => sessionEmailTypes.every((template) => sessionEmailStatus(session.id, template.type) !== "NOT_SCHEDULED")).length;
-    const materialReady = sessions.filter((session) => resources.some((resource) => resource.sessionId === session.id)).length;
-    return { calendarReady, emailReady, materialReady };
-  }, [communications, resources, sessions]);
 
   function sessionEmailStatus(sessionId: string, type: string) {
     const communication = communications.find((item) => item.sessionId === sessionId && item.template?.type === type);
@@ -1203,20 +1186,6 @@ export function CohortDetailClient({ id }: { id: string }) {
       } catch {
         notifyError((error as Error).message);
       }
-    }
-  }
-
-  async function completeCohortTask(task: AdminRow) {
-    setCompletingCohortTaskId(task.id);
-
-    try {
-      await adminApi("/api/operations/tasks", { method: "PATCH", body: { id: task.id, action: "complete" } });
-      notifySuccess("Readiness task marked complete");
-      await load();
-    } catch (error) {
-      notifyError((error as Error).message);
-    } finally {
-      setCompletingCohortTaskId("");
     }
   }
 
@@ -1714,8 +1683,8 @@ export function CohortDetailClient({ id }: { id: string }) {
                   {readinessItems.map((item: AdminRow) => {
                     const icon =
                       item.key === "calendar" ? <CalendarMonthOutlined /> :
-                        item.key === "communications" ? <EmailOutlined /> :
-                          item.key === "manual-tasks" ? <ArticleOutlined /> :
+                          item.key === "communications" ? <EmailOutlined /> :
+                          item.key === "manual-tasks" ? <CheckCircleOutline /> :
                             <CheckCircleOutline />;
 
                     return (
@@ -1750,93 +1719,12 @@ export function CohortDetailClient({ id }: { id: string }) {
                   >
                     {creatingSessionEmails ? "Creating" : "Create Emails"}
                   </Button>
-                  <Button variant="text" size="small" startIcon={<ArticleOutlined />} onClick={() => openMaterialDialog()}>
+                  <Button variant="text" size="small" startIcon={<AddIcon />} onClick={() => openMaterialDialog()}>
                     Add Material
                   </Button>
                   <Button variant="text" size="small" startIcon={<AddIcon />} onClick={() => setTaskDialogOpen(true)}>
                     Add Task
                   </Button>
-                </div>
-                {sessionReadinessDetails.length > 0 && (
-                  <div className="readiness-session-detail" aria-label="Session readiness details">
-                    <div className="readiness-session-detail-header">
-                      <strong>Session automation status</strong>
-                      <span>{sessionReadinessDetails.filter((session) => session.ready).length}/{sessionReadinessDetails.length} ready</span>
-                    </div>
-                    <div className="readiness-session-detail-list">
-                      {sessionReadinessDetails.map((session) => {
-                        const blockers = (session.blockers ?? []) as string[];
-                        const emailDetail = session.emails as AdminRow;
-                        const calendarDetail = session.calendar as AdminRow;
-                        const materialDetail = session.materials as AdminRow;
-
-                        return (
-                          <div className={`readiness-session-detail-row ${session.ready ? "is-ready" : "needs-work"}`} key={session.id || `${session.sessionNumber}-${session.title}`}>
-                            <div className="readiness-session-title">
-                              <span className="readiness-session-number">{String(session.sessionNumber ?? "").padStart(2, "0")}</span>
-                              <div>
-                                <strong title={session.title}>{session.title}</strong>
-                                <span>{formatTimeInZone(session.startTime, session.timezone) || "Time not set"}</span>
-                              </div>
-                            </div>
-                            <div className="readiness-session-signals">
-                              <span className={calendarDetail?.ready ? "is-ready" : "needs-work"} title={calendarDetail?.detail}>
-                                {calendarDetail?.detail ?? "Calendar unknown"}
-                              </span>
-                              <span className={emailDetail?.ready ? "is-ready" : "needs-work"} title={[...((emailDetail?.missing ?? []) as string[]), ...((emailDetail?.stale ?? []) as string[])].join(", ")}>
-                                {emailDetail?.detail ?? "Emails unknown"}
-                              </span>
-                              <span className={materialDetail?.ready ? "is-ready" : "needs-work"} title={materialDetail?.detail}>
-                                {materialDetail?.detail ?? "Materials unknown"}
-                              </span>
-                            </div>
-                            <span className={`session-check session-check-icon ${session.ready ? "is-done" : "is-missing"}`}>
-                              {session.ready ? <CheckCircleOutline /> : <CancelOutlined />}
-                            </span>
-                            {blockers.length > 0 && (
-                              <div className="readiness-session-blockers">
-                                {blockers.slice(0, 3).map((blocker) => <span key={blocker}>{blocker}</span>)}
-                                {blockers.length > 3 && <span>+{blockers.length - 3} more</span>}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-                <div className="readiness-task-card">
-                  <div className="readiness-task-card-header">
-                    <strong>Open Readiness Tasks</strong>
-                    <span>{openReadinessTasks.length}</span>
-                  </div>
-                  {openReadinessTasks.length > 0 ? (
-                    <div className="readiness-task-list" aria-label="Manual readiness tasks">
-                      {openReadinessTasks.map((task: AdminRow) => (
-                        <div className={`readiness-manual-task ${task.priority === "URGENT" || task.priority === "HIGH" ? "is-urgent" : ""}`} key={task.id}>
-                          <div>
-                            <span>{formatStatusLabel(task.category)}</span>
-                            <strong title={task.title}>{task.title}</strong>
-                            <small>{task.dueDate ? `Due ${new Date(task.dueDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : "No due date"}</small>
-                          </div>
-                          <Button
-                            variant="text"
-                            size="small"
-                            disabled={Boolean(completingCohortTaskId)}
-                            onClick={() => completeCohortTask(task)}
-                          >
-                            {completingCohortTaskId === task.id ? "Saving" : "Mark Done"}
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="readiness-empty-task">
-                      <CheckCircleOutline />
-                      <span>No open readiness tasks</span>
-                      <Button variant="text" size="small" onClick={() => setTaskDialogOpen(true)}>Add custom task</Button>
-                    </div>
-                  )}
                 </div>
               </div>
             </SectionCard>
@@ -1869,28 +1757,6 @@ export function CohortDetailClient({ id }: { id: string }) {
               </div>
             }
           >
-            <div className="calendar-readiness-panel">
-              <div>
-                <span>Calendar readiness</span>
-                <strong>{calendarHealth?.connection?.status === "CONNECTED" ? "Google Calendar connected" : calendarHealth?.configured ? "Google configured, connection needed" : "ICS fallback available"}</strong>
-                <p>{calendarProvider === "google" ? "Google sync will fall back to ICS if the connection is not ready." : "ICS invites can be generated without Google Calendar."}</p>
-              </div>
-              <div className="calendar-readiness-actions">
-                <TextField select label="Provider" value={calendarProvider} onChange={(event) => setCalendarProvider(event.target.value as "ics" | "google")}>
-                  <MenuItem value="ics">ICS fallback</MenuItem>
-                  <MenuItem value="google">Google Calendar</MenuItem>
-                </TextField>
-                <Button variant="outlined" startIcon={<CalendarMonthOutlined />} disabled={preparingInvites || sessions.length === 0} onClick={prepareAllCalendarInvites}>
-                  {preparingInvites ? "Preparing" : "Prepare all invites"}
-                </Button>
-              </div>
-            </div>
-            <div className="session-readiness-strip">
-              <DetailField label="Sessions" value={sessions.length} />
-              <DetailField label="Calendar Ready" value={`${sessionReadinessStats.calendarReady}/${sessions.length}`} />
-              <DetailField label="Email Ready" value={`${sessionReadinessStats.emailReady}/${sessions.length}`} />
-              <DetailField label="With Materials" value={`${sessionReadinessStats.materialReady}/${sessions.length}`} />
-            </div>
             {cohortLevelMaterials.length > 0 && (
               <div className="cohort-material-bank" aria-label="Cohort-level materials">
                 <span>Cohort materials</span>
