@@ -89,7 +89,7 @@ export const roadmapCards: RoadmapCard[] = [
       { title: "Sessions checklist", status: "done", note: "Overview uses a compact readiness checklist for calendar, default emails, and session materials.", priority: "high" },
       { title: "Registration/participant quick views", status: "in_progress", note: "Rows are clickable; history and edit affordances continue to improve.", priority: "high" },
       { title: "Materials/session resources", status: "done", note: "Materials can be added directly to sessions, shown in the session checklist, and linked into outbound communication attachments.", priority: "medium" },
-      { title: "Publish-readiness workflow", status: "in_progress", note: "Readiness actions now prepare invites, create session emails, clear session tasks, show session-level blockers/stale warnings, and guard publishing; live provider QA remains.", priority: "high" }
+      { title: "Publish-readiness workflow", status: "in_progress", note: "Readiness actions now prepare invites, create session emails, clear session tasks, show session-level blockers/stale warnings, score readiness, and guard publishing; live provider QA remains.", priority: "high" }
     ]
   },
   {
