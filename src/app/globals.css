@@ -743,6 +743,62 @@ h6,
   box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.24);
 }
 
+.ui-date-input {
+  position: relative;
+  display: block;
+  width: 100%;
+}
+
+.ui-date-input .ui-input {
+  padding-right: 42px;
+}
+
+.ui-date-picker-button {
+  position: absolute;
+  right: 5px;
+  top: 50%;
+  display: inline-grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-slate-500);
+  cursor: pointer;
+  transform: translateY(-50%);
+}
+
+.ui-date-picker-button:hover,
+.ui-date-picker-button:focus-visible {
+  background: var(--color-surface-container);
+  color: var(--color-deep-space);
+  outline: none;
+}
+
+.ui-date-picker-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.ui-date-native-picker {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  width: 1px;
+  height: 1px;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.app-shell.is-compact .ui-date-picker-button {
+  right: 3px;
+  width: 26px;
+  height: 26px;
+}
+
 .ui-select {
   position: relative;
   display: block;

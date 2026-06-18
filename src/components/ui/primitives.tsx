@@ -1,5 +1,6 @@
 "use client";
 
+import { CalendarMonthOutlined } from "@/components/ui/icons";
 import type {
   ButtonHTMLAttributes,
   CSSProperties,
@@ -365,6 +366,25 @@ function emitInputValue(onChange: ((event: any) => void) | undefined, value: str
   onChange?.({ target: { value }, currentTarget: { value } });
 }
 
+function nativePickerValue(value: unknown, type: "date" | "datetime-local") {
+  if (value == null || value === "") {
+    return "";
+  }
+
+  const text = String(value);
+  const dateMatch = /^(\d{4}-\d{2}-\d{2})/.exec(text);
+  if (!dateMatch) {
+    return "";
+  }
+
+  if (type === "date") {
+    return dateMatch[1];
+  }
+
+  const dateTimeMatch = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})/.exec(text);
+  return dateTimeMatch?.[1] ?? `${dateMatch[1]}T09:00`;
+}
+
 function AppDateInput({
   id,
   value,
@@ -378,6 +398,7 @@ function AppDateInput({
   type
 }: InputHTMLAttributes<HTMLInputElement> & { type: "date" | "datetime-local"; onChange?: (event: any) => void }) {
   const isDateTime = type === "datetime-local";
+  const pickerRef = useRef<HTMLInputElement>(null);
   const [displayValue, setDisplayValue] = useState(() => isDateTime ? formatDateTimeInputDisplay(value) : formatDateInputDisplay(value));
 
   useEffect(() => {
@@ -389,42 +410,75 @@ function AppDateInput({
   }
 
   return (
-    <input
-      id={id}
-      className={className}
-      name={name}
-      value={displayValue}
-      required={required}
-      disabled={disabled}
-      style={style}
-      type="text"
-      inputMode="numeric"
-      placeholder={isDateTime ? "MM/DD/YYYY 2:30 PM" : "MM/DD/YYYY"}
-      title={isDateTime ? "Use MM/DD/YYYY h:mm AM/PM" : "Use MM/DD/YYYY"}
-      onChange={(event) => {
-        const nextValue = event.currentTarget.value;
-        setDisplayValue(nextValue);
-        if (nextValue.trim() === "") {
-          emitInputValue(onChange, "");
-          return;
-        }
+    <span className="ui-date-input" style={style}>
+      <input
+        id={id}
+        className={className}
+        name={name}
+        value={displayValue}
+        required={required}
+        disabled={disabled}
+        type="text"
+        inputMode="numeric"
+        placeholder={isDateTime ? "MM/DD/YYYY 2:30 PM" : "MM/DD/YYYY"}
+        title={isDateTime ? "Use MM/DD/YYYY h:mm AM/PM" : "Use MM/DD/YYYY"}
+        onChange={(event) => {
+          const nextValue = event.currentTarget.value;
+          setDisplayValue(nextValue);
+          if (nextValue.trim() === "") {
+            emitInputValue(onChange, "");
+            return;
+          }
 
-        const parsed = parse(nextValue);
-        if (parsed) {
-          emitInputValue(onChange, parsed);
-        }
-      }}
-      onBlur={(event) => {
-        const parsed = parse(event.currentTarget.value);
-        if (parsed) {
-          setDisplayValue(isDateTime ? formatDateTimeInputDisplay(parsed) : formatDateInputDisplay(parsed));
-          emitInputValue(onChange, parsed);
-        } else {
-          setDisplayValue(isDateTime ? formatDateTimeInputDisplay(value) : formatDateInputDisplay(value));
-        }
-        onBlur?.(event);
-      }}
-    />
+          const parsed = parse(nextValue);
+          if (parsed) {
+            emitInputValue(onChange, parsed);
+          }
+        }}
+        onBlur={(event) => {
+          const parsed = parse(event.currentTarget.value);
+          if (parsed) {
+            setDisplayValue(isDateTime ? formatDateTimeInputDisplay(parsed) : formatDateInputDisplay(parsed));
+            emitInputValue(onChange, parsed);
+          } else {
+            setDisplayValue(isDateTime ? formatDateTimeInputDisplay(value) : formatDateInputDisplay(value));
+          }
+          onBlur?.(event);
+        }}
+      />
+      <button
+        type="button"
+        className="ui-date-picker-button"
+        disabled={disabled}
+        aria-label={isDateTime ? "Choose date and time" : "Choose date"}
+        onClick={() => {
+          if (typeof pickerRef.current?.showPicker === "function") {
+            pickerRef.current.showPicker();
+          } else {
+            pickerRef.current?.click();
+            pickerRef.current?.focus();
+          }
+        }}
+      >
+        <CalendarMonthOutlined fontSize="small" />
+      </button>
+      <input
+        ref={pickerRef}
+        aria-hidden="true"
+        className="ui-date-native-picker"
+        tabIndex={-1}
+        type={type}
+        value={nativePickerValue(value, type)}
+        onChange={(event) => {
+          const nextValue = event.currentTarget.value;
+          if (!nextValue) {
+            return;
+          }
+          setDisplayValue(isDateTime ? formatDateTimeInputDisplay(nextValue) : formatDateInputDisplay(nextValue));
+          emitInputValue(onChange, nextValue);
+        }}
+      />
+    </span>
   );
 }
 
