@@ -109,7 +109,10 @@ export async function getCohortById(id: string) {
       presenter: true,
       sessions: {
         orderBy: { sessionNumber: "asc" },
-        include: { communications: { include: { template: true } } }
+        include: {
+          calendarEvents: true,
+          communications: { include: { template: true } }
+        }
       },
       operationsTasks: true,
       registrationForms: true,
@@ -127,9 +130,12 @@ export async function listCohorts() {
       presenter: true,
       sessions: {
         orderBy: { sessionNumber: "asc" },
-        include: { communications: { include: { template: true } } }
+        include: {
+          calendarEvents: true,
+          communications: { include: { template: true } }
+        }
       },
-      operationsTasks: { select: { category: true, registrationId: true, status: true } },
+      operationsTasks: { select: { category: true, registrationId: true, sessionId: true, status: true } },
       registrations: { select: { totalAmount: true } },
       paymentRecords: { select: { amount: true, status: true } },
       _count: { select: { registrations: true, participants: true, sessions: true } }
@@ -144,9 +150,12 @@ export async function publishCohort(id: string) {
     where: { id },
     include: {
       sessions: {
-        include: { communications: { include: { template: true } } }
+        include: {
+          calendarEvents: true,
+          communications: { include: { template: true } }
+        }
       },
-      operationsTasks: { select: { category: true, registrationId: true, status: true } }
+      operationsTasks: { select: { category: true, registrationId: true, sessionId: true, status: true } }
     }
   });
 

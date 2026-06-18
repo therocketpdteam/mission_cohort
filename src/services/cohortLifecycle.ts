@@ -9,14 +9,28 @@ const requiredSessionTemplateTypes = [
 ] as const;
 
 type LifecycleCommunication = {
+  scheduledFor?: Date | string | null;
   status?: CommunicationStatus | string | null;
   template?: { type?: TemplateType | string | null } | null;
+  updatedAt?: Date | string | null;
 };
 
 type LifecycleSession = {
+  id?: string | null;
+  title?: string | null;
+  sessionNumber?: number | null;
   startTime?: Date | string | null;
   endTime?: Date | string | null;
+  timezone?: string | null;
+  updatedAt?: Date | string | null;
   calendarInviteStatus?: CalendarInviteStatus | string | null;
+  calendarEvents?: Array<{
+    startTime?: Date | string | null;
+    endTime?: Date | string | null;
+    timezone?: string | null;
+    title?: string | null;
+    updatedAt?: Date | string | null;
+  }> | null;
   communications?: LifecycleCommunication[];
 };
 
@@ -26,6 +40,7 @@ type LifecycleCohort = {
   operationsTasks?: Array<{
     category?: OperationsTaskCategory | string | null;
     registrationId?: string | null;
+    sessionId?: string | null;
     status?: OperationsTaskStatus | string | null;
   }> | null;
 };
@@ -37,38 +52,176 @@ export type CohortReadinessItem = {
   detail: string;
 };
 
+const requiredSessionTemplateLabels: Record<string, string> = {
+  [TemplateType.REGISTRATION_CONFIRMATION]: "Confirmation",
+  [TemplateType.WEEK_BEFORE_REMINDER]: "Week-before reminder",
+  [TemplateType.DAY_BEFORE_REMINDER]: "Day-before reminder",
+  [TemplateType.HOUR_BEFORE_REMINDER]: "Hour-before reminder",
+  [TemplateType.FOLLOW_UP]: "Follow-up"
+};
+
 function validDate(value?: Date | string | null) {
   const date = value ? new Date(value) : null;
   return date && Number.isFinite(date.getTime()) ? date : null;
 }
 
-function sessionHasRequiredCommunications(session: LifecycleSession) {
+function datesDiffer(first?: Date | string | null, second?: Date | string | null, toleranceMs = 5 * 60 * 1000) {
+  const firstDate = validDate(first);
+  const secondDate = validDate(second);
+
+  if (!firstDate || !secondDate) {
+    return Boolean(firstDate || secondDate);
+  }
+
+  return Math.abs(firstDate.getTime() - secondDate.getTime()) > toleranceMs;
+}
+
+function expectedScheduledFor(type: TemplateType | string, sessionStart?: Date | string | null) {
+  const start = validDate(sessionStart);
+
+  if (!start) {
+    return null;
+  }
+
+  if (type === TemplateType.WEEK_BEFORE_REMINDER) {
+    return new Date(start.getTime() - 7 * 24 * 60 * 60 * 1000);
+  }
+
+  if (type === TemplateType.DAY_BEFORE_REMINDER) {
+    return new Date(start.getTime() - 24 * 60 * 60 * 1000);
+  }
+
+  if (type === TemplateType.HOUR_BEFORE_REMINDER) {
+    return new Date(start.getTime() - 60 * 60 * 1000);
+  }
+
+  if (type === TemplateType.FOLLOW_UP) {
+    return new Date(start.getTime() + 24 * 60 * 60 * 1000);
+  }
+
+  return null;
+}
+
+function getCommunicationForType(session: LifecycleSession, type: TemplateType) {
   const communications = session.communications ?? [];
 
-  return requiredSessionTemplateTypes.every((type) =>
-    communications.some((communication) => {
-      const status = String(communication.status ?? "");
-      return communication.template?.type === type && !["CANCELLED", "FAILED"].includes(status);
-    })
+  return communications.find((communication) => {
+    const status = String(communication.status ?? "");
+    return communication.template?.type === type && !["CANCELLED", "FAILED"].includes(status);
+  });
+}
+
+function getSessionEmailReadiness(session: LifecycleSession) {
+  const missing: string[] = [];
+  const stale: string[] = [];
+
+  for (const type of requiredSessionTemplateTypes) {
+    const communication = getCommunicationForType(session, type);
+
+    if (!communication) {
+      missing.push(requiredSessionTemplateLabels[type]);
+      continue;
+    }
+
+    const expected = expectedScheduledFor(type, session.startTime);
+    if (expected && datesDiffer(communication.scheduledFor, expected)) {
+      stale.push(requiredSessionTemplateLabels[type]);
+    }
+  }
+
+  return {
+    ready: missing.length === 0 && stale.length === 0,
+    missing,
+    stale,
+    scheduled: requiredSessionTemplateTypes.length - missing.length,
+    total: requiredSessionTemplateTypes.length
+  };
+}
+
+function getSessionCalendarReadiness(session: LifecycleSession) {
+  const readyCalendarStatuses: Array<CalendarInviteStatus | string> = [CalendarInviteStatus.CREATED, CalendarInviteStatus.UPDATED];
+  const ready = readyCalendarStatuses.includes(session.calendarInviteStatus ?? "");
+  const latestEvent = [...(session.calendarEvents ?? [])]
+    .sort((a, b) => (validDate(b.updatedAt)?.getTime() ?? 0) - (validDate(a.updatedAt)?.getTime() ?? 0))[0];
+  const stale = Boolean(
+    ready &&
+    latestEvent &&
+    (
+      datesDiffer(latestEvent.startTime, session.startTime) ||
+      datesDiffer(latestEvent.endTime, session.endTime) ||
+      (latestEvent.timezone && session.timezone && latestEvent.timezone !== session.timezone) ||
+      (latestEvent.title && session.title && latestEvent.title !== session.title)
+    )
   );
+
+  return {
+    ready: ready && !stale,
+    stale,
+    detail: !ready
+      ? "Invite missing"
+      : stale
+        ? "Session changed; update invite"
+        : "Invite ready"
+  };
 }
 
 export function getCohortReadiness(cohort: LifecycleCohort) {
   const sessions = cohort.sessions ?? [];
-  const readyCalendarStatuses: Array<CalendarInviteStatus | string> = [CalendarInviteStatus.CREATED, CalendarInviteStatus.UPDATED];
-  const readyCalendarCount = sessions.filter((session) => readyCalendarStatuses.includes(session.calendarInviteStatus ?? "")).length;
-  const readyCommunicationCount = sessions.filter(sessionHasRequiredCommunications).length;
   const openTaskStatuses: Array<OperationsTaskStatus | string> = [OperationsTaskStatus.OPEN, OperationsTaskStatus.IN_PROGRESS];
   const publishReadinessTaskCategories: Array<OperationsTaskCategory | string> = [
     OperationsTaskCategory.CALENDAR_INVITE,
     OperationsTaskCategory.REMINDER_EMAILS,
     OperationsTaskCategory.SESSION_RESOURCES
   ];
-  const openManualTasks = (cohort.operationsTasks ?? []).filter((task) =>
+  const openReadinessTasks = (cohort.operationsTasks ?? []).filter((task) =>
     !task.registrationId &&
     openTaskStatuses.includes(task.status ?? "") &&
     publishReadinessTaskCategories.includes(task.category ?? "")
-  ).length;
+  );
+  const sessionDetails = sessions.map((session) => {
+    const calendar = getSessionCalendarReadiness(session);
+    const emails = getSessionEmailReadiness(session);
+    const sessionTasks = openReadinessTasks.filter((task) => task.sessionId === session.id);
+    const materialTasks = sessionTasks.filter((task) => task.category === OperationsTaskCategory.SESSION_RESOURCES);
+    const blockers = [
+      ...(!calendar.ready ? [calendar.detail] : []),
+      ...(emails.missing.length > 0 ? [`Missing ${emails.missing.join(", ")}`] : []),
+      ...(emails.stale.length > 0 ? [`Update ${emails.stale.join(", ")}`] : []),
+      ...(materialTasks.length > 0 ? ["Session materials need review"] : []),
+      ...sessionTasks
+        .filter((task) => task.category !== OperationsTaskCategory.SESSION_RESOURCES)
+        .map((task) => `${String(task.category ?? "Task").toLowerCase().replaceAll("_", " ")} needs review`)
+    ];
+
+    return {
+      id: session.id ?? "",
+      sessionNumber: session.sessionNumber ?? null,
+      title: session.title ?? "Session",
+      startTime: session.startTime ?? null,
+      timezone: session.timezone ?? null,
+      ready: blockers.length === 0,
+      calendar,
+      emails: {
+        ready: emails.ready,
+        scheduled: emails.scheduled,
+        total: emails.total,
+        missing: emails.missing,
+        stale: emails.stale,
+        detail: emails.ready
+          ? `${emails.total}/${emails.total} emails ready`
+          : `${emails.scheduled}/${emails.total} emails ready`
+      },
+      materials: {
+        ready: materialTasks.length === 0,
+        openTasks: materialTasks.length,
+        detail: materialTasks.length === 0 ? "Materials ready" : "Materials need review"
+      },
+      blockers
+    };
+  });
+  const readyCalendarCount = sessionDetails.filter((session) => session.calendar.ready).length;
+  const readyCommunicationCount = sessionDetails.filter((session) => session.emails.ready).length;
+  const openManualTasks = openReadinessTasks.length;
   const calendarReady = sessions.length > 0 && readyCalendarCount === sessions.length;
   const communicationsReady = sessions.length > 0 && readyCommunicationCount === sessions.length;
   const manualTasksReady = openManualTasks === 0;
@@ -106,7 +259,8 @@ export function getCohortReadiness(cohort: LifecycleCohort) {
 
   return {
     ready: items.every((item) => item.ready),
-    items
+    items,
+    sessionDetails
   };
 }
 

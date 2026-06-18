@@ -3963,6 +3963,97 @@ h6,
   min-width: 0;
 }
 
+.readiness-session-detail {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.readiness-session-detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--color-on-surface);
+  font-size: 13px;
+}
+
+.readiness-session-detail-header span {
+  color: var(--color-on-surface-variant);
+  font-weight: 700;
+}
+
+.readiness-session-detail-list {
+  display: grid;
+  gap: 8px;
+  max-height: 320px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.readiness-session-detail-row {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-container-lowest);
+}
+
+.readiness-session-detail-row.needs-work {
+  border-color: color-mix(in srgb, var(--color-warning-600) 30%, var(--color-outline-variant));
+}
+
+.readiness-session-title {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.readiness-session-title strong,
+.readiness-session-title span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.readiness-session-title span {
+  color: var(--color-on-surface-variant);
+  font-size: 12px;
+}
+
+.readiness-session-signals,
+.readiness-session-blockers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.readiness-session-signals span,
+.readiness-session-blockers span {
+  max-width: 100%;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-container);
+  color: var(--color-on-surface-variant);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.readiness-session-signals span.is-ready {
+  color: var(--color-success-600);
+}
+
+.readiness-session-signals span.needs-work,
+.readiness-session-blockers span {
+  color: var(--color-danger-600);
+  background: color-mix(in srgb, var(--color-danger-600) 9%, var(--color-surface-container));
+}
+
 .readiness-task-list {
   display: grid;
   gap: 8px;

@@ -1077,6 +1077,7 @@ export function CohortDetailClient({ id }: { id: string }) {
   const compareCohort = allCohorts.find((item) => item.id === compareCohortId);
   const detailTabs = ["Overview", "Registrations", "Participants", "Communications", "Distribution"];
   const readinessItems = cohort?.readiness?.items ?? [];
+  const sessionReadinessDetails = (cohort?.readiness?.sessionDetails ?? []) as AdminRow[];
   const openReadinessTasks = useMemo(() => tasks.filter((task) =>
     !task.registrationId &&
     publishReadinessTaskCategories.includes(String(task.category ?? "")) &&
@@ -1744,6 +1745,53 @@ export function CohortDetailClient({ id }: { id: string }) {
                     {publishingCohort ? "Publishing" : "Publish Cohort"}
                   </Button>
                 </div>
+                {sessionReadinessDetails.length > 0 && (
+                  <div className="readiness-session-detail" aria-label="Session readiness details">
+                    <div className="readiness-session-detail-header">
+                      <strong>Session automation status</strong>
+                      <span>{sessionReadinessDetails.filter((session) => session.ready).length}/{sessionReadinessDetails.length} ready</span>
+                    </div>
+                    <div className="readiness-session-detail-list">
+                      {sessionReadinessDetails.map((session) => {
+                        const blockers = (session.blockers ?? []) as string[];
+                        const emailDetail = session.emails as AdminRow;
+                        const calendarDetail = session.calendar as AdminRow;
+                        const materialDetail = session.materials as AdminRow;
+
+                        return (
+                          <div className={`readiness-session-detail-row ${session.ready ? "is-ready" : "needs-work"}`} key={session.id || `${session.sessionNumber}-${session.title}`}>
+                            <div className="readiness-session-title">
+                              <span className={`session-check session-check-icon ${session.ready ? "is-done" : "is-missing"}`}>
+                                {session.ready ? <CheckCircleOutline /> : <CancelOutlined />}
+                              </span>
+                              <div>
+                                <strong title={session.title}>{session.sessionNumber ? `${session.sessionNumber}. ` : ""}{session.title}</strong>
+                                <span>{formatTimeInZone(session.startTime, session.timezone) || "Time not set"}</span>
+                              </div>
+                            </div>
+                            <div className="readiness-session-signals">
+                              <span className={calendarDetail?.ready ? "is-ready" : "needs-work"} title={calendarDetail?.detail}>
+                                Calendar: {calendarDetail?.detail ?? "Unknown"}
+                              </span>
+                              <span className={emailDetail?.ready ? "is-ready" : "needs-work"} title={[...((emailDetail?.missing ?? []) as string[]), ...((emailDetail?.stale ?? []) as string[])].join(", ")}>
+                                Emails: {emailDetail?.detail ?? "Unknown"}
+                              </span>
+                              <span className={materialDetail?.ready ? "is-ready" : "needs-work"} title={materialDetail?.detail}>
+                                Materials: {materialDetail?.detail ?? "Unknown"}
+                              </span>
+                            </div>
+                            {blockers.length > 0 && (
+                              <div className="readiness-session-blockers">
+                                {blockers.slice(0, 3).map((blocker) => <span key={blocker}>{blocker}</span>)}
+                                {blockers.length > 3 && <span>+{blockers.length - 3} more</span>}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
                 <div className="readiness-task-strip">
                   <span>{openReadinessTasks.length} open manual tasks</span>
                   <span>{cohort?.readiness?.ready ? "Ready to publish" : "Clear blockers above"}</span>
