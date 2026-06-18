@@ -6,26 +6,30 @@ import {
   ensureRegistrationWindow,
   moneyInput,
   nonNegativeIntInput,
+  optionalDateInput,
+  optionalString,
   slugSchema
 } from "@/lib/validators";
 
+const nullishEmptyToUndefined = (value: unknown) => (value === "" || value === null ? undefined : value);
+
 const cohortBaseSchema = z.object({
   title: z.string().min(1),
-  shortName: z.string().trim().min(1).max(80).optional().or(z.literal("").transform(() => undefined)),
+  shortName: z.preprocess(nullishEmptyToUndefined, z.string().trim().min(1).max(80).optional()),
   slug: slugSchema,
-  description: z.string().optional(),
+  description: optionalString,
   presenterId: z.string().min(1),
   status: z.nativeEnum(CohortStatus).optional(),
   startDate: dateInput,
   endDate: dateInput,
-  registrationOpenDate: dateInput.optional(),
-  registrationCloseDate: dateInput.optional(),
+  registrationOpenDate: optionalDateInput,
+  registrationCloseDate: optionalDateInput,
   defaultTimezone: z.string().min(1).default("America/New_York"),
   maxParticipants: nonNegativeIntInput.optional(),
   minParticipants: nonNegativeIntInput.optional(),
   pricePerParticipant: moneyInput.default(0),
   cohortType: z.nativeEnum(CohortType).default(CohortType.LIVE_VIRTUAL),
-  thumbnailUrl: z.string().trim().optional().or(z.literal("").transform(() => undefined)).refine((value) => {
+  thumbnailUrl: z.preprocess(nullishEmptyToUndefined, z.string().trim().optional()).refine((value) => {
     if (!value) {
       return true;
     }

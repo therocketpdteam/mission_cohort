@@ -7,23 +7,19 @@ export const slugSchema = z
   .max(120)
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Use a lowercase URL-safe slug");
 
+const emptyToUndefined = (value: unknown) => (value === "" || value === null ? undefined : value);
+
 export const dateInput = z.coerce.date();
-export const optionalDateInput = z.preprocess((value) => (value === "" ? undefined : value), z.coerce.date().optional());
+export const optionalDateInput = z.preprocess(emptyToUndefined, z.coerce.date().optional());
 export const moneyInput = z.coerce.number().min(0);
 export const positiveIntInput = z.coerce.number().int().positive();
 export const nonNegativeIntInput = z.coerce.number().int().min(0);
 
-export const optionalEmail = z
-  .string()
-  .email()
-  .optional()
-  .or(z.literal("").transform(() => undefined));
+export const optionalString = z.preprocess(emptyToUndefined, z.string().optional());
 
-export const optionalUrl = z
-  .string()
-  .url()
-  .optional()
-  .or(z.literal("").transform(() => undefined));
+export const optionalEmail = z.preprocess(emptyToUndefined, z.string().email().optional());
+
+export const optionalUrl = z.preprocess(emptyToUndefined, z.string().url().optional());
 
 export function ensureEndAfterStart<T extends { startTime?: Date; endTime?: Date }>(
   value: T,

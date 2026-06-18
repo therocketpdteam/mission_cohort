@@ -674,7 +674,8 @@ export function MutationDialog({
     setSubmitError(null);
     try {
       const payload = fields.reduce<AdminRow>((current, field) => {
-        current[field.name] = values[field.name];
+        const value = values[field.name];
+        current[field.name] = value === null ? undefined : value;
         return current;
       }, {});
       await onSubmit(payload);

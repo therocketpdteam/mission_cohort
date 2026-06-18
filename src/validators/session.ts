@@ -1,21 +1,21 @@
 import { CalendarInviteStatus } from "@prisma/client";
 import { z } from "zod";
-import { dateInput, ensureEndAfterStart, positiveIntInput } from "@/lib/validators";
+import { dateInput, ensureEndAfterStart, optionalString, optionalUrl, positiveIntInput } from "@/lib/validators";
 
 const sessionBaseSchema = z.object({
   cohortId: z.string().min(1),
   title: z.string().min(1),
-  description: z.string().optional(),
+  description: optionalString,
   sessionNumber: positiveIntInput,
   startTime: dateInput,
   endTime: dateInput,
   timezone: z.string().min(1),
-  meetingUrl: z.string().url().optional(),
-  location: z.string().optional(),
+  meetingUrl: optionalUrl,
+  location: optionalString,
   calendarInviteStatus: z.nativeEnum(CalendarInviteStatus).optional(),
-  recordingUrl: z.string().url().optional(),
-  slidesUrl: z.string().url().optional(),
-  resourcesUrl: z.string().url().optional()
+  recordingUrl: optionalUrl,
+  slidesUrl: optionalUrl,
+  resourcesUrl: optionalUrl
 });
 
 export const sessionCreateSchema = sessionBaseSchema.superRefine(ensureEndAfterStart);
