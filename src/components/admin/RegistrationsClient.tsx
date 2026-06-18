@@ -601,7 +601,7 @@ function RegistrationDetailDialog({
                       <div>
                         <strong>{task.title}</strong>
                         <span>
-                          {[formatStatusLabel(task.category), task.description, task.dueDate ? new Date(task.dueDate).toLocaleDateString() : ""]
+                          {[formatStatusLabel(task.category), task.description, task.dueDate ? new Date(task.dueDate).toLocaleDateString("en-US") : ""]
                             .filter(Boolean)
                             .join(" · ")}
                         </span>
@@ -686,7 +686,7 @@ function RegistrationDetailDialog({
                         {`${communication.cohort?.title ?? "Mission Control"} · ${formatStatusLabel(communication.status)}${communication.emailSummary?.lastEmailEvent ? ` · ${formatStatusLabel(communication.emailSummary.lastEmailEvent)}` : ""}${communicationIssueLabel(communication) ? ` · ${communicationIssueLabel(communication)}` : ""}${communication.attachments?.length ? ` · ${communication.attachments.length} attachment${communication.attachments.length === 1 ? "" : "s"}` : ""}`}
                       </span>
                     </div>
-                    <span>{communication.sentAt || communication.createdAt ? new Date(communication.sentAt ?? communication.createdAt).toLocaleDateString() : ""}</span>
+                    <span>{communication.sentAt || communication.createdAt ? new Date(communication.sentAt ?? communication.createdAt).toLocaleDateString("en-US") : ""}</span>
                   </div>
                 ))}
               </div>
@@ -708,7 +708,7 @@ function RegistrationDetailDialog({
                   <div className="quick-view-list-row" key={event.id}>
                     <div>
                       <strong>{`Revision ${event.revisionNumber ?? "-"} · ${formatStatusLabel(event.status)}`}</strong>
-                      <span>{`${event.processedAt || event.createdAt ? new Date(event.processedAt ?? event.createdAt).toLocaleString() : ""}${revisionSummary(event) ? ` · ${revisionSummary(event)}` : ""}${event.errorMessage ? ` · ${event.errorMessage}` : ""}`}</span>
+                      <span>{`${event.processedAt || event.createdAt ? new Date(event.processedAt ?? event.createdAt).toLocaleString("en-US") : ""}${revisionSummary(event) ? ` · ${revisionSummary(event)}` : ""}${event.errorMessage ? ` · ${event.errorMessage}` : ""}`}</span>
                     </div>
                   </div>
                 ))}

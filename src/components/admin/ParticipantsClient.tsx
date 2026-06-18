@@ -245,7 +245,7 @@ function ParticipantDetailDialog({
             <ParticipantTile label="POC email" value={participant.registration?.primaryContactEmail ?? "-"} />
             <ParticipantTile label="Payment" value={formatStatusLabel(participant.registration?.paymentStatus ?? latestPayment?.status ?? "-")} />
             <ParticipantTile label="Amount" value={`$${Number(participant.registration?.totalAmount ?? latestPayment?.amount ?? 0).toLocaleString()}`} />
-            <ParticipantTile label="Last email" value={participant.emailSummary?.lastEmailEvent ? `${formatStatusLabel(participant.emailSummary.lastEmailEvent)} · ${participant.emailSummary.lastEmailEventAt ? new Date(participant.emailSummary.lastEmailEventAt).toLocaleDateString() : ""}` : "-"} />
+            <ParticipantTile label="Last email" value={participant.emailSummary?.lastEmailEvent ? `${formatStatusLabel(participant.emailSummary.lastEmailEvent)} · ${participant.emailSummary.lastEmailEventAt ? new Date(participant.emailSummary.lastEmailEventAt).toLocaleDateString("en-US") : ""}` : "-"} />
           </div>
 
           <section className="participant-detail-section">
@@ -509,7 +509,7 @@ export function ParticipantsClient() {
       width: 132,
       valueGetter: (_value, row) => row.emailSummary?.lastEmailEvent ?? "",
       renderCell: (params) => {
-        const sentAt = params.row.emailSummary?.lastEmailEventAt ? new Date(params.row.emailSummary.lastEmailEventAt).toLocaleDateString() : "";
+        const sentAt = params.row.emailSummary?.lastEmailEventAt ? new Date(params.row.emailSummary.lastEmailEventAt).toLocaleDateString("en-US") : "";
         return (
           <div className="app-table-status-stack">
             {params.value ? <StatusChip value={params.value} /> : <Typography color="text.secondary">-</Typography>}

@@ -371,7 +371,7 @@ export function ReportsClient() {
     },
     { field: "cohort", headerName: "Cohort", flex: 1, minWidth: 220, valueGetter: (_value, row) => row.cohort?.title ?? "All cohorts" },
     { field: "status", headerName: "Status", width: 120, renderCell: (params) => <StatusChip value={params.value} /> },
-    { field: "expiresAt", headerName: "Expires", width: 132, valueFormatter: (value) => value ? new Date(value).toLocaleDateString() : "" },
+    { field: "expiresAt", headerName: "Expires", width: 132, valueFormatter: (value) => value ? new Date(value).toLocaleDateString("en-US") : "" },
     {
       field: "actions",
       headerName: "Actions",

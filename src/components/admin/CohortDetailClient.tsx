@@ -193,7 +193,7 @@ function registrationTrendPoints(rows: AdminRow[], mode: "count" | "amount") {
   let cumulative = 0;
   return sorted.map((registration) => {
     cumulative += mode === "count" ? Number(registration.participantCount ?? 0) : Number(registration.totalAmount ?? 0);
-    return { label: new Date(registration.createdAt).toLocaleDateString(), value: cumulative };
+    return { label: new Date(registration.createdAt).toLocaleDateString("en-US"), value: cumulative };
   });
 }
 
@@ -433,7 +433,7 @@ function PaymentDetailDialog({
                 ["Method", payment.method ?? payment.registration?.paymentMethod ?? "-"],
                 ["Amount", money(payment.amount)],
                 ["QuickBooks Sync", payment.quickBooksSyncStatus ?? payment.registration?.quickBooksSyncStatus ?? "NOT_SYNCED"],
-                ["Last Touch Sent", payment.emailSummary?.lastEmailEventAt ? new Date(payment.emailSummary.lastEmailEventAt).toLocaleString() : "-"]
+                ["Last Touch Sent", payment.emailSummary?.lastEmailEventAt ? new Date(payment.emailSummary.lastEmailEventAt).toLocaleString("en-US") : "-"]
               ].map(([label, value]) => (
                 <Grid size={{ xs: 12, sm: 6 }} key={label}>
                   <Typography variant="body2" color="text.secondary">{label}</Typography>
@@ -1499,7 +1499,7 @@ export function CohortDetailClient({ id }: { id: string }) {
     { field: "category", headerName: "Category", width: 190, valueFormatter: (value) => formatStatusLabel(String(value ?? "")) },
     { field: "priority", headerName: "Priority", width: 120, renderCell: (params) => <StatusChip value={params.value} /> },
     { field: "status", headerName: "Status", width: 140, renderCell: (params) => <StatusChip value={params.value} /> },
-    { field: "dueDate", headerName: "Due", width: 170, valueFormatter: (value) => value ? new Date(value).toLocaleDateString() : "" },
+    { field: "dueDate", headerName: "Due", width: 170, valueFormatter: (value) => value ? new Date(value).toLocaleDateString("en-US") : "" },
     { field: "ownerName", headerName: "Owner", width: 160 },
     {
       field: "actions",
@@ -1625,7 +1625,7 @@ export function CohortDetailClient({ id }: { id: string }) {
                 <div className="quick-view-grid">
                   <DetailField label="Status" value={formatStatusLabel(cohort?.status)} />
                   <DetailField label="Presenter" value={`${cohort?.presenter?.firstName ?? ""} ${cohort?.presenter?.lastName ?? ""}`} proper />
-                  <DetailField label="Dates" value={`${cohort?.startDate ? new Date(cohort.startDate).toLocaleDateString() : "-"} - ${cohort?.endDate ? new Date(cohort.endDate).toLocaleDateString() : "-"}`} />
+                  <DetailField label="Dates" value={`${cohort?.startDate ? new Date(cohort.startDate).toLocaleDateString("en-US") : "-"} - ${cohort?.endDate ? new Date(cohort.endDate).toLocaleDateString("en-US") : "-"}`} />
                   <DetailField label="Timezone" value={cohort?.defaultTimezone ?? "-"} />
                   <DetailField label="Slug" value={cohort?.slug ?? "-"} />
                   <DetailField label="Public Registration" value={cohort?.publicRegistrationEnabled ? "Enabled" : "Off"} />
@@ -1667,7 +1667,7 @@ export function CohortDetailClient({ id }: { id: string }) {
                       <div className="readiness-manual-task" key={task.id}>
                         <div>
                           <strong title={task.title}>{task.title}</strong>
-                          <span>{formatStatusLabel(task.category)} · {task.dueDate ? new Date(task.dueDate).toLocaleDateString() : "No due date"}</span>
+                          <span>{formatStatusLabel(task.category)} · {task.dueDate ? new Date(task.dueDate).toLocaleDateString("en-US") : "No due date"}</span>
                         </div>
                         <StatusChip value={task.status} />
                       </div>
@@ -1917,7 +1917,7 @@ export function CohortDetailClient({ id }: { id: string }) {
           <List dense>
             {communications.map((communication) => (
               <ListItem key={communication.id} divider>
-                <ListItemText primary={communication.subject} secondary={communication.scheduledFor ? new Date(communication.scheduledFor).toLocaleString() : "Draft"} />
+                <ListItemText primary={communication.subject} secondary={communication.scheduledFor ? new Date(communication.scheduledFor).toLocaleString("en-US") : "Draft"} />
                 <StatusChip value={communication.status} />
               </ListItem>
             ))}
@@ -2183,7 +2183,7 @@ export function CohortDetailClient({ id }: { id: string }) {
                         <div>
                           <strong>{task.title}</strong>
                           <span>
-                            {[formatStatusLabel(task.category), task.description, task.dueDate ? new Date(task.dueDate).toLocaleDateString() : ""]
+                            {[formatStatusLabel(task.category), task.description, task.dueDate ? new Date(task.dueDate).toLocaleDateString("en-US") : ""]
                               .filter(Boolean)
                               .join(" · ")}
                           </span>
@@ -2258,7 +2258,7 @@ export function CohortDetailClient({ id }: { id: string }) {
               <DetailField label="Payment" value={formatStatusLabel(participantDetail.registration?.paymentStatus)} />
               <DetailField label="Amount" value={money(participantDetail.registration?.totalAmount)} />
               <DetailField label="Last Email" value={participantDetail.emailSummary?.lastEmailEvent ?? "-"} />
-              <DetailField label="Last Email Sent" value={participantDetail.emailSummary?.lastEmailEventAt ? new Date(participantDetail.emailSummary.lastEmailEventAt).toLocaleString() : "-"} />
+              <DetailField label="Last Email Sent" value={participantDetail.emailSummary?.lastEmailEventAt ? new Date(participantDetail.emailSummary.lastEmailEventAt).toLocaleString("en-US") : "-"} />
             </div>
             <SectionCard title="Participation History">
               {participantHistory.length > 0 ? (

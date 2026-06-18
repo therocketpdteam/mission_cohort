@@ -174,7 +174,7 @@ function InfoTile({ label, value }: { label: string; value: unknown }) {
 }
 
 function compactDate(value?: string) {
-  return value ? new Date(value).toLocaleDateString() : "-";
+  return value ? new Date(value).toLocaleDateString("en-US") : "-";
 }
 
 function envLabel(key: string) {
@@ -1315,7 +1315,7 @@ function HealthBadge({ status }: { status?: string }) {
 
 function SystemHealthPanel({ systemHealth, legacyHealth }: { systemHealth: AdminRow | null; legacyHealth: AdminRow | null }) {
   const groups = (systemHealth?.groups ?? []) as AdminRow[];
-  const generatedAt = systemHealth?.generatedAt ? new Date(systemHealth.generatedAt).toLocaleString() : null;
+  const generatedAt = systemHealth?.generatedAt ? new Date(systemHealth.generatedAt).toLocaleString("en-US") : null;
 
   if (!systemHealth) {
     const env = legacyHealth?.env ?? {};
@@ -1590,7 +1590,7 @@ export function SettingsClient() {
     { field: "email", headerName: "Email", flex: 1.2, minWidth: 240 },
     { field: "role", headerName: "Role", width: 150, valueFormatter: (value) => formatStatusLabel(String(value ?? "")) },
     { field: "active", headerName: "Active", width: 110, renderCell: (params) => <StatusChip value={params.value} /> },
-    { field: "updatedAt", headerName: "Updated", width: 160, valueFormatter: (value) => value ? new Date(value).toLocaleString() : "" },
+    { field: "updatedAt", headerName: "Updated", width: 160, valueFormatter: (value) => value ? new Date(value).toLocaleString("en-US") : "" },
     {
       field: "actions",
       headerName: "Actions",

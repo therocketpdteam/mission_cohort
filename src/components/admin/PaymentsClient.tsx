@@ -37,7 +37,7 @@ export function PaymentsClient() {
     { field: "method", headerName: "Method", width: 150, valueFormatter: (value) => formatStatusLabel(String(value ?? "")) },
     { field: "status", headerName: "Status", width: 150, renderCell: (params) => <StatusChip value={params.value} /> },
     { field: "amount", headerName: "Amount", width: 130, valueFormatter: (value) => `$${Number(value ?? 0).toLocaleString()}` },
-    { field: "paymentDate", headerName: "Payment date", width: 160, valueFormatter: (value) => value ? new Date(value).toLocaleDateString() : "" },
+    { field: "paymentDate", headerName: "Payment date", width: 160, valueFormatter: (value) => value ? new Date(value).toLocaleDateString("en-US") : "" },
     {
       field: "actions",
       headerName: "Actions",

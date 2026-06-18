@@ -356,7 +356,12 @@ export function TextField({
       ) : multiline ? (
         <textarea id={id} className="ui-input ui-textarea" rows={minRows} {...(props as TextareaHTMLAttributes<HTMLTextAreaElement>)} />
       ) : (
-        <input id={id} className="ui-input" {...(props as InputHTMLAttributes<HTMLInputElement>)} />
+        <input
+          id={id}
+          className="ui-input"
+          {...(props as InputHTMLAttributes<HTMLInputElement>)}
+          lang={props.type === "date" || props.type === "datetime-local" ? "en-US" : props.lang}
+        />
       )}
       {helperText && <span className="ui-helper">{helperText}</span>}
     </label>

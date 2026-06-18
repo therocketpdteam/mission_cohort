@@ -145,7 +145,7 @@ function formatDate(value?: string | Date | null, empty = "Not scheduled") {
     return empty;
   }
   const date = new Date(value);
-  return Number.isFinite(date.getTime()) ? date.toLocaleDateString() : empty;
+  return Number.isFinite(date.getTime()) ? date.toLocaleDateString("en-US") : empty;
 }
 
 function formatDateTime(value?: string | Date | null, empty = "No timestamp") {
@@ -153,7 +153,7 @@ function formatDateTime(value?: string | Date | null, empty = "No timestamp") {
     return empty;
   }
   const date = new Date(value);
-  return Number.isFinite(date.getTime()) ? date.toLocaleString() : empty;
+  return Number.isFinite(date.getTime()) ? date.toLocaleString("en-US") : empty;
 }
 
 function DeliverySummary({ row }: { row: AdminRow }) {

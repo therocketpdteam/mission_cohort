@@ -98,7 +98,7 @@ function defaultSession(index: number, timezone = "America/New_York") {
 }
 
 function formatDate(value?: string) {
-  return value ? new Date(value).toLocaleDateString() : "";
+  return value ? new Date(value).toLocaleDateString("en-US") : "";
 }
 
 function cohortFinanceSummary(row: AdminRow) {

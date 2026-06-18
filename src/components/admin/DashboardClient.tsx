@@ -530,7 +530,7 @@ export function DashboardClient() {
                   <div className="dashboard-task-meta">
                     <MetadataPill>{formatProperDisplay(task.registration?.organization?.name ?? "Organization")}</MetadataPill>
                     <MetadataPill>{formatProperDisplay(task.registration?.primaryContactName ?? "POC")}</MetadataPill>
-                    <MetadataPill>{task.dueDate ? new Date(task.dueDate).toLocaleDateString() : "No due date"}</MetadataPill>
+                    <MetadataPill>{task.dueDate ? new Date(task.dueDate).toLocaleDateString("en-US") : "No due date"}</MetadataPill>
                   </div>
                 </div>
                 <div className="dashboard-task-actions">
