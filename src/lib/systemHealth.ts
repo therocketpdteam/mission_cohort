@@ -237,16 +237,92 @@ async function storageChecks(): Promise<HealthCheck[]> {
   ];
 }
 
-function integrationChecks(): HealthCheck[] {
+async function integrationChecks(): Promise<HealthCheck[]> {
+  const presence = getEnvPresence();
+  const googleConnection = await prisma.integrationConnection.findUnique({
+    where: { provider_label: { provider: "GOOGLE_CALENDAR", label: "default" } },
+    select: { status: true, accountName: true, tokenExpiresAt: true, errorMessage: true }
+  }).catch(() => null);
+  const googleConnected = googleConnection?.status === "CONNECTED";
+  const checks: HealthCheck[] = [
+    {
+      key: "supabaseAuth",
+      label: "Supabase Auth",
+      status: presence.supabaseUrl && presence.supabaseAnonKey && presence.supabaseServiceRoleKey ? "healthy" : "blocked",
+      detail: presence.supabaseUrl && presence.supabaseAnonKey && presence.supabaseServiceRoleKey
+        ? "Authentication credentials are present."
+        : "Authentication requires Supabase URL, anon key, and service role key.",
+      nextAction: presence.supabaseUrl && presence.supabaseAnonKey && presence.supabaseServiceRoleKey ? undefined : "Add the missing Supabase environment variables in Vercel."
+    },
+    {
+      key: "sendgrid",
+      label: "SendGrid email sending",
+      status: presence.sendgridConfigured ? "healthy" : "warning",
+      detail: presence.sendgridConfigured
+        ? "SENDGRID_API_KEY and SENDGRID_FROM_EMAIL are present. Use Connected Tools to send a diagnostic email."
+        : "Outbound email requires SENDGRID_API_KEY and SENDGRID_FROM_EMAIL.",
+      nextAction: presence.sendgridConfigured ? "Send a diagnostic email from Settings > Connected Tools." : "Add SENDGRID_API_KEY and SENDGRID_FROM_EMAIL in Vercel."
+    },
+    {
+      key: "sendgridWebhook",
+      label: "SendGrid webhook telemetry",
+      status: presence.sendgridWebhookConfigured ? "healthy" : "warning",
+      detail: presence.sendgridWebhookConfigured
+        ? "Webhook public key is present for delivery/open/error event verification."
+        : "Delivery/open/error telemetry requires SENDGRID_WEBHOOK_PUBLIC_KEY.",
+      nextAction: presence.sendgridWebhookConfigured ? undefined : "Add SENDGRID_WEBHOOK_PUBLIC_KEY and point SendGrid Event Webhook to /api/webhooks/sendgrid."
+    },
+    {
+      key: "googleCalendarEnv",
+      label: "Google Calendar OAuth environment",
+      status: presence.googleCalendarConfigured ? "healthy" : "warning",
+      detail: presence.googleCalendarConfigured
+        ? "Google Calendar client ID, secret, redirect URI, and calendar ID are present."
+        : "Calendar automation requires Google Calendar client ID, secret, redirect URI, and calendar ID.",
+      nextAction: presence.googleCalendarConfigured ? undefined : "Add GOOGLE_CALENDAR_CLIENT_ID, GOOGLE_CALENDAR_CLIENT_SECRET, GOOGLE_CALENDAR_REDIRECT_URI, and GOOGLE_CALENDAR_ID in Vercel."
+    },
+    {
+      key: "googleCalendarConnection",
+      label: "Google Calendar connected account",
+      status: googleConnected ? "healthy" : "warning",
+      detail: googleConnected
+        ? `Connected to ${googleConnection.accountName ?? "Google Calendar"}.`
+        : googleConnection?.errorMessage ?? "Google Calendar has not completed OAuth connection yet. ICS fallback can still generate invite files.",
+      nextAction: googleConnected ? "Create a diagnostic Google Calendar event from Settings > Connected Tools." : "Use Connected Tools > Google Calendar > Connect, or use ICS fallback for calendar invite generation."
+    },
+    {
+      key: "jotformSecret",
+      label: "Jotform webhook secret",
+      status: presence.webhookSecretConfigured ? "healthy" : "warning",
+      detail: presence.webhookSecretConfigured ? "Jotform webhook secret is present." : "Jotform intake requires WEBHOOK_SECRET.",
+      nextAction: presence.webhookSecretConfigured ? undefined : "Generate or set WEBHOOK_SECRET before relying on production intake."
+    },
+    {
+      key: "quickbooks",
+      label: "QuickBooks",
+      status: presence.quickBooksConfigured ? "healthy" : "warning",
+      detail: presence.quickBooksConfigured ? "QuickBooks credentials are present." : "QuickBooks sync requires client credentials and webhook verifier.",
+      nextAction: presence.quickBooksConfigured ? undefined : "Add QuickBooks credentials before enabling live sync."
+    },
+    {
+      key: "cron",
+      label: "Scheduled jobs",
+      status: presence.cronSecretConfigured ? "healthy" : "warning",
+      detail: presence.cronSecretConfigured ? "CRON_SECRET is present for scheduled job routes." : "Automated jobs require CRON_SECRET.",
+      nextAction: presence.cronSecretConfigured ? undefined : "Add CRON_SECRET and verify Vercel cron/job calls."
+    }
+  ];
+
+  return checks.map((check) => ({
+    ...check,
+    nextAction: check.nextAction
+  }));
+}
+
+function legacyIntegrationChecks(): HealthCheck[] {
   const presence = getEnvPresence();
   const checks: Array<[string, string, boolean, HealthStatus, string]> = [
-    ["supabaseAuth", "Supabase Auth", presence.supabaseUrl && presence.supabaseAnonKey && presence.supabaseServiceRoleKey, "blocked", "Authentication requires Supabase URL, anon key, and service role key."],
-    ["sendgrid", "SendGrid email", presence.sendgridConfigured, "warning", "Outbound email requires SENDGRID_API_KEY and SENDGRID_FROM_EMAIL."],
-    ["sendgridWebhook", "SendGrid webhook", presence.sendgridWebhookConfigured, "warning", "Delivery/open/error telemetry requires SENDGRID_WEBHOOK_PUBLIC_KEY."],
-    ["jotformSecret", "Jotform webhook secret", presence.webhookSecretConfigured, "warning", "Jotform intake requires WEBHOOK_SECRET."],
-    ["googleCalendar", "Google Calendar", presence.googleCalendarConfigured, "warning", "Calendar automation requires Google Calendar credentials."],
-    ["quickbooks", "QuickBooks", presence.quickBooksConfigured, "warning", "QuickBooks sync requires client credentials and webhook verifier."],
-    ["cron", "Scheduled jobs", presence.cronSecretConfigured, "warning", "Automated jobs require CRON_SECRET."]
+    ["supabaseAuth", "Supabase Auth", presence.supabaseUrl && presence.supabaseAnonKey && presence.supabaseServiceRoleKey, "blocked", "Authentication requires Supabase URL, anon key, and service role key."]
   ];
 
   return checks.map(([key, label, ready, missingStatus, detail]) => ({
@@ -271,13 +347,14 @@ function group(key: string, title: string, summary: string, checks: HealthCheck[
 export async function buildSystemHealth(): Promise<SystemHealth> {
   const database = await databaseCheck();
   const databaseReady = database.status === "healthy";
+  const integrations = databaseReady ? await integrationChecks() : legacyIntegrationChecks();
   const groups = [
     group("database", "Database", "Connectivity and production migration readiness.", [
       database,
       ...await schemaChecks(databaseReady)
     ]),
     group("storage", "Storage", "Supabase buckets used by thumbnails, attachments, materials, invoices, and receipts.", await storageChecks()),
-    group("integrations", "Integrations", "External systems needed for real operations.", integrationChecks())
+    group("integrations", "Integrations", "External systems needed for real operations.", integrations)
   ];
 
   return {

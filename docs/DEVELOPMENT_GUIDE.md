@@ -104,4 +104,10 @@ Also open these routes as an admin:
 - Public/private storage buckets are ready.
 - SendGrid, Jotform, Supabase, and scheduled jobs show the expected status.
 
+7. In **Settings > Connected Tools**, run the live integration diagnostics when changing email/calendar setup:
+
+- `Send test email` sends a diagnostic email to the logged-in admin and verifies the SendGrid send path.
+- `Test ICS fallback` confirms Mission Control can generate calendar invite files even without Google OAuth.
+- `Test Google event` creates a diagnostic event on the configured Google Calendar after OAuth is connected.
+
 If a feature shows `Blocked`, keep the UI compatibility fallback in place and do not mark the roadmap item done until production reports ready.

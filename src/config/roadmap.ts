@@ -129,10 +129,10 @@ export const roadmapCards: RoadmapCard[] = [
     title: "Communications",
     summary: "Email templates, scheduled/manual sends, delivery telemetry, and message issue visibility.",
     ownerArea: "Communications",
-    nextAction: "Verify live SendGrid environment variables, then run a real send/resend/issue-review smoke test.",
+    nextAction: "Use Connected Tools to send a diagnostic SendGrid email, then run a real cohort send/resend/issue-review smoke test.",
     items: [
       { title: "Templates", status: "done", note: "Template management exists.", priority: "high" },
-      { title: "Scheduled/manual emails", status: "in_progress", note: "All-cohort outbox and resend actions exist; live sending depends on SendGrid env readiness.", priority: "high" },
+      { title: "Scheduled/manual emails", status: "in_progress", note: "All-cohort outbox and resend actions exist; Connected Tools now has a diagnostic SendGrid send check.", priority: "high" },
       { title: "Recipient issue review", status: "done", note: "Failed/bounced recipients can be reviewed with notes and removed from the active queue.", priority: "high" },
       { title: "SendGrid delivery/open/error telemetry", status: "in_progress", note: "Recipient timelines support events; production webhook key is still a health warning.", priority: "high" },
       { title: "Dashboard issue surfacing", status: "done", note: "Dashboard issue counts now track unreviewed failed/bounced recipients.", priority: "medium" },
@@ -161,12 +161,12 @@ export const roadmapCards: RoadmapCard[] = [
     title: "Integrations",
     summary: "Connected systems that make Mission Control operational instead of purely manual.",
     ownerArea: "Platform",
-    nextAction: "Clarify each provider’s done definition and expose connection health consistently.",
+    nextAction: "Run Connected Tools diagnostics in production, then mark SendGrid/Google Calendar done only after live sends and event creation pass.",
     items: [
       { title: "Supabase auth/storage", status: "done", note: "Auth configuration and public/private storage buckets are healthy in production.", priority: "high" },
-      { title: "SendGrid", status: "in_progress", note: "Outbound/events exist; operational health needs continued QA.", priority: "high" },
+      { title: "SendGrid", status: "in_progress", note: "Outbound/events exist and Settings can send a diagnostic email; live cohort-send QA remains.", priority: "high" },
       { title: "Jotform", status: "in_progress", note: "Intake, mapping, replay, and revision schema work; shared-form routing edge cases remain.", priority: "high" },
-      { title: "Google Calendar", status: "in_progress", note: "Batch invite preparation, ICS fallback, and Google sync actions exist; production OAuth/calendar connection still needs end-to-end verification.", priority: "medium" },
+      { title: "Google Calendar", status: "in_progress", note: "Batch invite preparation, ICS fallback, and diagnostic Google event checks exist; production OAuth/calendar connection still needs end-to-end verification.", priority: "medium" },
       { title: "QuickBooks", status: "planned", note: "References/status first; full invoice sync later.", priority: "medium" },
       { title: "CRM handoff", status: "planned", note: "Outbound contact/registration sync is scoped.", priority: "medium" },
       { title: "Mux/resources", status: "planned", note: "Recording/resource workflows remain future-facing.", priority: "low" }
@@ -191,7 +191,7 @@ export const roadmapCards: RoadmapCard[] = [
     title: "Platform / QA / Deployment",
     summary: "Quality gates, deployment safety, production audits, and environment readiness.",
     ownerArea: "Engineering",
-    nextAction: "Use Settings > System Health before and after deploys, then apply pending production migrations outside the app.",
+    nextAction: "Use Settings > System Health and Connected Tools diagnostics before/after deploys, then apply pending production migrations outside the app.",
     items: [
       { title: "Typecheck/build/prepush", status: "done", note: "Standard QA commands are documented and used.", priority: "high" },
       { title: "Playwright audit", status: "in_progress", note: "Audit exists and reports layout/API issues; sandbox permissions affect local runs.", priority: "high" },
@@ -199,7 +199,7 @@ export const roadmapCards: RoadmapCard[] = [
       { title: "System Health readiness panel", status: "done", note: "Settings now reports schema, storage, and integration readiness.", priority: "high" },
       { title: "Migrations/deploy process", status: "done", note: "Vercel build patches and readiness checks keep production schema drift visible.", priority: "high" },
       { title: "Error visibility", status: "done", note: "Schema lag returns controlled migration-required states in priority workflows.", priority: "medium" },
-      { title: "Environment readiness", status: "in_progress", note: "System Health is live; SendGrid, Google Calendar, and QuickBooks still show env warnings.", priority: "medium" }
+      { title: "Environment readiness", status: "in_progress", note: "System Health is live and Connected Tools has SendGrid/calendar diagnostics; provider env warnings still need production cleanup.", priority: "medium" }
     ]
   }
 ];

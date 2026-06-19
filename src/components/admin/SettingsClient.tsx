@@ -1409,6 +1409,7 @@ export function SettingsClient() {
   const [editing, setEditing] = useState<AdminRow | null>(null);
   const [userDialogOpen, setUserDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<AdminRow | null>(null);
+  const [testingIntegration, setTestingIntegration] = useState("");
   const { notifySuccess, notifyError, snackbar } = useNotifier();
 
   async function load() {
@@ -1435,17 +1436,79 @@ export function SettingsClient() {
     load().catch((error) => notifyError(error.message));
   }, [notifyError]);
 
-  const env = health?.env ?? {};
+  function healthCheck(key: string) {
+    return (systemHealth?.groups ?? [])
+      .flatMap((group: AdminRow) => group.checks ?? [])
+      .find((check: AdminRow) => check.key === key) as AdminRow | undefined;
+  }
+
+  async function runIntegrationDiagnostic(action: string) {
+    setTestingIntegration(action);
+    try {
+      const result = await adminApi<AdminRow>("/api/integrations/test", {
+        method: "POST",
+        body: { action }
+      });
+      const summary = result?.provider === "sendgrid"
+        ? `Diagnostic email sent to ${result.recipient}.`
+        : result?.provider === "google"
+          ? "Diagnostic Google Calendar event created."
+          : "ICS fallback generated successfully.";
+      notifySuccess(summary);
+      await load();
+    } catch (error) {
+      notifyError((error as Error).message);
+    } finally {
+      setTestingIntegration("");
+    }
+  }
+
   const currentWizardMapping = mappingWizardEvent
     ? mappings.find((mapping) => mapping.formId === mappingWizardEvent.preview?.formId)
     : undefined;
-  const providers: Array<[string, string, unknown, string]> = [
-    ["Google Calendar", "Shared operations calendar for cohort sessions.", env.googleCalendarConfigured, "/api/integrations/google/connect"],
-    ["QuickBooks", "Financial reporting status sync for invoices and payments.", env.quickBooksConfigured, "/api/integrations/quickbooks/connect"],
-    ["SendGrid Email", "Confirmation, reminder, and resend email delivery.", env.sendgridConfigured, ""],
-    ["CRM Handoff", "Outbound contact and registration updates to RocketPD CRM.", env.crmConfigured, ""],
-    ["Mux Video", "Session recording and lightweight resource playback.", env.muxConfigured, ""],
-    ["Jotform Intake", "Registration submissions, mapping, and replay queue.", Boolean(jotformSetup?.configured || env.webhookSecretConfigured), ""]
+  const providerCards = [
+    {
+      label: "SendGrid Email",
+      description: "Confirmation, reminder, invoice, receipt, and resend email delivery.",
+      checks: [healthCheck("sendgrid"), healthCheck("sendgridWebhook")].filter(Boolean),
+      actions: [
+        { label: "Send test email", action: "sendgrid", disabled: healthCheck("sendgrid")?.status !== "healthy" }
+      ]
+    },
+    {
+      label: "Google Calendar",
+      description: "Shared operations calendar for cohort sessions and publish readiness.",
+      checks: [healthCheck("googleCalendarEnv"), healthCheck("googleCalendarConnection")].filter(Boolean),
+      actions: [
+        { label: "Connect", href: "/api/integrations/google/connect", disabled: healthCheck("googleCalendarEnv")?.status !== "healthy" },
+        { label: "Test Google event", action: "googleCalendar", disabled: healthCheck("googleCalendarConnection")?.status !== "healthy" },
+        { label: "Test ICS fallback", action: "calendarIcs" }
+      ]
+    },
+    {
+      label: "QuickBooks",
+      description: "Financial reporting status sync for invoices and payments.",
+      checks: [healthCheck("quickbooks")].filter(Boolean),
+      actions: [{ label: "Connect", href: "/api/integrations/quickbooks/connect", disabled: healthCheck("quickbooks")?.status !== "healthy" }]
+    },
+    {
+      label: "Jotform Intake",
+      description: "Registration submissions, mapping, replay queue, and URL routing.",
+      checks: [healthCheck("jotformSecret")].filter(Boolean),
+      actions: []
+    },
+    {
+      label: "Scheduled Jobs",
+      description: "Background processing for scheduled communications and integration jobs.",
+      checks: [healthCheck("cron")].filter(Boolean),
+      actions: []
+    },
+    {
+      label: "Supabase Auth",
+      description: "Admin login and protected route access.",
+      checks: [healthCheck("supabaseAuth")].filter(Boolean),
+      actions: []
+    }
   ];
 
   async function saveMapping(values: AdminRow) {
@@ -1635,22 +1698,70 @@ export function SettingsClient() {
 
       <TabPanel active={activeTab} index={2}>
         <SectionCard title="Integration Hub">
-          <Grid container spacing={1.5}>
-            {providers.map(([label, description, configured, href]) => (
-              <Grid size={{ xs: 12, sm: 6, lg: 4 }} key={String(label)}>
-                <Stack spacing={1} sx={{ border: 1, borderColor: "divider", borderRadius: 1, p: 1.5, minHeight: 104 }}>
-                  <Stack direction="row" justifyContent="space-between" alignItems="center">
-                    <Typography fontWeight={800}>{label}</Typography>
-                    <StatusChip value={Boolean(configured)} />
-                  </Stack>
-                  <Typography variant="caption" color="text.secondary">
-                    {description}
-                  </Typography>
-                  {href && <Button size="small" variant="outlined" href={String(href)}>Connect</Button>}
-                </Stack>
-              </Grid>
-            ))}
-          </Grid>
+          <Typography color="text.secondary" sx={{ mb: 2 }}>
+            Use these checks before testing live cohort sends. Email and Google Calendar both need production configuration, and Google Calendar also needs an OAuth connection.
+          </Typography>
+          <div className="integration-hub-grid">
+            {providerCards.map((provider) => {
+              const checks = provider.checks as AdminRow[];
+              const blocked = checks.some((check) => check.status === "blocked");
+              const warning = checks.some((check) => check.status === "warning");
+              const status = blocked ? "blocked" : warning ? "warning" : "healthy";
+
+              return (
+                <article className={`integration-card is-${healthToneClass[status] ?? "yellow"}`} key={provider.label}>
+                  <div className="integration-card-header">
+                    <div>
+                      <span>{provider.description}</span>
+                      <h3>{provider.label}</h3>
+                    </div>
+                    <HealthBadge status={status} />
+                  </div>
+                  <div className="integration-check-list">
+                    {checks.length > 0 ? checks.map((check) => (
+                      <div className="integration-check-row" key={check.key}>
+                        <div>
+                          <strong>{check.label}</strong>
+                          <p>{check.detail}</p>
+                          {check.nextAction ? <em>{check.nextAction}</em> : null}
+                        </div>
+                        <HealthBadge status={String(check.status)} />
+                      </div>
+                    )) : (
+                      <p className="integration-muted">No detailed health check is available yet.</p>
+                    )}
+                  </div>
+                  {provider.actions.length > 0 && (
+                    <div className="integration-action-row">
+                      {provider.actions.map((action) => (
+                        action.href ? (
+                          <Button
+                            href={action.href}
+                            key={action.label}
+                            size="small"
+                            variant="outlined"
+                            disabled={action.disabled}
+                          >
+                            {action.label}
+                          </Button>
+                        ) : (
+                          <Button
+                            key={action.label}
+                            size="small"
+                            variant="outlined"
+                            disabled={action.disabled || testingIntegration === action.action}
+                            onClick={() => void runIntegrationDiagnostic(String(action.action))}
+                          >
+                            {testingIntegration === action.action ? "Testing..." : action.label}
+                          </Button>
+                        )
+                      ))}
+                    </div>
+                  )}
+                </article>
+              );
+            })}
+          </div>
         </SectionCard>
       </TabPanel>
 
