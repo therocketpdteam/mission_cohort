@@ -2362,6 +2362,36 @@ h6,
   background: rgba(15, 23, 42, 0.28);
 }
 
+.calendar-invite-preview {
+  display: grid;
+  gap: 14px;
+  padding-top: 8px;
+}
+
+.calendar-invite-preview > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.calendar-invite-preview span {
+  color: var(--color-slate-500);
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.calendar-invite-preview strong,
+.calendar-invite-preview p,
+.calendar-invite-preview a {
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.calendar-invite-preview a {
+  color: var(--color-primary-700);
+}
+
 .quick-view-drawer {
   display: flex;
   flex-direction: column;

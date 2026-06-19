@@ -4,6 +4,7 @@ import { AddIcon } from "@/components/ui/icons";
 import { CalendarMonthOutlined, EmailOutlined, GroupsOutlined, InsightsOutlined } from "@/components/ui/icons";
 import { CancelOutlined, CheckCircleOutline, SendOutlined } from "@/components/ui/icons";
 import { EditOutlined } from "@/components/ui/icons";
+import { VisibilityOutlined } from "@/components/ui/icons";
 import {
   Box,
   Alert,
@@ -54,13 +55,24 @@ import {
 
 const sessionFields: FieldConfig[] = [
   { name: "title", label: "Session title", required: true },
-  { name: "description", label: "Description", type: "textarea" },
+  {
+    name: "description",
+    label: "Calendar invite description",
+    type: "textarea",
+    placeholder: "Add the session context, preparation notes, or agenda attendees should see.",
+    helperText: "This appears inside the Google Calendar event and its invitation details."
+  },
   { name: "sessionNumber", label: "Session number", type: "number", required: true },
   { name: "startTime", label: "Start time", type: "datetime-local", required: true },
   { name: "endTime", label: "End time", type: "datetime-local", required: true },
   { name: "timezone", label: "Timezone", required: true },
-  { name: "meetingUrl", label: "Meeting URL" },
-  { name: "location", label: "Location" }
+  {
+    name: "meetingUrl",
+    label: "Zoom / meeting link",
+    placeholder: "https://zoom.us/j/...",
+    helperText: "Mission Control appends this link to the calendar description and uses it as the event location when no location is provided."
+  },
+  { name: "location", label: "Location (optional)", placeholder: "Online, room name, or physical address" }
 ];
 
 const taskFields: FieldConfig[] = [
@@ -838,6 +850,7 @@ export function CohortDetailClient({ id }: { id: string }) {
   const [sessionDialogOpen, setSessionDialogOpen] = useState(false);
   const [editingSession, setEditingSession] = useState<AdminRow | null>(null);
   const [calendarCancelTarget, setCalendarCancelTarget] = useState<{ scope: "session" | "cohort"; session?: AdminRow } | null>(null);
+  const [calendarPreviewSession, setCalendarPreviewSession] = useState<AdminRow | null>(null);
   const [cancellingCalendar, setCancellingCalendar] = useState(false);
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
   const [resourceDialogOpen, setResourceDialogOpen] = useState(false);
@@ -1898,6 +1911,7 @@ export function CohortDetailClient({ id }: { id: string }) {
                   <RowActionMenu
                     actions={[
                       { label: "Edit session", icon: <EditOutlined fontSize="small" />, onClick: () => { setEditingSession(session); setSessionDialogOpen(true); } },
+                      { label: "Preview Google invite", icon: <VisibilityOutlined fontSize="small" />, onClick: () => setCalendarPreviewSession(session) },
                       { label: "Add material", icon: <AddIcon fontSize="small" />, onClick: () => openMaterialDialog(session) },
                       {
                         label: "Generate ICS",
@@ -2184,6 +2198,47 @@ export function CohortDetailClient({ id }: { id: string }) {
           <Button color="error" onClick={() => void cancelCalendarInvites()} disabled={cancellingCalendar}>
             {cancellingCalendar ? "Cancelling" : "Send Cancellation"}
           </Button>
+        </DialogActions>
+      </Dialog>
+      <Dialog open={Boolean(calendarPreviewSession)} onClose={() => setCalendarPreviewSession(null)} maxWidth="sm" fullWidth>
+        <DialogTitle>Google Calendar Invite Preview</DialogTitle>
+        <DialogContent>
+          {calendarPreviewSession && (
+            <div className="calendar-invite-preview">
+              <div>
+                <span>Event</span>
+                <strong>{calendarPreviewSession.title}</strong>
+              </div>
+              <div>
+                <span>Date and time</span>
+                <strong>{formatDateTimeInZone(calendarPreviewSession.startTime, calendarPreviewSession.timezone)} - {formatTimeInZone(calendarPreviewSession.endTime, calendarPreviewSession.timezone)}</strong>
+              </div>
+              <div>
+                <span>Description</span>
+                <p>{calendarPreviewSession.description || "No calendar invite description."}</p>
+              </div>
+              <div>
+                <span>Zoom / meeting link</span>
+                {calendarPreviewSession.meetingUrl
+                  ? <a href={calendarPreviewSession.meetingUrl} target="_blank" rel="noreferrer">{calendarPreviewSession.meetingUrl}</a>
+                  : <p>No meeting link.</p>}
+              </div>
+              <div>
+                <span>Location</span>
+                <p>{calendarPreviewSession.location || calendarPreviewSession.meetingUrl || "No location."}</p>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button variant="outlined" onClick={() => setCalendarPreviewSession(null)}>Close</Button>
+          <Button onClick={() => {
+            if (calendarPreviewSession) {
+              setEditingSession(calendarPreviewSession);
+              setSessionDialogOpen(true);
+            }
+            setCalendarPreviewSession(null);
+          }}>Edit Session</Button>
         </DialogActions>
       </Dialog>
       <MutationDialog

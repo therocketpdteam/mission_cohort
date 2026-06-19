@@ -32,6 +32,8 @@ export type FieldConfig = {
   type?: "text" | "number" | "date" | "datetime-local" | "email" | "password" | "textarea" | "select" | "checkbox" | "image";
   options?: Array<{ label: string; value: string }>;
   required?: boolean;
+  helperText?: string;
+  placeholder?: string;
 };
 
 function formatInputDateValue(value: unknown, type: "date" | "datetime-local") {
@@ -763,6 +765,8 @@ export function MutationDialog({
                   <TextField
                     fullWidth
                     label={field.label}
+                    helperText={field.helperText}
+                    placeholder={field.placeholder}
                     required={field.required}
                     multiline={field.type === "textarea"}
                     minRows={field.type === "textarea" ? 4 : undefined}
