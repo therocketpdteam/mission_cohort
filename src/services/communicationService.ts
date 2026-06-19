@@ -1,6 +1,5 @@
 import { CommunicationStatus, EmailEventType, OperationsTaskCategory, OperationsTaskStatus, ParticipantStatus, Prisma, RecipientScope, RegistrationStatus, Role, TemplateType } from "@prisma/client";
 import { z } from "zod";
-import { env } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
 import { isMissingEmailReviewColumn, migrationRequiredResult } from "@/lib/prismaCompatibility";
 import {
@@ -574,13 +573,6 @@ async function resolveCommunicationRecipients(communication: {
 }
 
 export async function sendCommunication(id: string, options?: { recipients?: string[]; context?: Parameters<typeof sendEmail>[0]["context"] }) {
-  if (!env.SENDGRID_API_KEY || !env.SENDGRID_FROM_EMAIL) {
-    throw Object.assign(new Error("SendGrid is not configured. Add SENDGRID_API_KEY and SENDGRID_FROM_EMAIL before sending email."), {
-      code: "BAD_REQUEST",
-      status: 400
-    });
-  }
-
   const communication = await prisma.cohortCommunication.findUnique({
     where: { id },
     include: { cohort: { include: { presenter: true } }, session: true, template: true, createdBy: true, attachments: true }
