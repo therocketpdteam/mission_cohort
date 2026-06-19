@@ -1,4 +1,4 @@
-import { CommunicationStatus, EmailEventType, OperationsTaskCategory, OperationsTaskStatus, ParticipantStatus, Prisma, RecipientScope, RegistrationStatus, Role, TemplateType } from "@prisma/client";
+import { CohortStatus, CommunicationStatus, EmailEventType, OperationsTaskCategory, OperationsTaskStatus, ParticipantStatus, Prisma, RecipientScope, RegistrationStatus, Role, TemplateType } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { isMissingEmailReviewColumn, migrationRequiredResult } from "@/lib/prismaCompatibility";
@@ -12,6 +12,7 @@ import { logAuditEventAsync } from "./auditService";
 import { generateSessionReminderSchedule } from "@/modules/email";
 import { sendEmail } from "@/services/emailService";
 import { deletePrivateAppFile } from "@/services/storageService";
+import { assertCohortDeliveryAllowed, getSendGridSetup } from "@/services/integrationSetupService";
 
 const defaultTemplates: Array<{
   type: TemplateType;
@@ -100,7 +101,6 @@ const defaultTemplates: Array<{
 ];
 
 const sessionTemplateTypes = [
-  TemplateType.REGISTRATION_CONFIRMATION,
   TemplateType.WEEK_BEFORE_REMINDER,
   TemplateType.DAY_BEFORE_REMINDER,
   TemplateType.HOUR_BEFORE_REMINDER,
@@ -597,6 +597,8 @@ export async function sendCommunication(id: string, options?: { recipients?: str
       });
     }
 
+    await assertCohortDeliveryAllowed("SENDGRID", communication.cohort.status, recipients);
+
     const result = await sendEmail({
       to: recipients,
       subject: communication.subject,
@@ -690,6 +692,83 @@ export async function sendCalendarUpdateNotice(input: { cohortId: string; sessio
     cohortId: input.cohortId,
     sessionId: input.sessionId,
     recipientScope: RecipientScope.ALL_PARTICIPANTS
+  });
+
+  return sendCommunication(communication.id);
+}
+
+type SessionScheduleChange = {
+  sessionId: string;
+  sessionNumber?: number | null;
+  title: string;
+  timezone: string;
+  previousStartTime: Date | string;
+  nextStartTime: Date | string;
+  previousEndTime: Date | string;
+  nextEndTime: Date | string;
+};
+
+function escapeEmailHtml(value: string) {
+  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
+}
+
+function formatScheduleTime(value: Date | string, timezone: string) {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short"
+  }).format(new Date(value));
+}
+
+export async function sendCohortScheduleChangeNotice(input: { cohortId: string; changes: SessionScheduleChange[] }) {
+  if (input.changes.length === 0) {
+    return null;
+  }
+
+  const cohort = await prisma.cohort.findUnique({ where: { id: input.cohortId } });
+  if (!cohort) {
+    throw Object.assign(new Error("Cohort not found"), { code: "NOT_FOUND", status: 404 });
+  }
+
+  const rows = input.changes.map((change) => {
+    const label = `${change.sessionNumber ? `Session ${change.sessionNumber}: ` : ""}${change.title}`;
+    const previous = `${formatScheduleTime(change.previousStartTime, change.timezone)} - ${formatScheduleTime(change.previousEndTime, change.timezone)}`;
+    const next = `${formatScheduleTime(change.nextStartTime, change.timezone)} - ${formatScheduleTime(change.nextEndTime, change.timezone)}`;
+    const scheduleChanged = new Date(change.previousStartTime).getTime() !== new Date(change.nextStartTime).getTime() ||
+      new Date(change.previousEndTime).getTime() !== new Date(change.nextEndTime).getTime();
+    return { label, previous, next, scheduleChanged };
+  });
+  const bodyHtml = [
+    `<p>The schedule for <strong>${escapeEmailHtml(cohort.title)}</strong> has been updated.</p>`,
+    "<p>Your calendar invitations have been updated. The affected sessions are:</p>",
+    `<ul>${rows.map((row) => row.scheduleChanged
+      ? `<li><strong>${escapeEmailHtml(row.label)}</strong><br>Previous: ${escapeEmailHtml(row.previous)}<br>New: ${escapeEmailHtml(row.next)}</li>`
+      : `<li><strong>${escapeEmailHtml(row.label)}</strong><br>Session details were updated in the calendar invitation.</li>`).join("")}</ul>`,
+    "<p>Please contact the RocketPD team if you have any questions.</p>"
+  ].join("");
+  const bodyText = [
+    `The schedule for ${cohort.title} has been updated.`,
+    "Your calendar invitations have been updated.",
+    ...rows.map((row) => row.scheduleChanged
+      ? `${row.label}\nPrevious: ${row.previous}\nNew: ${row.next}`
+      : `${row.label}\nSession details were updated in the calendar invitation.`),
+    "Please contact the RocketPD team if you have any questions."
+  ].join("\n\n");
+  const createdById = await getSystemUserId();
+  const communication = await prisma.cohortCommunication.create({
+    data: {
+      cohortId: input.cohortId,
+      subject: `Schedule updated: ${cohort.title}`,
+      bodyHtml,
+      bodyText,
+      status: CommunicationStatus.DRAFT,
+      recipientScope: RecipientScope.ALL_PARTICIPANTS,
+      createdById
+    }
   });
 
   return sendCommunication(communication.id);
@@ -1073,10 +1152,12 @@ export async function getRecipientCommunicationThread(email: string) {
 }
 
 export async function processScheduledCommunications(limit = 25) {
+  const setup = await getSendGridSetup();
   const communications = await prisma.cohortCommunication.findMany({
     where: {
       status: CommunicationStatus.SCHEDULED,
-      scheduledFor: { lte: new Date() }
+      scheduledFor: { lte: new Date() },
+      ...(setup.liveSendingEnabled ? { cohort: { status: { not: CohortStatus.DRAFT } } } : {})
     },
     orderBy: { scheduledFor: "asc" },
     take: limit

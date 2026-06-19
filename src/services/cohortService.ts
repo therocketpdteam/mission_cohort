@@ -4,7 +4,8 @@ import { dateInput, ensureEndAfterStart, positiveIntInput } from "@/lib/validato
 import { prisma } from "@/lib/prisma";
 import { cohortCreateSchema, cohortUpdateSchema } from "@/validators/cohort";
 import { logAuditEventAsync } from "./auditService";
-import { createDefaultSessionOperationsTasks } from "./operationsTaskService";
+import { createDefaultSessionCommunications } from "./communicationService";
+import { prepareCohortCalendarInvites } from "./calendarService";
 import { getCohortReadiness, withCohortLifecycle } from "./cohortLifecycle";
 
 const nestedSessionCreateSchema = z.object({
@@ -79,11 +80,7 @@ export async function createCohortWithSessions(input: z.input<typeof cohortWithS
   });
 
   for (const session of cohort.sessions) {
-    void createDefaultSessionOperationsTasks({
-      cohortId: cohort.id,
-      sessionId: session.id,
-      sessionTitle: session.title
-    });
+    await createDefaultSessionCommunications(session.id);
   }
 
   return cohort;
@@ -169,7 +166,19 @@ export async function publishCohort(id: string) {
     throw Object.assign(new Error(`Cohort is not ready to publish: ${blockers}`), { code: "COHORT_NOT_READY", status: 409 });
   }
 
-  return updateCohort(id, { status: CohortStatus.PUBLISHED });
+  const published = await updateCohort(id, { status: CohortStatus.PUBLISHED });
+  try {
+    const delivery = await prepareCohortCalendarInvites({ cohortId: id, mode: "auto", fallbackToIcs: false });
+    return { ...published, delivery };
+  } catch (error) {
+    return {
+      ...published,
+      delivery: {
+        status: "needs_attention" as const,
+        error: error instanceof Error ? error.message : "Calendar invitation delivery failed"
+      }
+    };
+  }
 }
 
 export async function archiveCohort(id: string) {

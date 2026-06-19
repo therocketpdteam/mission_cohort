@@ -1,11 +1,11 @@
 import { fail, handleApiError, ok } from "@/lib/api";
 import { getEnvPresence } from "@/lib/env";
-import { createCalendarInvitePlaceholder, prepareCohortCalendarInvites } from "@/services/calendarService";
+import { applyCohortCalendarChanges, createCalendarInvitePlaceholder, prepareCohortCalendarInvites } from "@/services/calendarService";
 import { getIntegrationConnection } from "@/services/integrationService";
 import { IntegrationProvider } from "@prisma/client";
 import { cancelGoogleCalendarInvites } from "@/services/calendarService";
 import { MUTATION_ROLES, requireRole } from "@/lib/auth";
-import { sendCalendarCancellationNotice } from "@/services/communicationService";
+import { sendCalendarCancellationNotice, sendCohortScheduleChangeNotice } from "@/services/communicationService";
 import { prisma } from "@/lib/prisma";
 
 export async function GET() {
@@ -29,6 +29,22 @@ export async function POST(request: Request) {
   try {
     await requireRole(MUTATION_ROLES);
     const body = await request.json().catch(() => ({}));
+    if (body.action === "applyCohortChanges" && body.cohortId) {
+      const calendar = await applyCohortCalendarChanges(body.cohortId);
+      let communication: { status: string; communicationId?: string; error?: string } = { status: "not_needed" };
+
+      if (calendar.applied.length > 0) {
+        try {
+          const sent = await sendCohortScheduleChangeNotice({ cohortId: body.cohortId, changes: calendar.applied });
+          communication = { status: sent ? "sent" : "not_needed", communicationId: sent?.id };
+        } catch (error) {
+          communication = { status: "failed", error: error instanceof Error ? error.message : "Schedule update email failed" };
+        }
+      }
+
+      return ok({ ...calendar, communication }, { status: 202 });
+    }
+
     if (body.action === "prepareCohortInvites") {
       return ok(await prepareCohortCalendarInvites({
         cohortId: body.cohortId,

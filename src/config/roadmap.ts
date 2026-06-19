@@ -88,8 +88,9 @@ export const roadmapCards: RoadmapCard[] = [
       { title: "Overview/readiness", status: "done", note: "Basics and readiness are centered in Overview.", priority: "high" },
       { title: "Sessions checklist", status: "done", note: "Overview uses a compact readiness checklist for calendar, default emails, and session materials.", priority: "high" },
       { title: "Registration/participant quick views", status: "in_progress", note: "Rows are clickable; history and edit affordances continue to improve.", priority: "high" },
-      { title: "Materials/session resources", status: "done", note: "Materials can be added directly to sessions, shown in the session checklist, and linked into outbound communication attachments.", priority: "medium" },
-      { title: "Publish-readiness workflow", status: "in_progress", note: "Readiness actions now prepare invites, create session emails, clear session tasks, show session-level blockers/stale warnings, and guard publishing; live provider QA remains.", priority: "high" }
+      { title: "Materials/session resources", status: "done", note: "Materials remain optional session files and can be linked into outbound communications without blocking publication.", priority: "medium" },
+      { title: "Publish-readiness workflow", status: "in_progress", note: "Draft cohorts prepare plans without live delivery; publishing explicitly authorizes calendar delivery and pending session edits use one Apply Changes workflow.", priority: "high" },
+      { title: "Batch session change control", status: "done", note: "Linked session edits persist as pending changes, update affected Google events together, and create one consolidated communication record.", priority: "high" }
     ]
   },
   {
@@ -137,7 +138,8 @@ export const roadmapCards: RoadmapCard[] = [
       { title: "SendGrid delivery/open/error telemetry", status: "in_progress", note: "Recipient timelines support events; production webhook key is still a health warning.", priority: "high" },
       { title: "Dashboard issue surfacing", status: "done", note: "Dashboard issue counts now track unreviewed failed/bounced recipients.", priority: "medium" },
       { title: "Outbound attachments", status: "done", note: "Per-message uploads and cohort/session material links are available; live send QA still depends on SendGrid readiness.", priority: "high" },
-      { title: "Future inbound reply sync", status: "planned", note: "Explicitly future scope.", priority: "low" }
+      { title: "Registration communication journeys", status: "planned", note: "Separate POC and participant confirmations, eligibility-aware milestone scheduling, and roster/invoice change notices are next.", priority: "high" },
+      { title: "Shared inbound support inbox", status: "planned", note: "Connect support@rocketpd.com and its info@rocketpd.com alias, match contacts, preserve threads, and create response tasks.", priority: "high" }
     ]
   },
   {
@@ -153,7 +155,8 @@ export const roadmapCards: RoadmapCard[] = [
       { title: "QuickBooks reference sync", status: "in_progress", note: "Refs/status are editable in v1; creating/updating QuickBooks invoices is future scope.", priority: "medium" },
       { title: "Distribution calculator", status: "done", note: "Sold, paid, RPD share, TL share, payout due, paid out, pending payout, and project return are calculated from active registrations.", priority: "high" },
       { title: "Payout ledger", status: "done", note: "Payout create/edit/cancel and proof upload are available inside Distribution.", priority: "high" },
-      { title: "Production migration status", status: "done", note: "Finance and distribution schema checks are healthy in System Health.", priority: "high" }
+      { title: "Production migration status", status: "done", note: "Finance and distribution schema checks are healthy in System Health.", priority: "high" },
+      { title: "Payment reminder policies", status: "planned", note: "Support standard, after-final-session, custom-date, and manual-hold reminder behavior per registration.", priority: "high" }
     ]
   },
   {

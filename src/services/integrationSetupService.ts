@@ -263,6 +263,22 @@ export async function assertOutboundRecipientsAllowed(provider: "SENDGRID" | "GO
   }
 }
 
+export async function assertCohortDeliveryAllowed(
+  provider: "SENDGRID" | "GOOGLE_CALENDAR",
+  cohortStatus: string,
+  recipients: string[]
+) {
+  const setup = provider === "SENDGRID" ? await getSendGridSetup() : await getGoogleCalendarSetup();
+
+  if (cohortStatus === "DRAFT" && setup.liveSendingEnabled) {
+    throw Object.assign(new Error(
+      "Draft cohorts cannot send live communications. Publish the cohort first, or use outbound safety mode with explicitly allowlisted test recipients."
+    ), { code: "COHORT_NOT_PUBLISHED", status: 409 });
+  }
+
+  return assertOutboundRecipientsAllowed(provider, recipients);
+}
+
 export async function resolveQuickBooksSetup() {
   const setup = await getConnection(IntegrationProvider.QUICKBOOKS, "setup");
   const data = metadata(setup?.metadata);

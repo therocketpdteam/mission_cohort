@@ -135,7 +135,6 @@ function resourceFieldsForSessions(sessions: AdminRow[]): FieldConfig[] {
 }
 
 const sessionEmailTypes = [
-  { type: "REGISTRATION_CONFIRMATION", label: "Registration Confirmation" },
   { type: "WEEK_BEFORE_REMINDER", label: "1 Week" },
   { type: "DAY_BEFORE_REMINDER", label: "24h" },
   { type: "HOUR_BEFORE_REMINDER", label: "60m" },
@@ -883,6 +882,7 @@ export function CohortDetailClient({ id }: { id: string }) {
   const [preparingInvites, setPreparingInvites] = useState(false);
   const [creatingSessionEmails, setCreatingSessionEmails] = useState(false);
   const [publishingCohort, setPublishingCohort] = useState(false);
+  const [applyingSessionChanges, setApplyingSessionChanges] = useState(false);
   const { notifySuccess, notifyError, snackbar } = useNotifier();
 
   async function load() {
@@ -1100,6 +1100,7 @@ export function CohortDetailClient({ id }: { id: string }) {
   const compareCohort = allCohorts.find((item) => item.id === compareCohortId);
   const detailTabs = ["Overview", "Registrations", "Participants", "Communications", "Distribution"];
   const readinessItems = cohort?.readiness?.items ?? [];
+  const pendingSessionChanges = (cohort?.readiness?.sessionDetails ?? []).filter((session: AdminRow) => session.calendar?.stale);
   const filteredRegistrations = useMemo(() => registrations.filter((registration) => {
     const paymentMatch = !registrationPaymentFilter || registration.paymentStatus === registrationPaymentFilter;
     const rosterMatch = !registrationRosterFilter || registration.participantListStatus === registrationRosterFilter;
@@ -1205,6 +1206,33 @@ export function CohortDetailClient({ id }: { id: string }) {
     }
   }
 
+  async function applyPendingSessionChanges() {
+    setApplyingSessionChanges(true);
+    try {
+      const result = await adminApi<AdminRow>("/api/calendar", {
+        method: "POST",
+        body: { action: "applyCohortChanges", cohortId: id }
+      });
+      const applied = Number(result.applied?.length ?? 0);
+      const failed = Number(result.failed?.length ?? 0);
+
+      if (failed > 0) {
+        notifyError(`${applied} session update${applied === 1 ? "" : "s"} applied; ${failed} still need attention.`);
+      } else if (result.communication?.status === "failed") {
+        notifyError(`${applied} calendar update${applied === 1 ? "" : "s"} applied, but the consolidated email failed: ${result.communication.error}`);
+      } else if (applied > 0) {
+        notifySuccess(`${applied} session update${applied === 1 ? "" : "s"} applied with calendar notifications and one consolidated email`);
+      } else {
+        notifySuccess("No pending session changes");
+      }
+      await load();
+    } catch (error) {
+      notifyError((error as Error).message);
+    } finally {
+      setApplyingSessionChanges(false);
+    }
+  }
+
   async function syncGoogleCalendarSession(sessionId: string) {
     try {
       await adminApi("/api/calendar", { method: "POST", body: { sessionId, mode: "google" } });
@@ -1225,8 +1253,12 @@ export function CohortDetailClient({ id }: { id: string }) {
     setPublishingCohort(true);
 
     try {
-      await adminApi(`/api/cohorts/${id}`, { method: "PATCH", body: { action: "publish" } });
-      notifySuccess("Cohort published");
+      const result = await adminApi<AdminRow>(`/api/cohorts/${id}`, { method: "PATCH", body: { action: "publish" } });
+      if (result.delivery?.status === "needs_attention") {
+        notifyError(`Cohort published, but calendar delivery needs attention: ${result.delivery.error}`);
+      } else {
+        notifySuccess("Cohort published and calendar invitations released");
+      }
       await load();
     } catch (error) {
       notifyError((error as Error).message);
@@ -1594,12 +1626,8 @@ export function CohortDetailClient({ id }: { id: string }) {
     try {
       if (editingSession) {
         const result = await adminApi<AdminRow>("/api/sessions", { method: "PATCH", body: { ...values, id: editingSession.id } });
-        if (result.calendarSync === "updated" && result.emailSync === "sent") {
-          notifySuccess(`Session, Google invitation, and update email sent to ${result.calendarRecipients ?? 0} participants`);
-        } else if (result.calendarSync === "updated" && result.emailSync === "blocked") {
-          notifyError(`Session and Google invitation updated, but the email was not sent: ${result.emailSyncError}`);
-        } else if (result.calendarSync === "blocked") {
-          notifyError(`Session saved, but the Google invitation was not updated: ${result.calendarSyncError}`);
+        if (result.calendarSync === "pending") {
+          notifySuccess("Session change saved. Apply pending changes when all edits are ready.");
         } else {
           notifySuccess("Session updated");
         }
@@ -1834,6 +1862,15 @@ export function CohortDetailClient({ id }: { id: string }) {
             title="Sessions"
             action={
               <div className="action-group">
+                {pendingSessionChanges.length > 0 && (
+                  <Button
+                    startIcon={<SendOutlined />}
+                    disabled={applyingSessionChanges}
+                    onClick={applyPendingSessionChanges}
+                  >
+                    {applyingSessionChanges ? "Applying" : `Apply Changes (${pendingSessionChanges.length})`}
+                  </Button>
+                )}
                 {sessions.some((session) => (session.calendarEvents ?? []).some((event: AdminRow) => event.provider === "google")) && (
                   <Button variant="outlined" color="error" onClick={() => setCalendarCancelTarget({ scope: "cohort" })}>
                     Cancel All Invites
@@ -1873,6 +1910,7 @@ export function CohortDetailClient({ id }: { id: string }) {
               {sessions.map((session) => {
                 const sessionMaterials = resources.filter((resource) => resource.sessionId === session.id);
                 const emailSummary = sessionEmailSummary(session.id);
+                const sessionReadiness = (cohort?.readiness?.sessionDetails ?? []).find((item: AdminRow) => item.id === session.id);
 
                 return (
                 <div className="session-check-row" role="row" key={session.id}>
@@ -1898,7 +1936,11 @@ export function CohortDetailClient({ id }: { id: string }) {
                       </div>
                     )}
                   </div>
-                  {renderReadinessIcon(session.calendarInviteStatus === "CREATED" || session.calendarInviteStatus === "UPDATED", formatStatusLabel(session.calendarInviteStatus), async () => {
+                  {renderReadinessIcon(Boolean(sessionReadiness?.calendar?.ready), sessionReadiness?.calendar?.detail ?? formatStatusLabel(session.calendarInviteStatus), async () => {
+                    if (sessionReadiness?.calendar?.stale) {
+                      await applyPendingSessionChanges();
+                      return;
+                    }
                     try {
                       await adminApi("/api/calendar", { method: "POST", body: { sessionId: session.id, mode: "ics" } });
                       notifySuccess("ICS invite generated");
@@ -1922,15 +1964,15 @@ export function CohortDetailClient({ id }: { id: string }) {
                   <div className="session-material-cell">
                     <button
                       type="button"
-                      className={`session-check session-material-summary ${sessionMaterials.length > 0 ? "is-done" : "is-missing"}`}
+                      className={`session-check session-material-summary ${sessionMaterials.length > 0 ? "is-done" : "is-optional"}`}
                       title={sessionMaterials.length > 0 ? `${sessionMaterials.length} material${sessionMaterials.length === 1 ? "" : "s"}` : "Add session material"}
                       onClick={(event) => {
                         event.stopPropagation();
                         openMaterialDialog(session);
                       }}
                     >
-                      {sessionMaterials.length > 0 ? <CheckCircleOutline /> : <CancelOutlined />}
-                      <span>{sessionMaterials.length || "Add"}</span>
+                      {sessionMaterials.length > 0 ? <CheckCircleOutline /> : <AddIcon />}
+                      <span>{sessionMaterials.length || "Optional"}</span>
                     </button>
                   </div>
                   <RowActionMenu

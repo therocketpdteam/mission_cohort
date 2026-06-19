@@ -140,14 +140,6 @@ export async function createDefaultSessionOperationsTasks(input: {
       description: "Plan 7-day, 24-hour, and 1-hour reminder communications for this session.",
       category: OperationsTaskCategory.REMINDER_EMAILS,
       priority: OperationsTaskPriority.MEDIUM
-    },
-    {
-      cohortId: input.cohortId,
-      sessionId: input.sessionId,
-      title: `Prepare resources for ${input.sessionTitle}`,
-      description: "Confirm slides, resources, and any post-session recording links for delivery.",
-      category: OperationsTaskCategory.SESSION_RESOURCES,
-      priority: OperationsTaskPriority.MEDIUM
     }
   ];
 

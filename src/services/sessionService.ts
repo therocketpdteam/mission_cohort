@@ -1,10 +1,9 @@
 import { z } from "zod";
+import { CalendarInviteStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { sessionCreateSchema, sessionUpdateSchema } from "@/validators/session";
 import { logAuditEventAsync } from "./auditService";
-import { createDefaultSessionOperationsTasks } from "./operationsTaskService";
-import { createCalendarInvitePlaceholder } from "./calendarService";
-import { rescheduleUnsentSessionCommunications, sendCalendarUpdateNotice } from "./communicationService";
+import { createDefaultSessionCommunications, rescheduleUnsentSessionCommunications } from "./communicationService";
 
 const calendarRelevantFields = ["title", "description", "startTime", "endTime", "timezone", "meetingUrl", "location"] as const;
 
@@ -29,11 +28,7 @@ export async function createSession(input: z.input<typeof sessionCreateSchema>) 
     description: "Session created",
     metadata: { cohortId: session.cohortId, sessionNumber: session.sessionNumber }
   });
-  void createDefaultSessionOperationsTasks({
-    cohortId: session.cohortId,
-    sessionId: session.id,
-    sessionTitle: session.title
-  });
+  await createDefaultSessionCommunications(session.id);
   return session;
 }
 
@@ -46,7 +41,7 @@ export async function updateSession(id: string, input: z.input<typeof sessionUpd
   }
 
   const linkedGoogleEvent = await prisma.calendarEvent.findFirst({ where: { sessionId: id, provider: "google" } });
-  const session = await prisma.cohortSession.update({ where: { id }, data });
+  let session = await prisma.cohortSession.update({ where: { id }, data });
   const detailsChanged = calendarDetailsChanged(existingSession, session);
   const reminderSync = existingSession.startTime.getTime() !== session.startTime.getTime()
     ? await rescheduleUnsentSessionCommunications(id, session.startTime)
@@ -56,32 +51,12 @@ export async function updateSession(id: string, input: z.input<typeof sessionUpd
     return { ...session, calendarSync: linkedGoogleEvent ? "unchanged" as const : "not_linked" as const, reminderSync };
   }
 
-  let calendarResult: Awaited<ReturnType<typeof createCalendarInvitePlaceholder>> | null = null;
-  let calendarSyncError: string | null = null;
-  try {
-    calendarResult = await createCalendarInvitePlaceholder(id, "google");
-  } catch (error) {
-    calendarSyncError = error instanceof Error ? error.message : "Google Calendar update failed";
-  }
+  session = await prisma.cohortSession.update({
+    where: { id },
+    data: { calendarInviteStatus: CalendarInviteStatus.NOT_CREATED }
+  });
 
-  let emailSync: "sent" | "blocked" = "sent";
-  let emailSyncError: string | null = null;
-  try {
-    await sendCalendarUpdateNotice({ cohortId: session.cohortId, sessionId: session.id });
-  } catch (error) {
-    emailSync = "blocked";
-    emailSyncError = error instanceof Error ? error.message : "Session update email failed";
-  }
-
-  return {
-    ...session,
-    calendarSync: calendarResult ? "updated" as const : "blocked" as const,
-    calendarRecipients: calendarResult?.attendeeCount ?? 0,
-    calendarSyncError,
-    reminderSync,
-    emailSync,
-    emailSyncError
-  };
+  return { ...session, calendarSync: "pending" as const, reminderSync };
 }
 
 export async function deleteSession(id: string) {

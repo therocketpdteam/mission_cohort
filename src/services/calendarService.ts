@@ -2,7 +2,7 @@ import { CalendarInviteStatus, IntegrationConnectionStatus, IntegrationProvider,
 import { prisma } from "@/lib/prisma";
 import { deleteGoogleCalendarEvent, exchangeGoogleCalendarCode, generateSessionIcs, getGoogleCalendarConnectUrl, getGoogleCalendarEvent, listGoogleCalendars, refreshGoogleCalendarToken, uniqueCalendarAttendees, upsertGoogleCalendarEvent } from "@/modules/calendar";
 import { getDecryptedIntegrationConnection, upsertIntegrationConnection } from "@/services/integrationService";
-import { assertOutboundRecipientsAllowed, resolveGoogleCalendarSetup } from "@/services/integrationSetupService";
+import { assertCohortDeliveryAllowed, assertOutboundRecipientsAllowed, resolveGoogleCalendarSetup } from "@/services/integrationSetupService";
 
 async function googleSetupWithEnvFallback() {
   const setup = await resolveGoogleCalendarSetup();
@@ -123,7 +123,7 @@ export async function createCalendarInvitePlaceholder(sessionId?: string, mode: 
   try {
     if (mode === "google") {
       const attendees = await getCohortCalendarAttendees(session.cohortId);
-      await assertOutboundRecipientsAllowed("GOOGLE_CALENDAR", attendees.map((attendee) => attendee.email));
+      await assertCohortDeliveryAllowed("GOOGLE_CALENDAR", session.cohort.status, attendees.map((attendee) => attendee.email));
       const existing = await prisma.calendarEvent.findFirst({
         where: { sessionId: session.id, provider: "google" },
         orderBy: { createdAt: "desc" }
@@ -246,6 +246,72 @@ export async function createCalendarInvitePlaceholder(sessionId?: string, mode: 
     });
     throw error;
   }
+}
+
+function calendarRecordDiffers(session: {
+  title: string;
+  startTime: Date;
+  endTime: Date;
+  timezone: string;
+  meetingUrl: string | null;
+}, event: {
+  title: string;
+  startTime: Date;
+  endTime: Date;
+  timezone: string;
+  inviteUrl: string | null;
+}) {
+  return session.title !== event.title ||
+    session.startTime.getTime() !== event.startTime.getTime() ||
+    session.endTime.getTime() !== event.endTime.getTime() ||
+    session.timezone !== event.timezone ||
+    (session.meetingUrl ?? "") !== (event.inviteUrl ?? "");
+}
+
+export async function applyCohortCalendarChanges(cohortId: string) {
+  const sessions = await prisma.cohortSession.findMany({
+    where: { cohortId },
+    orderBy: { sessionNumber: "asc" },
+    include: {
+      calendarEvents: {
+        where: { provider: "google", providerEventId: { not: null } },
+        orderBy: { updatedAt: "desc" }
+      }
+    }
+  });
+  const pending = sessions.flatMap((session) => {
+    const previous = session.calendarEvents[0];
+    return previous && (session.calendarInviteStatus === CalendarInviteStatus.NOT_CREATED || calendarRecordDiffers(session, previous))
+      ? [{ session, previous }]
+      : [];
+  });
+  const applied = [];
+  const failed = [];
+
+  for (const { session, previous } of pending) {
+    try {
+      const result = await createCalendarInvitePlaceholder(session.id, "google");
+      applied.push({
+        sessionId: session.id,
+        sessionNumber: session.sessionNumber,
+        title: session.title,
+        timezone: session.timezone,
+        previousStartTime: previous.startTime,
+        nextStartTime: session.startTime,
+        previousEndTime: previous.endTime,
+        nextEndTime: session.endTime,
+        attendeeCount: result.attendeeCount ?? 0
+      });
+    } catch (error) {
+      failed.push({
+        sessionId: session.id,
+        title: session.title,
+        error: error instanceof Error ? error.message : "Google Calendar update failed"
+      });
+    }
+  }
+
+  return { totalPending: pending.length, applied, failed };
 }
 
 async function connectedGoogleEventDetails(sessionIds: string[]) {

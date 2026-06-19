@@ -1,7 +1,6 @@
 import { CalendarInviteStatus, CohortStatus, CommunicationStatus, OperationsTaskCategory, OperationsTaskStatus, TemplateType } from "@prisma/client";
 
 const requiredSessionTemplateTypes = [
-  TemplateType.REGISTRATION_CONFIRMATION,
   TemplateType.WEEK_BEFORE_REMINDER,
   TemplateType.DAY_BEFORE_REMINDER,
   TemplateType.HOUR_BEFORE_REMINDER,
@@ -22,6 +21,7 @@ type LifecycleSession = {
   startTime?: Date | string | null;
   endTime?: Date | string | null;
   timezone?: string | null;
+  meetingUrl?: string | null;
   updatedAt?: Date | string | null;
   calendarInviteStatus?: CalendarInviteStatus | string | null;
   calendarEvents?: Array<{
@@ -29,6 +29,7 @@ type LifecycleSession = {
     endTime?: Date | string | null;
     timezone?: string | null;
     title?: string | null;
+    inviteUrl?: string | null;
     updatedAt?: Date | string | null;
   }> | null;
   communications?: LifecycleCommunication[];
@@ -124,7 +125,7 @@ function getSessionEmailReadiness(session: LifecycleSession) {
     }
 
     const expected = expectedScheduledFor(type, session.startTime);
-    if (expected && datesDiffer(communication.scheduledFor, expected)) {
+    if (communication.status !== CommunicationStatus.SENT && expected && datesDiffer(communication.scheduledFor, expected)) {
       stale.push(requiredSessionTemplateLabels[type]);
     }
   }
@@ -143,14 +144,16 @@ function getSessionCalendarReadiness(session: LifecycleSession) {
   const ready = readyCalendarStatuses.includes(session.calendarInviteStatus ?? "");
   const latestEvent = [...(session.calendarEvents ?? [])]
     .sort((a, b) => (validDate(b.updatedAt)?.getTime() ?? 0) - (validDate(a.updatedAt)?.getTime() ?? 0))[0];
+  const pendingUpdate = Boolean(latestEvent && session.calendarInviteStatus === CalendarInviteStatus.NOT_CREATED);
   const stale = Boolean(
-    ready &&
     latestEvent &&
     (
+      pendingUpdate ||
       datesDiffer(latestEvent.startTime, session.startTime) ||
       datesDiffer(latestEvent.endTime, session.endTime) ||
       (latestEvent.timezone && session.timezone && latestEvent.timezone !== session.timezone) ||
-      (latestEvent.title && session.title && latestEvent.title !== session.title)
+      (latestEvent.title && session.title && latestEvent.title !== session.title) ||
+      (latestEvent.inviteUrl ?? "") !== (session.meetingUrl ?? "")
     )
   );
 
@@ -158,7 +161,7 @@ function getSessionCalendarReadiness(session: LifecycleSession) {
     ready: ready && !stale,
     stale,
     detail: !ready
-      ? "Invite missing"
+      ? pendingUpdate ? "Changes pending" : "Invite missing"
       : stale
         ? "Session changed; update invite"
         : "Invite ready"
@@ -170,8 +173,7 @@ export function getCohortReadiness(cohort: LifecycleCohort) {
   const openTaskStatuses: Array<OperationsTaskStatus | string> = [OperationsTaskStatus.OPEN, OperationsTaskStatus.IN_PROGRESS];
   const publishReadinessTaskCategories: Array<OperationsTaskCategory | string> = [
     OperationsTaskCategory.CALENDAR_INVITE,
-    OperationsTaskCategory.REMINDER_EMAILS,
-    OperationsTaskCategory.SESSION_RESOURCES
+    OperationsTaskCategory.REMINDER_EMAILS
   ];
   const openReadinessTasks = (cohort.operationsTasks ?? []).filter((task) =>
     !task.registrationId &&
@@ -182,15 +184,11 @@ export function getCohortReadiness(cohort: LifecycleCohort) {
     const calendar = getSessionCalendarReadiness(session);
     const emails = getSessionEmailReadiness(session);
     const sessionTasks = openReadinessTasks.filter((task) => task.sessionId === session.id);
-    const materialTasks = sessionTasks.filter((task) => task.category === OperationsTaskCategory.SESSION_RESOURCES);
     const blockers = [
       ...(!calendar.ready ? [calendar.detail] : []),
       ...(emails.missing.length > 0 ? [`Missing ${emails.missing.join(", ")}`] : []),
       ...(emails.stale.length > 0 ? [`Update ${emails.stale.join(", ")}`] : []),
-      ...(materialTasks.length > 0 ? ["Session materials need review"] : []),
-      ...sessionTasks
-        .filter((task) => task.category !== OperationsTaskCategory.SESSION_RESOURCES)
-        .map((task) => `${String(task.category ?? "Task").toLowerCase().replaceAll("_", " ")} needs review`)
+      ...sessionTasks.map((task) => `${String(task.category ?? "Task").toLowerCase().replaceAll("_", " ")} needs review`)
     ];
 
     return {
@@ -212,9 +210,9 @@ export function getCohortReadiness(cohort: LifecycleCohort) {
           : `${emails.scheduled}/${emails.total} emails ready`
       },
       materials: {
-        ready: materialTasks.length === 0,
-        openTasks: materialTasks.length,
-        detail: materialTasks.length === 0 ? "Materials ready" : "Materials need review"
+        ready: true,
+        openTasks: 0,
+        detail: "Optional"
       },
       blockers
     };
@@ -222,7 +220,10 @@ export function getCohortReadiness(cohort: LifecycleCohort) {
   const readyCalendarCount = sessionDetails.filter((session) => session.calendar.ready).length;
   const readyCommunicationCount = sessionDetails.filter((session) => session.emails.ready).length;
   const openManualTasks = openReadinessTasks.length;
-  const calendarReady = sessions.length > 0 && readyCalendarCount === sessions.length;
+  const draftCalendarPlansReady = cohort.status === CohortStatus.DRAFT && sessions.every((session) =>
+    Boolean(session.title && validDate(session.startTime) && validDate(session.endTime) && session.timezone)
+  );
+  const calendarReady = sessions.length > 0 && (draftCalendarPlansReady || readyCalendarCount === sessions.length);
   const communicationsReady = sessions.length > 0 && readyCommunicationCount === sessions.length;
   const manualTasksReady = openManualTasks === 0;
 
@@ -235,10 +236,12 @@ export function getCohortReadiness(cohort: LifecycleCohort) {
     },
     {
       key: "calendar",
-      label: "Calendar invites ready",
+      label: cohort.status === CohortStatus.DRAFT ? "Calendar plans ready" : "Calendar invites ready",
       ready: calendarReady,
       detail: sessions.length > 0
-        ? `${readyCalendarCount}/${sessions.length} session invite${sessions.length === 1 ? "" : "s"} ready`
+        ? draftCalendarPlansReady
+          ? `${sessions.length}/${sessions.length} session invite plan${sessions.length === 1 ? "" : "s"} ready`
+          : `${readyCalendarCount}/${sessions.length} session invite${sessions.length === 1 ? "" : "s"} ready`
         : "Add sessions before preparing invites"
     },
     {
@@ -269,6 +272,10 @@ export function deriveCohortStatus(cohort: LifecycleCohort, now = new Date()): C
     return CohortStatus.CANCELLED;
   }
 
+  if (cohort.status === CohortStatus.DRAFT) {
+    return CohortStatus.DRAFT;
+  }
+
   const sessions = [...(cohort.sessions ?? [])]
     .map((session) => ({ ...session, start: validDate(session.startTime), end: validDate(session.endTime) }))
     .filter((session) => session.start && session.end)
@@ -285,7 +292,9 @@ export function deriveCohortStatus(cohort: LifecycleCohort, now = new Date()): C
     return CohortStatus.ACTIVE;
   }
 
-  return getCohortReadiness(cohort).ready ? CohortStatus.PUBLISHED : CohortStatus.DRAFT;
+  return cohort.status === CohortStatus.PUBLISHED || getCohortReadiness(cohort).ready
+    ? CohortStatus.PUBLISHED
+    : CohortStatus.DRAFT;
 }
 
 export function withCohortLifecycle<T extends LifecycleCohort>(cohort: T): T & {
