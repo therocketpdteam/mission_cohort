@@ -330,6 +330,7 @@ List Console Pattern:
 - Sessions should render as a checklist, not a wide status spreadsheet. Use green check/red X affordances for reminder/template readiness and keep per-session actions in a row menu.
 - Editing a session with a linked Google event must update that same event and notify attendees, subject to outbound safety. Session and cohort cancellation actions must use a confirmation dialog, notify Google attendees, and reset readiness without deleting delivery history.
 - Session editing must label the attendee-facing calendar description and Zoom/meeting link explicitly. Provide a compact invite preview from the session row; calendar event copy remains separate from SendGrid communication templates.
+- Cancellation is a two-channel workflow: Google removes or updates the event, while an editable SendGrid cancellation template provides the explicit attendee message and remains visible in Communications history. Prior calendar-only cancellations need an email-only recovery action that never changes the calendar again.
 - Repeated session defaults such as meeting URL, location, and timezone should live in a small defaults card above the checklist.
 - Registrations should remove unclear primary-table columns such as `Docs`; supporting document status belongs in quick view/edit.
 - Participants should prioritize contact, organization, status, send-message action, bulk status/message controls, and a quick-view drawer with contact, payment, email activity, and participation history matched by email.

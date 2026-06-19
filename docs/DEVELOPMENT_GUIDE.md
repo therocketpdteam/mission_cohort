@@ -112,6 +112,7 @@ Also open these routes as an admin:
 - Cohort `Prepare Invites` uses Google automatically when connected, adds active participants from non-archived registrations as attendees, and asks Google to email all guests. ICS fallback prepares files only and must not be treated as a delivered invitation.
 - Google access tokens are refreshed server-side from the saved refresh token. If refresh authorization is unavailable, reconnect Google Calendar from Connected Tools.
 - Linked Google events update automatically when a session is edited. Cancellation uses Google Events delete with attendee updates enabled; single-session and full-cohort cancellations are available from the cohort Sessions surface and remain subject to the recipient safety allowlist.
+- Calendar cancellation also sends an editable, tracked SendGrid notice using the `Session Cancellation` or `Cohort Cancellation` template. A prior calendar-only cancellation can send its notice later from the cohort Communications tab without touching Google Calendar again.
 - SendGrid and Google Calendar default to outbound safety mode. Cohort delivery is blocked unless every recipient is explicitly allowlisted in Connected Tools or a super admin intentionally enables live sending.
 - Resetting cohort automation cancels only unsent/scheduled/failed communication records and clears ICS-only preparation. Sent history and Google event references are preserved to prevent hidden duplicate sends or cancellation notices.
 

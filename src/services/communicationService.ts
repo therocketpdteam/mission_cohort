@@ -1,4 +1,4 @@
-import { CommunicationStatus, EmailEventType, OperationsTaskCategory, OperationsTaskStatus, Prisma, RecipientScope, Role, TemplateType } from "@prisma/client";
+import { CommunicationStatus, EmailEventType, OperationsTaskCategory, OperationsTaskStatus, ParticipantStatus, Prisma, RecipientScope, RegistrationStatus, Role, TemplateType } from "@prisma/client";
 import { z } from "zod";
 import { env } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
@@ -76,6 +76,20 @@ const defaultTemplates: Array<{
     subject: "Supporting documents needed: {{cohort.title}}",
     bodyHtml: "<p>Hello {{registration.primaryContactName}},</p><p>We are preparing <strong>{{cohort.title}}</strong> and need the remaining supporting documents for {{organization.name}}.</p><p>Please reply with the needed documentation when available.</p>",
     bodyText: "Hello {{registration.primaryContactName}}, we are preparing {{cohort.title}} and need the remaining supporting documents for {{organization.name}}. Please reply with the needed documentation when available."
+  },
+  {
+    type: TemplateType.CUSTOM,
+    name: "Cohort Cancellation",
+    subject: "Cancelled: {{cohort.title}}",
+    bodyHtml: "<p>The remaining sessions for <strong>{{cohort.title}}</strong> have been cancelled.</p><p>Google Calendar invitations have been removed. Please contact the RocketPD team if you have any questions.</p>",
+    bodyText: "The remaining sessions for {{cohort.title}} have been cancelled. Google Calendar invitations have been removed. Please contact the RocketPD team if you have any questions."
+  },
+  {
+    type: TemplateType.CUSTOM,
+    name: "Session Cancellation",
+    subject: "Cancelled: {{session.title}} | {{cohort.title}}",
+    bodyHtml: "<p><strong>{{session.title}}</strong> for {{cohort.title}} has been cancelled.</p><p>The Google Calendar invitation has been removed. Please contact the RocketPD team if you have any questions.</p>",
+    bodyText: "{{session.title}} for {{cohort.title}} has been cancelled. The Google Calendar invitation has been removed. Please contact the RocketPD team if you have any questions."
   }
 ];
 
@@ -522,7 +536,12 @@ async function resolveCommunicationRecipients(communication: {
     where: { id: communication.cohortId },
     include: {
       registrations: { where: { archivedAt: null }, include: { participants: true } },
-      participants: { where: { registration: { archivedAt: null } } }
+      participants: {
+        where: {
+          status: ParticipantStatus.REGISTERED,
+          registration: { archivedAt: null, status: { not: RegistrationStatus.CANCELLED } }
+        }
+      }
     }
   });
 
@@ -634,6 +653,27 @@ export async function sendCommunicationToRecipient(input: { communicationId: str
   }
 
   return sendCommunication(input.communicationId, { recipients: [recipientEmail] });
+}
+
+export async function sendCalendarCancellationNotice(input: { cohortId: string; sessionId?: string }) {
+  await ensureDefaultCommunicationTemplates();
+  const templateName = input.sessionId ? "Session Cancellation" : "Cohort Cancellation";
+  const template = await prisma.communicationTemplate.findFirst({
+    where: { name: templateName, type: TemplateType.CUSTOM, active: true }
+  });
+
+  if (!template) {
+    throw Object.assign(new Error(`${templateName} template is unavailable.`), { code: "NOT_FOUND", status: 404 });
+  }
+
+  const communication = await createCommunicationFromTemplate({
+    templateId: template.id,
+    cohortId: input.cohortId,
+    sessionId: input.sessionId,
+    recipientScope: RecipientScope.ALL_PARTICIPANTS
+  });
+
+  return sendCommunication(communication.id);
 }
 
 export async function reviewRecipientIssue(input: { communicationId: string; recipientEmail: string; reviewedById: string; reviewNote?: string }) {

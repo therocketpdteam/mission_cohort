@@ -852,6 +852,8 @@ export function CohortDetailClient({ id }: { id: string }) {
   const [calendarCancelTarget, setCalendarCancelTarget] = useState<{ scope: "session" | "cohort"; session?: AdminRow } | null>(null);
   const [calendarPreviewSession, setCalendarPreviewSession] = useState<AdminRow | null>(null);
   const [cancellingCalendar, setCancellingCalendar] = useState(false);
+  const [cancellationNoticeOpen, setCancellationNoticeOpen] = useState(false);
+  const [sendingCancellationNotice, setSendingCancellationNotice] = useState(false);
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
   const [resourceDialogOpen, setResourceDialogOpen] = useState(false);
   const [resourceSeedSession, setResourceSeedSession] = useState<AdminRow | null>(null);
@@ -1621,13 +1623,34 @@ export function CohortDetailClient({ id }: { id: string }) {
           ? { action: "cancelSessionInvites", sessionId: calendarCancelTarget.session?.id }
           : { action: "cancelCohortInvites", cohortId: id }
       });
-      notifySuccess(`${result.googleEventsCancelled ?? 0} Google events cancelled; ${result.recipientsNotified ?? 0} participants notified`);
+      if (result.cancellationEmail?.status === "failed") {
+        notifyError(`${result.googleEventsCancelled ?? 0} Google events cancelled, but the SendGrid notice failed: ${result.cancellationEmail.error}`);
+      } else {
+        notifySuccess(`${result.googleEventsCancelled ?? 0} Google events cancelled; custom cancellation email sent`);
+      }
       setCalendarCancelTarget(null);
       await load();
     } catch (error) {
       notifyError((error as Error).message);
     } finally {
       setCancellingCalendar(false);
+    }
+  }
+
+  async function sendCohortCancellationNotice() {
+    setSendingCancellationNotice(true);
+    try {
+      await adminApi("/api/calendar", {
+        method: "PATCH",
+        body: { action: "sendCohortCancellationNotice", cohortId: id }
+      });
+      notifySuccess("Cohort cancellation notice sent and recorded in Communications");
+      setCancellationNoticeOpen(false);
+      await load();
+    } catch (error) {
+      notifyError((error as Error).message);
+    } finally {
+      setSendingCancellationNotice(false);
     }
   }
 
@@ -2011,7 +2034,10 @@ export function CohortDetailClient({ id }: { id: string }) {
       )}
 
       {tab === 3 && (
-        <SectionCard title="Communications">
+        <SectionCard
+          title="Communications"
+          action={<Button variant="outlined" color="error" onClick={() => setCancellationNoticeOpen(true)}>Send Cancellation Notice</Button>}
+        >
           <List dense>
             {communications.map((communication) => (
               <ListItem key={communication.id} divider>
@@ -2239,6 +2265,23 @@ export function CohortDetailClient({ id }: { id: string }) {
             }
             setCalendarPreviewSession(null);
           }}>Edit Session</Button>
+        </DialogActions>
+      </Dialog>
+      <Dialog open={cancellationNoticeOpen} onClose={() => !sendingCancellationNotice && setCancellationNoticeOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Send Cohort Cancellation Notice</DialogTitle>
+        <DialogContent>
+          <Typography color="text.secondary">
+            Send the editable “Cohort Cancellation” template to all active participants in this cohort. This sends email only and does not change Google Calendar.
+          </Typography>
+          <Alert severity="warning" sx={{ mt: 2 }}>
+            SendGrid safety mode applies. Every recipient must be allowlisted unless live email sending is enabled.
+          </Alert>
+        </DialogContent>
+        <DialogActions>
+          <Button variant="outlined" onClick={() => setCancellationNoticeOpen(false)} disabled={sendingCancellationNotice}>Cancel</Button>
+          <Button color="error" onClick={() => void sendCohortCancellationNotice()} disabled={sendingCancellationNotice}>
+            {sendingCancellationNotice ? "Sending" : "Send Notice"}
+          </Button>
         </DialogActions>
       </Dialog>
       <MutationDialog

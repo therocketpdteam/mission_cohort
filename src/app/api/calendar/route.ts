@@ -5,6 +5,8 @@ import { getIntegrationConnection } from "@/services/integrationService";
 import { IntegrationProvider } from "@prisma/client";
 import { cancelGoogleCalendarInvites } from "@/services/calendarService";
 import { MUTATION_ROLES, requireRole } from "@/lib/auth";
+import { sendCalendarCancellationNotice } from "@/services/communicationService";
+import { prisma } from "@/lib/prisma";
 
 export async function GET() {
   const connection = await getIntegrationConnection(IntegrationProvider.GOOGLE_CALENDAR);
@@ -47,11 +49,35 @@ export async function PATCH(request: Request) {
     const body = await request.json();
 
     if (body.action === "cancelSessionInvites" && body.sessionId) {
-      return ok(await cancelGoogleCalendarInvites({ sessionId: body.sessionId }));
+      const calendar = await cancelGoogleCalendarInvites({ sessionId: body.sessionId });
+      const session = await prisma.cohortSession.findUnique({ where: { id: body.sessionId }, select: { cohortId: true } });
+      let cancellationEmail: { status: string; error?: string } = { status: "not_sent" };
+      if (session) {
+        try {
+          await sendCalendarCancellationNotice({ cohortId: session.cohortId, sessionId: body.sessionId });
+          cancellationEmail = { status: "sent" };
+        } catch (error) {
+          cancellationEmail = { status: "failed", error: error instanceof Error ? error.message : "Cancellation email failed" };
+        }
+      }
+      return ok({ ...calendar, cancellationEmail });
     }
 
     if (body.action === "cancelCohortInvites" && body.cohortId) {
-      return ok(await cancelGoogleCalendarInvites({ cohortId: body.cohortId }));
+      const calendar = await cancelGoogleCalendarInvites({ cohortId: body.cohortId });
+      let cancellationEmail: { status: string; error?: string };
+      try {
+        await sendCalendarCancellationNotice({ cohortId: body.cohortId });
+        cancellationEmail = { status: "sent" };
+      } catch (error) {
+        cancellationEmail = { status: "failed", error: error instanceof Error ? error.message : "Cancellation email failed" };
+      }
+      return ok({ ...calendar, cancellationEmail });
+    }
+
+    if (body.action === "sendCohortCancellationNotice" && body.cohortId) {
+      const communication = await sendCalendarCancellationNotice({ cohortId: body.cohortId });
+      return ok({ status: "sent", communicationId: communication.id });
     }
 
     return fail("A supported cancellation action and target are required.", "BAD_REQUEST", 400);
