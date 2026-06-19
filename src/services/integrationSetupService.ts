@@ -22,6 +22,13 @@ function cleanString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function cleanRecipientEmails(value: unknown) {
+  const values = Array.isArray(value) ? value : String(value ?? "").split(/[\n,;]/);
+  return Array.from(new Set(values
+    .map((item) => String(item).trim().toLowerCase())
+    .filter((item) => item.includes("@"))));
+}
+
 async function getConnection(provider: IntegrationProvider, label = "default") {
   return prisma.integrationConnection.findUnique({
     where: { provider_label: { provider, label } }
@@ -38,6 +45,8 @@ export async function getSendGridSetup() {
     fromEmail: String(data.fromEmail ?? ""),
     fromName: String(data.fromName ?? connection?.accountName ?? ""),
     webhookPublicKey: String(data.webhookPublicKey ?? ""),
+    liveSendingEnabled: data.liveSendingEnabled === true,
+    testRecipientEmails: cleanRecipientEmails(data.testRecipientEmails),
     hasApiKey: maskedSecret(connection?.accessToken),
     status: connection?.status ?? IntegrationConnectionStatus.NOT_CONFIGURED,
     updatedAt: connection?.updatedAt ?? null
@@ -55,6 +64,8 @@ export async function getGoogleCalendarSetup() {
     clientId: setup?.accountId ?? "",
     redirectUri: String(data.redirectUri ?? ""),
     calendarId: String(data.calendarId ?? ""),
+    liveSendingEnabled: data.liveSendingEnabled === true,
+    testRecipientEmails: cleanRecipientEmails(data.testRecipientEmails),
     hasClientSecret: maskedSecret(setup?.accessToken),
     status: setup?.status ?? IntegrationConnectionStatus.NOT_CONFIGURED,
     connectedAccount: connection ? {
@@ -114,6 +125,8 @@ export async function saveIntegrationSetup(provider: IntegrationSetupProvider, i
     const fromEmail = cleanString(input.fromEmail) || String(existingMetadata.fromEmail ?? "");
     const fromName = cleanString(input.fromName);
     const webhookPublicKey = cleanString(input.webhookPublicKey);
+    const testRecipientEmails = cleanRecipientEmails(input.testRecipientEmails ?? existingMetadata.testRecipientEmails);
+    const liveSendingEnabled = input.liveSendingEnabled === true;
 
     if (!fromEmail) {
       throw Object.assign(new Error("SendGrid from email is required."), { code: "BAD_REQUEST", status: 400 });
@@ -133,7 +146,9 @@ export async function saveIntegrationSetup(provider: IntegrationSetupProvider, i
         ...existingMetadata,
         fromEmail,
         fromName,
-        webhookPublicKey
+        webhookPublicKey,
+        testRecipientEmails,
+        liveSendingEnabled
       } as Prisma.InputJsonValue
     });
 
@@ -147,6 +162,8 @@ export async function saveIntegrationSetup(provider: IntegrationSetupProvider, i
     const clientSecret = cleanString(input.clientSecret);
     const redirectUri = cleanString(input.redirectUri) || String(existingMetadata.redirectUri ?? "");
     const calendarId = cleanString(input.calendarId) || String(existingMetadata.calendarId ?? "");
+    const testRecipientEmails = cleanRecipientEmails(input.testRecipientEmails ?? existingMetadata.testRecipientEmails);
+    const liveSendingEnabled = input.liveSendingEnabled === true;
 
     if (!clientId || !redirectUri) {
       throw Object.assign(new Error("Google client ID and redirect URI are required."), { code: "BAD_REQUEST", status: 400 });
@@ -166,7 +183,9 @@ export async function saveIntegrationSetup(provider: IntegrationSetupProvider, i
       metadata: {
         ...existingMetadata,
         redirectUri,
-        ...(calendarId ? { calendarId } : {})
+        ...(calendarId ? { calendarId } : {}),
+        testRecipientEmails,
+        liveSendingEnabled
       } as Prisma.InputJsonValue
     });
 
@@ -221,6 +240,24 @@ export async function resolveGoogleCalendarSetup() {
     redirectUri: String(data.redirectUri ?? ""),
     calendarId: String(data.calendarId ?? "")
   };
+}
+
+export async function assertOutboundRecipientsAllowed(provider: "SENDGRID" | "GOOGLE_CALENDAR", recipients: string[]) {
+  const setup = provider === "SENDGRID" ? await getSendGridSetup() : await getGoogleCalendarSetup();
+  const normalized = Array.from(new Set(recipients.map((email) => email.trim().toLowerCase()).filter(Boolean)));
+
+  if (setup.liveSendingEnabled || normalized.length === 0) {
+    return;
+  }
+
+  const allowed = new Set(setup.testRecipientEmails);
+  const blocked = normalized.filter((email) => !allowed.has(email));
+
+  if (blocked.length > 0) {
+    throw Object.assign(new Error(
+      `Outbound safety mode blocked ${blocked.length} ${provider === "SENDGRID" ? "email" : "calendar"} recipient${blocked.length === 1 ? "" : "s"}. Add test recipients in Settings > Connected Tools or explicitly enable live sending.`
+    ), { code: "BAD_REQUEST", status: 400 });
+  }
 }
 
 export async function resolveQuickBooksSetup() {

@@ -2,7 +2,7 @@ import { CalendarInviteStatus, IntegrationConnectionStatus, IntegrationProvider,
 import { prisma } from "@/lib/prisma";
 import { exchangeGoogleCalendarCode, generateSessionIcs, getGoogleCalendarConnectUrl, listGoogleCalendars, refreshGoogleCalendarToken, uniqueCalendarAttendees, upsertGoogleCalendarEvent } from "@/modules/calendar";
 import { getDecryptedIntegrationConnection, upsertIntegrationConnection } from "@/services/integrationService";
-import { resolveGoogleCalendarSetup } from "@/services/integrationSetupService";
+import { assertOutboundRecipientsAllowed, resolveGoogleCalendarSetup } from "@/services/integrationSetupService";
 
 async function googleSetupWithEnvFallback() {
   const setup = await resolveGoogleCalendarSetup();
@@ -123,6 +123,7 @@ export async function createCalendarInvitePlaceholder(sessionId?: string, mode: 
   try {
     if (mode === "google") {
       const attendees = await getCohortCalendarAttendees(session.cohortId);
+      await assertOutboundRecipientsAllowed("GOOGLE_CALENDAR", attendees.map((attendee) => attendee.email));
       const existing = await prisma.calendarEvent.findFirst({
         where: { sessionId: session.id, provider: "google" },
         orderBy: { createdAt: "desc" }

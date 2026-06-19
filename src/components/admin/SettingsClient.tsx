@@ -20,6 +20,7 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControlLabel,
   Grid,
   IconButton,
   MenuItem,
@@ -28,6 +29,7 @@ import {
   Step,
   StepLabel,
   Stepper,
+  Switch,
   Tab,
   Tabs,
   TextField,
@@ -1441,13 +1443,17 @@ export function SettingsClient() {
         fromEmail: setupData?.sendgrid?.fromEmail ?? current.SENDGRID?.fromEmail ?? "",
         fromName: setupData?.sendgrid?.fromName ?? current.SENDGRID?.fromName ?? "",
         webhookPublicKey: setupData?.sendgrid?.webhookPublicKey ?? current.SENDGRID?.webhookPublicKey ?? "",
-        apiKey: ""
+        apiKey: "",
+        testRecipientEmails: (setupData?.sendgrid?.testRecipientEmails ?? []).join(", "),
+        liveSendingEnabled: setupData?.sendgrid?.liveSendingEnabled === true
       },
       GOOGLE_CALENDAR: {
         clientId: setupData?.googleCalendar?.clientId ?? current.GOOGLE_CALENDAR?.clientId ?? "",
         clientSecret: "",
         redirectUri: setupData?.googleCalendar?.redirectUri ?? current.GOOGLE_CALENDAR?.redirectUri ?? "",
-        calendarId: setupData?.googleCalendar?.calendarId ?? current.GOOGLE_CALENDAR?.calendarId ?? ""
+        calendarId: setupData?.googleCalendar?.calendarId ?? current.GOOGLE_CALENDAR?.calendarId ?? "",
+        testRecipientEmails: (setupData?.googleCalendar?.testRecipientEmails ?? []).join(", "),
+        liveSendingEnabled: setupData?.googleCalendar?.liveSendingEnabled === true
       },
       QUICKBOOKS: {
         clientId: setupData?.quickBooks?.clientId ?? current.QUICKBOOKS?.clientId ?? "",
@@ -1879,6 +1885,22 @@ export function SettingsClient() {
                   )}
                   {provider.provider === "SENDGRID" && (
                     <div className="integration-setup-form">
+                      <Alert severity={setupForms.SENDGRID?.liveSendingEnabled ? "warning" : "info"}>
+                        {setupForms.SENDGRID?.liveSendingEnabled
+                          ? "Live email sending is enabled. Messages may go to any resolved recipient."
+                          : "Email safety mode is on. Only the test recipients below can receive messages."}
+                      </Alert>
+                      <TextField
+                        fullWidth
+                        label="Test recipient emails"
+                        value={setupForms.SENDGRID?.testRecipientEmails ?? ""}
+                        onChange={(event) => updateSetupForm("SENDGRID", "testRecipientEmails", event.target.value)}
+                        helperText="Comma-separated. Leave empty to block all cohort email delivery."
+                      />
+                      <FormControlLabel
+                        control={<Switch checked={setupForms.SENDGRID?.liveSendingEnabled === true} onChange={(event) => updateSetupForm("SENDGRID", "liveSendingEnabled", event.target.checked)} />}
+                        label="Allow live email sending to all recipients"
+                      />
                       <TextField
                         fullWidth
                         label={provider.setup?.hasApiKey ? "API key (saved - paste only to replace)" : "API key"}
@@ -1915,6 +1937,22 @@ export function SettingsClient() {
                   )}
                   {provider.provider === "GOOGLE_CALENDAR" && (
                     <div className="integration-setup-form">
+                      <Alert severity={setupForms.GOOGLE_CALENDAR?.liveSendingEnabled ? "warning" : "info"}>
+                        {setupForms.GOOGLE_CALENDAR?.liveSendingEnabled
+                          ? "Live calendar invitations are enabled for all cohort participants."
+                          : "Calendar safety mode is on. Only the test recipients below can receive invitations."}
+                      </Alert>
+                      <TextField
+                        fullWidth
+                        label="Test calendar recipients"
+                        value={setupForms.GOOGLE_CALENDAR?.testRecipientEmails ?? ""}
+                        onChange={(event) => updateSetupForm("GOOGLE_CALENDAR", "testRecipientEmails", event.target.value)}
+                        helperText="Comma-separated. Leave empty to block every cohort calendar invitation."
+                      />
+                      <FormControlLabel
+                        control={<Switch checked={setupForms.GOOGLE_CALENDAR?.liveSendingEnabled === true} onChange={(event) => updateSetupForm("GOOGLE_CALENDAR", "liveSendingEnabled", event.target.checked)} />}
+                        label="Allow live calendar invitations to all participants"
+                      />
                       <div className="integration-simple-connect">
                         <div>
                           <strong>{provider.setup?.connectedAccount?.status === "CONNECTED" ? "Google account connected" : "Connect your Google account"}</strong>

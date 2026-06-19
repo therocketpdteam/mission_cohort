@@ -111,5 +111,7 @@ Also open these routes as an admin:
 - `Test Google event` creates a diagnostic event on the configured Google Calendar after OAuth is connected.
 - Cohort `Prepare Invites` uses Google automatically when connected, adds active participants from non-archived registrations as attendees, and asks Google to email all guests. ICS fallback prepares files only and must not be treated as a delivered invitation.
 - Google access tokens are refreshed server-side from the saved refresh token. If refresh authorization is unavailable, reconnect Google Calendar from Connected Tools.
+- SendGrid and Google Calendar default to outbound safety mode. Cohort delivery is blocked unless every recipient is explicitly allowlisted in Connected Tools or a super admin intentionally enables live sending.
+- Resetting cohort automation cancels only unsent/scheduled/failed communication records and clears ICS-only preparation. Sent history and Google event references are preserved to prevent hidden duplicate sends or cancellation notices.
 
 If a feature shows `Blocked`, keep the UI compatibility fallback in place and do not mark the roadmap item done until production reports ready.
