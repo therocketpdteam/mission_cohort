@@ -1,6 +1,6 @@
-import { CalendarInviteStatus, IntegrationConnectionStatus, IntegrationProvider, OperationsTaskCategory, OperationsTaskStatus } from "@prisma/client";
+import { CalendarInviteStatus, IntegrationConnectionStatus, IntegrationProvider, OperationsTaskCategory, OperationsTaskStatus, ParticipantStatus, RegistrationStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { exchangeGoogleCalendarCode, generateSessionIcs, getGoogleCalendarConnectUrl, listGoogleCalendars, upsertGoogleCalendarEvent } from "@/modules/calendar";
+import { exchangeGoogleCalendarCode, generateSessionIcs, getGoogleCalendarConnectUrl, listGoogleCalendars, refreshGoogleCalendarToken, uniqueCalendarAttendees, upsertGoogleCalendarEvent } from "@/modules/calendar";
 import { getDecryptedIntegrationConnection, upsertIntegrationConnection } from "@/services/integrationService";
 import { resolveGoogleCalendarSetup } from "@/services/integrationSetupService";
 
@@ -33,10 +33,77 @@ export async function completeGoogleCalendarOAuth(code: string) {
   });
 }
 
-export async function listConnectedGoogleCalendars() {
+export async function getConnectedGoogleCalendarAccessToken() {
   const connection = await getDecryptedIntegrationConnection(IntegrationProvider.GOOGLE_CALENDAR);
 
-  return listGoogleCalendars({ accessToken: connection?.accessToken });
+  if (!connection?.accessToken || connection.status !== IntegrationConnectionStatus.CONNECTED) {
+    throw Object.assign(new Error("Google Calendar is not connected. Connect it in Settings > Connected Tools."), {
+      code: "BAD_REQUEST",
+      status: 400
+    });
+  }
+
+  const expiresSoon = !connection.tokenExpiresAt || connection.tokenExpiresAt.getTime() <= Date.now() + 5 * 60 * 1000;
+
+  if (!expiresSoon) {
+    return connection.accessToken;
+  }
+
+  if (!connection.refreshToken) {
+    throw Object.assign(new Error("Google Calendar access expired. Reconnect it in Settings > Connected Tools."), {
+      code: "BAD_REQUEST",
+      status: 400
+    });
+  }
+
+  const token = await refreshGoogleCalendarToken(connection.refreshToken, await googleSetupWithEnvFallback());
+  await upsertIntegrationConnection({
+    provider: IntegrationProvider.GOOGLE_CALENDAR,
+    status: IntegrationConnectionStatus.CONNECTED,
+    accountName: connection.accountName ?? "Google Calendar",
+    accessToken: token.access_token,
+    tokenExpiresAt: token.expires_in ? new Date(Date.now() + token.expires_in * 1000) : undefined,
+    errorMessage: null
+  });
+
+  return token.access_token;
+}
+
+async function getCohortCalendarAttendees(cohortId: string) {
+  const registrations = await prisma.registration.findMany({
+    where: {
+      cohortId,
+      archivedAt: null,
+      status: { not: RegistrationStatus.CANCELLED }
+    },
+    select: {
+      primaryContactEmail: true,
+      primaryContactName: true,
+      participantCount: true,
+      participants: {
+        where: { status: ParticipantStatus.REGISTERED },
+        select: { email: true, firstName: true, lastName: true }
+      }
+    }
+  });
+  const rows = registrations.flatMap((registration) => {
+    if (registration.participants.length > 0) {
+      return registration.participants.map((participant) => ({
+        email: participant.email,
+        displayName: [participant.firstName, participant.lastName].filter(Boolean).join(" ")
+      }));
+    }
+
+    return registration.participantCount <= 1
+      ? [{ email: registration.primaryContactEmail, displayName: registration.primaryContactName }]
+      : [];
+  });
+
+  return uniqueCalendarAttendees(rows);
+}
+
+export async function listConnectedGoogleCalendars() {
+  return listGoogleCalendars({ accessToken: await getConnectedGoogleCalendarAccessToken() });
 }
 
 export async function createCalendarInvitePlaceholder(sessionId?: string, mode: "google" | "ics" = "ics") {
@@ -55,7 +122,7 @@ export async function createCalendarInvitePlaceholder(sessionId?: string, mode: 
 
   try {
     if (mode === "google") {
-      const connection = await getDecryptedIntegrationConnection(IntegrationProvider.GOOGLE_CALENDAR);
+      const attendees = await getCohortCalendarAttendees(session.cohortId);
       const existing = await prisma.calendarEvent.findFirst({
         where: { sessionId: session.id, provider: "google" },
         orderBy: { createdAt: "desc" }
@@ -68,9 +135,11 @@ export async function createCalendarInvitePlaceholder(sessionId?: string, mode: 
         timezone: session.timezone,
         meetingUrl: session.meetingUrl,
         location: session.location,
-        accessToken: connection?.accessToken,
+        accessToken: await getConnectedGoogleCalendarAccessToken(),
         calendarId: (await googleSetupWithEnvFallback()).calendarId,
-        providerEventId: existing?.providerEventId
+        providerEventId: existing?.providerEventId,
+        attendees,
+        sendUpdates: true
       });
 
       const calendarEvent = existing
@@ -117,7 +186,7 @@ export async function createCalendarInvitePlaceholder(sessionId?: string, mode: 
         data: { status: OperationsTaskStatus.COMPLETED, completedAt: new Date() }
       });
 
-      return { provider: "google", status: "created", event: calendarEvent };
+      return { provider: "google", status: "created", attendeeCount: attendees.length, event: calendarEvent };
     }
 
     const ics = generateSessionIcs(session);
@@ -163,7 +232,7 @@ export async function createCalendarInvitePlaceholder(sessionId?: string, mode: 
   }
 }
 
-export async function prepareCohortCalendarInvites(input: { cohortId?: string; mode?: "google" | "ics"; fallbackToIcs?: boolean }) {
+export async function prepareCohortCalendarInvites(input: { cohortId?: string; mode?: "google" | "ics" | "auto"; fallbackToIcs?: boolean }) {
   if (!input.cohortId) {
     throw Object.assign(new Error("cohortId is required"), { code: "BAD_REQUEST", status: 400 });
   }
@@ -172,7 +241,11 @@ export async function prepareCohortCalendarInvites(input: { cohortId?: string; m
     where: { cohortId: input.cohortId },
     orderBy: { startTime: "asc" }
   });
-  const mode = input.mode ?? "ics";
+  const googleConnection = await getDecryptedIntegrationConnection(IntegrationProvider.GOOGLE_CALENDAR);
+  const mode = input.mode === "auto" || !input.mode
+    ? googleConnection?.status === IntegrationConnectionStatus.CONNECTED ? "google" : "ics"
+    : input.mode;
+  const recipientCount = mode === "google" ? (await getCohortCalendarAttendees(input.cohortId)).length : 0;
   const results = [];
 
   for (const session of sessions) {
@@ -220,6 +293,8 @@ export async function prepareCohortCalendarInvites(input: { cohortId?: string; m
     total: sessions.length,
     created: results.filter((result) => result.status === "created").length,
     failed: results.filter((result) => result.status === "failed").length,
+    recipientCount,
+    invitationCount: results.reduce((count, result) => count + Number("attendeeCount" in result ? result.attendeeCount ?? 0 : 0), 0),
     results
   };
 }

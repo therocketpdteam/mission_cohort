@@ -27,7 +27,7 @@ export async function POST(request: Request) {
     if (body.action === "prepareCohortInvites") {
       return ok(await prepareCohortCalendarInvites({
         cohortId: body.cohortId,
-        mode: body.mode ?? "ics",
+        mode: body.mode ?? "auto",
         fallbackToIcs: body.fallbackToIcs !== false
       }), { status: 202 });
     }

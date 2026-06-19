@@ -6,6 +6,7 @@ import { generateSessionIcs, upsertGoogleCalendarEvent } from "@/modules/calenda
 import { sendWithSendGrid } from "@/modules/email";
 import { getDecryptedIntegrationConnection } from "@/services/integrationService";
 import { resolveGoogleCalendarSetup } from "@/services/integrationSetupService";
+import { getConnectedGoogleCalendarAccessToken } from "@/services/calendarService";
 
 function diagnosticSession() {
   const start = new Date(Date.now() + 24 * 60 * 60 * 1000);
@@ -81,7 +82,7 @@ export async function POST(request: Request) {
 
       const result = await upsertGoogleCalendarEvent({
         ...diagnosticSession(),
-        accessToken: connection.accessToken,
+        accessToken: await getConnectedGoogleCalendarAccessToken(),
         calendarId: setup.calendarId || env.GOOGLE_CALENDAR_ID
       });
 

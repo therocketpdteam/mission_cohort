@@ -11,6 +11,11 @@ export type GoogleCalendarEventInput = {
   accessToken?: string;
   calendarId?: string;
   providerEventId?: string | null;
+  attendees?: Array<{
+    email: string;
+    displayName?: string;
+  }>;
+  sendUpdates?: boolean;
 };
 
 export type GoogleCalendarOAuthConfig = {
@@ -93,6 +98,42 @@ export async function exchangeGoogleCalendarCode(code: string, config?: GoogleCa
   }>;
 }
 
+export async function refreshGoogleCalendarToken(refreshToken: string, config?: GoogleCalendarOAuthConfig) {
+  const resolved = googleConfig(config);
+
+  if (!resolved.clientId || !resolved.clientSecret) {
+    throw Object.assign(new Error("Google Calendar OAuth is not configured."), {
+      code: "BAD_REQUEST",
+      status: 400
+    });
+  }
+
+  const response = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: resolved.clientId,
+      client_secret: resolved.clientSecret,
+      refresh_token: refreshToken,
+      grant_type: "refresh_token"
+    })
+  });
+
+  if (!response.ok) {
+    throw Object.assign(new Error(`Google Calendar token refresh failed with status ${response.status}. Reconnect Google Calendar in Settings.`), {
+      code: "BAD_REQUEST",
+      status: 400
+    });
+  }
+
+  return response.json() as Promise<{
+    access_token: string;
+    expires_in?: number;
+    scope?: string;
+    token_type?: string;
+  }>;
+}
+
 export async function upsertGoogleCalendarEvent(input: GoogleCalendarEventInput) {
   const calendarIdValue = input.calendarId ?? env.GOOGLE_CALENDAR_ID;
 
@@ -115,11 +156,22 @@ export async function upsertGoogleCalendarEvent(input: GoogleCalendarEventInput)
     end: {
       dateTime: new Date(input.endTime).toISOString(),
       timeZone: input.timezone
-    }
+    },
+    attendees: input.attendees?.map((attendee) => ({
+      email: attendee.email,
+      displayName: attendee.displayName || undefined,
+      responseStatus: "needsAction"
+    }))
   };
-  const url = input.providerEventId
+  const eventUrl = input.providerEventId
     ? `https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events/${encodeURIComponent(input.providerEventId)}`
     : `https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events`;
+  const url = new URL(eventUrl);
+
+  if (input.sendUpdates && input.attendees?.length) {
+    url.searchParams.set("sendUpdates", "all");
+  }
+
   const response = await fetch(url, {
     method: input.providerEventId ? "PATCH" : "POST",
     headers: {

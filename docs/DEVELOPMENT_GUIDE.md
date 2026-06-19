@@ -109,5 +109,7 @@ Also open these routes as an admin:
 - `Send test email` sends a diagnostic email to the logged-in admin and verifies the SendGrid send path.
 - `Test ICS fallback` confirms Mission Control can generate calendar invite files even without Google OAuth.
 - `Test Google event` creates a diagnostic event on the configured Google Calendar after OAuth is connected.
+- Cohort `Prepare Invites` uses Google automatically when connected, adds active participants from non-archived registrations as attendees, and asks Google to email all guests. ICS fallback prepares files only and must not be treated as a delivered invitation.
+- Google access tokens are refreshed server-side from the saved refresh token. If refresh authorization is unavailable, reconnect Google Calendar from Connected Tools.
 
 If a feature shows `Blocked`, keep the UI compatibility fallback in place and do not mark the roadmap item done until production reports ready.

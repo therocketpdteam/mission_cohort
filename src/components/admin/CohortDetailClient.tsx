@@ -862,7 +862,6 @@ export function CohortDetailClient({ id }: { id: string }) {
   const [editingPayout, setEditingPayout] = useState<AdminRow | null>(null);
   const [distributionSettings, setDistributionSettings] = useState({ commissionPercent: "30", tlSharePercent: "70", tlName: "", notes: "" });
   const [financeHealth, setFinanceHealth] = useState<FinanceHealth | null>(null);
-  const [calendarProvider, setCalendarProvider] = useState<"ics" | "google">("ics");
   const [preparingInvites, setPreparingInvites] = useState(false);
   const [creatingSessionEmails, setCreatingSessionEmails] = useState(false);
   const [publishingCohort, setPublishingCohort] = useState(false);
@@ -1166,16 +1165,20 @@ export function CohortDetailClient({ id }: { id: string }) {
         body: {
           action: "prepareCohortInvites",
           cohortId: id,
-          mode: calendarProvider,
-          fallbackToIcs: true
+          mode: "auto",
+          fallbackToIcs: false
         }
       });
       const fallbackCount = (result.results ?? []).filter((row: AdminRow) => row.fallbackReason).length;
-      notifySuccess(
-        fallbackCount > 0
-          ? `${result.created ?? 0}/${result.total ?? 0} invites prepared; ${fallbackCount} used ICS fallback`
-          : `${result.created ?? 0}/${result.total ?? 0} calendar invites prepared`
-      );
+      if (Number(result.failed ?? 0) > 0) {
+        notifyError(`${result.failed} calendar sessions failed. No fallback was counted as a delivered invitation.`);
+      } else if (result.requestedProvider === "ics" || fallbackCount > 0) {
+        notifySuccess(`${result.created ?? 0}/${result.total ?? 0} ICS events prepared; participant invitations were not emailed.`);
+      } else if (Number(result.recipientCount ?? 0) === 0) {
+        notifyError("Calendar events were created, but no active participant email addresses were found.");
+      } else {
+        notifySuccess(`${result.invitationCount ?? 0} invitations sent across ${result.total ?? 0} sessions to ${result.recipientCount ?? 0} participants`);
+      }
       await load();
     } catch (error) {
       notifyError((error as Error).message);
