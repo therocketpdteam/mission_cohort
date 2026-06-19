@@ -20,7 +20,10 @@ export type GoogleCalendarOAuthConfig = {
   calendarId?: string | null;
 };
 
-const googleCalendarScopes = ["https://www.googleapis.com/auth/calendar.events"];
+const googleCalendarScopes = [
+  "https://www.googleapis.com/auth/calendar.events",
+  "https://www.googleapis.com/auth/calendar.calendarlist.readonly"
+];
 
 function googleConfig(config?: GoogleCalendarOAuthConfig) {
   return {
@@ -134,4 +137,45 @@ export async function upsertGoogleCalendarEvent(input: GoogleCalendarEventInput)
   }
 
   return response.json() as Promise<{ id: string; htmlLink?: string }>;
+}
+
+export async function listGoogleCalendars(input: { accessToken?: string }) {
+  if (!input.accessToken) {
+    throw Object.assign(new Error("Google Calendar is not connected."), {
+      code: "BAD_REQUEST",
+      status: 400
+    });
+  }
+
+  const response = await fetch("https://www.googleapis.com/calendar/v3/users/me/calendarList", {
+    headers: {
+      Authorization: `Bearer ${input.accessToken}`,
+      Accept: "application/json"
+    }
+  });
+
+  if (!response.ok) {
+    throw Object.assign(new Error(`Google Calendar list request failed with status ${response.status}`), {
+      code: "BAD_REQUEST",
+      status: 400
+    });
+  }
+
+  const payload = await response.json() as {
+    items?: Array<{
+      id?: string;
+      summary?: string;
+      primary?: boolean;
+      accessRole?: string;
+      backgroundColor?: string;
+    }>;
+  };
+
+  return (payload.items ?? []).map((calendar) => ({
+    id: calendar.id ?? "",
+    summary: calendar.summary ?? calendar.id ?? "Calendar",
+    primary: Boolean(calendar.primary),
+    accessRole: calendar.accessRole ?? "",
+    backgroundColor: calendar.backgroundColor ?? ""
+  })).filter((calendar) => calendar.id);
 }

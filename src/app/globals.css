@@ -2221,13 +2221,58 @@ h6,
   justify-self: end;
 }
 
+.integration-simple-connect {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px;
+  border: 1px solid var(--stroke-soft);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-container-lowest);
+}
+
+.integration-simple-connect div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.integration-simple-connect strong {
+  color: var(--color-slate-900);
+  font-size: 0.92rem;
+}
+
+.integration-simple-connect span {
+  color: var(--color-slate-500);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.integration-calendar-picker,
+.integration-advanced-panel {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.integration-advanced-panel {
+  padding: 12px;
+  border: 1px dashed var(--stroke-soft);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-surface-container-low) 60%, transparent);
+}
+
 .app-shell.is-night .system-health-generated,
 .app-shell.is-night .system-health-card,
 .app-shell.is-night .system-health-check,
 .app-shell.is-night .integration-card,
 .app-shell.is-night .integration-check-row,
 .app-shell.is-night .integration-instructions,
-.app-shell.is-night .integration-setup-form {
+.app-shell.is-night .integration-setup-form,
+.app-shell.is-night .integration-simple-connect,
+.app-shell.is-night .integration-advanced-panel {
   border-color: rgba(148, 163, 184, 0.22);
   background: #151329;
 }
@@ -2235,7 +2280,9 @@ h6,
 .app-shell.is-night .system-health-check,
 .app-shell.is-night .integration-check-row,
 .app-shell.is-night .integration-instructions,
-.app-shell.is-night .integration-setup-form {
+.app-shell.is-night .integration-setup-form,
+.app-shell.is-night .integration-simple-connect,
+.app-shell.is-night .integration-advanced-panel {
   background: #1b1832;
 }
 
@@ -2246,7 +2293,8 @@ h6,
 .app-shell.is-night .system-health-check strong,
 .app-shell.is-night .integration-card-header h3,
 .app-shell.is-night .integration-check-row strong,
-.app-shell.is-night .integration-instructions strong {
+.app-shell.is-night .integration-instructions strong,
+.app-shell.is-night .integration-simple-connect strong {
   color: #f4f1ff;
 }
 
@@ -2258,7 +2306,8 @@ h6,
 .app-shell.is-night .integration-card-header span,
 .app-shell.is-night .integration-check-row p,
 .app-shell.is-night .integration-muted,
-.app-shell.is-night .integration-instructions ol {
+.app-shell.is-night .integration-instructions ol,
+.app-shell.is-night .integration-simple-connect span {
   color: #c9c4d8;
 }
 
@@ -2273,7 +2322,9 @@ h6,
 .app-shell.is-compact .integration-card,
 .app-shell.is-compact .integration-check-row,
 .app-shell.is-compact .integration-instructions,
-.app-shell.is-compact .integration-setup-form {
+.app-shell.is-compact .integration-setup-form,
+.app-shell.is-compact .integration-simple-connect,
+.app-shell.is-compact .integration-advanced-panel {
   padding: 10px;
 }
 

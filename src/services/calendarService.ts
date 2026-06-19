@@ -1,6 +1,6 @@
 import { CalendarInviteStatus, IntegrationConnectionStatus, IntegrationProvider, OperationsTaskCategory, OperationsTaskStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { exchangeGoogleCalendarCode, generateSessionIcs, getGoogleCalendarConnectUrl, upsertGoogleCalendarEvent } from "@/modules/calendar";
+import { exchangeGoogleCalendarCode, generateSessionIcs, getGoogleCalendarConnectUrl, listGoogleCalendars, upsertGoogleCalendarEvent } from "@/modules/calendar";
 import { getDecryptedIntegrationConnection, upsertIntegrationConnection } from "@/services/integrationService";
 import { resolveGoogleCalendarSetup } from "@/services/integrationSetupService";
 
@@ -31,6 +31,12 @@ export async function completeGoogleCalendarOAuth(code: string) {
     tokenExpiresAt: token.expires_in ? new Date(Date.now() + token.expires_in * 1000) : undefined,
     metadata: { scope: token.scope ?? null, tokenType: token.token_type ?? null, calendarId: setup.calendarId ?? null }
   });
+}
+
+export async function listConnectedGoogleCalendars() {
+  const connection = await getDecryptedIntegrationConnection(IntegrationProvider.GOOGLE_CALENDAR);
+
+  return listGoogleCalendars({ accessToken: connection?.accessToken });
 }
 
 export async function createCalendarInvitePlaceholder(sessionId?: string, mode: "google" | "ics" = "ics") {

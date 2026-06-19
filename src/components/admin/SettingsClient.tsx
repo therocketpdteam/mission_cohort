@@ -1413,6 +1413,9 @@ export function SettingsClient() {
   const [savingIntegration, setSavingIntegration] = useState("");
   const [integrationSetup, setIntegrationSetup] = useState<AdminRow | null>(null);
   const [setupForms, setSetupForms] = useState<Record<string, AdminRow>>({});
+  const [advancedIntegrationSetup, setAdvancedIntegrationSetup] = useState<Record<string, boolean>>({});
+  const [googleCalendars, setGoogleCalendars] = useState<AdminRow[]>([]);
+  const [loadingGoogleCalendars, setLoadingGoogleCalendars] = useState(false);
   const { notifySuccess, notifyError, snackbar } = useNotifier();
 
   async function load() {
@@ -1535,6 +1538,26 @@ export function SettingsClient() {
     }
   }
 
+  async function loadGoogleCalendars() {
+    setLoadingGoogleCalendars(true);
+    try {
+      const calendars = await adminApi<AdminRow[]>("/api/integrations/setup?provider=GOOGLE_CALENDAR&action=listCalendars");
+      setGoogleCalendars(calendars);
+      notifySuccess("Google calendars loaded");
+    } catch (error) {
+      notifyError((error as Error).message);
+    } finally {
+      setLoadingGoogleCalendars(false);
+    }
+  }
+
+  function toggleAdvancedIntegration(provider: string) {
+    setAdvancedIntegrationSetup((current) => ({
+      ...current,
+      [provider]: !current[provider]
+    }));
+  }
+
   const currentWizardMapping = mappingWizardEvent
     ? mappings.find((mapping) => mapping.formId === mappingWizardEvent.preview?.formId)
     : undefined;
@@ -1573,9 +1596,9 @@ export function SettingsClient() {
         { label: "Google OAuth web server setup", href: "https://developers.google.com/identity/protocols/oauth2/web-server" }
       ],
       instructions: [
-        "Create an OAuth client in Google Cloud.",
-        "Copy the callback URL below into Authorized redirect URIs.",
-        "Save the client credentials and calendar ID here, then click Connect."
+        "If setup is already ready, just click Connect and log into Google.",
+        "After connecting, load calendars and choose where Mission Control should create events.",
+        "Only open Advanced setup if the app says OAuth setup is missing."
       ]
     },
     {
@@ -1892,22 +1915,59 @@ export function SettingsClient() {
                   )}
                   {provider.provider === "GOOGLE_CALENDAR" && (
                     <div className="integration-setup-form">
-                      <TextField fullWidth label="Client ID" value={setupForms.GOOGLE_CALENDAR?.clientId ?? ""} onChange={(event) => updateSetupForm("GOOGLE_CALENDAR", "clientId", event.target.value)} />
-                      <TextField
-                        fullWidth
-                        label={provider.setup?.hasClientSecret ? "Client secret (saved - paste only to replace)" : "Client secret"}
-                        type="password"
-                        value={setupForms.GOOGLE_CALENDAR?.clientSecret ?? ""}
-                        onChange={(event) => updateSetupForm("GOOGLE_CALENDAR", "clientSecret", event.target.value)}
-                      />
-                      <div className="integration-copy-row">
-                        <TextField fullWidth label="Redirect URI" value={setupForms.GOOGLE_CALENDAR?.redirectUri ?? integrationUrl("/api/integrations/google/callback")} onChange={(event) => updateSetupForm("GOOGLE_CALENDAR", "redirectUri", event.target.value)} />
-                        <Button size="small" variant="outlined" onClick={() => void copyIntegrationValue(String(setupForms.GOOGLE_CALENDAR?.redirectUri ?? integrationUrl("/api/integrations/google/callback")), "Google redirect URI")}>Copy</Button>
+                      <div className="integration-simple-connect">
+                        <div>
+                          <strong>{provider.setup?.connectedAccount?.status === "CONNECTED" ? "Google account connected" : "Connect your Google account"}</strong>
+                          <span>
+                            {provider.setup?.connectedAccount?.accountName ?? "Log in with Google, then choose the calendar Mission Control should use."}
+                          </span>
+                        </div>
+                        <Button href="/api/integrations/google/connect" disabled={healthCheck("googleCalendarEnv")?.status !== "healthy"}>
+                          {provider.setup?.connectedAccount?.status === "CONNECTED" ? "Reconnect" : "Connect Google Calendar"}
+                        </Button>
                       </div>
-                      <TextField fullWidth label="Calendar ID" value={setupForms.GOOGLE_CALENDAR?.calendarId ?? ""} onChange={(event) => updateSetupForm("GOOGLE_CALENDAR", "calendarId", event.target.value)} />
-                      <Button size="small" onClick={() => void saveIntegrationSetup("GOOGLE_CALENDAR")} disabled={savingIntegration === "GOOGLE_CALENDAR"}>
-                        {savingIntegration === "GOOGLE_CALENDAR" ? "Saving..." : "Save Google Calendar"}
+                      {provider.setup?.connectedAccount?.status === "CONNECTED" && (
+                        <div className="integration-calendar-picker">
+                          <div className="integration-copy-row">
+                            <TextField select fullWidth label="Mission Control calendar" value={setupForms.GOOGLE_CALENDAR?.calendarId ?? ""} onChange={(event) => updateSetupForm("GOOGLE_CALENDAR", "calendarId", event.target.value)}>
+                              <MenuItem value="">Choose calendar</MenuItem>
+                              {(googleCalendars.length > 0 ? googleCalendars : provider.setup?.calendarId ? [{ id: provider.setup.calendarId, summary: provider.setup.calendarId }] : []).map((calendar) => (
+                                <MenuItem value={calendar.id} key={calendar.id}>
+                                  {calendar.primary ? `${calendar.summary} (Primary)` : calendar.summary}
+                                </MenuItem>
+                              ))}
+                            </TextField>
+                            <Button size="small" variant="outlined" onClick={() => void loadGoogleCalendars()} disabled={loadingGoogleCalendars}>
+                              {loadingGoogleCalendars ? "Loading..." : "Load Calendars"}
+                            </Button>
+                          </div>
+                          <Button size="small" onClick={() => void saveIntegrationSetup("GOOGLE_CALENDAR")} disabled={savingIntegration === "GOOGLE_CALENDAR" || !setupForms.GOOGLE_CALENDAR?.calendarId}>
+                            {savingIntegration === "GOOGLE_CALENDAR" ? "Saving..." : "Save Calendar Choice"}
+                          </Button>
+                        </div>
+                      )}
+                      <Button size="small" variant="text" onClick={() => toggleAdvancedIntegration("GOOGLE_CALENDAR")}>
+                        {advancedIntegrationSetup.GOOGLE_CALENDAR ? "Hide Advanced Setup" : "Advanced OAuth Setup"}
                       </Button>
+                      {advancedIntegrationSetup.GOOGLE_CALENDAR && (
+                        <div className="integration-advanced-panel">
+                          <TextField fullWidth label="Client ID" value={setupForms.GOOGLE_CALENDAR?.clientId ?? ""} onChange={(event) => updateSetupForm("GOOGLE_CALENDAR", "clientId", event.target.value)} />
+                          <TextField
+                            fullWidth
+                            label={provider.setup?.hasClientSecret ? "Client secret (saved - paste only to replace)" : "Client secret"}
+                            type="password"
+                            value={setupForms.GOOGLE_CALENDAR?.clientSecret ?? ""}
+                            onChange={(event) => updateSetupForm("GOOGLE_CALENDAR", "clientSecret", event.target.value)}
+                          />
+                          <div className="integration-copy-row">
+                            <TextField fullWidth label="Redirect URI" value={setupForms.GOOGLE_CALENDAR?.redirectUri ?? integrationUrl("/api/integrations/google/callback")} onChange={(event) => updateSetupForm("GOOGLE_CALENDAR", "redirectUri", event.target.value)} />
+                            <Button size="small" variant="outlined" onClick={() => void copyIntegrationValue(String(setupForms.GOOGLE_CALENDAR?.redirectUri ?? integrationUrl("/api/integrations/google/callback")), "Google redirect URI")}>Copy</Button>
+                          </div>
+                          <Button size="small" onClick={() => void saveIntegrationSetup("GOOGLE_CALENDAR")} disabled={savingIntegration === "GOOGLE_CALENDAR"}>
+                            {savingIntegration === "GOOGLE_CALENDAR" ? "Saving..." : "Save OAuth Setup"}
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   )}
                   {provider.provider === "QUICKBOOKS" && (

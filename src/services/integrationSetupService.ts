@@ -148,8 +148,8 @@ export async function saveIntegrationSetup(provider: IntegrationSetupProvider, i
     const redirectUri = cleanString(input.redirectUri) || String(existingMetadata.redirectUri ?? "");
     const calendarId = cleanString(input.calendarId) || String(existingMetadata.calendarId ?? "");
 
-    if (!clientId || !redirectUri || !calendarId) {
-      throw Object.assign(new Error("Google client ID, redirect URI, and calendar ID are required."), { code: "BAD_REQUEST", status: 400 });
+    if (!clientId || !redirectUri) {
+      throw Object.assign(new Error("Google client ID and redirect URI are required."), { code: "BAD_REQUEST", status: 400 });
     }
 
     if (!clientSecret && !existing?.accessToken) {
@@ -166,7 +166,7 @@ export async function saveIntegrationSetup(provider: IntegrationSetupProvider, i
       metadata: {
         ...existingMetadata,
         redirectUri,
-        calendarId
+        ...(calendarId ? { calendarId } : {})
       } as Prisma.InputJsonValue
     });
 
