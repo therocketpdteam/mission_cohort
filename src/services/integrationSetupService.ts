@@ -44,10 +44,11 @@ export async function getSendGridSetup() {
     configured: Boolean(connection?.accessToken && data.fromEmail),
     fromEmail: String(data.fromEmail ?? ""),
     fromName: String(data.fromName ?? connection?.accountName ?? ""),
-    webhookPublicKey: String(data.webhookPublicKey ?? ""),
+    webhookPublicKey: "",
     liveSendingEnabled: data.liveSendingEnabled === true,
     testRecipientEmails: cleanRecipientEmails(data.testRecipientEmails),
     hasApiKey: maskedSecret(connection?.accessToken),
+    hasWebhookPublicKey: maskedSecret(String(data.webhookPublicKey ?? "")),
     status: connection?.status ?? IntegrationConnectionStatus.NOT_CONFIGURED,
     updatedAt: connection?.updatedAt ?? null
   };
@@ -61,12 +62,13 @@ export async function getGoogleCalendarSetup() {
   return {
     provider: "GOOGLE_CALENDAR",
     configured: Boolean(setup?.accountId && setup?.accessToken && data.redirectUri && data.calendarId),
-    clientId: setup?.accountId ?? "",
+    clientId: "",
     redirectUri: String(data.redirectUri ?? ""),
     calendarId: String(data.calendarId ?? ""),
     liveSendingEnabled: data.liveSendingEnabled === true,
     testRecipientEmails: cleanRecipientEmails(data.testRecipientEmails),
     hasClientSecret: maskedSecret(setup?.accessToken),
+    hasClientId: maskedSecret(setup?.accountId),
     status: setup?.status ?? IntegrationConnectionStatus.NOT_CONFIGURED,
     connectedAccount: connection ? {
       status: connection.status,
@@ -87,10 +89,11 @@ export async function getQuickBooksSetup() {
   return {
     provider: "QUICKBOOKS",
     configured: Boolean(setup?.accountId && setup?.accessToken && data.redirectUri && setup?.refreshToken),
-    clientId: setup?.accountId ?? "",
+    clientId: "",
     redirectUri: String(data.redirectUri ?? ""),
     environment: String(data.environment ?? "sandbox"),
     hasClientSecret: maskedSecret(setup?.accessToken),
+    hasClientId: maskedSecret(setup?.accountId),
     hasWebhookVerifierToken: maskedSecret(setup?.refreshToken),
     status: setup?.status ?? IntegrationConnectionStatus.NOT_CONFIGURED,
     connectedAccount: connection ? {
@@ -124,7 +127,7 @@ export async function saveIntegrationSetup(provider: IntegrationSetupProvider, i
     const apiKey = cleanString(input.apiKey);
     const fromEmail = cleanString(input.fromEmail) || String(existingMetadata.fromEmail ?? "");
     const fromName = cleanString(input.fromName);
-    const webhookPublicKey = cleanString(input.webhookPublicKey);
+    const webhookPublicKey = cleanString(input.webhookPublicKey) || String(existingMetadata.webhookPublicKey ?? "");
     const testRecipientEmails = cleanRecipientEmails(input.testRecipientEmails ?? existingMetadata.testRecipientEmails);
     const liveSendingEnabled = input.liveSendingEnabled === true;
 

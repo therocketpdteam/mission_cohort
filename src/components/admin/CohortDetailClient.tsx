@@ -6,6 +6,7 @@ import { CancelOutlined, CheckCircleOutline, SendOutlined } from "@/components/u
 import { EditOutlined } from "@/components/ui/icons";
 import {
   Box,
+  Alert,
   Button,
   Dialog,
   DialogActions,
@@ -836,6 +837,8 @@ export function CohortDetailClient({ id }: { id: string }) {
   const [activity, setActivity] = useState<AdminRow[]>([]);
   const [sessionDialogOpen, setSessionDialogOpen] = useState(false);
   const [editingSession, setEditingSession] = useState<AdminRow | null>(null);
+  const [calendarCancelTarget, setCalendarCancelTarget] = useState<{ scope: "session" | "cohort"; session?: AdminRow } | null>(null);
+  const [cancellingCalendar, setCancellingCalendar] = useState(false);
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
   const [resourceDialogOpen, setResourceDialogOpen] = useState(false);
   const [resourceSeedSession, setResourceSeedSession] = useState<AdminRow | null>(null);
@@ -1575,16 +1578,43 @@ export function CohortDetailClient({ id }: { id: string }) {
   async function saveSession(values: AdminRow) {
     try {
       if (editingSession) {
-        await adminApi("/api/sessions", { method: "PATCH", body: { ...values, id: editingSession.id } });
+        const result = await adminApi<AdminRow>("/api/sessions", { method: "PATCH", body: { ...values, id: editingSession.id } });
+        if (result.calendarSync === "updated") {
+          notifySuccess(`Session and Google invitation updated for ${result.calendarRecipients ?? 0} participants`);
+        } else if (result.calendarSync === "blocked") {
+          notifyError(`Session saved, but the Google invitation was not updated: ${result.calendarSyncError}`);
+        } else {
+          notifySuccess("Session updated");
+        }
       } else {
         await adminApi(`/api/cohorts/${id}/sessions`, { method: "POST", body: values });
+        notifySuccess("Session added");
       }
-      notifySuccess(editingSession ? "Session updated" : "Session added");
       setEditingSession(null);
       await load();
     } catch (error) {
       notifyError((error as Error).message);
       throw error;
+    }
+  }
+
+  async function cancelCalendarInvites() {
+    if (!calendarCancelTarget) return;
+    setCancellingCalendar(true);
+    try {
+      const result = await adminApi<AdminRow>("/api/calendar", {
+        method: "PATCH",
+        body: calendarCancelTarget.scope === "session"
+          ? { action: "cancelSessionInvites", sessionId: calendarCancelTarget.session?.id }
+          : { action: "cancelCohortInvites", cohortId: id }
+      });
+      notifySuccess(`${result.googleEventsCancelled ?? 0} Google events cancelled; ${result.recipientsNotified ?? 0} participants notified`);
+      setCalendarCancelTarget(null);
+      await load();
+    } catch (error) {
+      notifyError((error as Error).message);
+    } finally {
+      setCancellingCalendar(false);
     }
   }
 
@@ -1766,6 +1796,11 @@ export function CohortDetailClient({ id }: { id: string }) {
             title="Sessions"
             action={
               <div className="action-group">
+                {sessions.some((session) => (session.calendarEvents ?? []).some((event: AdminRow) => event.provider === "google")) && (
+                  <Button variant="outlined" color="error" onClick={() => setCalendarCancelTarget({ scope: "cohort" })}>
+                    Cancel All Invites
+                  </Button>
+                )}
                 <Button variant="outlined" startIcon={<AddIcon />} onClick={() => openMaterialDialog()}>Add Material</Button>
                 <Button startIcon={<AddIcon />} onClick={() => setSessionDialogOpen(true)}>Add Session</Button>
               </div>
@@ -1880,7 +1915,12 @@ export function CohortDetailClient({ id }: { id: string }) {
                         label: "Sync Google Calendar",
                         icon: <CalendarMonthOutlined fontSize="small" />,
                         onClick: () => void syncGoogleCalendarSession(session.id)
-                      }
+                      },
+                      ...((session.calendarEvents ?? []).some((event: AdminRow) => event.provider === "google") ? [{
+                        label: "Cancel Google invite",
+                        icon: <CancelOutlined fontSize="small" />,
+                        onClick: () => setCalendarCancelTarget({ scope: "session", session })
+                      }] : [])
                     ]}
                   />
                 </div>
@@ -2125,6 +2165,27 @@ export function CohortDetailClient({ id }: { id: string }) {
         onClose={() => { setSessionDialogOpen(false); setEditingSession(null); }}
         onSubmit={saveSession}
       />
+      <Dialog open={Boolean(calendarCancelTarget)} onClose={() => !cancellingCalendar && setCalendarCancelTarget(null)} maxWidth="sm" fullWidth>
+        <DialogTitle>
+          {calendarCancelTarget?.scope === "session" ? "Cancel Session Invitation" : "Cancel All Cohort Invitations"}
+        </DialogTitle>
+        <DialogContent>
+          <Typography color="text.secondary">
+            {calendarCancelTarget?.scope === "session"
+              ? `Google will remove “${calendarCancelTarget.session?.title ?? "this session"}” and email a cancellation to its attendees.`
+              : "Google will remove every linked session event for this cohort and email cancellations to attendees."}
+          </Typography>
+          <Alert severity="warning" sx={{ mt: 2 }}>
+            Outbound safety mode still applies. Every attendee must be allowlisted unless live calendar sending is enabled.
+          </Alert>
+        </DialogContent>
+        <DialogActions>
+          <Button variant="outlined" onClick={() => setCalendarCancelTarget(null)} disabled={cancellingCalendar}>Keep Invitations</Button>
+          <Button color="error" onClick={() => void cancelCalendarInvites()} disabled={cancellingCalendar}>
+            {cancellingCalendar ? "Cancelling" : "Send Cancellation"}
+          </Button>
+        </DialogActions>
+      </Dialog>
       <MutationDialog
         title="Add Operations Task"
         open={taskDialogOpen}

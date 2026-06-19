@@ -272,13 +272,13 @@ async function integrationChecks(): Promise<HealthCheck[]> {
     {
       key: "sendgridWebhook",
       label: "SendGrid webhook telemetry",
-      status: sendGridSetup.webhookPublicKey || presence.sendgridWebhookConfigured ? "healthy" : "warning",
-      detail: sendGridSetup.webhookPublicKey
+      status: sendGridSetup.hasWebhookPublicKey || presence.sendgridWebhookConfigured ? "healthy" : "warning",
+      detail: sendGridSetup.hasWebhookPublicKey
         ? "SendGrid webhook public key is saved in the app."
         : presence.sendgridWebhookConfigured
           ? "Webhook public key is present in the environment."
           : "Delivery/open/error telemetry requires the SendGrid Event Webhook public key.",
-      nextAction: sendGridSetup.webhookPublicKey || presence.sendgridWebhookConfigured ? undefined : "Save the SendGrid webhook public key and point SendGrid Event Webhook to /api/webhooks/sendgrid."
+      nextAction: sendGridSetup.hasWebhookPublicKey || presence.sendgridWebhookConfigured ? undefined : "Save the SendGrid webhook public key and point SendGrid Event Webhook to /api/webhooks/sendgrid."
     },
     {
       key: "googleCalendarEnv",

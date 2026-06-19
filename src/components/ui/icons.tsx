@@ -12,6 +12,7 @@ import {
   Eye,
   FileText,
   Gauge,
+  CircleHelp,
   KeyRound,
   Lock,
   LogOut,
@@ -63,6 +64,7 @@ export const EmailOutlined = icon(Mail);
 export const ExpandLessOutlined = icon(ChevronUp);
 export const ExpandMoreOutlined = icon(ChevronDown);
 export const GroupsOutlined = icon(Users);
+export const HelpOutline = icon(CircleHelp);
 export const InsightsOutlined = icon(Gauge);
 export const KeyOutlined = icon(KeyRound);
 export const LockOutlined = icon(Lock);

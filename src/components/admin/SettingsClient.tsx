@@ -6,6 +6,7 @@ import { EditOutlined } from "@/components/ui/icons";
 import { ExpandLessOutlined } from "@/components/ui/icons";
 import { ExpandMoreOutlined } from "@/components/ui/icons";
 import { KeyOutlined } from "@/components/ui/icons";
+import { HelpOutline } from "@/components/ui/icons";
 import { PowerSettingsNewOutlined } from "@/components/ui/icons";
 import { ReplayOutlined } from "@/components/ui/icons";
 import {
@@ -1416,6 +1417,8 @@ export function SettingsClient() {
   const [integrationSetup, setIntegrationSetup] = useState<AdminRow | null>(null);
   const [setupForms, setSetupForms] = useState<Record<string, AdminRow>>({});
   const [advancedIntegrationSetup, setAdvancedIntegrationSetup] = useState<Record<string, boolean>>({});
+  const [expandedIntegrations, setExpandedIntegrations] = useState<Record<string, boolean>>({});
+  const [integrationHelpProvider, setIntegrationHelpProvider] = useState<AdminRow | null>(null);
   const [googleCalendars, setGoogleCalendars] = useState<AdminRow[]>([]);
   const [loadingGoogleCalendars, setLoadingGoogleCalendars] = useState(false);
   const { notifySuccess, notifyError, snackbar } = useNotifier();
@@ -1442,13 +1445,13 @@ export function SettingsClient() {
       SENDGRID: {
         fromEmail: setupData?.sendgrid?.fromEmail ?? current.SENDGRID?.fromEmail ?? "",
         fromName: setupData?.sendgrid?.fromName ?? current.SENDGRID?.fromName ?? "",
-        webhookPublicKey: setupData?.sendgrid?.webhookPublicKey ?? current.SENDGRID?.webhookPublicKey ?? "",
+        webhookPublicKey: "",
         apiKey: "",
         testRecipientEmails: (setupData?.sendgrid?.testRecipientEmails ?? []).join(", "),
         liveSendingEnabled: setupData?.sendgrid?.liveSendingEnabled === true
       },
       GOOGLE_CALENDAR: {
-        clientId: setupData?.googleCalendar?.clientId ?? current.GOOGLE_CALENDAR?.clientId ?? "",
+        clientId: "",
         clientSecret: "",
         redirectUri: setupData?.googleCalendar?.redirectUri ?? current.GOOGLE_CALENDAR?.redirectUri ?? "",
         calendarId: setupData?.googleCalendar?.calendarId ?? current.GOOGLE_CALENDAR?.calendarId ?? "",
@@ -1456,7 +1459,7 @@ export function SettingsClient() {
         liveSendingEnabled: setupData?.googleCalendar?.liveSendingEnabled === true
       },
       QUICKBOOKS: {
-        clientId: setupData?.quickBooks?.clientId ?? current.QUICKBOOKS?.clientId ?? "",
+        clientId: "",
         clientSecret: "",
         redirectUri: setupData?.quickBooks?.redirectUri ?? current.QUICKBOOKS?.redirectUri ?? "",
         environment: setupData?.quickBooks?.environment ?? current.QUICKBOOKS?.environment ?? "sandbox",
@@ -1562,6 +1565,10 @@ export function SettingsClient() {
       ...current,
       [provider]: !current[provider]
     }));
+  }
+
+  function toggleIntegrationCard(provider: string) {
+    setExpandedIntegrations((current) => ({ ...current, [provider]: !current[provider] }));
   }
 
   const currentWizardMapping = mappingWizardEvent
@@ -1843,7 +1850,6 @@ export function SettingsClient() {
               const warning = checks.some((check) => check.status === "warning");
               const status = blocked ? "blocked" : warning ? "warning" : "healthy";
               const instructions = provider.instructions ?? [];
-              const docs = provider.docs ?? [];
 
               return (
                 <article className={`integration-card is-${healthToneClass[status] ?? "yellow"}`} key={provider.label}>
@@ -1852,9 +1858,30 @@ export function SettingsClient() {
                       <span>{provider.description}</span>
                       <h3>{provider.label}</h3>
                     </div>
-                    <HealthBadge status={status} />
+                    <div className="integration-card-controls">
+                      <HealthBadge status={status} />
+                      {instructions.length > 0 && (
+                        <IconButton title={`${provider.label} setup help`} onClick={() => setIntegrationHelpProvider(provider)}>
+                          <HelpOutline />
+                        </IconButton>
+                      )}
+                      <Button size="small" variant="text" onClick={() => toggleIntegrationCard(provider.provider)}>
+                        {expandedIntegrations[provider.provider] ? "Close" : "Configure"}
+                      </Button>
+                    </div>
                   </div>
-                  <div className="integration-check-list">
+                  <div className="integration-card-summary">
+                    <span>{checks.length > 0 ? `${checks.filter((check) => check.status === "healthy").length}/${checks.length} checks ready` : "No additional setup checks"}</span>
+                    <div className="integration-card-controls">
+                      {typeof provider.setup?.liveSendingEnabled === "boolean" && (
+                        <StatusChip value={provider.setup.liveSendingEnabled ? "LIVE SENDING" : "TEST MODE"} />
+                      )}
+                      {provider.setup?.configured ? <StatusChip value="CONFIGURED" /> : null}
+                    </div>
+                  </div>
+                  <Collapse in={Boolean(expandedIntegrations[provider.provider])}>
+                    <div className="integration-card-body">
+                    <div className="integration-check-list">
                     {checks.length > 0 ? checks.map((check) => (
                       <div className="integration-check-row" key={check.key}>
                         <div>
@@ -1868,21 +1895,6 @@ export function SettingsClient() {
                       <p className="integration-muted">No detailed health check is available yet.</p>
                     )}
                   </div>
-                  {instructions.length > 0 && (
-                    <div className="integration-instructions">
-                      <strong>Setup steps</strong>
-                      <ol>
-                        {instructions.map((instruction) => <li key={instruction}>{instruction}</li>)}
-                      </ol>
-                      <div className="integration-doc-links">
-                        {docs.map((doc) => (
-                          <Button key={doc.href} href={doc.href} target="_blank" rel="noreferrer" size="small" variant="text">
-                            {doc.label}
-                          </Button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
                   {provider.provider === "SENDGRID" && (
                     <div className="integration-setup-form">
                       <Alert severity={setupForms.SENDGRID?.liveSendingEnabled ? "warning" : "info"}>
@@ -1905,6 +1917,7 @@ export function SettingsClient() {
                         fullWidth
                         label={provider.setup?.hasApiKey ? "API key (saved - paste only to replace)" : "API key"}
                         type="password"
+                        placeholder={provider.setup?.hasApiKey ? "******** (saved)" : ""}
                         value={setupForms.SENDGRID?.apiKey ?? ""}
                         onChange={(event) => updateSetupForm("SENDGRID", "apiKey", event.target.value)}
                       />
@@ -1922,7 +1935,9 @@ export function SettingsClient() {
                       />
                       <TextField
                         fullWidth
-                        label="Event Webhook public key"
+                        label={provider.setup?.hasWebhookPublicKey ? "Event Webhook public key (saved)" : "Event Webhook public key"}
+                        type="password"
+                        placeholder={provider.setup?.hasWebhookPublicKey ? "******** (saved)" : ""}
                         value={setupForms.SENDGRID?.webhookPublicKey ?? ""}
                         onChange={(event) => updateSetupForm("SENDGRID", "webhookPublicKey", event.target.value)}
                       />
@@ -1989,11 +2004,19 @@ export function SettingsClient() {
                       </Button>
                       {advancedIntegrationSetup.GOOGLE_CALENDAR && (
                         <div className="integration-advanced-panel">
-                          <TextField fullWidth label="Client ID" value={setupForms.GOOGLE_CALENDAR?.clientId ?? ""} onChange={(event) => updateSetupForm("GOOGLE_CALENDAR", "clientId", event.target.value)} />
+                          <TextField
+                            fullWidth
+                            label={provider.setup?.hasClientId ? "Client ID (saved)" : "Client ID"}
+                            type="password"
+                            placeholder={provider.setup?.hasClientId ? "******** (saved)" : ""}
+                            value={setupForms.GOOGLE_CALENDAR?.clientId ?? ""}
+                            onChange={(event) => updateSetupForm("GOOGLE_CALENDAR", "clientId", event.target.value)}
+                          />
                           <TextField
                             fullWidth
                             label={provider.setup?.hasClientSecret ? "Client secret (saved - paste only to replace)" : "Client secret"}
                             type="password"
+                            placeholder={provider.setup?.hasClientSecret ? "******** (saved)" : ""}
                             value={setupForms.GOOGLE_CALENDAR?.clientSecret ?? ""}
                             onChange={(event) => updateSetupForm("GOOGLE_CALENDAR", "clientSecret", event.target.value)}
                           />
@@ -2010,11 +2033,19 @@ export function SettingsClient() {
                   )}
                   {provider.provider === "QUICKBOOKS" && (
                     <div className="integration-setup-form">
-                      <TextField fullWidth label="Client ID" value={setupForms.QUICKBOOKS?.clientId ?? ""} onChange={(event) => updateSetupForm("QUICKBOOKS", "clientId", event.target.value)} />
+                      <TextField
+                        fullWidth
+                        label={provider.setup?.hasClientId ? "Client ID (saved)" : "Client ID"}
+                        type="password"
+                        placeholder={provider.setup?.hasClientId ? "******** (saved)" : ""}
+                        value={setupForms.QUICKBOOKS?.clientId ?? ""}
+                        onChange={(event) => updateSetupForm("QUICKBOOKS", "clientId", event.target.value)}
+                      />
                       <TextField
                         fullWidth
                         label={provider.setup?.hasClientSecret ? "Client secret (saved - paste only to replace)" : "Client secret"}
                         type="password"
+                        placeholder={provider.setup?.hasClientSecret ? "******** (saved)" : ""}
                         value={setupForms.QUICKBOOKS?.clientSecret ?? ""}
                         onChange={(event) => updateSetupForm("QUICKBOOKS", "clientSecret", event.target.value)}
                       />
@@ -2030,6 +2061,7 @@ export function SettingsClient() {
                         fullWidth
                         label={provider.setup?.hasWebhookVerifierToken ? "Webhook verifier token (saved - paste only to replace)" : "Webhook verifier token"}
                         type="password"
+                        placeholder={provider.setup?.hasWebhookVerifierToken ? "******** (saved)" : ""}
                         value={setupForms.QUICKBOOKS?.webhookVerifierToken ?? ""}
                         onChange={(event) => updateSetupForm("QUICKBOOKS", "webhookVerifierToken", event.target.value)}
                       />
@@ -2069,11 +2101,35 @@ export function SettingsClient() {
                       ))}
                     </div>
                   )}
+                    </div>
+                  </Collapse>
                 </article>
               );
             })}
           </div>
         </SectionCard>
+        <Dialog open={Boolean(integrationHelpProvider)} onClose={() => setIntegrationHelpProvider(null)} maxWidth="sm" fullWidth>
+          <DialogTitle>{integrationHelpProvider?.label ?? "Integration"} Setup Help</DialogTitle>
+          <DialogContent>
+            <Typography color="text.secondary" sx={{ mb: 2 }}>{integrationHelpProvider?.description}</Typography>
+            <div className="integration-instructions">
+              <strong>Setup steps</strong>
+              <ol>
+                {(integrationHelpProvider?.instructions ?? []).map((instruction: string) => <li key={instruction}>{instruction}</li>)}
+              </ol>
+              <div className="integration-doc-links">
+                {(integrationHelpProvider?.docs ?? []).map((doc: AdminRow) => (
+                  <Button key={doc.href} href={doc.href} target="_blank" rel="noreferrer" size="small" variant="text">
+                    {doc.label}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setIntegrationHelpProvider(null)}>Done</Button>
+          </DialogActions>
+        </Dialog>
       </TabPanel>
 
       <TabPanel active={activeTab} index={3}>

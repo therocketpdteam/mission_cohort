@@ -1,6 +1,6 @@
 import { CalendarInviteStatus, IntegrationConnectionStatus, IntegrationProvider, OperationsTaskCategory, OperationsTaskStatus, ParticipantStatus, RegistrationStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { exchangeGoogleCalendarCode, generateSessionIcs, getGoogleCalendarConnectUrl, listGoogleCalendars, refreshGoogleCalendarToken, uniqueCalendarAttendees, upsertGoogleCalendarEvent } from "@/modules/calendar";
+import { deleteGoogleCalendarEvent, exchangeGoogleCalendarCode, generateSessionIcs, getGoogleCalendarConnectUrl, getGoogleCalendarEvent, listGoogleCalendars, refreshGoogleCalendarToken, uniqueCalendarAttendees, upsertGoogleCalendarEvent } from "@/modules/calendar";
 import { getDecryptedIntegrationConnection, upsertIntegrationConnection } from "@/services/integrationService";
 import { assertOutboundRecipientsAllowed, resolveGoogleCalendarSetup } from "@/services/integrationSetupService";
 
@@ -128,6 +128,18 @@ export async function createCalendarInvitePlaceholder(sessionId?: string, mode: 
         where: { sessionId: session.id, provider: "google" },
         orderBy: { createdAt: "desc" }
       });
+      const existingGoogleEvent = existing?.providerEventId
+        ? await getGoogleCalendarEvent({
+            accessToken: await getConnectedGoogleCalendarAccessToken(),
+            calendarId: (await googleSetupWithEnvFallback()).calendarId,
+            providerEventId: existing.providerEventId
+          })
+        : null;
+      const existingResponses = new Map(
+        (existingGoogleEvent?.attendees ?? [])
+          .filter((attendee) => attendee.email)
+          .map((attendee) => [attendee.email!.toLowerCase(), attendee.responseStatus])
+      );
       const result = await upsertGoogleCalendarEvent({
         title: session.title,
         description: session.description ?? undefined,
@@ -138,8 +150,11 @@ export async function createCalendarInvitePlaceholder(sessionId?: string, mode: 
         location: session.location,
         accessToken: await getConnectedGoogleCalendarAccessToken(),
         calendarId: (await googleSetupWithEnvFallback()).calendarId,
-        providerEventId: existing?.providerEventId,
-        attendees,
+        providerEventId: existingGoogleEvent ? existing?.providerEventId : null,
+        attendees: attendees.map((attendee) => ({
+          ...attendee,
+          responseStatus: existingResponses.get(attendee.email.toLowerCase())
+        })),
         sendUpdates: true
       });
 
@@ -231,6 +246,81 @@ export async function createCalendarInvitePlaceholder(sessionId?: string, mode: 
     });
     throw error;
   }
+}
+
+async function connectedGoogleEventDetails(sessionIds: string[]) {
+  const [calendarEvents, accessToken, setup] = await Promise.all([
+    prisma.calendarEvent.findMany({
+      where: { sessionId: { in: sessionIds }, provider: "google", providerEventId: { not: null } },
+      orderBy: { createdAt: "desc" }
+    }),
+    getConnectedGoogleCalendarAccessToken(),
+    googleSetupWithEnvFallback()
+  ]);
+  const latestBySession = new Map<string, (typeof calendarEvents)[number]>();
+
+  for (const event of calendarEvents) {
+    if (!latestBySession.has(event.sessionId)) {
+      latestBySession.set(event.sessionId, event);
+    }
+  }
+
+  const details = await Promise.all([...latestBySession.values()].map(async (event) => ({
+    record: event,
+    googleEvent: await getGoogleCalendarEvent({
+      accessToken,
+      calendarId: setup.calendarId,
+      providerEventId: event.providerEventId!
+    })
+  })));
+
+  return { details, accessToken, calendarId: setup.calendarId };
+}
+
+export async function cancelGoogleCalendarInvites(input: { sessionId?: string; cohortId?: string }) {
+  const sessions = await prisma.cohortSession.findMany({
+    where: input.sessionId ? { id: input.sessionId } : input.cohortId ? { cohortId: input.cohortId } : { id: "" },
+    select: { id: true }
+  });
+
+  if (sessions.length === 0) {
+    throw Object.assign(new Error("No matching sessions were found."), { code: "NOT_FOUND", status: 404 });
+  }
+
+  const sessionIds = sessions.map((session) => session.id);
+  const { details, accessToken, calendarId } = await connectedGoogleEventDetails(sessionIds);
+  const recipientEmails = details.flatMap(({ googleEvent }) => (googleEvent?.attendees ?? []).map((attendee) => attendee.email ?? ""));
+  await assertOutboundRecipientsAllowed("GOOGLE_CALENDAR", recipientEmails);
+
+  for (const { record, googleEvent } of details) {
+    if (googleEvent) {
+      await deleteGoogleCalendarEvent({
+        accessToken,
+        calendarId,
+        providerEventId: record.providerEventId!,
+        sendUpdates: true
+      });
+    }
+  }
+
+  await prisma.$transaction([
+    prisma.calendarEvent.deleteMany({ where: { sessionId: { in: sessionIds }, provider: "google" } }),
+    prisma.calendarEvent.deleteMany({ where: { sessionId: { in: sessionIds }, provider: "ics" } }),
+    prisma.cohortSession.updateMany({
+      where: { id: { in: sessionIds } },
+      data: { calendarInviteStatus: CalendarInviteStatus.NOT_CREATED }
+    }),
+    prisma.operationsTask.updateMany({
+      where: { sessionId: { in: sessionIds }, category: OperationsTaskCategory.CALENDAR_INVITE },
+      data: { status: OperationsTaskStatus.OPEN, completedAt: null }
+    })
+  ]);
+
+  return {
+    sessionsMatched: sessionIds.length,
+    googleEventsCancelled: details.filter(({ googleEvent }) => Boolean(googleEvent)).length,
+    recipientsNotified: new Set(recipientEmails.filter(Boolean).map((email) => email.toLowerCase())).size
+  };
 }
 
 export async function prepareCohortCalendarInvites(input: { cohortId?: string; mode?: "google" | "ics" | "auto"; fallbackToIcs?: boolean }) {

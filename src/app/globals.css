@@ -2119,6 +2119,31 @@ h6,
   gap: 10px;
 }
 
+.integration-card-controls,
+.integration-card-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.integration-card-controls {
+  justify-content: flex-end;
+}
+
+.integration-card-summary {
+  justify-content: space-between;
+  min-height: 24px;
+  color: var(--color-slate-500);
+  font-size: 0.78rem;
+}
+
+.integration-card-body {
+  display: grid;
+  gap: 12px;
+  padding-top: 12px;
+}
+
 .integration-card-header,
 .integration-check-row {
   justify-content: space-between;

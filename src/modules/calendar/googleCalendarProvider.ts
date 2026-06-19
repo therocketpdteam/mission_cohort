@@ -14,6 +14,7 @@ export type GoogleCalendarEventInput = {
   attendees?: Array<{
     email: string;
     displayName?: string;
+    responseStatus?: string;
   }>;
   sendUpdates?: boolean;
 };
@@ -160,7 +161,7 @@ export async function upsertGoogleCalendarEvent(input: GoogleCalendarEventInput)
     attendees: input.attendees?.map((attendee) => ({
       email: attendee.email,
       displayName: attendee.displayName || undefined,
-      responseStatus: "needsAction"
+      responseStatus: attendee.responseStatus || undefined
     }))
   };
   const eventUrl = input.providerEventId
@@ -189,6 +190,68 @@ export async function upsertGoogleCalendarEvent(input: GoogleCalendarEventInput)
   }
 
   return response.json() as Promise<{ id: string; htmlLink?: string }>;
+}
+
+export async function getGoogleCalendarEvent(input: { accessToken?: string; calendarId?: string; providerEventId: string }) {
+  const calendarIdValue = input.calendarId ?? env.GOOGLE_CALENDAR_ID;
+
+  if (!input.accessToken || !calendarIdValue) {
+    throw Object.assign(new Error("Google Calendar is not connected."), { code: "BAD_REQUEST", status: 400 });
+  }
+
+  const response = await fetch(
+    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarIdValue)}/events/${encodeURIComponent(input.providerEventId)}`,
+    { headers: { Authorization: `Bearer ${input.accessToken}`, Accept: "application/json" } }
+  );
+
+  if (response.status === 404 || response.status === 410) {
+    return null;
+  }
+
+  if (!response.ok) {
+    throw Object.assign(new Error(`Google Calendar event lookup failed with status ${response.status}`), { code: "BAD_REQUEST", status: 400 });
+  }
+
+  return response.json() as Promise<{
+    id: string;
+    htmlLink?: string;
+    attendees?: Array<{ email?: string; displayName?: string; responseStatus?: string }>;
+  }>;
+}
+
+export async function deleteGoogleCalendarEvent(input: {
+  accessToken?: string;
+  calendarId?: string;
+  providerEventId: string;
+  sendUpdates?: boolean;
+}) {
+  const calendarIdValue = input.calendarId ?? env.GOOGLE_CALENDAR_ID;
+
+  if (!input.accessToken || !calendarIdValue) {
+    throw Object.assign(new Error("Google Calendar is not connected."), { code: "BAD_REQUEST", status: 400 });
+  }
+
+  const url = new URL(
+    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarIdValue)}/events/${encodeURIComponent(input.providerEventId)}`
+  );
+  if (input.sendUpdates) {
+    url.searchParams.set("sendUpdates", "all");
+  }
+
+  const response = await fetch(url, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${input.accessToken}` }
+  });
+
+  if (response.status === 404 || response.status === 410) {
+    return { deleted: false, missing: true };
+  }
+
+  if (!response.ok) {
+    throw Object.assign(new Error(`Google Calendar event cancellation failed with status ${response.status}`), { code: "BAD_REQUEST", status: 400 });
+  }
+
+  return { deleted: true, missing: false };
 }
 
 export async function listGoogleCalendars(input: { accessToken?: string }) {

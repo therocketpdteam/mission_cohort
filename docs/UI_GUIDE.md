@@ -308,6 +308,13 @@ List Console Pattern:
 - Long selected values must never push adjacent dropdowns, buttons, or status controls underneath each other. Use fixed widths such as compact status selects, medium preset selects, and wider entity selects rather than content-driven sizing.
 - Dropdown menus should align to the trigger width unless a deliberately wider searchable picker is being used; menus must not bleed into neighboring controls.
 
+## Integration Hub
+
+- Integration cards are summary-first and collapsed by default. The closed card shows provider identity, readiness, configuration status, and one clear Configure action.
+- Detailed health checks, credentials, diagnostics, and safety controls belong inside the expanded card. Setup instructions and external documentation belong behind a compact help/info control.
+- Never return saved secrets to the browser. Saved client IDs, API keys, client secrets, verifier tokens, and webhook keys display only a masked saved-state placeholder and require a new value only when replacing them.
+- Outbound safety status must remain visible even when provider details are collapsed. Live-send controls must use explicit warning language.
+
 ## Cohort Detail Pattern
 
 - The breadcrumb must read like a product path: `Mission Control / Cohorts / {Cohort title}`. Never expose raw cohort IDs in the visible path.
@@ -321,6 +328,7 @@ List Console Pattern:
 - The revenue snapshot must be compact and premium. Total revenue, paid amount, pending amount, open amount, collected percentage, and project return context belong together in one polished finance card with a lightweight progress/ring visual, not a bulky table or oversized chart.
 - Registration evolution charts should be quiet and lightweight. They need metric filters (`Registrants`, `Revenue`) and an optional comparison cohort, defaulting to the current cohort only.
 - Sessions should render as a checklist, not a wide status spreadsheet. Use green check/red X affordances for reminder/template readiness and keep per-session actions in a row menu.
+- Editing a session with a linked Google event must update that same event and notify attendees, subject to outbound safety. Session and cohort cancellation actions must use a confirmation dialog, notify Google attendees, and reset readiness without deleting delivery history.
 - Repeated session defaults such as meeting URL, location, and timezone should live in a small defaults card above the checklist.
 - Registrations should remove unclear primary-table columns such as `Docs`; supporting document status belongs in quick view/edit.
 - Participants should prioritize contact, organization, status, send-message action, bulk status/message controls, and a quick-view drawer with contact, payment, email activity, and participation history matched by email.
