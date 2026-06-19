@@ -1,6 +1,7 @@
 import { env, getEnvPresence } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
 import { createSupabaseAdminClient } from "@/lib/supabase";
+import { getGoogleCalendarSetup, getQuickBooksSetup, getSendGridSetup } from "@/services/integrationSetupService";
 
 export type HealthStatus = "healthy" | "warning" | "blocked";
 
@@ -239,6 +240,9 @@ async function storageChecks(): Promise<HealthCheck[]> {
 
 async function integrationChecks(): Promise<HealthCheck[]> {
   const presence = getEnvPresence();
+  const sendGridSetup = await getSendGridSetup();
+  const googleSetup = await getGoogleCalendarSetup();
+  const quickBooksSetup = await getQuickBooksSetup();
   const googleConnection = await prisma.integrationConnection.findUnique({
     where: { provider_label: { provider: "GOOGLE_CALENDAR", label: "default" } },
     select: { status: true, accountName: true, tokenExpiresAt: true, errorMessage: true }
@@ -257,29 +261,35 @@ async function integrationChecks(): Promise<HealthCheck[]> {
     {
       key: "sendgrid",
       label: "SendGrid email sending",
-      status: presence.sendgridConfigured ? "healthy" : "warning",
-      detail: presence.sendgridConfigured
-        ? "SENDGRID_API_KEY and SENDGRID_FROM_EMAIL are present. Use Connected Tools to send a diagnostic email."
-        : "Outbound email requires SENDGRID_API_KEY and SENDGRID_FROM_EMAIL.",
-      nextAction: presence.sendgridConfigured ? "Send a diagnostic email from Settings > Connected Tools." : "Add SENDGRID_API_KEY and SENDGRID_FROM_EMAIL in Vercel."
+      status: sendGridSetup.configured || presence.sendgridConfigured ? "healthy" : "warning",
+      detail: sendGridSetup.configured
+        ? `SendGrid is configured in the app for ${sendGridSetup.fromEmail}.`
+        : presence.sendgridConfigured
+          ? "SENDGRID_API_KEY and SENDGRID_FROM_EMAIL are present in the environment. Use Connected Tools to move setup into the app."
+          : "Outbound email requires a SendGrid API key and from email.",
+      nextAction: sendGridSetup.configured || presence.sendgridConfigured ? "Send a diagnostic email from Settings > Connected Tools." : "Configure SendGrid in Settings > Connected Tools."
     },
     {
       key: "sendgridWebhook",
       label: "SendGrid webhook telemetry",
-      status: presence.sendgridWebhookConfigured ? "healthy" : "warning",
-      detail: presence.sendgridWebhookConfigured
-        ? "Webhook public key is present for delivery/open/error event verification."
-        : "Delivery/open/error telemetry requires SENDGRID_WEBHOOK_PUBLIC_KEY.",
-      nextAction: presence.sendgridWebhookConfigured ? undefined : "Add SENDGRID_WEBHOOK_PUBLIC_KEY and point SendGrid Event Webhook to /api/webhooks/sendgrid."
+      status: sendGridSetup.webhookPublicKey || presence.sendgridWebhookConfigured ? "healthy" : "warning",
+      detail: sendGridSetup.webhookPublicKey
+        ? "SendGrid webhook public key is saved in the app."
+        : presence.sendgridWebhookConfigured
+          ? "Webhook public key is present in the environment."
+          : "Delivery/open/error telemetry requires the SendGrid Event Webhook public key.",
+      nextAction: sendGridSetup.webhookPublicKey || presence.sendgridWebhookConfigured ? undefined : "Save the SendGrid webhook public key and point SendGrid Event Webhook to /api/webhooks/sendgrid."
     },
     {
       key: "googleCalendarEnv",
       label: "Google Calendar OAuth environment",
-      status: presence.googleCalendarConfigured ? "healthy" : "warning",
-      detail: presence.googleCalendarConfigured
-        ? "Google Calendar client ID, secret, redirect URI, and calendar ID are present."
-        : "Calendar automation requires Google Calendar client ID, secret, redirect URI, and calendar ID.",
-      nextAction: presence.googleCalendarConfigured ? undefined : "Add GOOGLE_CALENDAR_CLIENT_ID, GOOGLE_CALENDAR_CLIENT_SECRET, GOOGLE_CALENDAR_REDIRECT_URI, and GOOGLE_CALENDAR_ID in Vercel."
+      status: googleSetup.configured || presence.googleCalendarConfigured ? "healthy" : "warning",
+      detail: googleSetup.configured
+        ? "Google Calendar OAuth setup is saved in the app."
+        : presence.googleCalendarConfigured
+          ? "Google Calendar OAuth setup is present in the environment. Use Connected Tools to move setup into the app."
+          : "Calendar automation requires Google Calendar client ID, secret, redirect URI, and calendar ID.",
+      nextAction: googleSetup.configured || presence.googleCalendarConfigured ? undefined : "Configure Google Calendar in Settings > Connected Tools."
     },
     {
       key: "googleCalendarConnection",
@@ -300,9 +310,13 @@ async function integrationChecks(): Promise<HealthCheck[]> {
     {
       key: "quickbooks",
       label: "QuickBooks",
-      status: presence.quickBooksConfigured ? "healthy" : "warning",
-      detail: presence.quickBooksConfigured ? "QuickBooks credentials are present." : "QuickBooks sync requires client credentials and webhook verifier.",
-      nextAction: presence.quickBooksConfigured ? undefined : "Add QuickBooks credentials before enabling live sync."
+      status: quickBooksSetup.configured || presence.quickBooksConfigured ? "healthy" : "warning",
+      detail: quickBooksSetup.configured
+        ? `QuickBooks ${quickBooksSetup.environment} setup is saved in the app.`
+        : presence.quickBooksConfigured
+          ? "QuickBooks credentials are present in the environment. Use Connected Tools to move setup into the app."
+          : "QuickBooks sync requires client credentials and webhook verifier.",
+      nextAction: quickBooksSetup.configured || presence.quickBooksConfigured ? undefined : "Configure QuickBooks in Settings > Connected Tools."
     },
     {
       key: "cron",

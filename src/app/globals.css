@@ -2179,17 +2179,63 @@ h6,
   justify-content: flex-end;
 }
 
+.integration-instructions,
+.integration-setup-form {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--stroke-soft);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-container-low);
+}
+
+.integration-instructions strong {
+  color: var(--color-slate-900);
+  font-size: 0.84rem;
+}
+
+.integration-instructions ol {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 18px;
+  color: var(--color-slate-600);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.integration-doc-links,
+.integration-copy-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.integration-copy-row .ui-field {
+  flex: 1 1 240px;
+}
+
+.integration-setup-form > .ui-button {
+  justify-self: end;
+}
+
 .app-shell.is-night .system-health-generated,
 .app-shell.is-night .system-health-card,
 .app-shell.is-night .system-health-check,
 .app-shell.is-night .integration-card,
-.app-shell.is-night .integration-check-row {
+.app-shell.is-night .integration-check-row,
+.app-shell.is-night .integration-instructions,
+.app-shell.is-night .integration-setup-form {
   border-color: rgba(148, 163, 184, 0.22);
   background: #151329;
 }
 
 .app-shell.is-night .system-health-check,
-.app-shell.is-night .integration-check-row {
+.app-shell.is-night .integration-check-row,
+.app-shell.is-night .integration-instructions,
+.app-shell.is-night .integration-setup-form {
   background: #1b1832;
 }
 
@@ -2199,7 +2245,8 @@ h6,
 .app-shell.is-night .system-health-card-meter strong,
 .app-shell.is-night .system-health-check strong,
 .app-shell.is-night .integration-card-header h3,
-.app-shell.is-night .integration-check-row strong {
+.app-shell.is-night .integration-check-row strong,
+.app-shell.is-night .integration-instructions strong {
   color: #f4f1ff;
 }
 
@@ -2210,7 +2257,8 @@ h6,
 .app-shell.is-night .system-health-check p,
 .app-shell.is-night .integration-card-header span,
 .app-shell.is-night .integration-check-row p,
-.app-shell.is-night .integration-muted {
+.app-shell.is-night .integration-muted,
+.app-shell.is-night .integration-instructions ol {
   color: #c9c4d8;
 }
 
@@ -2223,7 +2271,9 @@ h6,
 .app-shell.is-compact .system-health-generated,
 .app-shell.is-compact .system-health-check,
 .app-shell.is-compact .integration-card,
-.app-shell.is-compact .integration-check-row {
+.app-shell.is-compact .integration-check-row,
+.app-shell.is-compact .integration-instructions,
+.app-shell.is-compact .integration-setup-form {
   padding: 10px;
 }
 

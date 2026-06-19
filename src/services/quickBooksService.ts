@@ -16,13 +16,27 @@ import {
   voidQuickBooksInvoice
 } from "@/modules/quickbooks";
 import { getDecryptedIntegrationConnection, upsertIntegrationConnection } from "@/services/integrationService";
+import { resolveQuickBooksSetup } from "@/services/integrationSetupService";
 
-export function getQuickBooksOAuthUrl() {
-  return getQuickBooksConnectUrl();
+async function quickBooksSetupWithEnvFallback() {
+  const setup = await resolveQuickBooksSetup();
+
+  return {
+    clientId: setup.clientId || undefined,
+    clientSecret: setup.clientSecret || undefined,
+    redirectUri: setup.redirectUri || undefined,
+    webhookVerifierToken: setup.webhookVerifierToken || undefined,
+    environment: setup.environment || undefined
+  };
+}
+
+export async function getQuickBooksOAuthUrl() {
+  return getQuickBooksConnectUrl("mission-control", await quickBooksSetupWithEnvFallback());
 }
 
 export async function completeQuickBooksOAuth(code: string, realmId?: string | null) {
-  const token = await exchangeQuickBooksCode(code);
+  const setup = await quickBooksSetupWithEnvFallback();
+  const token = await exchangeQuickBooksCode(code, setup);
   return upsertIntegrationConnection({
     provider: IntegrationProvider.QUICKBOOKS,
     status: IntegrationConnectionStatus.CONNECTED,
@@ -31,7 +45,7 @@ export async function completeQuickBooksOAuth(code: string, realmId?: string | n
     accessToken: token.access_token,
     refreshToken: token.refresh_token,
     tokenExpiresAt: token.expires_in ? new Date(Date.now() + token.expires_in * 1000) : undefined,
-    metadata: { refreshTokenExpiresIn: token.x_refresh_token_expires_in ?? null }
+    metadata: { refreshTokenExpiresIn: token.x_refresh_token_expires_in ?? null, environment: setup.environment ?? null }
   });
 }
 
@@ -75,7 +89,8 @@ export async function syncQuickBooksInvoice(invoiceId: string, realmId?: string)
   const result = await fetchQuickBooksInvoice({
     realmId: resolvedRealmId,
     accessToken: connection.accessToken,
-    invoiceId
+    invoiceId,
+    environment: (await quickBooksSetupWithEnvFallback()).environment
   });
   const invoice = result.Invoice ?? result;
   const invoiceStatus = invoiceStatusFromQuickBooks(invoice);
@@ -161,12 +176,14 @@ export async function voidRegistrationQuickBooksInvoice(registrationId: string) 
   const invoiceResult = await fetchQuickBooksInvoice({
     realmId,
     accessToken: connection.accessToken,
-    invoiceId: registration.quickBooksInvoiceRef
+    invoiceId: registration.quickBooksInvoiceRef,
+    environment: (await quickBooksSetupWithEnvFallback()).environment
   });
   const voidResult = await voidQuickBooksInvoice({
     realmId,
     accessToken: connection.accessToken,
-    invoice: invoiceResult.Invoice ?? invoiceResult
+    invoice: invoiceResult.Invoice ?? invoiceResult,
+    environment: (await quickBooksSetupWithEnvFallback()).environment
   });
 
   await prisma.registration.update({
@@ -195,7 +212,7 @@ export async function voidRegistrationQuickBooksInvoice(registrationId: string) 
 }
 
 export async function processQuickBooksWebhook(rawBody: string, signature?: string | null, skipSignature = false) {
-  if (!skipSignature && !verifyQuickBooksWebhookSignature(rawBody, signature)) {
+  if (!skipSignature && !verifyQuickBooksWebhookSignature(rawBody, signature, await quickBooksSetupWithEnvFallback())) {
     throw Object.assign(new Error("Invalid QuickBooks webhook signature."), { code: "FORBIDDEN", status: 403 });
   }
 

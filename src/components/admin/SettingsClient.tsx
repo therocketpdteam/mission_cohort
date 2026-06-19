@@ -1410,16 +1410,20 @@ export function SettingsClient() {
   const [userDialogOpen, setUserDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<AdminRow | null>(null);
   const [testingIntegration, setTestingIntegration] = useState("");
+  const [savingIntegration, setSavingIntegration] = useState("");
+  const [integrationSetup, setIntegrationSetup] = useState<AdminRow | null>(null);
+  const [setupForms, setSetupForms] = useState<Record<string, AdminRow>>({});
   const { notifySuccess, notifyError, snackbar } = useNotifier();
 
   async function load() {
-    const [healthData, systemHealthData, userRows, mappingRows, cohortRows, integrationRows, intakeData] = await Promise.all([
+    const [healthData, systemHealthData, userRows, mappingRows, cohortRows, integrationRows, setupData, intakeData] = await Promise.all([
       adminApi<AdminRow>("/api/health"),
       adminApi<AdminRow>("/api/system-health").catch(() => null),
       adminApi<AdminRow[]>("/api/users").catch(() => []),
       adminApi<AdminRow[]>("/api/jotform/mappings").catch(() => []),
       adminApi<AdminRow[]>("/api/cohorts").catch(() => []),
       adminApi<AdminRow>("/api/integrations/status").catch(() => null),
+      adminApi<AdminRow>("/api/integrations/setup").catch(() => null),
       adminApi<AdminRow>("/api/jotform/intake").catch(() => ({ setup: null, events: [] }))
     ]);
     setHealth(healthData);
@@ -1428,6 +1432,28 @@ export function SettingsClient() {
     setMappings(mappingRows);
     setCohorts(cohortRows);
     setIntegrationStatus(integrationRows);
+    setIntegrationSetup(setupData);
+    setSetupForms((current) => ({
+      SENDGRID: {
+        fromEmail: setupData?.sendgrid?.fromEmail ?? current.SENDGRID?.fromEmail ?? "",
+        fromName: setupData?.sendgrid?.fromName ?? current.SENDGRID?.fromName ?? "",
+        webhookPublicKey: setupData?.sendgrid?.webhookPublicKey ?? current.SENDGRID?.webhookPublicKey ?? "",
+        apiKey: ""
+      },
+      GOOGLE_CALENDAR: {
+        clientId: setupData?.googleCalendar?.clientId ?? current.GOOGLE_CALENDAR?.clientId ?? "",
+        clientSecret: "",
+        redirectUri: setupData?.googleCalendar?.redirectUri ?? current.GOOGLE_CALENDAR?.redirectUri ?? "",
+        calendarId: setupData?.googleCalendar?.calendarId ?? current.GOOGLE_CALENDAR?.calendarId ?? ""
+      },
+      QUICKBOOKS: {
+        clientId: setupData?.quickBooks?.clientId ?? current.QUICKBOOKS?.clientId ?? "",
+        clientSecret: "",
+        redirectUri: setupData?.quickBooks?.redirectUri ?? current.QUICKBOOKS?.redirectUri ?? "",
+        environment: setupData?.quickBooks?.environment ?? current.QUICKBOOKS?.environment ?? "sandbox",
+        webhookVerifierToken: ""
+      }
+    }));
     setJotformSetup(intakeData?.setup ?? null);
     setWebhookEvents(intakeData?.events ?? []);
   }
@@ -1463,19 +1489,77 @@ export function SettingsClient() {
     }
   }
 
+  function integrationUrl(path: string) {
+    if (typeof window === "undefined") {
+      return path;
+    }
+
+    return `${window.location.origin}${path}`;
+  }
+
+  function updateSetupForm(provider: string, field: string, value: unknown) {
+    setSetupForms((current) => ({
+      ...current,
+      [provider]: {
+        ...(current[provider] ?? {}),
+        [field]: value
+      }
+    }));
+  }
+
+  async function copyIntegrationValue(value: string, label: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      notifySuccess(`${label} copied`);
+    } catch (error) {
+      notifyError((error as Error).message);
+    }
+  }
+
+  async function saveIntegrationSetup(provider: string) {
+    setSavingIntegration(provider);
+    try {
+      await adminApi("/api/integrations/setup", {
+        method: "PATCH",
+        body: {
+          provider,
+          ...(setupForms[provider] ?? {})
+        }
+      });
+      notifySuccess(`${formatStatusLabel(provider)} setup saved`);
+      await load();
+    } catch (error) {
+      notifyError((error as Error).message);
+    } finally {
+      setSavingIntegration("");
+    }
+  }
+
   const currentWizardMapping = mappingWizardEvent
     ? mappings.find((mapping) => mapping.formId === mappingWizardEvent.preview?.formId)
     : undefined;
   const providerCards = [
     {
+      provider: "SENDGRID",
       label: "SendGrid Email",
       description: "Confirmation, reminder, invoice, receipt, and resend email delivery.",
       checks: [healthCheck("sendgrid"), healthCheck("sendgridWebhook")].filter(Boolean),
       actions: [
         { label: "Send test email", action: "sendgrid", disabled: healthCheck("sendgrid")?.status !== "healthy" }
+      ],
+      setup: integrationSetup?.sendgrid,
+      docs: [
+        { label: "Create a SendGrid API key", href: "https://www.twilio.com/docs/sendgrid/ui/account-and-settings/api-keys" },
+        { label: "Set up Event Webhook", href: "https://www.twilio.com/docs/sendgrid/for-developers/tracking-events/getting-started-event-webhook" }
+      ],
+      instructions: [
+        "Create or copy a SendGrid API key with Mail Send access.",
+        "Use a verified sender or authenticated domain for the From email.",
+        "Paste the Event Webhook public key so delivery/open/bounce events can be trusted."
       ]
     },
     {
+      provider: "GOOGLE_CALENDAR",
       label: "Google Calendar",
       description: "Shared operations calendar for cohort sessions and publish readiness.",
       checks: [healthCheck("googleCalendarEnv"), healthCheck("googleCalendarConnection")].filter(Boolean),
@@ -1483,27 +1567,49 @@ export function SettingsClient() {
         { label: "Connect", href: "/api/integrations/google/connect", disabled: healthCheck("googleCalendarEnv")?.status !== "healthy" },
         { label: "Test Google event", action: "googleCalendar", disabled: healthCheck("googleCalendarConnection")?.status !== "healthy" },
         { label: "Test ICS fallback", action: "calendarIcs" }
+      ],
+      setup: integrationSetup?.googleCalendar,
+      docs: [
+        { label: "Google OAuth web server setup", href: "https://developers.google.com/identity/protocols/oauth2/web-server" }
+      ],
+      instructions: [
+        "Create an OAuth client in Google Cloud.",
+        "Copy the callback URL below into Authorized redirect URIs.",
+        "Save the client credentials and calendar ID here, then click Connect."
       ]
     },
     {
+      provider: "QUICKBOOKS",
       label: "QuickBooks",
       description: "Financial reporting status sync for invoices and payments.",
       checks: [healthCheck("quickbooks")].filter(Boolean),
-      actions: [{ label: "Connect", href: "/api/integrations/quickbooks/connect", disabled: healthCheck("quickbooks")?.status !== "healthy" }]
+      actions: [{ label: "Connect", href: "/api/integrations/quickbooks/connect", disabled: healthCheck("quickbooks")?.status !== "healthy" }],
+      setup: integrationSetup?.quickBooks,
+      docs: [
+        { label: "QuickBooks OAuth setup", href: "https://developer.intuit.com/app/developer/qbo/docs/develop/authentication-and-authorization/oauth-2.0" }
+      ],
+      instructions: [
+        "Create or open your Intuit Developer app.",
+        "Copy the callback URL below into Redirect URIs.",
+        "Save the client credentials, environment, and webhook verifier token here."
+      ]
     },
     {
+      provider: "JOTFORM",
       label: "Jotform Intake",
       description: "Registration submissions, mapping, replay queue, and URL routing.",
       checks: [healthCheck("jotformSecret")].filter(Boolean),
       actions: []
     },
     {
+      provider: "CRON",
       label: "Scheduled Jobs",
       description: "Background processing for scheduled communications and integration jobs.",
       checks: [healthCheck("cron")].filter(Boolean),
       actions: []
     },
     {
+      provider: "SUPABASE_AUTH",
       label: "Supabase Auth",
       description: "Admin login and protected route access.",
       checks: [healthCheck("supabaseAuth")].filter(Boolean),
@@ -1707,6 +1813,8 @@ export function SettingsClient() {
               const blocked = checks.some((check) => check.status === "blocked");
               const warning = checks.some((check) => check.status === "warning");
               const status = blocked ? "blocked" : warning ? "warning" : "healthy";
+              const instructions = provider.instructions ?? [];
+              const docs = provider.docs ?? [];
 
               return (
                 <article className={`integration-card is-${healthToneClass[status] ?? "yellow"}`} key={provider.label}>
@@ -1731,6 +1839,111 @@ export function SettingsClient() {
                       <p className="integration-muted">No detailed health check is available yet.</p>
                     )}
                   </div>
+                  {instructions.length > 0 && (
+                    <div className="integration-instructions">
+                      <strong>Setup steps</strong>
+                      <ol>
+                        {instructions.map((instruction) => <li key={instruction}>{instruction}</li>)}
+                      </ol>
+                      <div className="integration-doc-links">
+                        {docs.map((doc) => (
+                          <Button key={doc.href} href={doc.href} target="_blank" rel="noreferrer" size="small" variant="text">
+                            {doc.label}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {provider.provider === "SENDGRID" && (
+                    <div className="integration-setup-form">
+                      <TextField
+                        fullWidth
+                        label={provider.setup?.hasApiKey ? "API key (saved - paste only to replace)" : "API key"}
+                        type="password"
+                        value={setupForms.SENDGRID?.apiKey ?? ""}
+                        onChange={(event) => updateSetupForm("SENDGRID", "apiKey", event.target.value)}
+                      />
+                      <TextField
+                        fullWidth
+                        label="From email"
+                        value={setupForms.SENDGRID?.fromEmail ?? ""}
+                        onChange={(event) => updateSetupForm("SENDGRID", "fromEmail", event.target.value)}
+                      />
+                      <TextField
+                        fullWidth
+                        label="From name"
+                        value={setupForms.SENDGRID?.fromName ?? ""}
+                        onChange={(event) => updateSetupForm("SENDGRID", "fromName", event.target.value)}
+                      />
+                      <TextField
+                        fullWidth
+                        label="Event Webhook public key"
+                        value={setupForms.SENDGRID?.webhookPublicKey ?? ""}
+                        onChange={(event) => updateSetupForm("SENDGRID", "webhookPublicKey", event.target.value)}
+                      />
+                      <div className="integration-copy-row">
+                        <TextField fullWidth label="Event Webhook URL" value={integrationUrl("/api/webhooks/sendgrid")} InputProps={{ readOnly: true }} />
+                        <Button size="small" variant="outlined" onClick={() => void copyIntegrationValue(integrationUrl("/api/webhooks/sendgrid"), "SendGrid webhook URL")}>Copy</Button>
+                      </div>
+                      <Button size="small" onClick={() => void saveIntegrationSetup("SENDGRID")} disabled={savingIntegration === "SENDGRID"}>
+                        {savingIntegration === "SENDGRID" ? "Saving..." : "Save SendGrid"}
+                      </Button>
+                    </div>
+                  )}
+                  {provider.provider === "GOOGLE_CALENDAR" && (
+                    <div className="integration-setup-form">
+                      <TextField fullWidth label="Client ID" value={setupForms.GOOGLE_CALENDAR?.clientId ?? ""} onChange={(event) => updateSetupForm("GOOGLE_CALENDAR", "clientId", event.target.value)} />
+                      <TextField
+                        fullWidth
+                        label={provider.setup?.hasClientSecret ? "Client secret (saved - paste only to replace)" : "Client secret"}
+                        type="password"
+                        value={setupForms.GOOGLE_CALENDAR?.clientSecret ?? ""}
+                        onChange={(event) => updateSetupForm("GOOGLE_CALENDAR", "clientSecret", event.target.value)}
+                      />
+                      <div className="integration-copy-row">
+                        <TextField fullWidth label="Redirect URI" value={setupForms.GOOGLE_CALENDAR?.redirectUri ?? integrationUrl("/api/integrations/google/callback")} onChange={(event) => updateSetupForm("GOOGLE_CALENDAR", "redirectUri", event.target.value)} />
+                        <Button size="small" variant="outlined" onClick={() => void copyIntegrationValue(String(setupForms.GOOGLE_CALENDAR?.redirectUri ?? integrationUrl("/api/integrations/google/callback")), "Google redirect URI")}>Copy</Button>
+                      </div>
+                      <TextField fullWidth label="Calendar ID" value={setupForms.GOOGLE_CALENDAR?.calendarId ?? ""} onChange={(event) => updateSetupForm("GOOGLE_CALENDAR", "calendarId", event.target.value)} />
+                      <Button size="small" onClick={() => void saveIntegrationSetup("GOOGLE_CALENDAR")} disabled={savingIntegration === "GOOGLE_CALENDAR"}>
+                        {savingIntegration === "GOOGLE_CALENDAR" ? "Saving..." : "Save Google Calendar"}
+                      </Button>
+                    </div>
+                  )}
+                  {provider.provider === "QUICKBOOKS" && (
+                    <div className="integration-setup-form">
+                      <TextField fullWidth label="Client ID" value={setupForms.QUICKBOOKS?.clientId ?? ""} onChange={(event) => updateSetupForm("QUICKBOOKS", "clientId", event.target.value)} />
+                      <TextField
+                        fullWidth
+                        label={provider.setup?.hasClientSecret ? "Client secret (saved - paste only to replace)" : "Client secret"}
+                        type="password"
+                        value={setupForms.QUICKBOOKS?.clientSecret ?? ""}
+                        onChange={(event) => updateSetupForm("QUICKBOOKS", "clientSecret", event.target.value)}
+                      />
+                      <div className="integration-copy-row">
+                        <TextField fullWidth label="Redirect URI" value={setupForms.QUICKBOOKS?.redirectUri ?? integrationUrl("/api/integrations/quickbooks/callback")} onChange={(event) => updateSetupForm("QUICKBOOKS", "redirectUri", event.target.value)} />
+                        <Button size="small" variant="outlined" onClick={() => void copyIntegrationValue(String(setupForms.QUICKBOOKS?.redirectUri ?? integrationUrl("/api/integrations/quickbooks/callback")), "QuickBooks redirect URI")}>Copy</Button>
+                      </div>
+                      <TextField select fullWidth label="Environment" value={setupForms.QUICKBOOKS?.environment ?? "sandbox"} onChange={(event) => updateSetupForm("QUICKBOOKS", "environment", event.target.value)}>
+                        <MenuItem value="sandbox">Sandbox</MenuItem>
+                        <MenuItem value="production">Production</MenuItem>
+                      </TextField>
+                      <TextField
+                        fullWidth
+                        label={provider.setup?.hasWebhookVerifierToken ? "Webhook verifier token (saved - paste only to replace)" : "Webhook verifier token"}
+                        type="password"
+                        value={setupForms.QUICKBOOKS?.webhookVerifierToken ?? ""}
+                        onChange={(event) => updateSetupForm("QUICKBOOKS", "webhookVerifierToken", event.target.value)}
+                      />
+                      <div className="integration-copy-row">
+                        <TextField fullWidth label="Webhook URL" value={integrationUrl("/api/webhooks/quickbooks")} InputProps={{ readOnly: true }} />
+                        <Button size="small" variant="outlined" onClick={() => void copyIntegrationValue(integrationUrl("/api/webhooks/quickbooks"), "QuickBooks webhook URL")}>Copy</Button>
+                      </div>
+                      <Button size="small" onClick={() => void saveIntegrationSetup("QUICKBOOKS")} disabled={savingIntegration === "QUICKBOOKS"}>
+                        {savingIntegration === "QUICKBOOKS" ? "Saving..." : "Save QuickBooks"}
+                      </Button>
+                    </div>
+                  )}
                   {provider.actions.length > 0 && (
                     <div className="integration-action-row">
                       {provider.actions.map((action) => (

@@ -2,13 +2,26 @@ import { CalendarInviteStatus, IntegrationConnectionStatus, IntegrationProvider,
 import { prisma } from "@/lib/prisma";
 import { exchangeGoogleCalendarCode, generateSessionIcs, getGoogleCalendarConnectUrl, upsertGoogleCalendarEvent } from "@/modules/calendar";
 import { getDecryptedIntegrationConnection, upsertIntegrationConnection } from "@/services/integrationService";
+import { resolveGoogleCalendarSetup } from "@/services/integrationSetupService";
 
-export function getGoogleCalendarOAuthUrl() {
-  return getGoogleCalendarConnectUrl();
+async function googleSetupWithEnvFallback() {
+  const setup = await resolveGoogleCalendarSetup();
+
+  return {
+    clientId: setup.clientId || undefined,
+    clientSecret: setup.clientSecret || undefined,
+    redirectUri: setup.redirectUri || undefined,
+    calendarId: setup.calendarId || undefined
+  };
+}
+
+export async function getGoogleCalendarOAuthUrl() {
+  return getGoogleCalendarConnectUrl("mission-control", await googleSetupWithEnvFallback());
 }
 
 export async function completeGoogleCalendarOAuth(code: string) {
-  const token = await exchangeGoogleCalendarCode(code);
+  const setup = await googleSetupWithEnvFallback();
+  const token = await exchangeGoogleCalendarCode(code, setup);
   return upsertIntegrationConnection({
     provider: IntegrationProvider.GOOGLE_CALENDAR,
     status: IntegrationConnectionStatus.CONNECTED,
@@ -16,7 +29,7 @@ export async function completeGoogleCalendarOAuth(code: string) {
     accessToken: token.access_token,
     refreshToken: token.refresh_token,
     tokenExpiresAt: token.expires_in ? new Date(Date.now() + token.expires_in * 1000) : undefined,
-    metadata: { scope: token.scope ?? null, tokenType: token.token_type ?? null }
+    metadata: { scope: token.scope ?? null, tokenType: token.token_type ?? null, calendarId: setup.calendarId ?? null }
   });
 }
 
@@ -50,6 +63,7 @@ export async function createCalendarInvitePlaceholder(sessionId?: string, mode: 
         meetingUrl: session.meetingUrl,
         location: session.location,
         accessToken: connection?.accessToken,
+        calendarId: (await googleSetupWithEnvFallback()).calendarId,
         providerEventId: existing?.providerEventId
       });
 

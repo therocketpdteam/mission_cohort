@@ -5,6 +5,7 @@ import { env, getEnvPresence } from "@/lib/env";
 import { generateSessionIcs, upsertGoogleCalendarEvent } from "@/modules/calendar";
 import { sendWithSendGrid } from "@/modules/email";
 import { getDecryptedIntegrationConnection } from "@/services/integrationService";
+import { resolveGoogleCalendarSetup } from "@/services/integrationSetupService";
 
 function diagnosticSession() {
   const start = new Date(Date.now() + 24 * 60 * 60 * 1000);
@@ -59,10 +60,11 @@ export async function POST(request: Request) {
     }
 
     if (action === "googleCalendar") {
+      const setup = await resolveGoogleCalendarSetup();
       const presence = getEnvPresence();
 
-      if (!presence.googleCalendarConfigured) {
-        throw Object.assign(new Error("Google Calendar environment variables are missing. Add client ID, secret, redirect URI, and calendar ID."), {
+      if (!presence.googleCalendarConfigured && !(setup.clientId && setup.clientSecret && setup.redirectUri && setup.calendarId)) {
+        throw Object.assign(new Error("Google Calendar setup is missing. Save client ID, secret, redirect URI, and calendar ID in Settings > Connected Tools."), {
           code: "BAD_REQUEST",
           status: 400
         });
@@ -80,7 +82,7 @@ export async function POST(request: Request) {
       const result = await upsertGoogleCalendarEvent({
         ...diagnosticSession(),
         accessToken: connection.accessToken,
-        calendarId: env.GOOGLE_CALENDAR_ID
+        calendarId: setup.calendarId || env.GOOGLE_CALENDAR_ID
       });
 
       return ok({
