@@ -2574,6 +2574,60 @@ h6,
   min-width: 0;
 }
 
+.create-cohort-modal {
+  width: min(100%, 1120px);
+}
+
+.create-cohort-body {
+  padding: 18px 22px 22px;
+}
+
+.create-cohort-basics-grid.ui-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.create-cohort-basics-grid > .ui-grid-item:has(.create-cohort-image-field),
+.create-cohort-basics-grid > .ui-grid-item:has(.ui-stack) {
+  grid-column: 1 / -1;
+}
+
+.create-cohort-image-field {
+  grid-template-columns: minmax(160px, 200px) minmax(0, 1fr);
+  align-items: center;
+  overflow: hidden;
+}
+
+.create-cohort-image-field .image-field-preview {
+  aspect-ratio: 16 / 9;
+  min-height: 0;
+  width: 100%;
+  max-height: 132px;
+}
+
+.create-cohort-image-field .image-field-preview img {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.create-cohort-presenter-field .ui-field {
+  height: 100%;
+}
+
+.create-cohort-session-row.ui-grid {
+  grid-template-columns: minmax(220px, 1.35fr) minmax(150px, 0.8fr) minmax(112px, 0.58fr) minmax(112px, 0.58fr) minmax(220px, 1fr);
+  gap: 10px;
+  align-items: end;
+  padding: 12px;
+  border: 1px solid var(--stroke-soft);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-container-lowest);
+}
+
+.create-cohort-session-row .ui-field {
+  min-width: 0;
+}
+
 .cohort-cell {
   display: flex;
   align-items: center;
@@ -6019,6 +6073,19 @@ h6,
 
   .image-field {
     grid-template-columns: 1fr;
+  }
+
+  .create-cohort-basics-grid.ui-grid,
+  .create-cohort-session-row.ui-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .create-cohort-image-field {
+    grid-template-columns: 1fr;
+  }
+
+  .create-cohort-image-field .image-field-preview {
+    max-height: none;
   }
 }
 

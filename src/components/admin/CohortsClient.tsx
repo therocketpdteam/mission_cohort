@@ -362,9 +362,9 @@ function CreateCohortWizard({
   }
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="lg">
+    <Dialog open={open} onClose={onClose} fullWidth maxWidth="lg" PaperProps={{ className: "create-cohort-modal" }}>
       <DialogTitle>Create Cohort</DialogTitle>
-      <DialogContent>
+      <DialogContent className="create-cohort-body">
         <Stepper activeStep={activeStep} sx={{ mb: 3 }}>
           {["Basics", "Sessions", "Schedule"].map((label) => (
             <Step key={label}>
@@ -375,7 +375,7 @@ function CreateCohortWizard({
         {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
         {activeStep === 0 && (
-          <Grid container spacing={2}>
+          <Grid container spacing={2} className="create-cohort-basics-grid">
             <Grid size={{ xs: 12, md: 6 }}>
               <TextField fullWidth label="Cohort title" value={title} onChange={(event) => setTitle(event.target.value)} required />
             </Grid>
@@ -392,7 +392,7 @@ function CreateCohortWizard({
               />
             </Grid>
             <Grid size={{ xs: 12 }}>
-              <div className="image-field">
+              <div className="image-field create-cohort-image-field">
                 <div className="image-field-preview">
                   {thumbnailUrl ? <img src={thumbnailUrl} alt="" /> : <span>No thumbnail</span>}
                 </div>
@@ -405,7 +405,7 @@ function CreateCohortWizard({
                 </div>
               </div>
             </Grid>
-            <Grid size={{ xs: 12, md: 6 }}>
+            <Grid size={{ xs: 12, md: 6 }} className="create-cohort-presenter-field">
               <Autocomplete
                 options={presenters}
                 value={presenter}
@@ -483,20 +483,20 @@ function CreateCohortWizard({
               Set the first session date, time, and timezone. Mission Control will draft the remaining sessions weekly with the same timing, and you can still fine-tune any row.
             </Alert>
             {sessions.map((session, index) => (
-              <Grid container spacing={2} key={index} alignItems="center">
-                <Grid size={{ xs: 12, md: 3 }}>
+              <Grid container spacing={2} key={index} alignItems="center" className="create-cohort-session-row">
+                <Grid size={{ xs: 12, md: 3 }} className="create-cohort-session-title">
                   <TextField fullWidth label="Session title" value={session.title} onChange={(event) => updateSession(index, "title", event.target.value)} />
                 </Grid>
-                <Grid size={{ xs: 12, md: 2 }}>
+                <Grid size={{ xs: 12, md: 2 }} className="create-cohort-session-date">
                   <TextField fullWidth label="Date" type="date" value={session.date} InputLabelProps={{ shrink: true }} onChange={(event) => updateSession(index, "date", event.target.value)} />
                 </Grid>
-                <Grid size={{ xs: 6, md: 2 }}>
+                <Grid size={{ xs: 6, md: 2 }} className="create-cohort-session-time">
                   <TextField fullWidth label="Start" type="time" value={session.startTime} InputLabelProps={{ shrink: true }} onChange={(event) => updateSession(index, "startTime", event.target.value)} />
                 </Grid>
-                <Grid size={{ xs: 6, md: 2 }}>
+                <Grid size={{ xs: 6, md: 2 }} className="create-cohort-session-time">
                   <TextField fullWidth label="End" type="time" value={session.endTime} InputLabelProps={{ shrink: true }} onChange={(event) => updateSession(index, "endTime", event.target.value)} />
                 </Grid>
-                <Grid size={{ xs: 12, md: 3 }}>
+                <Grid size={{ xs: 12, md: 3 }} className="create-cohort-session-zone">
                   <TextField fullWidth select label="Timezone" value={session.timezone} onChange={(event) => updateSession(index, "timezone", event.target.value)}>
                     {timezoneOptions.map((option) => <MenuItem value={option.value} key={option.value}>{option.label}</MenuItem>)}
                   </TextField>

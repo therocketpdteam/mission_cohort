@@ -29,6 +29,7 @@ import { adminApi, uploadAdminFile } from "@/lib/adminApi";
 import { formatProperDisplay, formatStatusLabel } from "@/lib/formatting";
 import { formatDateTimeInZone, formatTimeInZone } from "@/lib/timezones";
 import { RosterWorkbench } from "./RosterWorkbench";
+import { RegistrationEditor } from "./RegistrationsClient";
 import type { ParsedRosterParticipant } from "@/lib/rosterParser";
 import {
   AdminRow,
@@ -819,6 +820,7 @@ export function CohortDetailClient({ id }: { id: string }) {
   const [loading, setLoading] = useState(true);
   const [cohort, setCohort] = useState<AdminRow | null>(null);
   const [allCohorts, setAllCohorts] = useState<AdminRow[]>([]);
+  const [organizations, setOrganizations] = useState<AdminRow[]>([]);
   const [allParticipants, setAllParticipants] = useState<AdminRow[]>([]);
   const [sessions, setSessions] = useState<AdminRow[]>([]);
   const [registrations, setRegistrations] = useState<AdminRow[]>([]);
@@ -844,6 +846,8 @@ export function CohortDetailClient({ id }: { id: string }) {
   const [registrationRosterFilter, setRegistrationRosterFilter] = useState("");
   const [paymentDetail, setPaymentDetail] = useState<AdminRow | null>(null);
   const [registrationDetail, setRegistrationDetail] = useState<AdminRow | null>(null);
+  const [registrationDialogOpen, setRegistrationDialogOpen] = useState(false);
+  const [editingRegistration, setEditingRegistration] = useState<AdminRow | null>(null);
   const [registrationThread, setRegistrationThread] = useState<AdminRow[]>([]);
   const [registrationThreadLoading, setRegistrationThreadLoading] = useState(false);
   const [sendingRegistrationTaskId, setSendingRegistrationTaskId] = useState("");
@@ -865,10 +869,11 @@ export function CohortDetailClient({ id }: { id: string }) {
   const { notifySuccess, notifyError, snackbar } = useNotifier();
 
   async function load() {
-    const [cohortData, cohortRows, sessionRows, registrationRows, participantRows, allParticipantRows, communicationRows, templateRows, paymentRows, invoiceRows, distributionData, taskRows, resourceRows, activityRows] =
+    const [cohortData, cohortRows, organizationRows, sessionRows, registrationRows, participantRows, allParticipantRows, communicationRows, templateRows, paymentRows, invoiceRows, distributionData, taskRows, resourceRows, activityRows] =
       await Promise.all([
         adminApi<AdminRow>(`/api/cohorts/${id}`),
         adminApi<AdminRow[]>("/api/cohorts").catch(() => []),
+        adminApi<AdminRow[]>("/api/organizations").catch(() => []),
         adminApi<AdminRow[]>(`/api/cohorts/${id}/sessions`),
         adminApi<AdminRow[]>(`/api/cohorts/${id}/registrations`),
         adminApi<AdminRow[]>(`/api/cohorts/${id}/participants`),
@@ -885,6 +890,7 @@ export function CohortDetailClient({ id }: { id: string }) {
 
     setCohort(cohortData);
     setAllCohorts(cohortRows);
+    setOrganizations(organizationRows);
     setSessions(sessionRows);
     setRegistrations(registrationRows);
     setParticipants(participantRows);
@@ -915,6 +921,11 @@ export function CohortDetailClient({ id }: { id: string }) {
     } catch (error) {
       notifyError((error as Error).message);
     }
+  }
+
+  function openRegistrationEditor(row?: AdminRow | null) {
+    setEditingRegistration(row ?? null);
+    setRegistrationDialogOpen(true);
   }
 
   async function sendRegistrationTaskMessage(task: AdminRow) {
@@ -1879,7 +1890,7 @@ export function CohortDetailClient({ id }: { id: string }) {
       )}
 
       {tab === 1 && (
-        <SectionCard title="Registrations" action={<Button href="/registrations" startIcon={<AddIcon />}>Add/Edit Registration</Button>}>
+        <SectionCard title="Registrations" action={<Button type="button" startIcon={<AddIcon />} onClick={() => openRegistrationEditor(null)}>Add Registration</Button>}>
           <CompactFilterBar resultCount={filteredRegistrations.length}>
             <TextField select label="Payment" value={registrationPaymentFilter} onChange={(event) => setRegistrationPaymentFilter(event.target.value)}>
               <MenuItem value="">All payments</MenuItem>
@@ -2175,7 +2186,18 @@ export function CohortDetailClient({ id }: { id: string }) {
         title="Registration Detail"
         open={Boolean(registrationDetail)}
         onClose={() => setRegistrationDetail(null)}
-        actions={<Button href="/registrations" variant="outlined">Open Registrations</Button>}
+        actions={registrationDetail ? (
+          <div className="section-action-row">
+            <Button variant="outlined" onClick={() => openRegistrationEditor(registrationDetail)}>
+              Edit Registration
+            </Button>
+            {registrationDetail.primaryContactEmail && (
+              <Button href={`/communications?search=${encodeURIComponent(registrationDetail.primaryContactEmail)}`} variant="outlined">
+                Open Communications
+              </Button>
+            )}
+          </div>
+        ) : null}
       >
         {registrationDetail && (
           <>
@@ -2268,6 +2290,29 @@ export function CohortDetailClient({ id }: { id: string }) {
           </>
         )}
       </QuickViewDrawer>
+      <RegistrationEditor
+        open={registrationDialogOpen}
+        editing={editingRegistration}
+        cohorts={cohort ? [cohort, ...allCohorts.filter((row) => row.id !== cohort.id)] : allCohorts}
+        organizations={organizations}
+        defaultCohortId={id}
+        lockCohort={!editingRegistration}
+        onClose={() => {
+          setRegistrationDialogOpen(false);
+          setEditingRegistration(null);
+        }}
+        onSaved={async () => {
+          notifySuccess(editingRegistration ? "Registration updated" : "Registration created");
+          await load();
+          if (registrationDetail?.id) {
+            try {
+              setRegistrationDetail(await adminApi<AdminRow>(`/api/registrations?id=${registrationDetail.id}`));
+            } catch {
+              setRegistrationDetail(null);
+            }
+          }
+        }}
+      />
       <QuickViewDrawer
         title="Participant Detail"
         open={Boolean(participantDetail)}

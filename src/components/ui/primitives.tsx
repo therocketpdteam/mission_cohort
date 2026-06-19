@@ -721,7 +721,8 @@ export function Autocomplete<T>({
   isOptionEqualToValue: _isOptionEqualToValue,
   onInputChange,
   inputValue: _inputValue,
-  sx: _sx
+  sx: _sx,
+  disabled = false
 }: {
   options: T[];
   value?: T | null;
@@ -732,6 +733,7 @@ export function Autocomplete<T>({
   onInputChange?: (...args: any[]) => void;
   inputValue?: string;
   sx?: SxValue | SxValue[];
+  disabled?: boolean;
 }) {
   const labelElement = renderInput?.({});
   const label = isValidElement(labelElement) ? (labelElement.props as any).label : undefined;
@@ -762,7 +764,7 @@ export function Autocomplete<T>({
     <label className="ui-field ui-field-full" ref={ref}>
       {label && <span className="ui-label">{label}</span>}
       <span className="ui-select">
-        <button type="button" className="ui-input ui-select-trigger" aria-expanded={open} onClick={() => setOpen((current) => !current)}>
+        <button type="button" className="ui-input ui-select-trigger" aria-expanded={open} disabled={disabled} onClick={() => setOpen((current) => !current)}>
           <span>{currentIndex >= 0 ? labels[currentIndex] : "Select"}</span>
           <span aria-hidden="true">⌄</span>
         </button>

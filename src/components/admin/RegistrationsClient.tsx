@@ -127,11 +127,13 @@ function emptyRegistration() {
   };
 }
 
-function RegistrationEditor({
+export function RegistrationEditor({
   open,
   editing,
   cohorts,
   organizations,
+  defaultCohortId,
+  lockCohort = false,
   onClose,
   onSaved
 }: {
@@ -139,6 +141,8 @@ function RegistrationEditor({
   editing: AdminRow | null;
   cohorts: AdminRow[];
   organizations: AdminRow[];
+  defaultCohortId?: string;
+  lockCohort?: boolean;
   onClose: () => void;
   onSaved: () => Promise<void>;
 }) {
@@ -152,12 +156,13 @@ function RegistrationEditor({
   useEffect(() => {
     if (open) {
       setValues(editing ?? emptyRegistration());
-      setCohort(cohorts.find((item) => item.id === editing?.cohortId) ?? editing?.cohort ?? null);
+      const selectedCohortId = editing?.cohortId ?? defaultCohortId;
+      setCohort(cohorts.find((item) => item.id === selectedCohortId) ?? editing?.cohort ?? null);
       setOrganization(organizations.find((item) => item.id === editing?.organizationId) ?? editing?.organization ?? null);
       setOrganizationSearch(editing?.organization?.name ?? "");
       setError(null);
     }
-  }, [cohorts, editing, open, organizations]);
+  }, [cohorts, defaultCohortId, editing, open, organizations]);
 
   function setValue(name: string, value: unknown) {
     setValues((current) => ({ ...current, [name]: value }));
@@ -213,6 +218,7 @@ function RegistrationEditor({
             <Autocomplete
               options={cohorts}
               value={cohort}
+              disabled={lockCohort}
               onChange={(_event, value) => setCohort(value)}
               getOptionLabel={(option) => option.title ?? ""}
               renderInput={(params) => <TextField {...params} label="Cohort" required />}
