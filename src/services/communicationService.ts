@@ -90,6 +90,13 @@ const defaultTemplates: Array<{
     subject: "Cancelled: {{session.title}} | {{cohort.title}}",
     bodyHtml: "<p><strong>{{session.title}}</strong> for {{cohort.title}} has been cancelled.</p><p>The Google Calendar invitation has been removed. Please contact the RocketPD team if you have any questions.</p>",
     bodyText: "{{session.title}} for {{cohort.title}} has been cancelled. The Google Calendar invitation has been removed. Please contact the RocketPD team if you have any questions."
+  },
+  {
+    type: TemplateType.CUSTOM,
+    name: "Session Updated",
+    subject: "Updated: {{session.title}} | {{cohort.title}}",
+    bodyHtml: "<p><strong>{{session.title}}</strong> for {{cohort.title}} has been updated.</p><p>The session is now scheduled for {{session.startTime}}. Your Google Calendar invitation has also been updated.</p><p>Please contact the RocketPD team if you have any questions.</p>",
+    bodyText: "{{session.title}} for {{cohort.title}} has been updated. The session is now scheduled for {{session.startTime}}. Your Google Calendar invitation has also been updated. Please contact the RocketPD team if you have any questions."
   }
 ];
 
@@ -676,6 +683,26 @@ export async function sendCalendarCancellationNotice(input: { cohortId: string; 
   return sendCommunication(communication.id);
 }
 
+export async function sendCalendarUpdateNotice(input: { cohortId: string; sessionId: string }) {
+  await ensureDefaultCommunicationTemplates();
+  const template = await prisma.communicationTemplate.findFirst({
+    where: { name: "Session Updated", type: TemplateType.CUSTOM, active: true }
+  });
+
+  if (!template) {
+    throw Object.assign(new Error("Session Updated template is unavailable."), { code: "NOT_FOUND", status: 404 });
+  }
+
+  const communication = await createCommunicationFromTemplate({
+    templateId: template.id,
+    cohortId: input.cohortId,
+    sessionId: input.sessionId,
+    recipientScope: RecipientScope.ALL_PARTICIPANTS
+  });
+
+  return sendCommunication(communication.id);
+}
+
 export async function reviewRecipientIssue(input: { communicationId: string; recipientEmail: string; reviewedById: string; reviewNote?: string }) {
   const recipientEmail = input.recipientEmail.trim();
 
@@ -866,6 +893,57 @@ export async function createDefaultSessionCommunications(sessionId: string) {
   });
 
   return records;
+}
+
+function scheduledTimeForSessionTemplate(type: TemplateType, startTime: Date) {
+  if (type === TemplateType.WEEK_BEFORE_REMINDER) {
+    return new Date(startTime.getTime() - 7 * 24 * 60 * 60 * 1000);
+  }
+  if (type === TemplateType.DAY_BEFORE_REMINDER) {
+    return new Date(startTime.getTime() - 24 * 60 * 60 * 1000);
+  }
+  if (type === TemplateType.HOUR_BEFORE_REMINDER) {
+    return new Date(startTime.getTime() - 60 * 60 * 1000);
+  }
+  if (type === TemplateType.FOLLOW_UP) {
+    return new Date(startTime.getTime() + 24 * 60 * 60 * 1000);
+  }
+  return null;
+}
+
+export async function rescheduleUnsentSessionCommunications(sessionId: string, startTime: Date) {
+  const communications = await prisma.cohortCommunication.findMany({
+    where: {
+      sessionId,
+      status: CommunicationStatus.SCHEDULED,
+      sentAt: null,
+      template: {
+        type: {
+          in: [
+            TemplateType.WEEK_BEFORE_REMINDER,
+            TemplateType.DAY_BEFORE_REMINDER,
+            TemplateType.HOUR_BEFORE_REMINDER,
+            TemplateType.FOLLOW_UP
+          ]
+        }
+      }
+    },
+    include: { template: true }
+  });
+
+  const updates = communications.flatMap((communication) => {
+    const scheduledFor = communication.template ? scheduledTimeForSessionTemplate(communication.template.type, startTime) : null;
+    return scheduledFor ? [{ id: communication.id, scheduledFor }] : [];
+  });
+
+  await prisma.$transaction(
+    updates.map((update) => prisma.cohortCommunication.update({
+      where: { id: update.id },
+      data: { scheduledFor: update.scheduledFor }
+    }))
+  );
+
+  return { updated: updates.length };
 }
 
 export async function createDefaultCohortSessionCommunications(cohortId: string) {

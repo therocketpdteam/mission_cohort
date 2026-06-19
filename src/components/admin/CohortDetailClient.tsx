@@ -1594,8 +1594,10 @@ export function CohortDetailClient({ id }: { id: string }) {
     try {
       if (editingSession) {
         const result = await adminApi<AdminRow>("/api/sessions", { method: "PATCH", body: { ...values, id: editingSession.id } });
-        if (result.calendarSync === "updated") {
-          notifySuccess(`Session and Google invitation updated for ${result.calendarRecipients ?? 0} participants`);
+        if (result.calendarSync === "updated" && result.emailSync === "sent") {
+          notifySuccess(`Session, Google invitation, and update email sent to ${result.calendarRecipients ?? 0} participants`);
+        } else if (result.calendarSync === "updated" && result.emailSync === "blocked") {
+          notifyError(`Session and Google invitation updated, but the email was not sent: ${result.emailSyncError}`);
         } else if (result.calendarSync === "blocked") {
           notifyError(`Session saved, but the Google invitation was not updated: ${result.calendarSyncError}`);
         } else {
