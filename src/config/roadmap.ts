@@ -130,15 +130,15 @@ export const roadmapCards: RoadmapCard[] = [
     title: "Communications",
     summary: "Email templates, scheduled/manual sends, delivery telemetry, and message issue visibility.",
     ownerArea: "Communications",
-    nextAction: "Use Connected Tools to send a diagnostic SendGrid email, then run a real cohort send/resend/issue-review smoke test.",
+    nextAction: "Add participant/invoice revision notices, then connect the shared support inbox for reply history and response tasks.",
     items: [
       { title: "Templates", status: "done", note: "Template management exists.", priority: "high" },
-      { title: "Scheduled/manual emails", status: "in_progress", note: "All-cohort outbox and resend actions exist; Connected Tools now has a diagnostic SendGrid send check.", priority: "high" },
+      { title: "Scheduled/manual emails", status: "done", note: "All-cohort outbox, scheduled sends, diagnostics, resend actions, and live cohort delivery have been verified.", priority: "high" },
       { title: "Recipient issue review", status: "done", note: "Failed/bounced recipients can be reviewed with notes and removed from the active queue.", priority: "high" },
       { title: "SendGrid delivery/open/error telemetry", status: "in_progress", note: "Recipient timelines support events; production webhook key is still a health warning.", priority: "high" },
       { title: "Dashboard issue surfacing", status: "done", note: "Dashboard issue counts now track unreviewed failed/bounced recipients.", priority: "medium" },
-      { title: "Outbound attachments", status: "done", note: "Per-message uploads and cohort/session material links are available; live send QA still depends on SendGrid readiness.", priority: "high" },
-      { title: "Registration communication journeys", status: "planned", note: "Separate POC and participant confirmations, eligibility-aware milestone scheduling, and roster/invoice change notices are next.", priority: "high" },
+      { title: "Outbound attachments", status: "done", note: "Per-message uploads, cohort/session material links, and live SendGrid delivery are available.", priority: "high" },
+      { title: "Registration communication journeys", status: "in_progress", note: "POC and participant confirmations, publish activation, late-registration milestone skipping, calendar enrollment, and a visible journey timeline are implemented. Roster/invoice revision notices remain.", priority: "high" },
       { title: "Shared inbound support inbox", status: "planned", note: "Connect support@rocketpd.com and its info@rocketpd.com alias, match contacts, preserve threads, and create response tasks.", priority: "high" }
     ]
   },
@@ -164,12 +164,12 @@ export const roadmapCards: RoadmapCard[] = [
     title: "Integrations",
     summary: "Connected systems that make Mission Control operational instead of purely manual.",
     ownerArea: "Platform",
-    nextAction: "Run Connected Tools diagnostics in production, then mark SendGrid/Google Calendar done only after live sends and event creation pass.",
+    nextAction: "Keep provider health visible, then scope QuickBooks authorization and the shared inbound support inbox.",
     items: [
       { title: "Supabase auth/storage", status: "done", note: "Auth configuration and public/private storage buckets are healthy in production.", priority: "high" },
-      { title: "SendGrid", status: "in_progress", note: "Outbound/events exist and Settings can send a diagnostic email; live cohort-send QA remains.", priority: "high" },
+      { title: "SendGrid", status: "done", note: "App-managed setup, diagnostics, templates, live sends, consolidated change notices, and cancellation notices are operational.", priority: "high" },
       { title: "Jotform", status: "in_progress", note: "Intake, mapping, replay, and revision schema work; shared-form routing edge cases remain.", priority: "high" },
-      { title: "Google Calendar", status: "in_progress", note: "Batch invite preparation, ICS fallback, and diagnostic Google event checks exist; production OAuth/calendar connection still needs end-to-end verification.", priority: "medium" },
+      { title: "Google Calendar", status: "done", note: "App-managed OAuth, diagnostics, attendee invitations, session updates, batch changes, and cancellation delivery have been verified live.", priority: "medium" },
       { title: "QuickBooks", status: "planned", note: "References/status first; full invoice sync later.", priority: "medium" },
       { title: "CRM handoff", status: "planned", note: "Outbound contact/registration sync is scoped.", priority: "medium" },
       { title: "Mux/resources", status: "planned", note: "Recording/resource workflows remain future-facing.", priority: "low" }

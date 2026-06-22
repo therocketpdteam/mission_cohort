@@ -7,6 +7,7 @@ import { logAuditEventAsync } from "./auditService";
 import { createDefaultSessionCommunications } from "./communicationService";
 import { prepareCohortCalendarInvites } from "./calendarService";
 import { getCohortReadiness, withCohortLifecycle } from "./cohortLifecycle";
+import { activateCohortRegistrationJourneys } from "./registrationJourneyService";
 
 const nestedSessionCreateSchema = z.object({
   title: z.string().min(1),
@@ -167,12 +168,22 @@ export async function publishCohort(id: string) {
   }
 
   const published = await updateCohort(id, { status: CohortStatus.PUBLISHED });
+  let journey: Awaited<ReturnType<typeof activateCohortRegistrationJourneys>> | { status: "needs_attention"; error: string };
+  try {
+    journey = await activateCohortRegistrationJourneys(id);
+  } catch (error) {
+    journey = {
+      status: "needs_attention",
+      error: error instanceof Error ? error.message : "Registration communication activation failed"
+    };
+  }
   try {
     const delivery = await prepareCohortCalendarInvites({ cohortId: id, mode: "auto", fallbackToIcs: false });
-    return { ...published, delivery };
+    return { ...published, journey, delivery };
   } catch (error) {
     return {
       ...published,
+      journey,
       delivery: {
         status: "needs_attention" as const,
         error: error instanceof Error ? error.message : "Calendar invitation delivery failed"

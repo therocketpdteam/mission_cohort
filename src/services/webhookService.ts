@@ -15,6 +15,7 @@ import { getDecryptedIntegrationConnection } from "@/services/integrationService
 import { listActiveJotformFormMappings } from "@/services/jotformMappingService";
 import { createDefaultRegistrationOperationsTasks } from "@/services/operationsTaskService";
 import { queueParticipantCrmSync, queueRegistrationCrmSync } from "@/services/crmSyncService";
+import { cancelParticipantJourneys, cancelRegistrationJourneys, planRegistrationJourneys } from "@/services/registrationJourneyService";
 
 export async function recordWebhookEvent(input: {
   source: string;
@@ -280,6 +281,7 @@ export async function processRegistrationWebhook(payload: Record<string, any>, o
     const shouldReplaceParticipants = !existingRegistration || participantsInput.length > 0;
 
     if (existingRegistration && shouldReplaceParticipants) {
+      await cancelParticipantJourneys(existingRegistration.participants.map((participant) => participant.id), "Participant roster replaced by a newer intake revision.");
       await prisma.participant.deleteMany({ where: { registrationId: registration.id } });
     }
 
@@ -388,6 +390,9 @@ export async function processRegistrationWebhook(payload: Record<string, any>, o
         console.warn("CRM participant sync queue failed", crmError);
       });
     }
+    const journey = registration.status === RegistrationStatus.CANCELLED
+      ? await cancelRegistrationJourneys(registration.id, "Registration cancelled by intake revision.")
+      : await planRegistrationJourneys(registration.id);
 
     return {
       eventId: event.id,
@@ -400,7 +405,8 @@ export async function processRegistrationWebhook(payload: Record<string, any>, o
       registration,
       participants,
       payment,
-      operationsTasks
+      operationsTasks,
+      journey
     };
   } catch (error) {
     await prisma.webhookEvent.update({

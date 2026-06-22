@@ -118,3 +118,15 @@ Also open these routes as an admin:
 - Resetting cohort automation cancels only unsent/scheduled/failed communication records and clears ICS-only preparation. Sent history and Google event references are preserved to prevent hidden duplicate sends or cancellation notices.
 
 If a feature shows `Blocked`, keep the UI compatibility fallback in place and do not mark the roadmap item done until production reports ready.
+
+## Registration Communication Journeys
+
+- Registration messaging is planned from one service regardless of whether the registration came from manual entry, participant maintenance, or Jotform intake.
+- Every active registration gets a POC confirmation plan. Every registered participant gets a separate confirmation plus eligible one-month and one-week cohort milestones.
+- Milestones already in the past when a participant is added are stored as `Skipped`, not sent late. Operators can see Draft, Scheduled, Sent, Skipped, and Failed records in registration quick view.
+- Draft cohorts may build journey records but cannot use normal live delivery. Publishing explicitly activates pending confirmations; Published and Active cohorts may deliver new-registration messages immediately. Draft delivery remains limited to the explicit allowlisted test mode.
+- Journey keys are durable and unique by registration, recipient, and milestone so Jotform revisions or repeated edits do not create duplicate messages.
+- Cancelling/archiving a registration, removing a participant, changing a participant email, or replacing a Jotform roster cancels that recipient's unsent journey records before any new plan is created.
+- When a participant joins a Published or Active cohort, future linked Google events are refreshed so the new attendee receives the remaining calendar invitations.
+- Existing W-9 and generated invoice documents are attached to the POC confirmation when available. Creating or revising invoices remains a separate finance workflow.
+- Cohort publishing performs one cohort-level calendar preparation. Registration journey activation skips per-registration calendar refresh during that operation to prevent duplicate Google updates.

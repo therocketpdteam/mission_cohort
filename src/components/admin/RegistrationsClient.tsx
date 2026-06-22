@@ -632,6 +632,38 @@ function RegistrationDetailDialog({
           <section className="registration-detail-section">
             <div className="registration-section-heading">
               <div>
+                <h3>Registration Communication Journey</h3>
+                <p>POC and participant confirmations, upcoming milestones, and skipped messages.</p>
+              </div>
+            </div>
+            {(registration.communications ?? []).length > 0 ? (
+              <div className="quick-view-list">
+                {(registration.communications ?? []).map((communication: AdminRow) => {
+                  const recipient = communication.participant
+                    ? `${formatProperDisplay(`${communication.participant.firstName} ${communication.participant.lastName}`)} · ${communication.participant.email}`
+                    : Array.isArray(communication.recipientEmails)
+                      ? communication.recipientEmails.join(", ")
+                      : registration.primaryContactEmail;
+                  const timing = communication.sentAt ?? communication.scheduledFor ?? communication.createdAt;
+                  return (
+                    <div className="quick-view-list-row" key={communication.id}>
+                      <div>
+                        <strong>{communication.template?.name ?? communication.subject ?? "Registration message"}</strong>
+                        <span>{[recipient, timing ? new Date(timing).toLocaleString("en-US") : "", communication.providerError].filter(Boolean).join(" · ")}</span>
+                      </div>
+                      <StatusChip value={communication.status} />
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <EmptyState title="No communication journey yet" description="The journey is created when the registration is added or updated. Draft cohorts keep these messages safely queued until publishing." />
+            )}
+          </section>
+
+          <section className="registration-detail-section">
+            <div className="registration-section-heading">
+              <div>
                 <h3>Team Roster</h3>
                 <p>{health?.label} · {health?.helper}</p>
               </div>

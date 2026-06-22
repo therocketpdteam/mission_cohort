@@ -62,6 +62,17 @@ const requiredSchema: SchemaRequirement[] = [
     ]
   },
   {
+    key: "registrationJourneys",
+    label: "Registration communication journeys",
+    detail: "Links deduplicated POC and participant messages to registrations.",
+    nextAction: "Run the 20260622120000 registration communication journeys migration.",
+    columns: [
+      ["CohortCommunication", "registrationId"],
+      ["CohortCommunication", "participantId"],
+      ["CohortCommunication", "journeyKey"]
+    ]
+  },
+  {
     key: "invoiceDrafts",
     label: "Invoice drafts",
     detail: "Supports editable invoice/receipt documents.",

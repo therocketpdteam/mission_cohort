@@ -115,6 +115,7 @@ enum TemplateType {
 enum CommunicationStatus {
   DRAFT
   SCHEDULED
+  SKIPPED
   SENDING
   SENT
   FAILED
@@ -465,6 +466,7 @@ model Registration {
   operationsTasks       OperationsTask[]
   crmSyncEvents         CrmSyncEvent[]
   webhookEvents         WebhookEvent[]
+  communications        CohortCommunication[]
 
   @@index([cohortId])
   @@index([organizationId])
@@ -518,6 +520,7 @@ model Participant {
   cohort            Cohort            @relation(fields: [cohortId], references: [id])
   organization      Organization      @relation(fields: [organizationId], references: [id])
   crmSyncEvents     CrmSyncEvent[]
+  communications    CohortCommunication[]
 
   @@index([registrationId])
   @@index([cohortId])
@@ -570,6 +573,9 @@ model CohortCommunication {
   id             String              @id @default(cuid())
   cohortId       String
   sessionId      String?
+  registrationId String?
+  participantId  String?
+  journeyKey     String?             @unique
   templateId     String?
   subject        String
   bodyHtml       String
@@ -586,6 +592,8 @@ model CohortCommunication {
   updatedAt      DateTime            @updatedAt
   cohort         Cohort              @relation(fields: [cohortId], references: [id], onDelete: Cascade)
   session        CohortSession?      @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  registration   Registration?       @relation(fields: [registrationId], references: [id], onDelete: SetNull)
+  participant    Participant?        @relation(fields: [participantId], references: [id], onDelete: SetNull)
   template       CommunicationTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
   createdBy      User                @relation(fields: [createdById], references: [id])
   emailEvents    EmailEvent[]
@@ -593,6 +601,8 @@ model CohortCommunication {
 
   @@index([cohortId])
   @@index([sessionId])
+  @@index([registrationId])
+  @@index([participantId])
   @@index([templateId])
   @@index([createdById])
   @@index([status])

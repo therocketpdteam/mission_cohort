@@ -97,6 +97,34 @@ const defaultTemplates: Array<{
     subject: "Updated: {{session.title}} | {{cohort.title}}",
     bodyHtml: "<p><strong>{{session.title}}</strong> for {{cohort.title}} has been updated.</p><p>The session is now scheduled for {{session.startTime}}. Your Google Calendar invitation has also been updated.</p><p>Please contact the RocketPD team if you have any questions.</p>",
     bodyText: "{{session.title}} for {{cohort.title}} has been updated. The session is now scheduled for {{session.startTime}}. Your Google Calendar invitation has also been updated. Please contact the RocketPD team if you have any questions."
+  },
+  {
+    type: TemplateType.CUSTOM,
+    name: "POC Registration Confirmation",
+    subject: "Registration received: {{cohort.title}}",
+    bodyHtml: "<p>Hello {{registration.primaryContactName}},</p><p>We received the registration for <strong>{{organization.name}}</strong> in <strong>{{cohort.title}}</strong>.</p><p>Available registration documents are attached below. We will continue to keep you updated about roster and payment needs.</p>",
+    bodyText: "Hello {{registration.primaryContactName}}, we received the registration for {{organization.name}} in {{cohort.title}}. Available registration documents are attached below."
+  },
+  {
+    type: TemplateType.CUSTOM,
+    name: "Participant Registration Confirmation",
+    subject: "You're registered: {{cohort.title}}",
+    bodyHtml: "<p>Hello {{participant.firstName}},</p><p>You are registered for <strong>{{cohort.title}}</strong>.</p><p>You will receive calendar invitations and future session reminders at this email address.</p>",
+    bodyText: "Hello {{participant.firstName}}, you are registered for {{cohort.title}}. You will receive calendar invitations and future session reminders at this email address."
+  },
+  {
+    type: TemplateType.CUSTOM,
+    name: "One Month Before Cohort",
+    subject: "One month until {{cohort.title}}",
+    bodyHtml: "<p>Hello {{participant.firstName}},</p><p><strong>{{cohort.title}}</strong> begins in about one month.</p><p>Your calendar invitations contain the latest session details.</p>",
+    bodyText: "Hello {{participant.firstName}}, {{cohort.title}} begins in about one month. Your calendar invitations contain the latest session details."
+  },
+  {
+    type: TemplateType.CUSTOM,
+    name: "One Week Before Cohort",
+    subject: "One week until {{cohort.title}}",
+    bodyHtml: "<p>Hello {{participant.firstName}},</p><p><strong>{{cohort.title}}</strong> begins in one week.</p><p>Please review your calendar invitations for the latest session details.</p>",
+    bodyText: "Hello {{participant.firstName}}, {{cohort.title}} begins in one week. Please review your calendar invitations for the latest session details."
   }
 ];
 
@@ -575,7 +603,15 @@ async function resolveCommunicationRecipients(communication: {
 export async function sendCommunication(id: string, options?: { recipients?: string[]; context?: Parameters<typeof sendEmail>[0]["context"] }) {
   const communication = await prisma.cohortCommunication.findUnique({
     where: { id },
-    include: { cohort: { include: { presenter: true } }, session: true, template: true, createdBy: true, attachments: true }
+    include: {
+      cohort: { include: { presenter: true } },
+      session: true,
+      registration: { include: { organization: true } },
+      participant: true,
+      template: true,
+      createdBy: true,
+      attachments: true
+    }
   });
 
   if (!communication) {
@@ -611,7 +647,10 @@ export async function sendCommunication(id: string, options?: { recipients?: str
           startDate: communication.cohort.startDate,
           presenterName: `${communication.cohort.presenter.firstName} ${communication.cohort.presenter.lastName}`
         },
-        session: communication.session ?? undefined
+        session: communication.session ?? undefined,
+        participant: communication.participant ?? undefined,
+        registration: communication.registration ?? undefined,
+        organization: communication.registration?.organization ?? undefined
       }
     });
 

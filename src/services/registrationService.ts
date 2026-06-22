@@ -6,6 +6,7 @@ import { logAuditEventAsync } from "./auditService";
 import { createDefaultRegistrationOperationsTasks } from "./operationsTaskService";
 import { queueRegistrationCrmSync } from "./crmSyncService";
 import { voidRegistrationQuickBooksInvoice } from "./quickBooksService";
+import { cancelRegistrationJourneys, planRegistrationJourneys } from "./registrationJourneyService";
 
 export async function createRegistration(input: z.input<typeof registrationCreateSchema>) {
   const data = registrationCreateSchema.parse(input);
@@ -26,14 +27,18 @@ export async function createRegistration(input: z.input<typeof registrationCreat
     hasSupportingDocs: Boolean(registration.w9Url || registration.invoiceUrl || registration.confirmationDocsSentAt)
   });
   void queueRegistrationCrmSync(registration.id, "registration.created").catch(() => undefined);
-  return registration;
+  const journey = await planRegistrationJourneys(registration.id);
+  return { ...registration, journey };
 }
 
 export async function updateRegistration(id: string, input: z.input<typeof registrationUpdateSchema>) {
   const data = registrationUpdateSchema.parse(input);
   const registration = await prisma.registration.update({ where: { id }, data });
   void queueRegistrationCrmSync(registration.id, "registration.updated").catch(() => undefined);
-  return registration;
+  const journey = registration.status === RegistrationStatus.CANCELLED
+    ? await cancelRegistrationJourneys(registration.id, "Registration cancelled.")
+    : await planRegistrationJourneys(registration.id);
+  return { ...registration, journey };
 }
 
 export async function confirmRegistration(id: string) {
@@ -76,6 +81,7 @@ export async function archiveRegistration(id: string, reason?: string) {
     metadata: { cohortId: registration.cohortId, organizationId: registration.organizationId, reason: reason ?? null }
   });
   void queueRegistrationCrmSync(registration.id, "registration.archived").catch(() => undefined);
+  await cancelRegistrationJourneys(registration.id, reason?.trim() || "Registration archived.");
   return registration;
 }
 
@@ -96,7 +102,8 @@ export async function restoreRegistration(id: string) {
     metadata: { cohortId: registration.cohortId, organizationId: registration.organizationId }
   });
   void queueRegistrationCrmSync(registration.id, "registration.restored").catch(() => undefined);
-  return registration;
+  const journey = await planRegistrationJourneys(registration.id);
+  return { ...registration, journey };
 }
 
 export async function deleteRegistration(id: string) {
@@ -135,6 +142,7 @@ export async function deleteRegistration(id: string) {
     });
   }
 
+  await cancelRegistrationJourneys(id, "Registration permanently deleted.");
   await prisma.registration.delete({ where: { id } });
 
   logAuditEventAsync({
@@ -208,6 +216,11 @@ export async function bulkUpdateRegistrations(input: {
 
   for (const id of ids) {
     void queueRegistrationCrmSync(id, "registration.bulk_updated").catch(() => undefined);
+    if (input.action === "cancel" || input.action === "archive") {
+      await cancelRegistrationJourneys(id, input.action === "cancel" ? "Registration cancelled." : "Registration archived.");
+    } else if (input.action === "restore") {
+      await planRegistrationJourneys(id);
+    }
   }
 
   return { count: ids.length };
@@ -239,6 +252,15 @@ export async function getRegistrationById(id: string) {
         where: { source: "jotform" },
         orderBy: { createdAt: "desc" },
         take: 12
+      },
+      communications: {
+        orderBy: { createdAt: "desc" },
+        include: {
+          participant: true,
+          template: true,
+          emailEvents: { orderBy: { createdAt: "desc" } },
+          attachments: true
+        }
       }
     }
   });

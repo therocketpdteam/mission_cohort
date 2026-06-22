@@ -1,10 +1,11 @@
-import { OperationsTaskCategory, OperationsTaskStatus, ParticipantListStatus } from "@prisma/client";
+import { OperationsTaskCategory, OperationsTaskStatus, ParticipantListStatus, ParticipantStatus } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { participantCreateSchema, participantUpdateSchema } from "@/validators/participant";
 import { logAuditEventAsync } from "./auditService";
 import { queueParticipantCrmSync } from "./crmSyncService";
 import { getRecipientCommunicationSummary } from "./communicationService";
+import { cancelParticipantJourneys, planRegistrationJourneys } from "./registrationJourneyService";
 
 async function syncRegistrationParticipantListStatus(registrationId: string) {
   const registration = await prisma.registration.findUnique({
@@ -76,17 +77,24 @@ export async function addParticipant(input: z.input<typeof participantCreateSche
   });
   await syncRegistrationParticipantListStatus(participant.registrationId);
   void queueParticipantCrmSync(participant.id, "participant.created").catch(() => undefined);
-  return participant;
+  const journey = await planRegistrationJourneys(participant.registrationId);
+  return { ...participant, journey };
 }
 
 export async function updateParticipant(id: string, input: z.input<typeof participantUpdateSchema>) {
   const data = participantUpdateSchema.parse(input);
+  const existing = await prisma.participant.findUniqueOrThrow({ where: { id } });
   const participant = await prisma.participant.update({ where: { id }, data });
   void queueParticipantCrmSync(participant.id, "participant.updated").catch(() => undefined);
-  return participant;
+  if (existing.email.toLowerCase() !== participant.email.toLowerCase() || participant.status !== ParticipantStatus.REGISTERED) {
+    await cancelParticipantJourneys([participant.id], participant.status !== ParticipantStatus.REGISTERED ? "Participant is no longer registered." : "Participant email changed.");
+  }
+  const journey = await planRegistrationJourneys(participant.registrationId);
+  return { ...participant, journey };
 }
 
 export async function removeParticipant(id: string) {
+  await cancelParticipantJourneys([id], "Participant removed from registration.");
   const participant = await prisma.participant.delete({ where: { id } });
   await syncRegistrationParticipantListStatus(participant.registrationId);
   return participant;

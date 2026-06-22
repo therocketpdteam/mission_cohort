@@ -2462,6 +2462,34 @@ export function CohortDetailClient({ id }: { id: string }) {
                 <Typography color="text.secondary">No open follow-ups for this registration.</Typography>
               )}
             </SectionCard>
+            <SectionCard title="Registration Communication Journey">
+              {(registrationDetail.communications ?? []).length > 0 ? (
+                <div className="quick-view-list">
+                  {(registrationDetail.communications ?? []).map((communication: AdminRow) => {
+                    const recipient = communication.participant
+                      ? `${formatProperDisplay(`${communication.participant.firstName} ${communication.participant.lastName}`)} · ${communication.participant.email}`
+                      : Array.isArray(communication.recipientEmails)
+                        ? communication.recipientEmails.join(", ")
+                        : registrationDetail.primaryContactEmail;
+                    return (
+                      <div className="quick-view-list-row" key={communication.id}>
+                        <div>
+                          <strong>{communication.template?.name ?? communication.subject ?? "Registration message"}</strong>
+                          <span>
+                            {[recipient, communication.sentAt || communication.scheduledFor || communication.createdAt
+                              ? new Date(communication.sentAt ?? communication.scheduledFor ?? communication.createdAt).toLocaleString("en-US")
+                              : "", communication.providerError].filter(Boolean).join(" · ")}
+                          </span>
+                        </div>
+                        <StatusChip value={communication.status} />
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <Typography color="text.secondary">No communication journey yet. Draft cohorts keep new messages safely queued until publishing.</Typography>
+              )}
+            </SectionCard>
             <SectionCard
               title="POC Communication History"
               action={registrationDetail.primaryContactEmail ? (

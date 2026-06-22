@@ -422,6 +422,8 @@ Navigation should feel branded:
 
 - Registration source should use structured UTM fields when present.
 - Show a compact source pill in tables, then expose full UTM/source/referrer detail inside registration detail modals.
+- Registration quick views should include one compact communication-journey list showing the audience, template, timing, and status. Do not split POC confirmations, participant confirmations, scheduled milestones, and skipped milestones into separate cards.
+- Automation must be inspectable: show `Draft`, `Scheduled`, `Sent`, `Skipped`, and `Failed` states with the skipped/failure reason inline. Draft-copy should explain that publishing authorizes delivery.
 - Do not display raw `jotform` as the primary source label when a campaign, source, or landing page is available.
 
 ## Acceptance Criteria For UI Work
