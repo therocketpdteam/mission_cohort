@@ -87,7 +87,7 @@ export const roadmapCards: RoadmapCard[] = [
       { title: "Cohort thumbnails", status: "done", note: "Thumbnails upload and appear in cohort/dashboard contexts.", priority: "medium" },
       { title: "Overview/readiness", status: "done", note: "Basics and readiness are centered in Overview.", priority: "high" },
       { title: "Sessions checklist", status: "done", note: "Overview uses a compact readiness checklist for calendar, default emails, and session materials.", priority: "high" },
-      { title: "Registration/participant quick views", status: "in_progress", note: "Rows are clickable; history and edit affordances continue to improve.", priority: "high" },
+      { title: "Registration/participant quick views", status: "in_progress", note: "Rows are clickable; cohort registration detail now exposes the saved roster, derived status, POC fallback, and participant removal. History/edit affordances continue to improve.", priority: "high" },
       { title: "Materials/session resources", status: "done", note: "Materials remain optional session files and can be linked into outbound communications without blocking publication.", priority: "medium" },
       { title: "Publish-readiness workflow", status: "in_progress", note: "Draft cohorts prepare plans without live delivery; publishing explicitly authorizes calendar delivery and pending session edits use one Apply Changes workflow.", priority: "high" },
       { title: "Batch session change control", status: "done", note: "Linked session edits persist as pending changes, update affected Google events together, and create one consolidated communication record.", priority: "high" }
@@ -117,7 +117,7 @@ export const roadmapCards: RoadmapCard[] = [
     ownerArea: "Operations",
     nextAction: "Deepen POC timeline and participant history inside quick views after the roster table cleanup.",
     items: [
-      { title: "Registration quick view", status: "done", note: "Primary rows open an operational drawer with roster, Jotform revisions, POC history, and finance/source context.", priority: "high" },
+      { title: "Registration quick view", status: "done", note: "Primary rows open an operational drawer with the actual saved roster, automatic roster health, POC fallback, Jotform revisions, POC history, and finance/source context.", priority: "high" },
       { title: "POC communication context", status: "done", note: "Registration detail links outbound history back to Communications.", priority: "high" },
       { title: "Roster/payment filters", status: "done", note: "Payment, roster, cohort, organization, source, and archive filters use the shared compact filter pattern.", priority: "medium" },
       { title: "Participant history", status: "done", note: "Participant detail now matches by email across cohorts for quick participation context.", priority: "medium" },

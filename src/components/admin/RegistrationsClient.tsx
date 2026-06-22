@@ -254,9 +254,7 @@ export function RegistrationEditor({
             <TextField fullWidth label="Participant count" type="number" value={values.participantCount ?? 0} onChange={(event) => setValue("participantCount", Number(event.target.value))} />
           </Grid>
           <Grid size={{ xs: 12, md: 3 }}>
-            <TextField fullWidth select label="Roster status" value={values.participantListStatus ?? "NEEDED"} onChange={(event) => setValue("participantListStatus", event.target.value)}>
-              {rosterStatuses.map((value) => <MenuItem value={value} key={value}>{formatStatusLabel(value)}</MenuItem>)}
-            </TextField>
+            <TextField fullWidth label="Roster status" value={formatStatusLabel(values.participantListStatus ?? "NEEDED")} disabled helperText="Calculated from saved participants" />
           </Grid>
           <Grid size={{ xs: 12, md: 3 }}>
             <TextField fullWidth select label="Payment method" value={values.paymentMethod ?? "UNKNOWN"} onChange={(event) => setValue("paymentMethod", event.target.value)}>
@@ -462,7 +460,6 @@ function RegistrationDetailDialog({
 
   const health = registration ? rosterHealth(registration) : null;
   const participantTotal = registration?.participants?.length ?? 0;
-  const canUsePocAsParticipant = Boolean(registration?.primaryContactEmail && participantTotal === 0 && Number(registration?.participantCount ?? 0) <= 1);
 
   async function addPocAsParticipant() {
     if (!registration?.primaryContactEmail) {
@@ -489,7 +486,7 @@ function RegistrationDetailDialog({
         body: {
           id: registration.id,
           participantCount: Math.max(1, Number(registration.participantCount ?? 0)),
-          participantListStatus: "COMPLETE"
+          participantListStatus: registration.participantListStatus
         }
       });
       await onChanged();
@@ -667,9 +664,6 @@ function RegistrationDetailDialog({
                 <h3>Team Roster</h3>
                 <p>{health?.label} · {health?.helper}</p>
               </div>
-              {canUsePocAsParticipant ? (
-                <Button size="small" variant="outlined" onClick={addPocAsParticipant}>Use POC as participant</Button>
-              ) : null}
             </div>
             {(registration.participants ?? []).length > 0 ? (
               <div className="quick-view-list">
@@ -697,6 +691,7 @@ function RegistrationDetailDialog({
               registration={registration}
               existingParticipants={registration.participants ?? []}
               onImport={importRoster}
+              onAddPrimaryContact={addPocAsParticipant}
             />
           </section>
 

@@ -10,9 +10,19 @@ type RosterWorkbenchProps = {
   registration: AdminRow;
   existingParticipants?: AdminRow[];
   onImport: (participants: ParsedRosterParticipant[]) => Promise<void>;
+  onAddPrimaryContact?: () => Promise<void>;
+  onRemoveParticipant?: (participantId: string) => Promise<void>;
+  showSavedParticipants?: boolean;
 };
 
-export function RosterWorkbench({ registration, existingParticipants = [], onImport }: RosterWorkbenchProps) {
+export function RosterWorkbench({
+  registration,
+  existingParticipants = [],
+  onImport,
+  onAddPrimaryContact,
+  onRemoveParticipant,
+  showSavedParticipants = false
+}: RosterWorkbenchProps) {
   const [rosterText, setRosterText] = useState("");
   const [importing, setImporting] = useState(false);
   const parsed = useMemo(() => parseRosterText(rosterText), [rosterText]);
@@ -26,6 +36,9 @@ export function RosterWorkbench({ registration, existingParticipants = [], onImp
   const projectedTotal = existingParticipants.length + newParticipants.length;
   const savedComplete = expected > 0 && existingParticipants.length >= expected;
   const savedPartial = expected > 0 && existingParticipants.length > 0 && existingParticipants.length < expected;
+  const primaryContactEmail = String(registration.primaryContactEmail ?? "").toLowerCase();
+  const primaryContactMissing = Boolean(primaryContactEmail && !existingEmails.has(primaryContactEmail));
+  const canAddPrimaryContact = Boolean(onAddPrimaryContact && primaryContactMissing && (expected === 0 || existingParticipants.length < expected));
 
   async function importRoster() {
     if (newParticipants.length === 0 || importing) {
@@ -54,7 +67,10 @@ export function RosterWorkbench({ registration, existingParticipants = [], onImp
                 : "Paste names and emails from a message, spreadsheet, or CSV."}
           </p>
         </div>
-        <StatusChip value={projectedTotal >= expected && expected > 0 ? "COMPLETE" : projectedTotal > 0 ? "PARTIAL" : "NEEDED"} />
+        <Stack direction="row" flexWrap="wrap" useFlexGap gap={1} alignItems="center" justifyContent="flex-end">
+          {canAddPrimaryContact ? <Button size="small" variant="outlined" onClick={onAddPrimaryContact}>Add POC to roster</Button> : null}
+          <StatusChip value={projectedTotal >= expected && expected > 0 ? "COMPLETE" : projectedTotal > 0 ? "PARTIAL" : "NEEDED"} />
+        </Stack>
       </div>
       {savedComplete && (
         <div className="roster-workbench-state is-complete">
@@ -66,6 +82,19 @@ export function RosterWorkbench({ registration, existingParticipants = [], onImp
           Roster partial at {existingParticipants.length}/{expected} participants. The participant-list follow-up stays open until the count is complete.
         </div>
       )}
+      {showSavedParticipants && existingParticipants.length > 0 ? (
+        <div className="quick-view-list">
+          {existingParticipants.map((participant) => (
+            <div className="quick-view-list-row" key={participant.id}>
+              <div>
+                <strong>{formatProperDisplay(`${participant.firstName ?? ""} ${participant.lastName ?? ""}`)}</strong>
+                <span>{participant.email}</span>
+              </div>
+              {onRemoveParticipant ? <Button size="small" variant="text" color="error" onClick={() => onRemoveParticipant(participant.id)}>Remove</Button> : null}
+            </div>
+          ))}
+        </div>
+      ) : null}
       <TextField
         label="Paste roster"
         multiline
@@ -109,7 +138,7 @@ export function RosterWorkbench({ registration, existingParticipants = [], onImp
           {expected ? `${projectedTotal}/${expected} projected roster` : `${projectedTotal} projected participants`}
         </Typography>
         <Button size="small" onClick={importRoster} disabled={newParticipants.length === 0 || importing}>
-          {importing ? "Importing" : `Import ${newParticipants.length || ""}`.trim()}
+          {importing ? "Adding" : newParticipants.length ? `Add ${newParticipants.length} to roster` : "Add to roster"}
         </Button>
       </Stack>
     </div>

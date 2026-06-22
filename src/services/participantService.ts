@@ -1,13 +1,14 @@
 import { OperationsTaskCategory, OperationsTaskStatus, ParticipantListStatus, ParticipantStatus } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { deriveParticipantListStatus } from "@/lib/rosterStatus";
 import { participantCreateSchema, participantUpdateSchema } from "@/validators/participant";
 import { logAuditEventAsync } from "./auditService";
 import { queueParticipantCrmSync } from "./crmSyncService";
 import { getRecipientCommunicationSummary } from "./communicationService";
 import { cancelParticipantJourneys, planRegistrationJourneys } from "./registrationJourneyService";
 
-async function syncRegistrationParticipantListStatus(registrationId: string) {
+export async function syncRegistrationParticipantListStatus(registrationId: string) {
   const registration = await prisma.registration.findUnique({
     where: { id: registrationId },
     include: { _count: { select: { participants: true } } }
@@ -18,14 +19,7 @@ async function syncRegistrationParticipantListStatus(registrationId: string) {
   }
 
   const actualCount = registration._count.participants;
-  const status =
-    registration.participantCount === 0 && actualCount === 0
-      ? ParticipantListStatus.NOT_REQUESTED
-      : registration.participantCount === 0 || actualCount >= registration.participantCount
-        ? ParticipantListStatus.COMPLETE
-        : actualCount > 0
-          ? ParticipantListStatus.PARTIAL
-          : ParticipantListStatus.NEEDED;
+  const status = deriveParticipantListStatus(registration.participantCount, actualCount);
 
   await prisma.registration.update({
     where: { id: registrationId },
@@ -67,6 +61,12 @@ async function syncRegistrationParticipantListStatus(registrationId: string) {
 
 export async function addParticipant(input: z.input<typeof participantCreateSchema>) {
   const data = participantCreateSchema.parse(input);
+  const duplicate = await prisma.participant.findFirst({
+    where: { registrationId: data.registrationId, email: { equals: data.email, mode: "insensitive" } }
+  });
+  if (duplicate) {
+    throw Object.assign(new Error("This email is already saved on the registration roster."), { code: "CONFLICT", status: 409 });
+  }
   const participant = await prisma.participant.create({ data });
   logAuditEventAsync({
     entityType: "Participant",

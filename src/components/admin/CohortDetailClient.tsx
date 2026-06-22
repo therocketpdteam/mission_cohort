@@ -201,6 +201,14 @@ function resourceHref(resource: AdminRow) {
   return "";
 }
 
+function splitContactName(value?: string | null) {
+  const parts = String(value ?? "").trim().split(/\s+/).filter(Boolean);
+  return {
+    firstName: parts.length > 1 ? parts.slice(0, -1).join(" ") : parts[0] || "Participant",
+    lastName: parts.length > 1 ? parts.at(-1)! : "-"
+  };
+}
+
 function registrationTrendPoints(rows: AdminRow[], mode: "count" | "amount") {
   const sorted = [...rows].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
   let cumulative = 0;
@@ -1021,6 +1029,48 @@ export function CohortDetailClient({ id }: { id: string }) {
       }
 
       notifySuccess(`${participants.length} participant${participants.length === 1 ? "" : "s"} imported.`);
+      await openRegistrationDetail(registrationDetail);
+      await load();
+    } catch (error) {
+      notifyError((error as Error).message);
+    }
+  }
+
+  async function addRegistrationPocToRoster() {
+    if (!registrationDetail?.id || !registrationDetail.primaryContactEmail) {
+      notifyError("This registration needs a POC email before the POC can join the roster.");
+      return;
+    }
+
+    const name = splitContactName(registrationDetail.primaryContactName);
+    try {
+      await adminApi("/api/participants", {
+        method: "POST",
+        body: {
+          ...name,
+          email: registrationDetail.primaryContactEmail,
+          phone: registrationDetail.primaryContactPhone ?? "",
+          title: registrationDetail.primaryContactTitle ?? "",
+          registrationId: registrationDetail.id,
+          cohortId: registrationDetail.cohortId,
+          organizationId: registrationDetail.organizationId
+        }
+      });
+      notifySuccess("POC added to the participant roster.");
+      await openRegistrationDetail(registrationDetail);
+      await load();
+    } catch (error) {
+      notifyError((error as Error).message);
+    }
+  }
+
+  async function removeRegistrationParticipant(participantId: string) {
+    if (!registrationDetail?.id) {
+      return;
+    }
+    try {
+      await adminApi(`/api/participants?id=${participantId}`, { method: "DELETE" });
+      notifySuccess("Participant removed from the roster.");
       await openRegistrationDetail(registrationDetail);
       await load();
     } catch (error) {
@@ -2429,6 +2479,9 @@ export function CohortDetailClient({ id }: { id: string }) {
                 registration={registrationDetail}
                 existingParticipants={registrationDetail.participants ?? []}
                 onImport={importRegistrationRoster}
+                onAddPrimaryContact={addRegistrationPocToRoster}
+                onRemoveParticipant={removeRegistrationParticipant}
+                showSavedParticipants
               />
             </SectionCard>
             <SectionCard title="Open Follow-Ups">

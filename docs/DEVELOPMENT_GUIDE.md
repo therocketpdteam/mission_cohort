@@ -130,3 +130,10 @@ If a feature shows `Blocked`, keep the UI compatibility fallback in place and do
 - When a participant joins a Published or Active cohort, future linked Google events are refreshed so the new attendee receives the remaining calendar invitations.
 - Existing W-9 and generated invoice documents are attached to the POC confirmation when available. Creating or revising invoices remains a separate finance workflow.
 - Cohort publishing performs one cohort-level calendar preparation. Registration journey activation skips per-registration calendar refresh during that operation to prevent duplicate Google updates.
+
+## Registration Roster Rules
+
+- A newly created one-seat registration with no supplied roster defaults the POC to the participant in both manual and Jotform intake flows.
+- Roster status is derived from saved participant records and the expected participant count. It is not a manually maintained registration field.
+- If a legacy or team registration is missing its POC from the roster, registration quick view exposes `Add POC to roster` while an expected seat remains open.
+- Increasing the expected participant count does not invent additional people; the roster remains Partial until those participant records are saved.

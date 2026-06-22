@@ -1,16 +1,67 @@
 import { ParticipantListStatus, PaymentStatus, RegistrationStatus, SupportingDocumentStatus } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { shouldDefaultPrimaryContactParticipant } from "@/lib/rosterStatus";
 import { registrationCreateSchema, registrationUpdateSchema } from "@/validators/registration";
 import { logAuditEventAsync } from "./auditService";
 import { createDefaultRegistrationOperationsTasks } from "./operationsTaskService";
-import { queueRegistrationCrmSync } from "./crmSyncService";
+import { queueParticipantCrmSync, queueRegistrationCrmSync } from "./crmSyncService";
 import { voidRegistrationQuickBooksInvoice } from "./quickBooksService";
 import { cancelRegistrationJourneys, planRegistrationJourneys } from "./registrationJourneyService";
+import { syncRegistrationParticipantListStatus } from "./participantService";
+
+function splitPrimaryContactName(value: string) {
+  const parts = value.trim().split(/\s+/).filter(Boolean);
+  return {
+    firstName: parts.length > 1 ? parts.slice(0, -1).join(" ") : parts[0] || "Participant",
+    lastName: parts.length > 1 ? parts.at(-1)! : "-"
+  };
+}
+
+async function ensureSingleSeatPrimaryContactParticipant(registration: {
+  id: string;
+  cohortId: string;
+  organizationId: string;
+  participantCount: number;
+  primaryContactName: string;
+  primaryContactEmail: string;
+  primaryContactPhone: string | null;
+  primaryContactTitle: string | null;
+}, inheritedSingleSeatDefault = false) {
+  const actualCount = await prisma.participant.count({ where: { registrationId: registration.id } });
+  if (!shouldDefaultPrimaryContactParticipant(registration.participantCount, actualCount) && !(inheritedSingleSeatDefault && actualCount === 0)) {
+    return null;
+  }
+
+  const name = splitPrimaryContactName(registration.primaryContactName);
+  const participant = await prisma.participant.create({
+    data: {
+      registrationId: registration.id,
+      cohortId: registration.cohortId,
+      organizationId: registration.organizationId,
+      firstName: name.firstName,
+      lastName: name.lastName,
+      email: registration.primaryContactEmail.toLowerCase(),
+      phone: registration.primaryContactPhone ?? undefined,
+      title: registration.primaryContactTitle ?? undefined
+    }
+  });
+  logAuditEventAsync({
+    entityType: "Participant",
+    entityId: participant.id,
+    action: "ADDED",
+    description: "Primary contact defaulted to participant for a one-seat registration",
+    metadata: { registrationId: registration.id, cohortId: registration.cohortId }
+  });
+  void queueParticipantCrmSync(participant.id, "participant.created").catch(() => undefined);
+  return { participant, created: true };
+}
 
 export async function createRegistration(input: z.input<typeof registrationCreateSchema>) {
   const data = registrationCreateSchema.parse(input);
   const registration = await prisma.registration.create({ data });
+  await ensureSingleSeatPrimaryContactParticipant(registration);
+  const roster = await syncRegistrationParticipantListStatus(registration.id);
   logAuditEventAsync({
     entityType: "Registration",
     entityId: registration.id,
@@ -22,23 +73,32 @@ export async function createRegistration(input: z.input<typeof registrationCreat
     cohortId: registration.cohortId,
     registrationId: registration.id,
     participantCount: registration.participantCount,
-    actualParticipantCount: 0,
+    actualParticipantCount: roster?.actualCount ?? 0,
     paymentStatus: registration.paymentStatus,
     hasSupportingDocs: Boolean(registration.w9Url || registration.invoiceUrl || registration.confirmationDocsSentAt)
   });
   void queueRegistrationCrmSync(registration.id, "registration.created").catch(() => undefined);
   const journey = await planRegistrationJourneys(registration.id);
-  return { ...registration, journey };
+  return { ...registration, participantListStatus: roster?.status ?? registration.participantListStatus, journey };
 }
 
 export async function updateRegistration(id: string, input: z.input<typeof registrationUpdateSchema>) {
   const data = registrationUpdateSchema.parse(input);
+  const previous = await prisma.registration.findUniqueOrThrow({
+    where: { id },
+    include: { _count: { select: { participants: true } } }
+  });
   const registration = await prisma.registration.update({ where: { id }, data });
+  await ensureSingleSeatPrimaryContactParticipant(
+    registration,
+    previous.participantCount === 1 && previous._count.participants === 0
+  );
+  const roster = await syncRegistrationParticipantListStatus(registration.id);
   void queueRegistrationCrmSync(registration.id, "registration.updated").catch(() => undefined);
   const journey = registration.status === RegistrationStatus.CANCELLED
     ? await cancelRegistrationJourneys(registration.id, "Registration cancelled.")
     : await planRegistrationJourneys(registration.id);
-  return { ...registration, journey };
+  return { ...registration, participantListStatus: roster?.status ?? registration.participantListStatus, journey };
 }
 
 export async function confirmRegistration(id: string) {
