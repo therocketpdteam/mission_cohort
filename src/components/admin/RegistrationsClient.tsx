@@ -29,6 +29,7 @@ import { formatProperDisplay, formatRegistrationSource, formatStatusLabel } from
 import { RosterWorkbench } from "./RosterWorkbench";
 import { RegistrationPendingChangesPanel } from "./RegistrationPendingChangesPanel";
 import { RegistrationDeliveryPreflight } from "./RegistrationDeliveryPreflight";
+import { PocCommunicationHistory } from "./PocCommunicationHistory";
 import type { ParsedRosterParticipant } from "@/lib/rosterParser";
 import {
   AdminRow,
@@ -91,17 +92,6 @@ function rosterHealth(registration: AdminRow) {
   }
 
   return { tone: "warning", label: formatStatusLabel(status || "NEEDED"), helper: `${actual}/${expected || actual} participants` };
-}
-
-function communicationIssueLabel(communication: AdminRow) {
-  const summary = communication.emailSummary ?? {};
-  if (Number(summary.unreviewedIssueCount ?? 0) > 0) {
-    return "Open issue";
-  }
-  if (Number(summary.reviewedIssueCount ?? 0) > 0) {
-    return "Reviewed issue";
-  }
-  return null;
 }
 
 function communicationDeliverySummary(communication: AdminRow) {
@@ -814,25 +804,7 @@ function RegistrationDetailDialog({
                 </Button>
               ) : null}
             </div>
-            {threadLoading ? (
-              <Typography color="text.secondary">Loading communication history...</Typography>
-            ) : thread.length > 0 ? (
-              <div className="quick-view-list">
-                {thread.map((communication) => (
-                  <div className="quick-view-list-row" key={communication.id}>
-                    <div>
-                      <strong title={communication.subject}>{communication.subject ?? "Email event"}</strong>
-                      <span title={communication.cohort?.title ?? ""}>
-                        {`${communication.cohort?.title ?? "Mission Control"} · ${formatStatusLabel(communication.status)}${communication.emailSummary?.lastEmailEvent ? ` · ${formatStatusLabel(communication.emailSummary.lastEmailEvent)}` : ""}${communicationIssueLabel(communication) ? ` · ${communicationIssueLabel(communication)}` : ""}${communication.attachments?.length ? ` · ${communication.attachments.length} attachment${communication.attachments.length === 1 ? "" : "s"}` : ""}`}
-                      </span>
-                    </div>
-                    <span>{communication.sentAt || communication.createdAt ? new Date(communication.sentAt ?? communication.createdAt).toLocaleDateString("en-US") : ""}</span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <EmptyState title="No POC emails yet" description="Manual and automatic outbound emails to this POC will appear here with delivery and open signals." />
-            )}
+            <PocCommunicationHistory loading={threadLoading} communications={thread} pocEmail={registration.primaryContactEmail} />
           </section>
 
           <section className="registration-detail-section">

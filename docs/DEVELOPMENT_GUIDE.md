@@ -124,6 +124,7 @@ If a feature shows `Blocked`, keep the UI compatibility fallback in place and do
 - Registration messaging is planned from one service regardless of whether the registration came from manual entry, participant maintenance, or Jotform intake.
 - Every active registration gets a POC confirmation plan. Every registered participant gets a separate confirmation plus eligible one-month and one-week cohort milestones.
 - Milestones already in the past when a participant is added are stored as `Skipped`, not sent late. Operators can see Draft, Scheduled, Sent, Skipped, and Failed records in registration quick view.
+- POC communication history should render one condensed row per communication with delivery counts and issue chips. Do not show one row per SendGrid event in registration detail; raw recipient events belong in Communications.
 - Draft cohorts may build journey records but cannot use normal live delivery. Publishing explicitly activates pending confirmations; Published and Active cohorts may deliver new-registration messages immediately. Draft delivery remains limited to the explicit allowlisted test mode.
 - Journey keys are durable and unique by registration, recipient, and milestone so Jotform revisions or repeated edits do not create duplicate messages.
 - Cancelling/archiving a registration, removing a participant, changing a participant email, or replacing a Jotform roster cancels that recipient's unsent journey records before any new plan is created.

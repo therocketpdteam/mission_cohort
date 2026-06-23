@@ -4858,6 +4858,94 @@ h6,
   align-items: flex-start;
 }
 
+.poc-history-list {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.poc-history-row {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  border: 1px solid var(--color-slate-200);
+  border-radius: 10px;
+  background: var(--color-slate-50);
+  padding: 10px;
+}
+
+.poc-history-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.poc-history-main > div:first-child {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.poc-history-row strong,
+.poc-history-row span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.poc-history-row strong {
+  color: var(--color-primary-900);
+  font-size: 0.86rem;
+  font-weight: 820;
+}
+
+.poc-history-row span {
+  color: var(--color-slate-500);
+  font-size: 0.78rem;
+}
+
+.poc-history-row-actions,
+.poc-history-chips,
+.poc-history-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.poc-history-row-actions {
+  justify-content: flex-end;
+}
+
+.poc-history-chips span {
+  border: 1px solid rgba(120, 118, 128, 0.18);
+  border-radius: 999px;
+  background: var(--color-surface-container-lowest);
+  padding: 3px 7px;
+  color: var(--color-slate-600);
+  font-size: 0.68rem;
+  font-weight: 760;
+}
+
+.poc-history-footer {
+  justify-content: space-between;
+  border: 1px dashed rgba(120, 118, 128, 0.28);
+  border-radius: 10px;
+  background: var(--color-surface-container-lowest);
+  padding: 9px 10px;
+}
+
+.poc-history-footer span {
+  flex: 1;
+  min-width: 220px;
+  color: var(--color-slate-500);
+  font-size: 0.76rem;
+}
+
 .comms-summary-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -5360,6 +5448,14 @@ h6,
   .compose-message-grid {
     grid-template-columns: 1fr;
   }
+
+  .poc-history-main {
+    grid-template-columns: 1fr;
+  }
+
+  .poc-history-row-actions {
+    justify-content: flex-start;
+  }
 }
 
 .app-shell.is-night .cohort-metric-card,
@@ -5381,6 +5477,8 @@ h6,
 .app-shell.is-night .readiness-row,
 .app-shell.is-night .distribution-ledger-row,
 .app-shell.is-night .quick-view-list-row,
+.app-shell.is-night .poc-history-row,
+.app-shell.is-night .poc-history-footer,
 .app-shell.is-night .comms-stat-card,
 .app-shell.is-night .comms-message-hero,
 .app-shell.is-night .comms-review-target,
@@ -5416,6 +5514,7 @@ h6,
 .app-shell.is-night .registration-preflight-tile strong,
 .app-shell.is-night .registration-change-impact strong,
 .app-shell.is-night .registration-preflight-notes strong,
+.app-shell.is-night .poc-history-row strong,
 .app-shell.is-night .registration-detail-tile strong,
 .app-shell.is-night .participant-hero h3,
 .app-shell.is-night .participant-section-heading h3,
@@ -5430,6 +5529,8 @@ h6,
 .app-shell.is-night .registration-preflight-tile p,
 .app-shell.is-night .registration-change-impact ul,
 .app-shell.is-night .registration-preflight-notes span,
+.app-shell.is-night .poc-history-row span,
+.app-shell.is-night .poc-history-footer span,
 .app-shell.is-night .registration-detail-tile span,
 .app-shell.is-night .participant-hero p,
 .app-shell.is-night .participant-section-heading p,
@@ -5443,6 +5544,8 @@ h6,
 .app-shell.is-night .registration-preflight-tile,
 .app-shell.is-night .registration-change-impact,
 .app-shell.is-night .registration-preflight-notes,
+.app-shell.is-night .poc-history-row,
+.app-shell.is-night .poc-history-footer,
 .app-shell.is-night .participant-hero,
 .app-shell.is-night .participant-detail-tile,
 .app-shell.is-night .cohort-material-bank,
