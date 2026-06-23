@@ -58,8 +58,63 @@ function money(value: unknown) {
   return `$${Number(value ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-function defaultInvoiceNumber(id: string, date: Date = new Date()) {
-  return `RPD-${date.getFullYear()}-${id.slice(-8).toUpperCase()}`;
+function slugPart(value: string) {
+  return value
+    .normalize("NFKD")
+    .replace(/[^\w\s-]/g, "")
+    .trim()
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .toUpperCase();
+}
+
+function presenterInvoiceCode(presenter?: { firstName?: string | null; lastName?: string | null } | null) {
+  const fullName = `${presenter?.firstName ?? ""} ${presenter?.lastName ?? ""}`.trim();
+  const known: Record<string, string> = {
+    "kim marshall": "KM",
+    "peter liljedahl": "PL",
+    "jessica garcia": "JG",
+    "the core group": "TCG"
+  };
+  const key = fullName.toLowerCase();
+  if (known[key]) {
+    return known[key];
+  }
+
+  const words = fullName.split(/\s+/).filter(Boolean);
+  return (words.length ? words.map((word) => word[0]).join("") : "RPD").slice(0, 3).toUpperCase();
+}
+
+async function defaultInvoiceNumber(input: {
+  id: string;
+  cohort: { presenter?: { firstName?: string | null; lastName?: string | null } | null };
+  organizationName?: string | null;
+  invoiceDraftClient?: Pick<typeof prisma.invoiceDraft, "findMany">;
+}) {
+  const base = [
+    presenterInvoiceCode(input.cohort.presenter),
+    slugPart(input.organizationName || "COHORT")
+  ].filter(Boolean).join("-");
+  const invoiceDraftClient = input.invoiceDraftClient ?? prisma.invoiceDraft;
+  const existing = await invoiceDraftClient.findMany({
+    where: {
+      id: { not: input.id },
+      invoiceNumber: {
+        startsWith: base
+      }
+    },
+    select: { invoiceNumber: true }
+  });
+
+  if (!existing.some((row) => row.invoiceNumber === base)) {
+    return base;
+  }
+
+  let suffix = existing.length + 1;
+  while (existing.some((row) => row.invoiceNumber === `${base}-${suffix}`)) {
+    suffix += 1;
+  }
+  return `${base}-${suffix}`;
 }
 
 const printableInvoiceFields = new Set([
@@ -104,9 +159,10 @@ export async function listInvoiceDrafts(cohortId?: string) {
 export async function createInvoiceDraft(input: z.input<typeof invoiceDraftInputSchema>) {
   const data = invoiceDraftInputSchema.parse(input);
   const fallbackRegistration = data.registrationId
-    ? await prisma.registration.findUnique({ where: { id: data.registrationId }, include: { organization: true, cohort: true } })
+    ? await prisma.registration.findUnique({ where: { id: data.registrationId }, include: { organization: true, cohort: { include: { presenter: true } } } })
     : null;
   const registration = await fallbackRegistration;
+  const fallbackCohort = registration?.cohort ?? await prisma.cohort.findUniqueOrThrow({ where: { id: data.cohortId }, include: { presenter: true } });
 
   if (registration?.archivedAt) {
     throw Object.assign(new Error("Archived registrations cannot be invoiced."), { code: "BAD_REQUEST", status: 400 });
@@ -127,7 +183,7 @@ export async function createInvoiceDraft(input: z.input<typeof invoiceDraftInput
         cohortId: data.cohortId,
         registrationId: data.registrationId,
         organizationId: data.organizationId ?? registration?.organizationId,
-        invoiceNumber: data.invoiceNumber ?? registration?.invoiceNumber,
+        invoiceNumber: data.invoiceNumber,
         purchaseOrderNumber: data.purchaseOrderNumber ?? registration?.purchaseOrderNumber,
         issueDate: data.issueDate ?? new Date(),
         dueDate: data.dueDate,
@@ -158,9 +214,20 @@ export async function createInvoiceDraft(input: z.input<typeof invoiceDraftInput
       });
     }
 
+    const organizationName = registration?.organization?.name ?? (data.organizationId
+      ? (await tx.organization.findUnique({ where: { id: data.organizationId }, select: { name: true } }))?.name
+      : null);
+
     return tx.invoiceDraft.update({
       where: { id: created.id },
-      data: { invoiceNumber: defaultInvoiceNumber(created.id, created.issueDate) },
+      data: {
+        invoiceNumber: await defaultInvoiceNumber({
+          id: created.id,
+          cohort: fallbackCohort,
+          organizationName,
+          invoiceDraftClient: tx.invoiceDraft
+        })
+      },
       include: invoiceInclude()
     });
   });

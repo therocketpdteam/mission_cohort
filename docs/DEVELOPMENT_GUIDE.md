@@ -151,6 +151,14 @@ If a feature shows `Blocked`, keep the UI compatibility fallback in place and do
 ## Invoice Workbench
 
 - Cohort `Distribution` is the finance home, but registration quick view must also expose linked invoice drafts so operators can create, edit, generate, open, and send documents without leaving the registration context.
+- New invoice numbers default to `{thought-leader-code}-{organization-name}`, such as `KM-RIVERSIDE-SCHOOL-DISTRICT`, with a numeric suffix when a duplicate exists. Operators may still override the value before saving when finance needs a special case.
 - Editing printable invoice fields, including line items, dates, PO number, status, paid amount, tax, notes, or invoice number, invalidates existing generated PDFs/receipts. Operators must regenerate the document after saving those changes.
 - QuickBooks fields remain references/status only in v1. Editing QuickBooks reference fields must not invalidate generated PDFs.
 - Invoice and receipt sends use Communications with the generated PDF attached and dedupe billing plus POC recipient emails.
+
+## Registration Pricing And Attribution
+
+- Registration totals auto-calculate from the selected cohort's `pricePerParticipant` times participant count.
+- If a cohort does not have a configured price, Mission Control uses the central fallback matrix in `src/config/cohortPricing.ts` for 3-, 4-, 5-, and 8-session cohorts. Update that file intentionally when RocketPD pricing changes.
+- Registration source display uses structured UTM fields first, then landing page, then source fallback. Raw provider labels such as `jotform` should not be the primary visible source when UTM or landing-page context exists.
+- Legacy Docs/W-9/Invoice URL fields are not part of the primary registration editor. Generated invoice PDFs and receipts live in invoice drafts instead.

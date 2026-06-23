@@ -334,6 +334,8 @@ List Console Pattern:
 - Repeated session defaults such as meeting URL, location, and timezone should live in a small defaults card above the checklist.
 - Registrations should remove unclear primary-table columns such as `Docs`; supporting document status belongs in quick view/edit.
 - Registration roster status is read-only and calculated from saved participants. The quick view should expose a clear `Add POC to roster` action when the POC is missing and an expected seat remains open.
+- Registration edit forms should allow operational typo fixes for contact, billing, organization, payment, PO, UTM/source, QuickBooks reference, and notes fields. Do not show legacy W-9 URL, Invoice URL, or Docs status in the primary editor.
+- Registration totals should feel calculated, not arbitrary: default to cohort price per participant multiplied by participant count, with a clear helper when fallback session-count pricing is being used.
 - Published/Active registration quick views show one compact pending-change review surface above registration detail. It lists participant and finance changes and exposes one `Apply Changes` action; do not scatter separate calendar, email, and invoice buttons around the roster.
 - Pending registration changes are saved app data awaiting external delivery, not a second editable form. Reverting the underlying field or participant change should remove the corresponding review row automatically.
 - Participants should prioritize contact, organization, status, send-message action, bulk status/message controls, and a quick-view drawer with contact, payment, email activity, and participation history matched by email.
@@ -428,7 +430,7 @@ Navigation should feel branded:
 - Registration source should use structured UTM fields when present.
 - Show a compact source pill in tables, then expose full UTM/source/referrer detail inside registration detail modals.
 - Registration quick views should include one compact communication-journey list showing the audience, template, timing, and status. Do not split POC confirmations, participant confirmations, scheduled milestones, and skipped milestones into separate cards.
-- Automation must be inspectable: show `Draft`, `Scheduled`, `Sent`, `Skipped`, and `Failed` states with the skipped/failure reason inline. Draft-copy should explain that publishing authorizes delivery.
+- Automation must be inspectable without noise: show scheduled, sent, sending, and failed emails in normal registration quick views with delivery/open/click context. Draft/skipped planning records may stay available in deeper diagnostics but should not dominate the operator drawer.
 - Do not display raw `jotform` as the primary source label when a campaign, source, or landing page is available.
 
 ## Acceptance Criteria For UI Work

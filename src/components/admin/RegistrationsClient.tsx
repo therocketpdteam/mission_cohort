@@ -24,6 +24,7 @@ import {
 import { GridColDef, GridRowParams, GridRowSelectionModel } from "./common";
 import { useEffect, useMemo, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
+import { pricePerParticipantForCohort, registrationTotalForCohort, sessionCountForPricing } from "@/config/cohortPricing";
 import { formatProperDisplay, formatRegistrationSource, formatStatusLabel } from "@/lib/formatting";
 import { RosterWorkbench } from "./RosterWorkbench";
 import { RegistrationPendingChangesPanel } from "./RegistrationPendingChangesPanel";
@@ -48,7 +49,7 @@ import {
 const paymentMethods = ["CREDIT_CARD", "PURCHASE_ORDER", "INVOICE", "COMPED", "UNKNOWN"];
 const paymentStatuses = ["PENDING", "INVOICED", "PARTIALLY_PAID", "PAID", "REFUNDED", "CANCELLED"];
 const rosterStatuses = ["NOT_REQUESTED", "NEEDED", "PARTIAL", "COMPLETE"];
-const documentStatuses = ["NOT_READY", "READY", "SENT", "FAILED"];
+const visibleJourneyStatuses = new Set(["SCHEDULED", "SENDING", "SENT", "FAILED"]);
 const visibilityOptions = [
   { value: "active", label: "Active registrations" },
   { value: "archived", label: "Archived registrations" },
@@ -102,6 +103,24 @@ function communicationIssueLabel(communication: AdminRow) {
   return null;
 }
 
+function communicationDeliverySummary(communication: AdminRow) {
+  const events = ((communication.emailEvents ?? []) as AdminRow[]).map((event) => String(event.eventType ?? "").toUpperCase());
+  const opened = events.filter((event) => event === "OPENED").length;
+  const clicked = events.filter((event) => event === "CLICKED").length;
+  const delivered = events.includes("DELIVERED");
+  const failed = events.find((event) => event === "FAILED" || event === "BOUNCED");
+
+  if (failed) {
+    return formatStatusLabel(failed);
+  }
+
+  return [
+    delivered ? "Delivered" : "",
+    opened ? `${opened} open${opened === 1 ? "" : "s"}` : "",
+    clicked ? `${clicked} click${clicked === 1 ? "" : "s"}` : ""
+  ].filter(Boolean).join(" · ");
+}
+
 function taskTemplateName(task: AdminRow) {
   if (task.category === "PAYMENT_FOLLOW_UP") {
     return "Payment Reminder";
@@ -151,16 +170,20 @@ export function RegistrationEditor({
   const [cohort, setCohort] = useState<AdminRow | null>(null);
   const [organization, setOrganization] = useState<AdminRow | null>(null);
   const [organizationSearch, setOrganizationSearch] = useState("");
+  const [lastAutoTotal, setLastAutoTotal] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (open) {
-      setValues(editing ?? emptyRegistration());
+      const nextValues = editing ?? emptyRegistration();
       const selectedCohortId = editing?.cohortId ?? defaultCohortId;
-      setCohort(cohorts.find((item) => item.id === selectedCohortId) ?? editing?.cohort ?? null);
+      const selectedCohort = cohorts.find((item) => item.id === selectedCohortId) ?? editing?.cohort ?? null;
+      setValues(nextValues);
+      setCohort(selectedCohort);
       setOrganization(organizations.find((item) => item.id === editing?.organizationId) ?? editing?.organization ?? null);
       setOrganizationSearch(editing?.organization?.name ?? "");
+      setLastAutoTotal(registrationTotalForCohort(selectedCohort, nextValues.participantCount));
       setError(null);
     }
   }, [cohorts, defaultCohortId, editing, open, organizations]);
@@ -168,6 +191,23 @@ export function RegistrationEditor({
   function setValue(name: string, value: unknown) {
     setValues((current) => ({ ...current, [name]: value }));
   }
+
+  const pricePerParticipant = pricePerParticipantForCohort(cohort);
+  const sessionCount = sessionCountForPricing(cohort);
+  const suggestedTotal = registrationTotalForCohort(cohort, values.participantCount);
+
+  useEffect(() => {
+    if (!open || !cohort) {
+      return;
+    }
+
+    const currentTotal = Number(values.totalAmount ?? 0);
+    const canAutoUpdate = currentTotal === 0 || (lastAutoTotal !== null && currentTotal === lastAutoTotal);
+    if (canAutoUpdate && Number.isFinite(suggestedTotal) && currentTotal !== suggestedTotal) {
+      setValues((current) => ({ ...current, totalAmount: suggestedTotal }));
+      setLastAutoTotal(suggestedTotal);
+    }
+  }, [cohort, editing, lastAutoTotal, open, suggestedTotal, values.totalAmount]);
 
   async function createOrganizationInline() {
     if (!organizationSearch.trim()) {
@@ -252,6 +292,15 @@ export function RegistrationEditor({
           <Grid size={{ xs: 12, md: 4 }}>
             <TextField fullWidth label="Primary contact phone" value={values.primaryContactPhone ?? ""} onChange={(event) => setValue("primaryContactPhone", event.target.value)} />
           </Grid>
+          <Grid size={{ xs: 12, md: 4 }}>
+            <TextField fullWidth label="Primary contact title" value={values.primaryContactTitle ?? ""} onChange={(event) => setValue("primaryContactTitle", event.target.value)} />
+          </Grid>
+          <Grid size={{ xs: 12, md: 4 }}>
+            <TextField fullWidth label="Billing contact name" value={values.billingContactName ?? ""} onChange={(event) => setValue("billingContactName", event.target.value)} />
+          </Grid>
+          <Grid size={{ xs: 12, md: 4 }}>
+            <TextField fullWidth label="Billing contact email" type="email" value={values.billingContactEmail ?? ""} onChange={(event) => setValue("billingContactEmail", event.target.value)} />
+          </Grid>
           <Grid size={{ xs: 12, md: 3 }}>
             <TextField fullWidth label="Participant count" type="number" value={values.participantCount ?? 0} onChange={(event) => setValue("participantCount", Number(event.target.value))} />
           </Grid>
@@ -269,24 +318,19 @@ export function RegistrationEditor({
             </TextField>
           </Grid>
           <Grid size={{ xs: 12, md: 3 }}>
-            <TextField fullWidth label="Invoice number" value={values.invoiceNumber ?? ""} onChange={(event) => setValue("invoiceNumber", event.target.value)} />
-          </Grid>
-          <Grid size={{ xs: 12, md: 3 }}>
             <TextField fullWidth label="PO number" value={values.purchaseOrderNumber ?? ""} onChange={(event) => setValue("purchaseOrderNumber", event.target.value)} />
           </Grid>
-          <Grid size={{ xs: 12, md: 3 }}>
-            <TextField fullWidth label="Total amount" type="number" value={values.totalAmount ?? 0} onChange={(event) => setValue("totalAmount", Number(event.target.value))} />
-          </Grid>
-          <Grid size={{ xs: 12, md: 3 }}>
-            <TextField fullWidth select label="Docs status" value={values.supportingDocumentStatus ?? "NOT_READY"} onChange={(event) => setValue("supportingDocumentStatus", event.target.value)}>
-              {documentStatuses.map((value) => <MenuItem value={value} key={value}>{formatStatusLabel(value)}</MenuItem>)}
-            </TextField>
-          </Grid>
           <Grid size={{ xs: 12, md: 6 }}>
-            <TextField fullWidth label="W-9 URL" value={values.w9Url ?? ""} onChange={(event) => setValue("w9Url", event.target.value)} />
-          </Grid>
-          <Grid size={{ xs: 12, md: 6 }}>
-            <TextField fullWidth label="Invoice URL" value={values.invoiceUrl ?? ""} onChange={(event) => setValue("invoiceUrl", event.target.value)} />
+            <TextField
+              fullWidth
+              label="Total amount"
+              type="number"
+              value={values.totalAmount ?? 0}
+              onChange={(event) => setValue("totalAmount", Number(event.target.value))}
+              helperText={pricePerParticipant > 0
+                ? `${money(pricePerParticipant)} x ${Number(values.participantCount ?? 0)} participant${Number(values.participantCount ?? 0) === 1 ? "" : "s"}${Number(cohort?.pricePerParticipant ?? 0) > 0 ? "" : ` · fallback ${sessionCount || "unknown"}-session pricing`}`
+                : "No cohort price is configured yet; enter the total manually."}
+            />
           </Grid>
           <Grid size={{ xs: 12, md: 6 }}>
             <TextField fullWidth label="QuickBooks customer ref" value={values.quickBooksCustomerRef ?? ""} onChange={(event) => setValue("quickBooksCustomerRef", event.target.value)} />
@@ -296,6 +340,34 @@ export function RegistrationEditor({
           </Grid>
           <Grid size={{ xs: 12, md: 6 }}>
             <TextField fullWidth label="QuickBooks realm ID" value={values.quickBooksRealmId ?? ""} onChange={(event) => setValue("quickBooksRealmId", event.target.value)} />
+          </Grid>
+          <Grid size={{ xs: 12 }}>
+            <div className="registration-editor-subsection">
+              <div>
+                <Typography variant="subtitle2">Tracking</Typography>
+                <Typography variant="body2" color="text.secondary">UTM fields power source filters and reports. Leave blank when the link did not include them.</Typography>
+              </div>
+              <Grid container spacing={2}>
+                <Grid size={{ xs: 12, md: 4 }}>
+                  <TextField fullWidth label="UTM source" value={values.utmSource ?? ""} onChange={(event) => setValue("utmSource", event.target.value)} />
+                </Grid>
+                <Grid size={{ xs: 12, md: 4 }}>
+                  <TextField fullWidth label="UTM medium" value={values.utmMedium ?? ""} onChange={(event) => setValue("utmMedium", event.target.value)} />
+                </Grid>
+                <Grid size={{ xs: 12, md: 4 }}>
+                  <TextField fullWidth label="UTM campaign" value={values.utmCampaign ?? ""} onChange={(event) => setValue("utmCampaign", event.target.value)} />
+                </Grid>
+                <Grid size={{ xs: 12, md: 4 }}>
+                  <TextField fullWidth label="UTM content" value={values.utmContent ?? ""} onChange={(event) => setValue("utmContent", event.target.value)} />
+                </Grid>
+                <Grid size={{ xs: 12, md: 4 }}>
+                  <TextField fullWidth label="UTM term" value={values.utmTerm ?? ""} onChange={(event) => setValue("utmTerm", event.target.value)} />
+                </Grid>
+                <Grid size={{ xs: 12, md: 4 }}>
+                  <TextField fullWidth label="Landing page URL" value={values.landingPageUrl ?? ""} onChange={(event) => setValue("landingPageUrl", event.target.value)} />
+                </Grid>
+              </Grid>
+            </div>
           </Grid>
           <Grid size={{ xs: 12 }}>
             <TextField fullWidth multiline minRows={3} label="Notes" value={values.notes ?? ""} onChange={(event) => setValue("notes", event.target.value)} />
@@ -658,9 +730,16 @@ function RegistrationDetailDialog({
                 <p>POC and participant confirmations, upcoming milestones, and skipped messages.</p>
               </div>
             </div>
-            {(registration.communications ?? []).length > 0 ? (
+            {(() => {
+              const visibleCommunications = ((registration.communications ?? []) as AdminRow[]).filter((communication) => visibleJourneyStatuses.has(String(communication.status ?? "")));
+
+              if (visibleCommunications.length === 0) {
+                return <EmptyState title="No scheduled or sent emails yet" description="Scheduled confirmations, reminders, sent emails, and failed delivery attempts will appear here." />;
+              }
+
+              return (
               <div className="quick-view-list">
-                {(registration.communications ?? []).map((communication: AdminRow) => {
+                {visibleCommunications.map((communication: AdminRow) => {
                   const recipient = communication.participant
                     ? `${formatProperDisplay(`${communication.participant.firstName} ${communication.participant.lastName}`)} · ${communication.participant.email}`
                     : Array.isArray(communication.recipientEmails)
@@ -671,16 +750,15 @@ function RegistrationDetailDialog({
                     <div className="quick-view-list-row" key={communication.id}>
                       <div>
                         <strong>{communication.template?.name ?? communication.subject ?? "Registration message"}</strong>
-                        <span>{[recipient, timing ? new Date(timing).toLocaleString("en-US") : "", communication.providerError].filter(Boolean).join(" · ")}</span>
+                        <span>{[recipient, timing ? new Date(timing).toLocaleString("en-US") : "", communicationDeliverySummary(communication), communication.providerError].filter(Boolean).join(" · ")}</span>
                       </div>
                       <StatusChip value={communication.status} />
                     </div>
                   );
                 })}
               </div>
-            ) : (
-              <EmptyState title="No communication journey yet" description="The journey is created when the registration is added or updated. Draft cohorts keep these messages safely queued until publishing." />
-            )}
+              );
+            })()}
           </section>
 
           <section className="registration-detail-section">
@@ -784,7 +862,6 @@ function RegistrationDetailDialog({
               </div>
             </div>
             <div className="quick-view-grid">
-              <DetailTile label="Docs" value={formatStatusLabel(registration.supportingDocumentStatus)} />
               <DetailTile label="QB invoice" value={registration.quickBooksInvoiceRef ?? "-"} />
               <DetailTile label="QB status" value={formatStatusLabel(registration.quickBooksInvoiceStatus ?? "UNKNOWN")} />
               <DetailTile label="QB sync" value={formatStatusLabel(registration.quickBooksSyncStatus ?? "NOT SYNCED")} />
@@ -819,7 +896,6 @@ export function RegistrationsClient() {
   const [templates, setTemplates] = useState<AdminRow[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkPaymentStatus, setBulkPaymentStatus] = useState("");
-  const [bulkDocumentStatus, setBulkDocumentStatus] = useState("");
   const [bulkTemplateId, setBulkTemplateId] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<AdminRow | null>(null);
@@ -921,7 +997,7 @@ export function RegistrationsClient() {
     }
   }
 
-  async function runBulkAction(action: "confirm" | "cancel" | "archive" | "restore" | "payment" | "docs" | "send") {
+  async function runBulkAction(action: "confirm" | "cancel" | "archive" | "restore" | "payment" | "send") {
     if (selectedIds.length === 0) {
       return;
     }
@@ -944,11 +1020,6 @@ export function RegistrationsClient() {
           return;
         }
 
-        if (action === "docs" && !bulkDocumentStatus) {
-          notifyError("Choose a document status first");
-          return;
-        }
-
         await adminApi("/api/registrations", {
           method: "PATCH",
           body: {
@@ -958,8 +1029,7 @@ export function RegistrationsClient() {
             ...(action === "cancel" ? { bulkAction: "cancel" } : {}),
             ...(action === "archive" ? { bulkAction: "archive" } : {}),
             ...(action === "restore" ? { bulkAction: "restore" } : {}),
-            ...(action === "payment" && bulkPaymentStatus ? { paymentStatus: bulkPaymentStatus } : {}),
-            ...(action === "docs" && bulkDocumentStatus ? { supportingDocumentStatus: bulkDocumentStatus } : {})
+            ...(action === "payment" && bulkPaymentStatus ? { paymentStatus: bulkPaymentStatus } : {})
           }
         });
         notifySuccess("Bulk update complete");
@@ -1143,10 +1213,6 @@ export function RegistrationsClient() {
               {paymentStatuses.map((value) => <MenuItem value={value} key={value}>{formatStatusLabel(value)}</MenuItem>)}
             </TextField>
             <Button size="small" variant="outlined" onClick={() => runBulkAction("payment")}>Apply Payment</Button>
-            <TextField select size="small" label="Docs" value={bulkDocumentStatus} onChange={(event) => setBulkDocumentStatus(event.target.value)} sx={{ minWidth: 160 }}>
-              {documentStatuses.map((value) => <MenuItem value={value} key={value}>{formatStatusLabel(value)}</MenuItem>)}
-            </TextField>
-            <Button size="small" variant="outlined" onClick={() => runBulkAction("docs")}>Apply Docs</Button>
             <TextField select size="small" label="Template" value={bulkTemplateId} onChange={(event) => setBulkTemplateId(event.target.value)} sx={{ minWidth: 220 }}>
               {templates.filter((template) => template.active).map((template) => <MenuItem value={template.id} key={template.id}>{template.name}</MenuItem>)}
             </TextField>

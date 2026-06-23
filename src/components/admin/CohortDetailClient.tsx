@@ -28,7 +28,7 @@ import { GridColDef } from "./common";
 import type { CSSProperties } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { adminApi, uploadAdminFile } from "@/lib/adminApi";
-import { formatProperDisplay, formatStatusLabel } from "@/lib/formatting";
+import { formatProperDisplay, formatRegistrationSource, formatStatusLabel } from "@/lib/formatting";
 import { formatDateTimeInZone, formatTimeInZone } from "@/lib/timezones";
 import { RosterWorkbench } from "./RosterWorkbench";
 import { RegistrationPendingChangesPanel } from "./RegistrationPendingChangesPanel";
@@ -147,6 +147,7 @@ const participantStatuses = ["REGISTERED", "CANCELLED", "COMPLETED", "NO_SHOW"];
 const rosterStatuses = ["NOT_REQUESTED", "NEEDED", "PARTIAL", "COMPLETE"];
 const invoiceStatuses = ["DRAFT", "SENT", "PAID", "VOIDED", "CANCELLED"];
 const payoutStatuses = ["PLANNED", "PARTIAL", "PAID", "CANCELLED"];
+const visibleJourneyStatuses = new Set(["SCHEDULED", "SENDING", "SENT", "FAILED"]);
 
 type FinanceHealth = {
   sendgridReady: boolean;
@@ -176,6 +177,24 @@ function communicationIssueLabel(communication: AdminRow) {
     return "Reviewed issue";
   }
   return null;
+}
+
+function communicationDeliverySummary(communication: AdminRow) {
+  const events = ((communication.emailEvents ?? []) as AdminRow[]).map((event) => String(event.eventType ?? "").toUpperCase());
+  const opened = events.filter((event) => event === "OPENED").length;
+  const clicked = events.filter((event) => event === "CLICKED").length;
+  const delivered = events.includes("DELIVERED");
+  const failed = events.find((event) => event === "FAILED" || event === "BOUNCED");
+
+  if (failed) {
+    return formatStatusLabel(failed);
+  }
+
+  return [
+    delivered ? "Delivered" : "",
+    opened ? `${opened} open${opened === 1 ? "" : "s"}` : "",
+    clicked ? `${clicked} click${clicked === 1 ? "" : "s"}` : ""
+  ].filter(Boolean).join(" · ");
 }
 
 function taskTemplateName(task: AdminRow) {
@@ -382,7 +401,6 @@ function PaymentDetailDialog({
   const [status, setStatus] = useState("");
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [purchaseOrderNumber, setPurchaseOrderNumber] = useState("");
-  const [invoiceUrl, setInvoiceUrl] = useState("");
   const [draftOpen, setDraftOpen] = useState(false);
   const [invoiceDraft, setInvoiceDraft] = useState<AdminRow | null>(null);
 
@@ -391,7 +409,6 @@ function PaymentDetailDialog({
       setStatus(payment.status ?? "PENDING");
       setInvoiceNumber(payment.invoiceNumber ?? payment.registration?.invoiceNumber ?? "");
       setPurchaseOrderNumber(payment.registration?.purchaseOrderNumber ?? "");
-      setInvoiceUrl(payment.registration?.invoiceUrl ?? "");
     }
   }, [payment]);
 
@@ -409,7 +426,7 @@ function PaymentDetailDialog({
       if (payment.registrationId) {
         await adminApi("/api/registrations", {
           method: "PATCH",
-          body: { id: payment.registrationId, paymentStatus: status, invoiceNumber, purchaseOrderNumber, invoiceUrl }
+          body: { id: payment.registrationId, paymentStatus: status, invoiceNumber, purchaseOrderNumber }
         });
       }
 
@@ -472,9 +489,6 @@ function PaymentDetailDialog({
               </Grid>
               <Grid size={{ xs: 12, sm: 6 }}>
                 <TextField fullWidth label="PO number" value={purchaseOrderNumber} onChange={(event) => setPurchaseOrderNumber(event.target.value)} />
-              </Grid>
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <TextField fullWidth label="Invoice URL" value={invoiceUrl} onChange={(event) => setInvoiceUrl(event.target.value)} />
               </Grid>
             </Grid>
           ) : (
@@ -926,6 +940,7 @@ export function CohortDetailClient({ id }: { id: string }) {
   const [invoiceDialogOpen, setInvoiceDialogOpen] = useState(false);
   const [editingInvoice, setEditingInvoice] = useState<AdminRow | null>(null);
   const [invoiceSeedRegistration, setInvoiceSeedRegistration] = useState<AdminRow | null>(null);
+  const [invoicePreview, setInvoicePreview] = useState<{ url: string; title: string } | null>(null);
   const [payoutDialogOpen, setPayoutDialogOpen] = useState(false);
   const [editingPayout, setEditingPayout] = useState<AdminRow | null>(null);
   const [distributionSettings, setDistributionSettings] = useState({ commissionPercent: "30", tlSharePercent: "70", tlName: "", notes: "" });
@@ -1435,6 +1450,14 @@ export function CohortDetailClient({ id }: { id: string }) {
     setEditingInvoice(invoice ?? null);
     setInvoiceSeedRegistration(registration ?? null);
     setInvoiceDialogOpen(true);
+  }
+
+  function openInvoicePreview(url?: string | null, title = "Invoice PDF") {
+    if (!url) {
+      notifyError("Generate the PDF before previewing it.");
+      return;
+    }
+    setInvoicePreview({ url, title });
   }
 
   async function saveDistributionSettings() {
@@ -2300,11 +2323,11 @@ export function CohortDetailClient({ id }: { id: string }) {
                     actions={[
                       { label: "Edit invoice", onClick: () => openInvoiceEditor(invoice) },
                       { label: invoice.pdfUrl ? "Regenerate PDF" : "Generate PDF", onClick: () => void generateInvoiceDocument(invoice) },
-                      ...(invoice.pdfUrl ? [{ label: "Open PDF", onClick: () => window.open(invoice.pdfUrl, "_blank", "noreferrer") }] : []),
+                      ...(invoice.pdfUrl ? [{ label: "Preview PDF", onClick: () => openInvoicePreview(invoice.pdfUrl, `Invoice ${invoice.invoiceNumber ?? ""}`.trim()) }] : []),
                       { label: financeHealth?.sendgridReady === false ? "Send invoice unavailable" : "Send invoice", disabled: financeHealth?.sendgridReady === false, onClick: () => void sendInvoiceDocument(invoice) },
                       { label: invoice.receiptUrl ? "Regenerate receipt" : "Generate receipt", onClick: () => void generateInvoiceDocument(invoice, true) },
                       ...(invoice.receiptUrl ? [
-                        { label: "Open receipt", onClick: () => window.open(invoice.receiptUrl, "_blank", "noreferrer") },
+                        { label: "Preview receipt", onClick: () => openInvoicePreview(invoice.receiptUrl, `Receipt ${invoice.invoiceNumber ?? ""}`.trim()) },
                         { label: financeHealth?.sendgridReady === false ? "Send receipt unavailable" : "Send receipt", disabled: financeHealth?.sendgridReady === false, onClick: () => void sendInvoiceDocument(invoice, true) }
                       ] : [])
                     ]}
@@ -2498,6 +2521,20 @@ export function CohortDetailClient({ id }: { id: string }) {
         }}
         onError={notifyError}
       />
+      <Dialog open={Boolean(invoicePreview)} onClose={() => setInvoicePreview(null)} maxWidth="lg" fullWidth>
+        <DialogTitle>{invoicePreview?.title ?? "Invoice PDF"}</DialogTitle>
+        <DialogContent>
+          {invoicePreview?.url ? (
+            <iframe className="invoice-preview-frame" src={invoicePreview.url} title={invoicePreview.title} />
+          ) : (
+            <Typography color="text.secondary">Generate the PDF before previewing it.</Typography>
+          )}
+        </DialogContent>
+        <DialogActions>
+          {invoicePreview?.url && <Button href={invoicePreview.url} target="_blank" rel="noreferrer" variant="outlined">Open in New Tab</Button>}
+          <Button onClick={() => setInvoicePreview(null)}>Close</Button>
+        </DialogActions>
+      </Dialog>
       <PayoutEditorDialog
         cohortId={id}
         payout={editingPayout}
@@ -2553,10 +2590,10 @@ export function CohortDetailClient({ id }: { id: string }) {
               <DetailField label="Total" value={money(registrationDetail.totalAmount)} />
               <DetailField label="Payment" value={formatStatusLabel(registrationDetail.paymentStatus)} />
               <DetailField label="Roster" value={formatStatusLabel(registrationDetail.participantListStatus)} />
-              <DetailField label="Supporting Docs" value={formatStatusLabel(registrationDetail.supportingDocumentStatus)} />
               <DetailField label="Invoice" value={registrationDetail.invoiceNumber} />
               <DetailField label="PO" value={registrationDetail.purchaseOrderNumber} />
-              <DetailField label="Source" value={registrationDetail.source} />
+              <DetailField label="UTM / Source" value={formatRegistrationSource(registrationDetail)} />
+              <DetailField label="Landing Page" value={registrationDetail.landingPageUrl} />
             </div>
             <SectionCard title="Notes">
               <Typography color="text.secondary">{registrationDetail.notes ?? "No notes captured yet."}</Typography>
@@ -2588,11 +2625,11 @@ export function CohortDetailClient({ id }: { id: string }) {
                             actions={[
                               { label: "Edit invoice", onClick: () => openInvoiceEditor(invoice, registrationDetail) },
                               { label: invoice.pdfUrl ? "Regenerate PDF" : "Generate PDF", onClick: () => void generateInvoiceDocument(invoice) },
-                              ...(invoice.pdfUrl ? [{ label: "Open PDF", onClick: () => window.open(invoice.pdfUrl, "_blank", "noreferrer") }] : []),
+                              ...(invoice.pdfUrl ? [{ label: "Preview PDF", onClick: () => openInvoicePreview(invoice.pdfUrl, `Invoice ${invoice.invoiceNumber ?? ""}`.trim()) }] : []),
                               { label: financeHealth?.sendgridReady === false ? "Send invoice unavailable" : "Send invoice", disabled: financeHealth?.sendgridReady === false, onClick: () => void sendInvoiceDocument(invoice) },
                               { label: invoice.receiptUrl ? "Regenerate receipt" : "Generate receipt", onClick: () => void generateInvoiceDocument(invoice, true) },
                               ...(invoice.receiptUrl ? [
-                                { label: "Open receipt", onClick: () => window.open(invoice.receiptUrl, "_blank", "noreferrer") },
+                                { label: "Preview receipt", onClick: () => openInvoicePreview(invoice.receiptUrl, `Receipt ${invoice.invoiceNumber ?? ""}`.trim()) },
                                 { label: financeHealth?.sendgridReady === false ? "Send receipt unavailable" : "Send receipt", disabled: financeHealth?.sendgridReady === false, onClick: () => void sendInvoiceDocument(invoice, true) }
                               ] : [])
                             ]}
@@ -2646,32 +2683,38 @@ export function CohortDetailClient({ id }: { id: string }) {
               )}
             </SectionCard>
             <SectionCard title="Registration Communication Journey">
-              {(registrationDetail.communications ?? []).length > 0 ? (
-                <div className="quick-view-list">
-                  {(registrationDetail.communications ?? []).map((communication: AdminRow) => {
-                    const recipient = communication.participant
-                      ? `${formatProperDisplay(`${communication.participant.firstName} ${communication.participant.lastName}`)} · ${communication.participant.email}`
-                      : Array.isArray(communication.recipientEmails)
-                        ? communication.recipientEmails.join(", ")
-                        : registrationDetail.primaryContactEmail;
-                    return (
-                      <div className="quick-view-list-row" key={communication.id}>
-                        <div>
-                          <strong>{communication.template?.name ?? communication.subject ?? "Registration message"}</strong>
-                          <span>
-                            {[recipient, communication.sentAt || communication.scheduledFor || communication.createdAt
-                              ? new Date(communication.sentAt ?? communication.scheduledFor ?? communication.createdAt).toLocaleString("en-US")
-                              : "", communication.providerError].filter(Boolean).join(" · ")}
-                          </span>
+              {(() => {
+                const visibleCommunications = ((registrationDetail.communications ?? []) as AdminRow[]).filter((communication) => visibleJourneyStatuses.has(String(communication.status ?? "")));
+
+                if (visibleCommunications.length === 0) {
+                  return <Typography color="text.secondary">No scheduled or sent emails yet. Scheduled confirmations, reminders, sent emails, and failed delivery attempts will appear here.</Typography>;
+                }
+
+                return (
+                  <div className="quick-view-list">
+                    {visibleCommunications.map((communication: AdminRow) => {
+                      const recipient = communication.participant
+                        ? `${formatProperDisplay(`${communication.participant.firstName} ${communication.participant.lastName}`)} · ${communication.participant.email}`
+                        : Array.isArray(communication.recipientEmails)
+                          ? communication.recipientEmails.join(", ")
+                          : registrationDetail.primaryContactEmail;
+                      return (
+                        <div className="quick-view-list-row" key={communication.id}>
+                          <div>
+                            <strong>{communication.template?.name ?? communication.subject ?? "Registration message"}</strong>
+                            <span>
+                              {[recipient, communication.sentAt || communication.scheduledFor || communication.createdAt
+                                ? new Date(communication.sentAt ?? communication.scheduledFor ?? communication.createdAt).toLocaleString("en-US")
+                                : "", communicationDeliverySummary(communication), communication.providerError].filter(Boolean).join(" · ")}
+                            </span>
+                          </div>
+                          <StatusChip value={communication.status} />
                         </div>
-                        <StatusChip value={communication.status} />
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <Typography color="text.secondary">No communication journey yet. Draft cohorts keep new messages safely queued until publishing.</Typography>
-              )}
+                      );
+                    })}
+                  </div>
+                );
+              })()}
             </SectionCard>
             <SectionCard
               title="POC Communication History"

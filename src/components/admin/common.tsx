@@ -500,13 +500,28 @@ export function DetailField({ label, value, proper = false }: { label: string; v
 
 export function useNotifier() {
   const [notice, setNotice] = useState<{ message: string; severity: "success" | "error" } | null>(null);
+  const close = useCallback(() => setNotice(null), []);
+
+  useEffect(() => {
+    if (!notice) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => setNotice(null), notice.severity === "error" ? 9000 : 4500);
+    return () => window.clearTimeout(timeout);
+  }, [notice]);
 
   return {
     notifySuccess: useCallback((message: string) => setNotice({ message, severity: "success" }), []),
     notifyError: useCallback((message: string) => setNotice({ message, severity: "error" }), []),
     snackbar: (
       <Snackbar open={Boolean(notice)}>
-        <Alert severity={notice?.severity ?? "success"}>{notice?.message}</Alert>
+        <Alert severity={notice?.severity ?? "success"} className="ui-alert-toast">
+          <span>{notice?.message}</span>
+          <IconButton type="button" size="small" aria-label="Dismiss notification" onClick={close}>
+            <CloseIcon fontSize="small" />
+          </IconButton>
+        </Alert>
       </Snackbar>
     )
   };
