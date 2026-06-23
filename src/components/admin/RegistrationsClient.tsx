@@ -28,6 +28,7 @@ import { pricePerParticipantForCohort, registrationTotalForCohort, sessionCountF
 import { formatProperDisplay, formatRegistrationSource, formatStatusLabel } from "@/lib/formatting";
 import { RosterWorkbench } from "./RosterWorkbench";
 import { RegistrationPendingChangesPanel } from "./RegistrationPendingChangesPanel";
+import { RegistrationDeliveryPreflight } from "./RegistrationDeliveryPreflight";
 import type { ParsedRosterParticipant } from "@/lib/rosterParser";
 import {
   AdminRow,
@@ -671,6 +672,8 @@ function RegistrationDetailDialog({
               onError(message);
             }}
           />
+
+          <RegistrationDeliveryPreflight registration={registration} onAddPrimaryContact={addPocAsParticipant} />
 
           <div className="quick-view-grid">
             <DetailTile label="POC email" value={registration.primaryContactEmail} />

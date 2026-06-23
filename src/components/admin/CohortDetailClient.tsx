@@ -32,6 +32,7 @@ import { formatProperDisplay, formatRegistrationSource, formatStatusLabel } from
 import { formatDateTimeInZone, formatTimeInZone } from "@/lib/timezones";
 import { RosterWorkbench } from "./RosterWorkbench";
 import { RegistrationPendingChangesPanel } from "./RegistrationPendingChangesPanel";
+import { RegistrationDeliveryPreflight } from "./RegistrationDeliveryPreflight";
 import { RegistrationEditor } from "./RegistrationsClient";
 import type { ParsedRosterParticipant } from "@/lib/rosterParser";
 import {
@@ -2581,6 +2582,7 @@ export function CohortDetailClient({ id }: { id: string }) {
               }}
               onError={notifyError}
             />
+            <RegistrationDeliveryPreflight registration={registrationDetail} onAddPrimaryContact={addRegistrationPocToRoster} />
             <div className="quick-view-grid">
               <DetailField label="Contact" value={registrationDetail.primaryContactName} proper />
               <DetailField label="Email" value={registrationDetail.primaryContactEmail} />

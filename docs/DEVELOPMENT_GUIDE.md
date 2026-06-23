@@ -137,6 +137,7 @@ If a feature shows `Blocked`, keep the UI compatibility fallback in place and do
 - Roster status is derived from saved participant records and the expected participant count. It is not a manually maintained registration field.
 - If a legacy or team registration is missing its POC from the roster, registration quick view exposes `Add POC to roster` while an expected seat remains open.
 - Increasing the expected participant count does not invent additional people; the roster remains Partial until those participant records are saved.
+- Registration detail surfaces must show a roster and delivery preflight before operators apply changes: expected seats vs saved participants, whether the POC is on the participant roster, participant delivery recipients, pending add/remove impact, and any safety-mode recipient blockers.
 
 ## Registration Change Control
 
