@@ -122,6 +122,7 @@ export const roadmapCards: RoadmapCard[] = [
       { title: "Roster/payment filters", status: "done", note: "Payment, roster, cohort, organization, source, and archive filters use the shared compact filter pattern.", priority: "medium" },
       { title: "Participant history", status: "done", note: "Participant detail now matches by email across cohorts for quick participation context.", priority: "medium" },
       { title: "Bulk actions", status: "done", note: "Registration and participant bulk status, certificate, archive/restore, and send-message actions are available from list views.", priority: "medium" },
+      { title: "Registration change control", status: "done", note: "Published/Active participant and finance edits accumulate in one review batch, then coordinate participant confirmations, Google attendee updates, invoice refresh, and a consolidated POC summary.", priority: "high" },
       { title: "Attachments", status: "planned", note: "Needs private storage flow connected to communications.", priority: "medium" }
     ]
   },
@@ -138,7 +139,7 @@ export const roadmapCards: RoadmapCard[] = [
       { title: "SendGrid delivery/open/error telemetry", status: "in_progress", note: "Recipient timelines support events; production webhook key is still a health warning.", priority: "high" },
       { title: "Dashboard issue surfacing", status: "done", note: "Dashboard issue counts now track unreviewed failed/bounced recipients.", priority: "medium" },
       { title: "Outbound attachments", status: "done", note: "Per-message uploads, cohort/session material links, and live SendGrid delivery are available.", priority: "high" },
-      { title: "Registration communication journeys", status: "in_progress", note: "POC and participant confirmations, publish activation, late-registration milestone skipping, calendar enrollment, and a visible journey timeline are implemented. Roster/invoice revision notices remain.", priority: "high" },
+      { title: "Registration communication journeys", status: "in_progress", note: "POC/participant confirmations, milestone eligibility, calendar enrollment, visible timelines, and consolidated roster/invoice change delivery are implemented. Payment-policy and inbound-reply context remain.", priority: "high" },
       { title: "Shared inbound support inbox", status: "planned", note: "Connect support@rocketpd.com and its info@rocketpd.com alias, match contacts, preserve threads, and create response tasks.", priority: "high" }
     ]
   },

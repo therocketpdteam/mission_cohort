@@ -73,6 +73,16 @@ const requiredSchema: SchemaRequirement[] = [
     ]
   },
   {
+    key: "registrationChangeControl",
+    label: "Registration change control",
+    detail: "Stores participant and finance changes until delivery is applied.",
+    nextAction: "Run the 20260622170000 registration change control migration.",
+    columns: [
+      ["Registration", "pendingChanges"],
+      ["Registration", "pendingChangesAt"]
+    ]
+  },
+  {
     key: "invoiceDrafts",
     label: "Invoice drafts",
     detail: "Supports editable invoice/receipt documents.",

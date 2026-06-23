@@ -213,6 +213,13 @@ const patches = [
     `
   },
   {
+    name: "registration change control",
+    sql: `
+      ALTER TABLE "Registration" ADD COLUMN IF NOT EXISTS "pendingChanges" JSONB;
+      ALTER TABLE "Registration" ADD COLUMN IF NOT EXISTS "pendingChangesAt" TIMESTAMP(3);
+    `
+  },
+  {
     name: "foreign keys",
     sql: `
       DO $$

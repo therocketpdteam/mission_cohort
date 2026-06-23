@@ -453,6 +453,8 @@ model Registration {
   externalSource        String?
   externalSubmissionId  String?
   notes                 String?
+  pendingChanges        Json?
+  pendingChangesAt      DateTime?
   archivedAt            DateTime?
   archivedReason        String?
   createdAt             DateTime           @default(now())

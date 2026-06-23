@@ -125,6 +125,13 @@ const defaultTemplates: Array<{
     subject: "One week until {{cohort.title}}",
     bodyHtml: "<p>Hello {{participant.firstName}},</p><p><strong>{{cohort.title}}</strong> begins in one week.</p><p>Please review your calendar invitations for the latest session details.</p>",
     bodyText: "Hello {{participant.firstName}}, {{cohort.title}} begins in one week. Please review your calendar invitations for the latest session details."
+  },
+  {
+    type: TemplateType.CUSTOM,
+    name: "Registration Changes Summary",
+    subject: "Registration updates: {{cohort.title}}",
+    bodyHtml: "<p>Hello {{registration.primaryContactName}},</p><p>The requested registration updates have been applied for <strong>{{cohort.title}}</strong>.</p>",
+    bodyText: "Hello {{registration.primaryContactName}}, the requested registration updates have been applied for {{cohort.title}}."
   }
 ];
 

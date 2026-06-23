@@ -26,6 +26,7 @@ import { useEffect, useMemo, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
 import { formatProperDisplay, formatRegistrationSource, formatStatusLabel } from "@/lib/formatting";
 import { RosterWorkbench } from "./RosterWorkbench";
+import { RegistrationPendingChangesPanel } from "./RegistrationPendingChangesPanel";
 import type { ParsedRosterParticipant } from "@/lib/rosterParser";
 import {
   AdminRow,
@@ -196,7 +197,8 @@ export function RegistrationEditor({
           ...values,
           id: editing?.id,
           cohortId: cohort.id,
-          organizationId: organization.id
+          organizationId: organization.id,
+          deferNotifications: Boolean(editing && ["PUBLISHED", "ACTIVE"].includes(String(cohort.derivedStatus ?? cohort.status)))
         }
       });
       await onSaved();
@@ -365,7 +367,8 @@ function RegistrationDetailDialog({
           ...participant,
           registrationId: registration.id,
           cohortId: registration.cohortId,
-          organizationId: registration.organizationId
+          organizationId: registration.organizationId,
+          deferNotifications: ["PUBLISHED", "ACTIVE"].includes(String(registration.cohort?.derivedStatus ?? registration.cohort?.status))
         }
       });
       setParticipant({ firstName: "", lastName: "", email: "", title: "", phone: "" });
@@ -381,21 +384,28 @@ function RegistrationDetailDialog({
     }
 
     try {
-      await Promise.all(participants.map((row) => adminApi("/api/participants", {
-        method: "POST",
-        body: {
-          ...row,
-          registrationId: registration.id,
-          cohortId: registration.cohortId,
-          organizationId: registration.organizationId
-        }
-      })));
+      for (const row of participants) {
+        await adminApi("/api/participants", {
+          method: "POST",
+          body: {
+            ...row,
+            registrationId: registration.id,
+            cohortId: registration.cohortId,
+            organizationId: registration.organizationId,
+            deferNotifications: ["PUBLISHED", "ACTIVE"].includes(String(registration.cohort?.derivedStatus ?? registration.cohort?.status))
+          }
+        });
+      }
 
       const projectedCount = (registration.participants?.length ?? 0) + participants.length;
       if (projectedCount > Number(registration.participantCount ?? 0)) {
         await adminApi("/api/registrations", {
           method: "PATCH",
-          body: { id: registration.id, participantCount: projectedCount }
+          body: {
+            id: registration.id,
+            participantCount: projectedCount,
+            deferNotifications: ["PUBLISHED", "ACTIVE"].includes(String(registration.cohort?.derivedStatus ?? registration.cohort?.status))
+          }
         });
       }
 
@@ -410,7 +420,8 @@ function RegistrationDetailDialog({
 
   async function removeParticipant(id: string) {
     try {
-      await adminApi(`/api/participants?id=${id}`, { method: "DELETE" });
+      const defer = ["PUBLISHED", "ACTIVE"].includes(String(registration?.cohort?.derivedStatus ?? registration?.cohort?.status));
+      await adminApi(`/api/participants?id=${id}${defer ? "&deferNotifications=1" : ""}`, { method: "DELETE" });
       await onChanged();
     } catch (removeError) {
       setError((removeError as Error).message);
@@ -478,7 +489,8 @@ function RegistrationDetailDialog({
           phone: registration.primaryContactPhone ?? "",
           registrationId: registration.id,
           cohortId: registration.cohortId,
-          organizationId: registration.organizationId
+          organizationId: registration.organizationId,
+          deferNotifications: ["PUBLISHED", "ACTIVE"].includes(String(registration.cohort?.derivedStatus ?? registration.cohort?.status))
         }
       });
       await adminApi("/api/registrations", {
@@ -486,7 +498,8 @@ function RegistrationDetailDialog({
         body: {
           id: registration.id,
           participantCount: Math.max(1, Number(registration.participantCount ?? 0)),
-          participantListStatus: registration.participantListStatus
+          participantListStatus: registration.participantListStatus,
+          deferNotifications: ["PUBLISHED", "ACTIVE"].includes(String(registration.cohort?.derivedStatus ?? registration.cohort?.status))
         }
       });
       await onChanged();
@@ -574,6 +587,18 @@ function RegistrationDetailDialog({
               <StatusChip value={health?.label} />
             </div>
           </section>
+
+          <RegistrationPendingChangesPanel
+            registration={registration}
+            onApplied={async (message) => {
+              onSuccess(message);
+              await onChanged();
+            }}
+            onError={(message) => {
+              setError(message);
+              onError(message);
+            }}
+          />
 
           <div className="quick-view-grid">
             <DetailTile label="POC email" value={registration.primaryContactEmail} />
@@ -794,7 +819,6 @@ export function RegistrationsClient() {
   const [templates, setTemplates] = useState<AdminRow[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkPaymentStatus, setBulkPaymentStatus] = useState("");
-  const [bulkRosterStatus, setBulkRosterStatus] = useState("");
   const [bulkDocumentStatus, setBulkDocumentStatus] = useState("");
   const [bulkTemplateId, setBulkTemplateId] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -897,7 +921,7 @@ export function RegistrationsClient() {
     }
   }
 
-  async function runBulkAction(action: "confirm" | "cancel" | "archive" | "restore" | "payment" | "roster" | "docs" | "send") {
+  async function runBulkAction(action: "confirm" | "cancel" | "archive" | "restore" | "payment" | "docs" | "send") {
     if (selectedIds.length === 0) {
       return;
     }
@@ -920,11 +944,6 @@ export function RegistrationsClient() {
           return;
         }
 
-        if (action === "roster" && !bulkRosterStatus) {
-          notifyError("Choose a roster status first");
-          return;
-        }
-
         if (action === "docs" && !bulkDocumentStatus) {
           notifyError("Choose a document status first");
           return;
@@ -940,7 +959,6 @@ export function RegistrationsClient() {
             ...(action === "archive" ? { bulkAction: "archive" } : {}),
             ...(action === "restore" ? { bulkAction: "restore" } : {}),
             ...(action === "payment" && bulkPaymentStatus ? { paymentStatus: bulkPaymentStatus } : {}),
-            ...(action === "roster" && bulkRosterStatus ? { participantListStatus: bulkRosterStatus } : {}),
             ...(action === "docs" && bulkDocumentStatus ? { supportingDocumentStatus: bulkDocumentStatus } : {})
           }
         });
@@ -1125,10 +1143,6 @@ export function RegistrationsClient() {
               {paymentStatuses.map((value) => <MenuItem value={value} key={value}>{formatStatusLabel(value)}</MenuItem>)}
             </TextField>
             <Button size="small" variant="outlined" onClick={() => runBulkAction("payment")}>Apply Payment</Button>
-            <TextField select size="small" label="Roster" value={bulkRosterStatus} onChange={(event) => setBulkRosterStatus(event.target.value)} sx={{ minWidth: 170 }}>
-              {rosterStatuses.map((value) => <MenuItem value={value} key={value}>{formatStatusLabel(value)}</MenuItem>)}
-            </TextField>
-            <Button size="small" variant="outlined" onClick={() => runBulkAction("roster")}>Apply Roster</Button>
             <TextField select size="small" label="Docs" value={bulkDocumentStatus} onChange={(event) => setBulkDocumentStatus(event.target.value)} sx={{ minWidth: 160 }}>
               {documentStatuses.map((value) => <MenuItem value={value} key={value}>{formatStatusLabel(value)}</MenuItem>)}
             </TextField>
@@ -1163,7 +1177,8 @@ export function RegistrationsClient() {
         organizations={organizations}
         onClose={() => { setDialogOpen(false); setEditing(null); }}
         onSaved={async () => {
-          notifySuccess(editing ? "Registration updated" : "Registration created");
+          const defer = Boolean(editing && ["PUBLISHED", "ACTIVE"].includes(String(editing.cohort?.derivedStatus ?? editing.cohort?.status)));
+          notifySuccess(defer ? "Registration saved. Review and apply its delivery changes." : editing ? "Registration updated" : "Registration created");
           await load();
         }}
       />

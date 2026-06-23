@@ -11,7 +11,8 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    return ok(await addParticipant(await request.json()), { status: 201 });
+    const body = await request.json();
+    return ok(await addParticipant(body, { deferNotifications: true }), { status: 201 });
   } catch (error) {
     return handleApiError(error);
   }
@@ -25,7 +26,7 @@ export async function PATCH(request: Request) {
       return fail("id is required", "BAD_REQUEST", 400);
     }
 
-    return ok(await updateParticipant(body.id, body));
+    return ok(await updateParticipant(body.id, body, { deferNotifications: true }));
   } catch (error) {
     return handleApiError(error);
   }
@@ -33,13 +34,14 @@ export async function PATCH(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
-    const id = new URL(request.url).searchParams.get("id");
+    const params = new URL(request.url).searchParams;
+    const id = params.get("id");
 
     if (!id) {
       return fail("id is required", "BAD_REQUEST", 400);
     }
 
-    return ok(await removeParticipant(id));
+    return ok(await removeParticipant(id, { deferNotifications: true }));
   } catch (error) {
     return handleApiError(error);
   }

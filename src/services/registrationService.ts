@@ -1,4 +1,4 @@
-import { ParticipantListStatus, PaymentStatus, RegistrationStatus, SupportingDocumentStatus } from "@prisma/client";
+import { PaymentStatus, RegistrationStatus, SupportingDocumentStatus } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { shouldDefaultPrimaryContactParticipant } from "@/lib/rosterStatus";
@@ -9,6 +9,7 @@ import { queueParticipantCrmSync, queueRegistrationCrmSync } from "./crmSyncServ
 import { voidRegistrationQuickBooksInvoice } from "./quickBooksService";
 import { cancelRegistrationJourneys, planRegistrationJourneys } from "./registrationJourneyService";
 import { syncRegistrationParticipantListStatus } from "./participantService";
+import { shouldDeferRegistrationDelivery, stageParticipantAddition, stageRegistrationFieldChanges } from "./registrationChangeService";
 
 function splitPrimaryContactName(value: string) {
   const parts = value.trim().split(/\s+/).filter(Boolean);
@@ -82,19 +83,42 @@ export async function createRegistration(input: z.input<typeof registrationCreat
   return { ...registration, participantListStatus: roster?.status ?? registration.participantListStatus, journey };
 }
 
-export async function updateRegistration(id: string, input: z.input<typeof registrationUpdateSchema>) {
+export async function updateRegistration(
+  id: string,
+  input: z.input<typeof registrationUpdateSchema>,
+  options: { deferNotifications?: boolean } = {}
+) {
   const data = registrationUpdateSchema.parse(input);
   const previous = await prisma.registration.findUniqueOrThrow({
     where: { id },
     include: { _count: { select: { participants: true } } }
   });
   const registration = await prisma.registration.update({ where: { id }, data });
-  await ensureSingleSeatPrimaryContactParticipant(
+  const fallback = await ensureSingleSeatPrimaryContactParticipant(
     registration,
     previous.participantCount === 1 && previous._count.participants === 0
   );
   const roster = await syncRegistrationParticipantListStatus(registration.id);
   void queueRegistrationCrmSync(registration.id, "registration.updated").catch(() => undefined);
+  if (options.deferNotifications) {
+    const cohort = await prisma.cohort.findUniqueOrThrow({ where: { id: registration.cohortId }, select: { status: true } });
+    if (shouldDeferRegistrationDelivery(cohort.status)) {
+      if (fallback?.created) {
+        await stageParticipantAddition(registration.id, {
+          participantId: fallback.participant.id,
+          firstName: fallback.participant.firstName,
+          lastName: fallback.participant.lastName,
+          email: fallback.participant.email.toLowerCase()
+        });
+      }
+      await stageRegistrationFieldChanges(registration.id, previous, registration);
+      return {
+        ...registration,
+        participantListStatus: roster?.status ?? registration.participantListStatus,
+        journey: { status: "pending_apply" as const }
+      };
+    }
+  }
   const journey = registration.status === RegistrationStatus.CANCELLED
     ? await cancelRegistrationJourneys(registration.id, "Registration cancelled.")
     : await planRegistrationJourneys(registration.id);
@@ -228,7 +252,6 @@ export async function bulkUpdateRegistrations(input: {
   ids: string[];
   action?: "confirm" | "cancel" | "archive" | "restore";
   paymentStatus?: PaymentStatus;
-  participantListStatus?: ParticipantListStatus;
   supportingDocumentStatus?: SupportingDocumentStatus;
 }) {
   const ids = input.ids.filter(Boolean);
@@ -248,16 +271,11 @@ export async function bulkUpdateRegistrations(input: {
   } else {
     const data: {
       paymentStatus?: PaymentStatus;
-      participantListStatus?: ParticipantListStatus;
       supportingDocumentStatus?: SupportingDocumentStatus;
     } = {};
 
     if (input.paymentStatus) {
       data.paymentStatus = input.paymentStatus;
-    }
-
-    if (input.participantListStatus) {
-      data.participantListStatus = input.participantListStatus;
     }
 
     if (input.supportingDocumentStatus) {

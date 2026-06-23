@@ -11,6 +11,7 @@ import {
   restoreRegistration,
   updateRegistration
 } from "@/services/registrationService";
+import { applyRegistrationChanges } from "@/services/registrationChangeService";
 
 export async function GET(request: Request) {
   try {
@@ -64,7 +65,11 @@ export async function PATCH(request: Request) {
       return ok(await restoreRegistration(body.id));
     }
 
-    return ok(await updateRegistration(body.id, body));
+    if (body.action === "applyChanges") {
+      return ok(await applyRegistrationChanges(body.id));
+    }
+
+    return ok(await updateRegistration(body.id, body, { deferNotifications: true }));
   } catch (error) {
     return handleApiError(error);
   }

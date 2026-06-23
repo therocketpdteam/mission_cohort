@@ -334,6 +334,8 @@ List Console Pattern:
 - Repeated session defaults such as meeting URL, location, and timezone should live in a small defaults card above the checklist.
 - Registrations should remove unclear primary-table columns such as `Docs`; supporting document status belongs in quick view/edit.
 - Registration roster status is read-only and calculated from saved participants. The quick view should expose a clear `Add POC to roster` action when the POC is missing and an expected seat remains open.
+- Published/Active registration quick views show one compact pending-change review surface above registration detail. It lists participant and finance changes and exposes one `Apply Changes` action; do not scatter separate calendar, email, and invoice buttons around the roster.
+- Pending registration changes are saved app data awaiting external delivery, not a second editable form. Reverting the underlying field or participant change should remove the corresponding review row automatically.
 - Participants should prioritize contact, organization, status, send-message action, bulk status/message controls, and a quick-view drawer with contact, payment, email activity, and participation history matched by email.
 - Distribution is the cohort finance home. It should combine incoming payments, outgoing TL payouts, project return, pending payout, invoice drafts, and payment detail access in one ledger-style experience.
 

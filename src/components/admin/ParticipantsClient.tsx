@@ -84,7 +84,8 @@ function ParticipantEditor({
           id: editing?.id,
           registrationId: registration.id,
           cohortId: registration.cohortId,
-          organizationId: registration.organizationId
+          organizationId: registration.organizationId,
+          deferNotifications: ["PUBLISHED", "ACTIVE"].includes(String(registration.cohort?.derivedStatus ?? registration.cohort?.status))
         }
       });
       await onSaved();
@@ -400,7 +401,14 @@ export function ParticipantsClient() {
 
   async function patchParticipant(body: AdminRow, success: string) {
     try {
-      await adminApi("/api/participants", { method: "PATCH", body });
+      const participant = rows.find((row) => row.id === body.id);
+      await adminApi("/api/participants", {
+        method: "PATCH",
+        body: {
+          ...body,
+          deferNotifications: ["PUBLISHED", "ACTIVE"].includes(String(participant?.cohort?.derivedStatus ?? participant?.cohort?.status))
+        }
+      });
       notifySuccess(success);
       await load();
     } catch (error) {
@@ -420,8 +428,18 @@ export function ParticipantsClient() {
           return;
         }
 
-        await Promise.all(selectedIds.map((id) => adminApi("/api/participants", { method: "PATCH", body: { id, status: bulkStatus } })));
-        notifySuccess("Participant statuses updated");
+        for (const id of selectedIds) {
+          const participant = rows.find((row) => row.id === id);
+          await adminApi("/api/participants", {
+            method: "PATCH",
+            body: {
+              id,
+              status: bulkStatus,
+              deferNotifications: ["PUBLISHED", "ACTIVE"].includes(String(participant?.cohort?.derivedStatus ?? participant?.cohort?.status))
+            }
+          });
+        }
+        notifySuccess("Participant statuses updated. Published cohort delivery changes are waiting in each registration review.");
       }
 
       if (action === "certificate") {
@@ -546,8 +564,9 @@ export function ParticipantsClient() {
                 color: "error",
                 onClick: async () => {
                   try {
-                    await adminApi(`/api/participants?id=${params.row.id}`, { method: "DELETE" });
-                    notifySuccess("Participant removed");
+                    const defer = ["PUBLISHED", "ACTIVE"].includes(String(params.row.cohort?.derivedStatus ?? params.row.cohort?.status));
+                    await adminApi(`/api/participants?id=${params.row.id}${defer ? "&deferNotifications=1" : ""}`, { method: "DELETE" });
+                    notifySuccess(defer ? "Participant removed. Apply the registration changes to update calendar and email delivery." : "Participant removed");
                     await load();
                   } catch (error) {
                     notifyError((error as Error).message);
@@ -637,7 +656,8 @@ export function ParticipantsClient() {
         registrations={registrations}
         onClose={() => { setDialogOpen(false); setEditing(null); }}
         onSaved={async () => {
-          notifySuccess(editing ? "Participant updated" : "Participant added");
+          const defer = ["PUBLISHED", "ACTIVE"].includes(String(editing?.cohort?.derivedStatus ?? editing?.cohort?.status));
+          notifySuccess(defer ? "Participant saved. Apply the registration changes to update calendar and email delivery." : editing ? "Participant updated" : "Participant added");
           await load();
         }}
       />

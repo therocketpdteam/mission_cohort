@@ -31,6 +31,7 @@ import { adminApi, uploadAdminFile } from "@/lib/adminApi";
 import { formatProperDisplay, formatStatusLabel } from "@/lib/formatting";
 import { formatDateTimeInZone, formatTimeInZone } from "@/lib/timezones";
 import { RosterWorkbench } from "./RosterWorkbench";
+import { RegistrationPendingChangesPanel } from "./RegistrationPendingChangesPanel";
 import { RegistrationEditor } from "./RegistrationsClient";
 import type { ParsedRosterParticipant } from "@/lib/rosterParser";
 import {
@@ -1010,21 +1011,28 @@ export function CohortDetailClient({ id }: { id: string }) {
     }
 
     try {
-      await Promise.all(participants.map((row) => adminApi("/api/participants", {
-        method: "POST",
-        body: {
-          ...row,
-          registrationId: registrationDetail.id,
-          cohortId: registrationDetail.cohortId,
-          organizationId: registrationDetail.organizationId
-        }
-      })));
+      for (const row of participants) {
+        await adminApi("/api/participants", {
+          method: "POST",
+          body: {
+            ...row,
+            registrationId: registrationDetail.id,
+            cohortId: registrationDetail.cohortId,
+            organizationId: registrationDetail.organizationId,
+            deferNotifications: ["PUBLISHED", "ACTIVE"].includes(String(cohort?.derivedStatus ?? cohort?.status))
+          }
+        });
+      }
 
       const projectedCount = (registrationDetail.participants?.length ?? 0) + participants.length;
       if (projectedCount > Number(registrationDetail.participantCount ?? 0)) {
         await adminApi("/api/registrations", {
           method: "PATCH",
-          body: { id: registrationDetail.id, participantCount: projectedCount }
+          body: {
+            id: registrationDetail.id,
+            participantCount: projectedCount,
+            deferNotifications: ["PUBLISHED", "ACTIVE"].includes(String(cohort?.derivedStatus ?? cohort?.status))
+          }
         });
       }
 
@@ -1053,7 +1061,8 @@ export function CohortDetailClient({ id }: { id: string }) {
           title: registrationDetail.primaryContactTitle ?? "",
           registrationId: registrationDetail.id,
           cohortId: registrationDetail.cohortId,
-          organizationId: registrationDetail.organizationId
+          organizationId: registrationDetail.organizationId,
+          deferNotifications: ["PUBLISHED", "ACTIVE"].includes(String(cohort?.derivedStatus ?? cohort?.status))
         }
       });
       notifySuccess("POC added to the participant roster.");
@@ -1069,7 +1078,8 @@ export function CohortDetailClient({ id }: { id: string }) {
       return;
     }
     try {
-      await adminApi(`/api/participants?id=${participantId}`, { method: "DELETE" });
+      const defer = ["PUBLISHED", "ACTIVE"].includes(String(cohort?.derivedStatus ?? cohort?.status));
+      await adminApi(`/api/participants?id=${participantId}${defer ? "&deferNotifications=1" : ""}`, { method: "DELETE" });
       notifySuccess("Participant removed from the roster.");
       await openRegistrationDetail(registrationDetail);
       await load();
@@ -1361,7 +1371,16 @@ export function CohortDetailClient({ id }: { id: string }) {
     }
 
     try {
-      await Promise.all(ids.map((participantId) => adminApi("/api/participants", { method: "PATCH", body: { id: participantId, status: bulkParticipantStatus } })));
+      for (const participantId of ids) {
+        await adminApi("/api/participants", {
+          method: "PATCH",
+          body: {
+            id: participantId,
+            status: bulkParticipantStatus,
+            deferNotifications: ["PUBLISHED", "ACTIVE"].includes(String(cohort?.derivedStatus ?? cohort?.status))
+          }
+        });
+      }
       notifySuccess(`${ids.length} participants updated`);
       setParticipantSelection({ type: "include", ids: new Set() });
       await load();
@@ -2457,6 +2476,15 @@ export function CohortDetailClient({ id }: { id: string }) {
       >
         {registrationDetail && (
           <>
+            <RegistrationPendingChangesPanel
+              registration={registrationDetail}
+              onApplied={async (message) => {
+                notifySuccess(message);
+                await openRegistrationDetail(registrationDetail);
+                await load();
+              }}
+              onError={notifyError}
+            />
             <div className="quick-view-grid">
               <DetailField label="Contact" value={registrationDetail.primaryContactName} proper />
               <DetailField label="Email" value={registrationDetail.primaryContactEmail} />
@@ -2589,7 +2617,8 @@ export function CohortDetailClient({ id }: { id: string }) {
           setEditingRegistration(null);
         }}
         onSaved={async () => {
-          notifySuccess(editingRegistration ? "Registration updated" : "Registration created");
+          const defer = Boolean(editingRegistration && ["PUBLISHED", "ACTIVE"].includes(String(cohort?.derivedStatus ?? cohort?.status)));
+          notifySuccess(defer ? "Registration saved. Review and apply its delivery changes." : editingRegistration ? "Registration updated" : "Registration created");
           await load();
           if (registrationDetail?.id) {
             try {

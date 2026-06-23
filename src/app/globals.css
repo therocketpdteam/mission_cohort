@@ -2497,6 +2497,47 @@ h6,
   padding-top: 14px;
 }
 
+.registration-change-review {
+  display: grid;
+  gap: 12px;
+  border: 1px solid color-mix(in srgb, var(--color-blue-600) 30%, var(--color-outline-variant));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--color-blue-100) 42%, var(--color-surface-container-lowest));
+  padding: 14px;
+}
+
+.registration-change-review-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.registration-change-review-header > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.registration-change-review-header span {
+  color: var(--color-blue-600);
+  font-size: 0.7rem;
+  font-weight: 760;
+  text-transform: uppercase;
+}
+
+.registration-change-review-header strong {
+  color: var(--color-on-surface);
+  font-size: 0.94rem;
+}
+
+@media (max-width: 720px) {
+  .registration-change-review-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+
 .registration-section-heading {
   display: flex;
   align-items: flex-start;

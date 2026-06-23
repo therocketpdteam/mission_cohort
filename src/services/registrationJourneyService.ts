@@ -92,10 +92,11 @@ async function upsertJourneyCommunication(input: {
   scheduledFor?: Date;
   status: CommunicationStatus;
   skippedReason?: string;
+  retryFailed?: boolean;
 }) {
   const existing = await prisma.cohortCommunication.findUnique({ where: { journeyKey: input.journeyKey } });
 
-  if (existing?.status === CommunicationStatus.SENT || existing?.status === CommunicationStatus.FAILED) {
+  if (existing?.status === CommunicationStatus.SENT || (existing?.status === CommunicationStatus.FAILED && !input.retryFailed)) {
     return existing;
   }
 
@@ -197,7 +198,7 @@ async function syncFutureCalendarInvites(registration: {
 
 export async function planRegistrationJourneys(
   registrationId: string,
-  options: { syncCalendar?: boolean } = {}
+  options: { syncCalendar?: boolean; sendPocConfirmation?: boolean; participantEmails?: string[]; retryFailed?: boolean } = {}
 ) {
   const registration = await prisma.registration.findUnique({
     where: { id: registrationId },
@@ -217,7 +218,7 @@ export async function planRegistrationJourneys(
   });
 
   if (!registration || registration.archivedAt || registration.status === RegistrationStatus.CANCELLED) {
-    return { registrationId, planned: 0, sent: 0, skipped: 0, ignored: true };
+    return { registrationId, planned: 0, sent: 0, failed: 0, failedCommunicationIds: [], skipped: 0, ignored: true };
   }
 
   const templates = await ensureDefaultCommunicationTemplates();
@@ -238,17 +239,26 @@ export async function planRegistrationJourneys(
     registrationId: registration.id,
     template: template(journeyTemplateNames.pocConfirmation),
     recipientEmail: pocEmail,
-    status: CommunicationStatus.DRAFT
+    status: CommunicationStatus.DRAFT,
+    retryFailed: options.retryFailed
   });
   const attachmentCount = await attachRegistrationDocuments(poc.id, registration);
   planned.push(poc);
-  immediate.push(poc);
+  if (options.sendPocConfirmation !== false) {
+    immediate.push(poc);
+  }
 
   const firstSession = registration.cohort.sessions[0];
   const milestones = firstSession ? buildRegistrationMilestones(firstSession.startTime) : [];
+  const targetParticipantEmails = options.participantEmails
+    ? new Set(options.participantEmails.map(normalizeEmail))
+    : null;
 
   for (const participant of registration.participants) {
     const email = normalizeEmail(participant.email);
+    if (targetParticipantEmails && !targetParticipantEmails.has(email)) {
+      continue;
+    }
     const confirmation = await upsertJourneyCommunication({
       journeyKey: `registration:${registration.id}:participant:${email}:confirmation`,
       cohortId: registration.cohortId,
@@ -256,7 +266,8 @@ export async function planRegistrationJourneys(
       participantId: participant.id,
       template: template(journeyTemplateNames.participantConfirmation),
       recipientEmail: email,
-      status: CommunicationStatus.DRAFT
+      status: CommunicationStatus.DRAFT,
+      retryFailed: options.retryFailed
     });
     planned.push(confirmation);
     immediate.push(confirmation);
@@ -271,12 +282,14 @@ export async function planRegistrationJourneys(
         recipientEmail: email,
         scheduledFor: milestone.scheduledFor,
         status: milestone.eligible ? CommunicationStatus.SCHEDULED : CommunicationStatus.SKIPPED,
-        skippedReason: milestone.eligible ? undefined : "Skipped because this participant was registered after the milestone date."
+        skippedReason: milestone.eligible ? undefined : "Skipped because this participant was registered after the milestone date.",
+        retryFailed: options.retryFailed
       }));
     }
   }
 
   const sent = [];
+  const failed: string[] = [];
   if (deliveryAuthorized(registration.cohort.status)) {
     for (const communication of immediate) {
       if (communication.status === CommunicationStatus.DRAFT) {
@@ -284,6 +297,7 @@ export async function planRegistrationJourneys(
           sent.push(await sendCommunication(communication.id));
         } catch {
           // The failed communication remains visible and retryable in Communications.
+          failed.push(communication.id);
         }
       }
     }
@@ -309,6 +323,8 @@ export async function planRegistrationJourneys(
     registrationId,
     planned: planned.length,
     sent: sent.length,
+    failed: failed.length,
+    failedCommunicationIds: failed,
     skipped: planned.filter((communication) => communication.status === CommunicationStatus.SKIPPED).length,
     calendar
   };

@@ -7,11 +7,27 @@ import { logAuditEventAsync } from "./auditService";
 import { queueParticipantCrmSync } from "./crmSyncService";
 import { getRecipientCommunicationSummary } from "./communicationService";
 import { cancelParticipantJourneys, planRegistrationJourneys } from "./registrationJourneyService";
+import { shouldDeferRegistrationDelivery, stageParticipantAddition, stageParticipantRemoval } from "./registrationChangeService";
+
+type ParticipantMutationOptions = { deferNotifications?: boolean };
+
+function participantChangeRow(participant: { id: string; firstName: string; lastName: string; email: string }) {
+  return {
+    participantId: participant.id,
+    firstName: participant.firstName,
+    lastName: participant.lastName,
+    email: participant.email.toLowerCase()
+  };
+}
 
 export async function syncRegistrationParticipantListStatus(registrationId: string) {
   const registration = await prisma.registration.findUnique({
     where: { id: registrationId },
-    include: { _count: { select: { participants: true } } }
+    include: {
+      _count: {
+        select: { participants: { where: { status: ParticipantStatus.REGISTERED } } }
+      }
+    }
   });
 
   if (!registration) {
@@ -59,7 +75,7 @@ export async function syncRegistrationParticipantListStatus(registrationId: stri
   return { status, actualCount, expectedCount: registration.participantCount };
 }
 
-export async function addParticipant(input: z.input<typeof participantCreateSchema>) {
+export async function addParticipant(input: z.input<typeof participantCreateSchema>, options: ParticipantMutationOptions = {}) {
   const data = participantCreateSchema.parse(input);
   const duplicate = await prisma.participant.findFirst({
     where: { registrationId: data.registrationId, email: { equals: data.email, mode: "insensitive" } }
@@ -77,11 +93,16 @@ export async function addParticipant(input: z.input<typeof participantCreateSche
   });
   await syncRegistrationParticipantListStatus(participant.registrationId);
   void queueParticipantCrmSync(participant.id, "participant.created").catch(() => undefined);
+  const registration = await prisma.registration.findUniqueOrThrow({ where: { id: participant.registrationId }, include: { cohort: true } });
+  if (options.deferNotifications && shouldDeferRegistrationDelivery(registration.cohort.status)) {
+    await stageParticipantAddition(participant.registrationId, participantChangeRow(participant));
+    return { ...participant, journey: { status: "pending_apply" as const } };
+  }
   const journey = await planRegistrationJourneys(participant.registrationId);
   return { ...participant, journey };
 }
 
-export async function updateParticipant(id: string, input: z.input<typeof participantUpdateSchema>) {
+export async function updateParticipant(id: string, input: z.input<typeof participantUpdateSchema>, options: ParticipantMutationOptions = {}) {
   const data = participantUpdateSchema.parse(input);
   const existing = await prisma.participant.findUniqueOrThrow({ where: { id } });
   const participant = await prisma.participant.update({ where: { id }, data });
@@ -89,14 +110,30 @@ export async function updateParticipant(id: string, input: z.input<typeof partic
   if (existing.email.toLowerCase() !== participant.email.toLowerCase() || participant.status !== ParticipantStatus.REGISTERED) {
     await cancelParticipantJourneys([participant.id], participant.status !== ParticipantStatus.REGISTERED ? "Participant is no longer registered." : "Participant email changed.");
   }
+  const registration = await prisma.registration.findUniqueOrThrow({ where: { id: participant.registrationId }, include: { cohort: true } });
+  if (options.deferNotifications && shouldDeferRegistrationDelivery(registration.cohort.status)) {
+    if (existing.status === ParticipantStatus.REGISTERED && participant.status !== ParticipantStatus.REGISTERED) {
+      await stageParticipantRemoval(participant.registrationId, participantChangeRow(existing));
+    } else if (existing.status !== ParticipantStatus.REGISTERED && participant.status === ParticipantStatus.REGISTERED) {
+      await stageParticipantAddition(participant.registrationId, participantChangeRow(participant));
+    } else if (existing.email.toLowerCase() !== participant.email.toLowerCase()) {
+      await stageParticipantRemoval(participant.registrationId, participantChangeRow(existing));
+      await stageParticipantAddition(participant.registrationId, participantChangeRow(participant));
+    }
+    return { ...participant, journey: { status: "pending_apply" as const } };
+  }
   const journey = await planRegistrationJourneys(participant.registrationId);
   return { ...participant, journey };
 }
 
-export async function removeParticipant(id: string) {
+export async function removeParticipant(id: string, options: ParticipantMutationOptions = {}) {
+  const existing = await prisma.participant.findUniqueOrThrow({ where: { id }, include: { registration: { include: { cohort: true } } } });
   await cancelParticipantJourneys([id], "Participant removed from registration.");
   const participant = await prisma.participant.delete({ where: { id } });
   await syncRegistrationParticipantListStatus(participant.registrationId);
+  if (options.deferNotifications && shouldDeferRegistrationDelivery(existing.registration.cohort.status)) {
+    await stageParticipantRemoval(participant.registrationId, participantChangeRow(existing));
+  }
   return participant;
 }
 

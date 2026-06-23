@@ -137,3 +137,13 @@ If a feature shows `Blocked`, keep the UI compatibility fallback in place and do
 - Roster status is derived from saved participant records and the expected participant count. It is not a manually maintained registration field.
 - If a legacy or team registration is missing its POC from the roster, registration quick view exposes `Add POC to roster` while an expected seat remains open.
 - Increasing the expected participant count does not invent additional people; the roster remains Partial until those participant records are saved.
+
+## Registration Change Control
+
+- Published and Active registration edits save to Mission Control immediately but defer attendee-facing delivery until an operator selects `Apply Changes` in registration quick view.
+- A pending batch combines participant additions/removals with participant-count, total-amount, PO-number, and invoice-number changes. Repeated edits preserve the original value and latest value; reverting to the original removes that item from review.
+- Applying a batch sends confirmations only to newly added participants, updates linked future Google events once per session, refreshes a simple one-line invoice/PDF when relevant, and sends one consolidated POC summary.
+- Removed participants have unsent journey messages cancelled immediately, but Google attendee removal waits for Apply so multiple changes generate one coordinated update.
+- Custom multi-line invoices are never rewritten automatically when seats or totals change. Apply remains pending and asks the operator to review the invoice first.
+- Draft cohorts do not accumulate delivery batches because normal delivery is already blocked. Jotform intake remains an automatic registration path and does not use the manual edit batch.
+- Partial Apply progress is stored in the pending envelope. Retrying does not repeat completed invoice, participant-journey, or calendar phases.
