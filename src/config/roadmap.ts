@@ -151,8 +151,8 @@ export const roadmapCards: RoadmapCard[] = [
     nextAction: "QA invoice/receipt sending in production once SendGrid env is configured, then decide the QuickBooks v2 sync scope.",
     items: [
       { title: "Payment snapshot", status: "done", note: "Payment summary is available on dashboard/cohort surfaces.", priority: "high" },
-      { title: "Invoice drafts", status: "done", note: "Distribution now has a first-class editable invoice workbench with generated invoice numbers and line items.", priority: "high" },
-      { title: "PDF invoices/receipts", status: "in_progress", note: "PDF generation/storage and send actions are wired; production send QA depends on SendGrid configuration.", priority: "high" },
+      { title: "Invoice drafts", status: "done", note: "Distribution and registration quick view now expose editable invoice drafts with generated invoice numbers, line items, totals, PO, and accounting refs.", priority: "high" },
+      { title: "PDF invoices/receipts", status: "in_progress", note: "PDF generation/storage, regeneration state, and send actions are wired; production send QA remains the last hardening step.", priority: "high" },
       { title: "QuickBooks reference sync", status: "in_progress", note: "Refs/status are editable in v1; creating/updating QuickBooks invoices is future scope.", priority: "medium" },
       { title: "Distribution calculator", status: "done", note: "Sold, paid, RPD share, TL share, payout due, paid out, pending payout, and project return are calculated from active registrations.", priority: "high" },
       { title: "Payout ledger", status: "done", note: "Payout create/edit/cancel and proof upload are available inside Distribution.", priority: "high" },

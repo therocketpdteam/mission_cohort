@@ -559,6 +559,10 @@ type InvoiceLineItemState = {
   unitAmount: number;
 };
 
+function invoiceLineTotal(item: InvoiceLineItemState) {
+  return Number(item.quantity ?? 0) * Number(item.unitAmount ?? 0);
+}
+
 function InvoiceEditorDialog({
   cohortId,
   invoice,
@@ -592,6 +596,17 @@ function InvoiceEditorDialog({
   const [quickBooksRealmId, setQuickBooksRealmId] = useState("");
   const [lineItems, setLineItems] = useState<InvoiceLineItemState[]>([{ description: "Cohort registration seats", quantity: 1, unitAmount: 0 }]);
   const selectedRegistration = registrations.find((registration) => registration.id === registrationId);
+  const subtotalAmount = lineItems.reduce((sum, item) => sum + invoiceLineTotal(item), 0);
+  const totalAmount = subtotalAmount + Number(taxAmount ?? 0);
+  const balanceAmount = Math.max(totalAmount - Number(paidAmount ?? 0), 0);
+  const invoiceRecipient = selectedRegistration
+    ? [
+        selectedRegistration.billingContactEmail || selectedRegistration.primaryContactEmail,
+        selectedRegistration.billingContactEmail && selectedRegistration.primaryContactEmail && selectedRegistration.billingContactEmail !== selectedRegistration.primaryContactEmail
+          ? selectedRegistration.primaryContactEmail
+          : ""
+      ].filter(Boolean).join(", ")
+    : "Cohort-level invoice; choose a registration to send to billing/POC contacts.";
 
   useEffect(() => {
     const row = invoice;
@@ -673,6 +688,19 @@ function InvoiceEditorDialog({
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
       <DialogTitle>{invoice ? "Edit Invoice Draft" : "Create Invoice"}</DialogTitle>
       <DialogContent>
+        <div className="invoice-editor-hero">
+          <div>
+            <span>{invoice ? "Existing draft" : "New draft"}</span>
+            <strong>{invoiceNumber || "Auto number on save"}</strong>
+            <p>{invoiceRecipient}</p>
+          </div>
+          <div className="invoice-editor-totals">
+            <DetailField label="Subtotal" value={money(subtotalAmount)} />
+            <DetailField label="Tax" value={money(taxAmount)} />
+            <DetailField label="Total" value={money(totalAmount)} />
+            <DetailField label="Balance" value={money(balanceAmount)} />
+          </div>
+        </div>
         <div className="finance-dialog-grid">
           <TextField select fullWidth label="Registration" value={registrationId} onChange={(event) => setRegistrationId(event.target.value)}>
             <MenuItem value="">Cohort-level invoice</MenuItem>
@@ -691,9 +719,6 @@ function InvoiceEditorDialog({
           <TextField fullWidth label="Due date" type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} InputLabelProps={{ shrink: true }} />
           <TextField fullWidth label="Paid amount" type="number" value={paidAmount} onChange={(event) => setPaidAmount(Number(event.target.value))} />
           <TextField fullWidth label="Tax amount" type="number" value={taxAmount} onChange={(event) => setTaxAmount(Number(event.target.value))} />
-          <TextField fullWidth label="QuickBooks customer ref" value={quickBooksCustomerRef} onChange={(event) => setQuickBooksCustomerRef(event.target.value)} />
-          <TextField fullWidth label="QuickBooks invoice ref" value={quickBooksInvoiceRef} onChange={(event) => setQuickBooksInvoiceRef(event.target.value)} />
-          <TextField fullWidth label="QuickBooks realm" value={quickBooksRealmId} onChange={(event) => setQuickBooksRealmId(event.target.value)} />
         </div>
         <div className="invoice-line-editor">
           <div className="section-inline-header">
@@ -705,6 +730,7 @@ function InvoiceEditorDialog({
               <TextField label="Description" value={item.description} onChange={(event) => updateLineItem(index, "description", event.target.value)} />
               <TextField label="Qty" type="number" value={item.quantity} onChange={(event) => updateLineItem(index, "quantity", event.target.value)} />
               <TextField label="Unit" type="number" value={item.unitAmount} onChange={(event) => updateLineItem(index, "unitAmount", event.target.value)} />
+              <DetailField label="Line total" value={money(invoiceLineTotal(item))} />
               <Button
                 variant="text"
                 color="error"
@@ -716,7 +742,23 @@ function InvoiceEditorDialog({
             </div>
           ))}
         </div>
+        <div className="invoice-accounting-panel">
+          <div>
+            <Typography variant="subtitle2">Accounting references</Typography>
+            <Typography variant="body2" color="text.secondary">QuickBooks remains reference/status only in this version.</Typography>
+          </div>
+          <div className="finance-dialog-grid">
+            <TextField fullWidth label="QuickBooks customer ref" value={quickBooksCustomerRef} onChange={(event) => setQuickBooksCustomerRef(event.target.value)} />
+            <TextField fullWidth label="QuickBooks invoice ref" value={quickBooksInvoiceRef} onChange={(event) => setQuickBooksInvoiceRef(event.target.value)} />
+            <TextField fullWidth label="QuickBooks realm" value={quickBooksRealmId} onChange={(event) => setQuickBooksRealmId(event.target.value)} />
+          </div>
+        </div>
         <TextField fullWidth multiline minRows={3} label="Notes" value={notes} onChange={(event) => setNotes(event.target.value)} />
+        {invoice && (invoice.pdfUrl || invoice.receiptUrl) && (
+          <Alert severity="info" sx={{ mt: 2 }}>
+            Saving printable invoice changes will mark existing PDFs and receipts as needing regeneration.
+          </Alert>
+        )}
       </DialogContent>
       <DialogActions>
         <Button variant="outlined" onClick={onClose}>Cancel</Button>
@@ -1444,6 +1486,9 @@ export function CohortDetailClient({ id }: { id: string }) {
       await adminApi("/api/invoices", { method: "PATCH", body: { action: "generatePdf", id: invoice.id, receipt } });
       notifySuccess(receipt ? "Receipt PDF generated" : "Invoice PDF generated");
       await load();
+      if (registrationDetail?.id) {
+        await openRegistrationDetail(registrationDetail);
+      }
     } catch (error) {
       notifyError((error as Error).message);
     }
@@ -1454,6 +1499,9 @@ export function CohortDetailClient({ id }: { id: string }) {
       await adminApi("/api/invoices", { method: "PATCH", body: { action: receipt ? "sendReceipt" : "sendInvoice", id: invoice.id } });
       notifySuccess(receipt ? "Receipt sent" : "Invoice sent");
       await load();
+      if (registrationDetail?.id) {
+        await openRegistrationDetail(registrationDetail);
+      }
     } catch (error) {
       notifyError((error as Error).message);
     }
@@ -1587,7 +1635,12 @@ export function CohortDetailClient({ id }: { id: string }) {
       sortable: false,
       renderCell: (params) => (
         <Box onClick={(event) => event.stopPropagation()}>
-          <RowActionMenu actions={[{ label: "Quick view", onClick: () => void openRegistrationDetail(params.row) }]} />
+          <RowActionMenu
+            actions={[
+              { label: "Quick view", onClick: () => void openRegistrationDetail(params.row) },
+              { label: "Create invoice", onClick: () => openInvoiceEditor(null, params.row) }
+            ]}
+          />
         </Box>
       )
     }
@@ -2439,6 +2492,9 @@ export function CohortDetailClient({ id }: { id: string }) {
         onSaved={async () => {
           notifySuccess(editingInvoice ? "Invoice updated" : "Invoice created");
           await load();
+          if (registrationDetail?.id) {
+            await openRegistrationDetail(registrationDetail);
+          }
         }}
         onError={notifyError}
       />
@@ -2465,6 +2521,9 @@ export function CohortDetailClient({ id }: { id: string }) {
           <div className="section-action-row">
             <Button variant="outlined" onClick={() => openRegistrationEditor(registrationDetail)}>
               Edit Registration
+            </Button>
+            <Button variant="outlined" onClick={() => openInvoiceEditor(null, registrationDetail)}>
+              Create Invoice
             </Button>
             {registrationDetail.primaryContactEmail && (
               <Button href={`/communications?search=${encodeURIComponent(registrationDetail.primaryContactEmail)}`} variant="outlined">
@@ -2501,6 +2560,49 @@ export function CohortDetailClient({ id }: { id: string }) {
             </div>
             <SectionCard title="Notes">
               <Typography color="text.secondary">{registrationDetail.notes ?? "No notes captured yet."}</Typography>
+            </SectionCard>
+            <SectionCard
+              title="Invoices And Receipts"
+              action={<Button variant="outlined" size="small" onClick={() => openInvoiceEditor(null, registrationDetail)}>Create invoice</Button>}
+            >
+              {(() => {
+                const registrationInvoices = ((registrationDetail.invoiceDrafts ?? invoiceDrafts.filter((invoice) => invoice.registrationId === registrationDetail.id)) as AdminRow[]);
+
+                if (registrationInvoices.length === 0) {
+                  return <EmptyState title="No invoice drafts yet" description="Create an invoice draft from this registration, then generate or send the PDF from here." />;
+                }
+
+                return (
+                  <div className="quick-view-list">
+                    {registrationInvoices.map((invoice: AdminRow) => (
+                      <div className="quick-view-list-row invoice-quick-row" key={invoice.id}>
+                        <div>
+                          <strong>{invoice.invoiceNumber ?? invoice.id.slice(-8)}</strong>
+                          <span>
+                            {[formatStatusLabel(invoice.status), money(invoice.totalAmount), invoice.pdfUrl ? "PDF ready" : "PDF needs generation"].join(" · ")}
+                          </span>
+                        </div>
+                        <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap justifyContent="flex-end">
+                          <StatusChip value={invoice.status} />
+                          <RowActionMenu
+                            actions={[
+                              { label: "Edit invoice", onClick: () => openInvoiceEditor(invoice, registrationDetail) },
+                              { label: invoice.pdfUrl ? "Regenerate PDF" : "Generate PDF", onClick: () => void generateInvoiceDocument(invoice) },
+                              ...(invoice.pdfUrl ? [{ label: "Open PDF", onClick: () => window.open(invoice.pdfUrl, "_blank", "noreferrer") }] : []),
+                              { label: financeHealth?.sendgridReady === false ? "Send invoice unavailable" : "Send invoice", disabled: financeHealth?.sendgridReady === false, onClick: () => void sendInvoiceDocument(invoice) },
+                              { label: invoice.receiptUrl ? "Regenerate receipt" : "Generate receipt", onClick: () => void generateInvoiceDocument(invoice, true) },
+                              ...(invoice.receiptUrl ? [
+                                { label: "Open receipt", onClick: () => window.open(invoice.receiptUrl, "_blank", "noreferrer") },
+                                { label: financeHealth?.sendgridReady === false ? "Send receipt unavailable" : "Send receipt", disabled: financeHealth?.sendgridReady === false, onClick: () => void sendInvoiceDocument(invoice, true) }
+                              ] : [])
+                            ]}
+                          />
+                        </Stack>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
             </SectionCard>
             <SectionCard title="Team Roster">
               <RosterWorkbench

@@ -62,6 +62,22 @@ function defaultInvoiceNumber(id: string, date: Date = new Date()) {
   return `RPD-${date.getFullYear()}-${id.slice(-8).toUpperCase()}`;
 }
 
+const printableInvoiceFields = new Set([
+  "invoiceNumber",
+  "purchaseOrderNumber",
+  "issueDate",
+  "dueDate",
+  "status",
+  "taxAmount",
+  "paidAmount",
+  "notes",
+  "lineItems"
+]);
+
+export function shouldInvalidateInvoiceDocuments(input: Record<string, unknown>) {
+  return Object.keys(input).some((key) => printableInvoiceFields.has(key));
+}
+
 function dedupeEmails(values: Array<string | null | undefined>) {
   const seen = new Set<string>();
   return values
@@ -154,6 +170,7 @@ export async function updateInvoiceDraft(id: string, input: z.input<typeof invoi
   const data = invoiceDraftInputSchema.partial().parse(input);
   const lineItems = data.lineItems;
   const totals = lineItems ? invoiceTotals(lineItems, data.taxAmount) : null;
+  const shouldRegenerateDocuments = shouldInvalidateInvoiceDocuments(data);
 
   return prisma.$transaction(async (tx) => {
     if (lineItems) {
@@ -184,7 +201,15 @@ export async function updateInvoiceDraft(id: string, input: z.input<typeof invoi
         notes: data.notes,
         quickBooksCustomerRef: data.quickBooksCustomerRef,
         quickBooksInvoiceRef: data.quickBooksInvoiceRef,
-        quickBooksRealmId: data.quickBooksRealmId
+        quickBooksRealmId: data.quickBooksRealmId,
+        ...(shouldRegenerateDocuments
+          ? {
+              pdfFileKey: null,
+              pdfUrl: null,
+              receiptFileKey: null,
+              receiptUrl: null
+            }
+          : {})
       },
       include: invoiceInclude()
     });

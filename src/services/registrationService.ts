@@ -339,6 +339,13 @@ export async function getRegistrationById(id: string) {
           emailEvents: { orderBy: { createdAt: "desc" } },
           attachments: true
         }
+      },
+      invoiceDrafts: {
+        orderBy: { updatedAt: "desc" },
+        include: {
+          organization: true,
+          lineItems: true
+        }
       }
     }
   });

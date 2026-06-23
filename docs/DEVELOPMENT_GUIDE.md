@@ -147,3 +147,10 @@ If a feature shows `Blocked`, keep the UI compatibility fallback in place and do
 - Custom multi-line invoices are never rewritten automatically when seats or totals change. Apply remains pending and asks the operator to review the invoice first.
 - Draft cohorts do not accumulate delivery batches because normal delivery is already blocked. Jotform intake remains an automatic registration path and does not use the manual edit batch.
 - Partial Apply progress is stored in the pending envelope. Retrying does not repeat completed invoice, participant-journey, or calendar phases.
+
+## Invoice Workbench
+
+- Cohort `Distribution` is the finance home, but registration quick view must also expose linked invoice drafts so operators can create, edit, generate, open, and send documents without leaving the registration context.
+- Editing printable invoice fields, including line items, dates, PO number, status, paid amount, tax, notes, or invoice number, invalidates existing generated PDFs/receipts. Operators must regenerate the document after saving those changes.
+- QuickBooks fields remain references/status only in v1. Editing QuickBooks reference fields must not invalidate generated PDFs.
+- Invoice and receipt sends use Communications with the generated PDF attached and dedupe billing plus POC recipient emails.

@@ -338,6 +338,8 @@ List Console Pattern:
 - Pending registration changes are saved app data awaiting external delivery, not a second editable form. Reverting the underlying field or participant change should remove the corresponding review row automatically.
 - Participants should prioritize contact, organization, status, send-message action, bulk status/message controls, and a quick-view drawer with contact, payment, email activity, and participation history matched by email.
 - Distribution is the cohort finance home. It should combine incoming payments, outgoing TL payouts, project return, pending payout, invoice drafts, and payment detail access in one ledger-style experience.
+- Invoice drafts should be reachable from both `Distribution` and registration quick view. The editor should show recipient context, invoice totals, line-item totals, and one quiet accounting-reference area rather than spreading QuickBooks fields through the primary form.
+- Generated PDF/receipt status must be explicit. If an invoice edit requires regeneration, show the document as pending/needs generation instead of implying the old PDF is current.
 
 ## Badges / Status Pills
 

@@ -4498,6 +4498,58 @@ h6,
   gap: 12px;
 }
 
+.invoice-editor-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.8fr);
+  gap: 14px;
+  margin-bottom: 14px;
+  border: 1px solid var(--color-outline-variant);
+  border-radius: 12px;
+  background:
+    linear-gradient(135deg, rgba(124, 58, 237, 0.08), transparent 46%),
+    var(--color-surface-container-lowest);
+  padding: 14px;
+}
+
+.invoice-editor-hero > div:first-child {
+  display: grid;
+  align-content: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.invoice-editor-hero span {
+  color: var(--color-on-surface-variant);
+  font-size: 0.76rem;
+  font-weight: 850;
+}
+
+.invoice-editor-hero strong {
+  overflow: hidden;
+  color: var(--color-primary-900);
+  font-size: 1.24rem;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.invoice-editor-hero p {
+  margin: 0;
+  color: var(--color-on-surface-variant);
+  font-size: 0.84rem;
+  font-weight: 650;
+}
+
+.invoice-editor-totals {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  border: 1px solid var(--color-outline-variant);
+  border-radius: 10px;
+  background: var(--color-surface-container-low);
+  padding: 10px;
+}
+
 .section-action-row,
 .section-inline-header,
 .finance-upload-row {
@@ -4563,9 +4615,23 @@ h6,
 
 .invoice-line-row {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) 92px 120px auto;
+  grid-template-columns: minmax(220px, 1fr) 92px 120px 104px auto;
   gap: 8px;
   align-items: end;
+}
+
+.invoice-accounting-panel {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0;
+  border: 1px solid var(--color-outline-variant);
+  border-radius: 12px;
+  background: var(--color-surface-container-lowest);
+  padding: 12px;
+}
+
+.invoice-accounting-panel .finance-dialog-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .finance-upload-row {
@@ -4609,6 +4675,10 @@ h6,
 .quick-view-list-row span {
   color: var(--color-slate-500);
   font-size: 0.82rem;
+}
+
+.invoice-quick-row {
+  align-items: flex-start;
 }
 
 .comms-summary-grid {
@@ -5125,6 +5195,9 @@ h6,
 .app-shell.is-night .cohort-finance-strip,
 .app-shell.is-night .finance-readiness-strip,
 .app-shell.is-night .finance-settings-panel,
+.app-shell.is-night .invoice-editor-hero,
+.app-shell.is-night .invoice-editor-totals,
+.app-shell.is-night .invoice-accounting-panel,
 .app-shell.is-night .invoice-line-editor,
 .app-shell.is-night .invoice-workbench-row,
 .app-shell.is-night .readiness-summary,
@@ -5149,6 +5222,10 @@ h6,
 }
 
 .app-shell.is-night .invoice-workbench-title strong {
+  color: #f4f1ff;
+}
+
+.app-shell.is-night .invoice-editor-hero strong {
   color: #f4f1ff;
 }
 
@@ -6182,6 +6259,9 @@ h6,
   .finance-command-grid,
   .finance-settings-grid,
   .finance-dialog-grid,
+  .invoice-editor-hero,
+  .invoice-editor-totals,
+  .invoice-accounting-panel .finance-dialog-grid,
   .invoice-workbench-row,
   .invoice-line-row {
     grid-template-columns: 1fr;

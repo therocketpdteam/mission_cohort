@@ -105,13 +105,13 @@ export function buildInvoicePdf(input: InvoicePdfInput) {
   const isReceipt = input.documentType === "receipt";
   const title = isReceipt ? "PAID RECEIPT" : "INVOICE";
   const content: string[] = [
-    fillRect(0, 720, 612, 72, [10, 31, 68]),
+    fillRect(0, 720, 612, 72, [37, 0, 90]),
     fillRect(44, 684, 524, 1, [203, 213, 225]),
     pdfText("RocketPD", 44, 752, { size: 22, font: "F2", color: [255, 255, 255] }),
     pdfText("Mission Control Finance", 44, 733, { size: 10, color: [203, 213, 225] }),
     pdfText(title, 568, 752, { size: 18, font: "F2", color: [255, 255, 255], align: "right" }),
     pdfText(input.invoiceNumber, 568, 733, { size: 10, color: [203, 213, 225], align: "right" }),
-    pdfText(isReceipt ? "Payment received" : "Bill To", 44, 656, { size: 9, font: "F2", color: [20, 121, 201] }),
+    pdfText(isReceipt ? "Payment received" : "Bill To", 44, 656, { size: 9, font: "F2", color: [99, 14, 212] }),
     pdfText(input.organizationName, 44, 636, { size: 14, font: "F2" }),
     input.contactName ? pdfText(input.contactName, 44, 618, { size: 10, color: [71, 85, 105] }) : "",
     input.contactEmail ? pdfText(input.contactEmail, 44, 602, { size: 10, color: [71, 85, 105] }) : "",
@@ -126,7 +126,7 @@ export function buildInvoicePdf(input: InvoicePdfInput) {
     ...wrapText(input.cohortTitle, 86).slice(0, 2).map((line, index) => pdfText(line, 44, 542 - index * 15, { size: 10 })),
     pdfText("PO Number", 356, 560, { size: 8, font: "F2", color: [100, 116, 139] }),
     pdfText(input.purchaseOrderNumber || "-", 568, 542, { size: 10, align: "right" }),
-    fillRect(44, 492, 524, 28, [15, 23, 42]),
+    fillRect(44, 492, 524, 28, [37, 0, 90]),
     pdfText("Description", 58, 502, { size: 9, font: "F2", color: [255, 255, 255] }),
     pdfText("Qty", 374, 502, { size: 9, font: "F2", color: [255, 255, 255], align: "right" }),
     pdfText("Unit", 464, 502, { size: 9, font: "F2", color: [255, 255, 255], align: "right" }),
