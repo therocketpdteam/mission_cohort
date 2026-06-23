@@ -2431,6 +2431,24 @@ h6,
   box-shadow: -24px 0 60px rgba(15, 23, 42, 0.16);
 }
 
+.quick-view-drawer.registration-detail-drawer {
+  width: min(100%, 760px);
+}
+
+.quick-view-drawer.registration-detail-drawer .quick-view-header,
+.quick-view-drawer.registration-detail-drawer .quick-view-footer {
+  padding-inline: 22px;
+}
+
+.quick-view-drawer.registration-detail-drawer .quick-view-body {
+  gap: 16px;
+  padding: 22px;
+}
+
+.quick-view-drawer.registration-detail-drawer .quick-view-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .quick-view-header,
 .quick-view-footer {
   display: flex;
@@ -2795,11 +2813,28 @@ h6,
   .registration-preflight-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .quick-view-drawer.registration-detail-drawer .quick-view-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 620px) {
   .registration-preflight-grid,
   .registration-add-participant {
+    grid-template-columns: 1fr;
+  }
+
+  .quick-view-drawer.registration-detail-drawer .quick-view-header,
+  .quick-view-drawer.registration-detail-drawer .quick-view-footer {
+    padding-inline: 16px;
+  }
+
+  .quick-view-drawer.registration-detail-drawer .quick-view-body {
+    padding: 16px;
+  }
+
+  .quick-view-drawer.registration-detail-drawer .quick-view-grid {
     grid-template-columns: 1fr;
   }
 }

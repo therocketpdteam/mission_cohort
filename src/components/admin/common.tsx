@@ -181,13 +181,15 @@ export function QuickViewDrawer({
   open,
   onClose,
   children,
-  actions
+  actions,
+  className = ""
 }: {
   title: string;
   open: boolean;
   onClose: () => void;
   children: ReactNode;
   actions?: ReactNode;
+  className?: string;
 }) {
   if (!open) {
     return null;
@@ -195,7 +197,7 @@ export function QuickViewDrawer({
 
   return (
     <div className="quick-view-backdrop" role="presentation" onClick={onClose}>
-      <aside className="quick-view-drawer" role="dialog" aria-modal="true" aria-label={title} onClick={(event) => event.stopPropagation()}>
+      <aside className={`quick-view-drawer ${className}`.trim()} role="dialog" aria-modal="true" aria-label={title} onClick={(event) => event.stopPropagation()}>
         <header className="quick-view-header">
           <h2>{title}</h2>
           <IconButton type="button" onClick={onClose} aria-label="Close drawer">

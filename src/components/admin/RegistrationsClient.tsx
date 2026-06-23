@@ -636,6 +636,7 @@ function RegistrationDetailDialog({
       open={open}
       onClose={onClose}
       title={registration ? formatProperDisplay(registration.primaryContactName) || "Registration detail" : "Registration detail"}
+      className="registration-detail-drawer"
       actions={
         registration ? (
           <>

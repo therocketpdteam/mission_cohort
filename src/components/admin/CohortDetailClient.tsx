@@ -2555,6 +2555,7 @@ export function CohortDetailClient({ id }: { id: string }) {
         title="Registration Detail"
         open={Boolean(registrationDetail)}
         onClose={() => setRegistrationDetail(null)}
+        className="registration-detail-drawer"
         actions={registrationDetail ? (
           <div className="section-action-row">
             <Button variant="outlined" onClick={() => openRegistrationEditor(registrationDetail)}>

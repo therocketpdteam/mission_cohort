@@ -202,6 +202,7 @@ Rules:
 - Table row actions should collapse into a dropdown or kebab menu when more than 2 actions exist.
 - Modal footers should use a consistent layout: Cancel/Secondary on the left or right, Primary on the far right, with `gap: 8px` or `12px`.
 - Cards with actions should have actions in a dedicated header or footer area, not floating over card content.
+- Data-rich registration detail drawers should use the wide drawer variant so roster, delivery preflight, invoices, and communication history can render in tidy grids instead of cramped single-column stacks.
 
 Recommended class/layout pattern:
 
