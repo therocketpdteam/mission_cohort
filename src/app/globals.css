@@ -4946,6 +4946,202 @@ h6,
   font-size: 0.76rem;
 }
 
+.registration-journey {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.registration-journey-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.registration-journey-stat {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  border: 1px solid rgba(120, 118, 128, 0.18);
+  border-radius: 10px;
+  background: var(--color-surface-container-lowest);
+  padding: 9px 10px;
+}
+
+.registration-journey-stat span {
+  overflow: hidden;
+  color: var(--color-slate-500);
+  font-size: 0.68rem;
+  font-weight: 760;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.registration-journey-stat strong {
+  color: var(--color-primary-900);
+  font-size: 1.08rem;
+  font-weight: 860;
+}
+
+.registration-journey-stat.is-alert {
+  border-color: rgba(220, 38, 38, 0.22);
+  background: rgba(254, 226, 226, 0.44);
+}
+
+.registration-journey-stat.is-alert strong {
+  color: var(--color-danger-600);
+}
+
+.registration-journey-groups {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.registration-journey-group {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.registration-journey-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.registration-journey-group-header > div {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.registration-journey-group-header h4,
+.registration-journey-group-header p {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.registration-journey-group-header h4 {
+  color: var(--color-primary-900);
+  font-size: 0.86rem;
+  font-weight: 840;
+}
+
+.registration-journey-group-header p {
+  color: var(--color-slate-500);
+  font-size: 0.74rem;
+}
+
+.registration-journey-group-header > span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: var(--color-blue-100);
+  color: var(--color-blue-600);
+  font-size: 0.72rem;
+  font-weight: 840;
+}
+
+.registration-journey-group-rows {
+  display: grid;
+  gap: 7px;
+}
+
+.registration-journey-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 12px;
+  min-width: 0;
+  border: 1px solid var(--color-slate-200);
+  border-radius: 10px;
+  background: var(--color-slate-50);
+  padding: 10px;
+}
+
+.registration-journey-main {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.registration-journey-main strong,
+.registration-journey-main span,
+.registration-journey-main em {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.registration-journey-main strong {
+  color: var(--color-primary-900);
+  font-size: 0.84rem;
+  font-weight: 820;
+}
+
+.registration-journey-main span {
+  color: var(--color-slate-500);
+  font-size: 0.76rem;
+}
+
+.registration-journey-main em {
+  color: var(--color-danger-600);
+  font-size: 0.74rem;
+  font-style: normal;
+  font-weight: 760;
+}
+
+.registration-journey-meta,
+.registration-journey-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.registration-journey-meta {
+  justify-content: flex-end;
+}
+
+.registration-journey-chips {
+  grid-column: 1 / -1;
+}
+
+.registration-journey-chips span,
+.registration-recipient-pill {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+  border: 1px solid rgba(120, 118, 128, 0.18);
+  border-radius: 999px;
+  background: var(--color-surface-container-lowest);
+  padding: 3px 7px;
+  color: var(--color-slate-600);
+  font-size: 0.68rem;
+  font-weight: 760;
+  line-height: 1;
+}
+
+.registration-journey-group.is-needs_attention .registration-journey-row {
+  border-color: rgba(220, 38, 38, 0.22);
+  background: rgba(254, 226, 226, 0.36);
+}
+
+.registration-journey-group.is-scheduled .registration-journey-row {
+  border-color: rgba(124, 58, 237, 0.2);
+  background: rgba(237, 224, 255, 0.26);
+}
+
 .comms-summary-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -5456,6 +5652,18 @@ h6,
   .poc-history-row-actions {
     justify-content: flex-start;
   }
+
+  .registration-journey-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .registration-journey-row {
+    grid-template-columns: 1fr;
+  }
+
+  .registration-journey-meta {
+    justify-content: flex-start;
+  }
 }
 
 .app-shell.is-night .cohort-metric-card,
@@ -5479,6 +5687,10 @@ h6,
 .app-shell.is-night .quick-view-list-row,
 .app-shell.is-night .poc-history-row,
 .app-shell.is-night .poc-history-footer,
+.app-shell.is-night .registration-journey-stat,
+.app-shell.is-night .registration-journey-row,
+.app-shell.is-night .registration-journey-chips span,
+.app-shell.is-night .registration-recipient-pill,
 .app-shell.is-night .comms-stat-card,
 .app-shell.is-night .comms-message-hero,
 .app-shell.is-night .comms-review-target,
@@ -5515,6 +5727,9 @@ h6,
 .app-shell.is-night .registration-change-impact strong,
 .app-shell.is-night .registration-preflight-notes strong,
 .app-shell.is-night .poc-history-row strong,
+.app-shell.is-night .registration-journey-stat strong,
+.app-shell.is-night .registration-journey-group-header h4,
+.app-shell.is-night .registration-journey-main strong,
 .app-shell.is-night .registration-detail-tile strong,
 .app-shell.is-night .participant-hero h3,
 .app-shell.is-night .participant-section-heading h3,
@@ -5531,6 +5746,11 @@ h6,
 .app-shell.is-night .registration-preflight-notes span,
 .app-shell.is-night .poc-history-row span,
 .app-shell.is-night .poc-history-footer span,
+.app-shell.is-night .registration-journey-stat span,
+.app-shell.is-night .registration-journey-group-header p,
+.app-shell.is-night .registration-journey-main span,
+.app-shell.is-night .registration-journey-chips span,
+.app-shell.is-night .registration-recipient-pill,
 .app-shell.is-night .registration-detail-tile span,
 .app-shell.is-night .participant-hero p,
 .app-shell.is-night .participant-section-heading p,
@@ -5546,6 +5766,8 @@ h6,
 .app-shell.is-night .registration-preflight-notes,
 .app-shell.is-night .poc-history-row,
 .app-shell.is-night .poc-history-footer,
+.app-shell.is-night .registration-journey-stat,
+.app-shell.is-night .registration-journey-row,
 .app-shell.is-night .participant-hero,
 .app-shell.is-night .participant-detail-tile,
 .app-shell.is-night .cohort-material-bank,

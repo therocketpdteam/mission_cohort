@@ -30,6 +30,7 @@ import { RosterWorkbench } from "./RosterWorkbench";
 import { RegistrationPendingChangesPanel } from "./RegistrationPendingChangesPanel";
 import { RegistrationDeliveryPreflight } from "./RegistrationDeliveryPreflight";
 import { PocCommunicationHistory } from "./PocCommunicationHistory";
+import { RegistrationCommunicationJourney } from "./RegistrationCommunicationJourney";
 import type { ParsedRosterParticipant } from "@/lib/rosterParser";
 import {
   AdminRow,
@@ -51,7 +52,6 @@ import {
 const paymentMethods = ["CREDIT_CARD", "PURCHASE_ORDER", "INVOICE", "COMPED", "UNKNOWN"];
 const paymentStatuses = ["PENDING", "INVOICED", "PARTIALLY_PAID", "PAID", "REFUNDED", "CANCELLED"];
 const rosterStatuses = ["NOT_REQUESTED", "NEEDED", "PARTIAL", "COMPLETE"];
-const visibleJourneyStatuses = new Set(["SCHEDULED", "SENDING", "SENT", "FAILED"]);
 const visibilityOptions = [
   { value: "active", label: "Active registrations" },
   { value: "archived", label: "Archived registrations" },
@@ -92,24 +92,6 @@ function rosterHealth(registration: AdminRow) {
   }
 
   return { tone: "warning", label: formatStatusLabel(status || "NEEDED"), helper: `${actual}/${expected || actual} participants` };
-}
-
-function communicationDeliverySummary(communication: AdminRow) {
-  const events = ((communication.emailEvents ?? []) as AdminRow[]).map((event) => String(event.eventType ?? "").toUpperCase());
-  const opened = events.filter((event) => event === "OPENED").length;
-  const clicked = events.filter((event) => event === "CLICKED").length;
-  const delivered = events.includes("DELIVERED");
-  const failed = events.find((event) => event === "FAILED" || event === "BOUNCED");
-
-  if (failed) {
-    return formatStatusLabel(failed);
-  }
-
-  return [
-    delivered ? "Delivered" : "",
-    opened ? `${opened} open${opened === 1 ? "" : "s"}` : "",
-    clicked ? `${clicked} click${clicked === 1 ? "" : "s"}` : ""
-  ].filter(Boolean).join(" · ");
 }
 
 function taskTemplateName(task: AdminRow) {
@@ -724,35 +706,7 @@ function RegistrationDetailDialog({
                 <p>POC and participant confirmations, upcoming milestones, and skipped messages.</p>
               </div>
             </div>
-            {(() => {
-              const visibleCommunications = ((registration.communications ?? []) as AdminRow[]).filter((communication) => visibleJourneyStatuses.has(String(communication.status ?? "")));
-
-              if (visibleCommunications.length === 0) {
-                return <EmptyState title="No scheduled or sent emails yet" description="Scheduled confirmations, reminders, sent emails, and failed delivery attempts will appear here." />;
-              }
-
-              return (
-              <div className="quick-view-list">
-                {visibleCommunications.map((communication: AdminRow) => {
-                  const recipient = communication.participant
-                    ? `${formatProperDisplay(`${communication.participant.firstName} ${communication.participant.lastName}`)} · ${communication.participant.email}`
-                    : Array.isArray(communication.recipientEmails)
-                      ? communication.recipientEmails.join(", ")
-                      : registration.primaryContactEmail;
-                  const timing = communication.sentAt ?? communication.scheduledFor ?? communication.createdAt;
-                  return (
-                    <div className="quick-view-list-row" key={communication.id}>
-                      <div>
-                        <strong>{communication.template?.name ?? communication.subject ?? "Registration message"}</strong>
-                        <span>{[recipient, timing ? new Date(timing).toLocaleString("en-US") : "", communicationDeliverySummary(communication), communication.providerError].filter(Boolean).join(" · ")}</span>
-                      </div>
-                      <StatusChip value={communication.status} />
-                    </div>
-                  );
-                })}
-              </div>
-              );
-            })()}
+            <RegistrationCommunicationJourney communications={registration.communications} pocEmail={registration.primaryContactEmail} />
           </section>
 
           <section className="registration-detail-section">
