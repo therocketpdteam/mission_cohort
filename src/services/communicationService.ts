@@ -702,6 +702,33 @@ export async function sendCommunicationToRecipient(input: { communicationId: str
   return sendCommunication(input.communicationId, { recipients: [recipientEmail] });
 }
 
+export async function cancelCommunication(input: { id: string }) {
+  const communication = await prisma.cohortCommunication.findUnique({
+    where: { id: input.id },
+    select: { id: true, status: true, sentAt: true }
+  });
+
+  if (!communication) {
+    throw Object.assign(new Error("Communication not found"), { code: "NOT_FOUND", status: 404 });
+  }
+
+  if (communication.sentAt || communication.status === CommunicationStatus.SENT || communication.status === CommunicationStatus.SENDING) {
+    throw Object.assign(new Error("Sent or sending communications cannot be cancelled from the journey."), {
+      code: "BAD_REQUEST",
+      status: 400
+    });
+  }
+
+  return prisma.cohortCommunication.update({
+    where: { id: input.id },
+    data: {
+      status: CommunicationStatus.CANCELLED,
+      scheduledFor: null,
+      providerError: null
+    }
+  });
+}
+
 export async function sendCalendarCancellationNotice(input: { cohortId: string; sessionId?: string }) {
   await ensureDefaultCommunicationTemplates();
   const templateName = input.sessionId ? "Session Cancellation" : "Cohort Cancellation";

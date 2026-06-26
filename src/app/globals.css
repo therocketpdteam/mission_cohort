@@ -5100,7 +5100,8 @@ h6,
 }
 
 .registration-journey-meta,
-.registration-journey-chips {
+.registration-journey-chips,
+.registration-journey-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -5114,6 +5115,42 @@ h6,
 
 .registration-journey-chips {
   grid-column: 1 / -1;
+}
+
+.registration-journey-actions {
+  grid-column: 1 / -1;
+  justify-content: flex-end;
+}
+
+.registration-journey-preview {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 6px;
+  min-width: 0;
+  border: 1px dashed rgba(120, 118, 128, 0.26);
+  border-radius: 10px;
+  background: var(--color-surface-container-lowest);
+  padding: 10px;
+}
+
+.registration-journey-preview strong {
+  overflow: hidden;
+  color: var(--color-primary-900);
+  font-size: 0.78rem;
+  font-weight: 820;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.registration-journey-preview p {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  color: var(--color-slate-600);
+  font-size: 0.76rem;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 8;
 }
 
 .registration-journey-chips span,
@@ -5664,6 +5701,10 @@ h6,
   .registration-journey-meta {
     justify-content: flex-start;
   }
+
+  .registration-journey-actions {
+    justify-content: flex-start;
+  }
 }
 
 .app-shell.is-night .cohort-metric-card,
@@ -5691,6 +5732,7 @@ h6,
 .app-shell.is-night .registration-journey-row,
 .app-shell.is-night .registration-journey-chips span,
 .app-shell.is-night .registration-recipient-pill,
+.app-shell.is-night .registration-journey-preview,
 .app-shell.is-night .comms-stat-card,
 .app-shell.is-night .comms-message-hero,
 .app-shell.is-night .comms-review-target,
@@ -5730,6 +5772,7 @@ h6,
 .app-shell.is-night .registration-journey-stat strong,
 .app-shell.is-night .registration-journey-group-header h4,
 .app-shell.is-night .registration-journey-main strong,
+.app-shell.is-night .registration-journey-preview strong,
 .app-shell.is-night .registration-detail-tile strong,
 .app-shell.is-night .participant-hero h3,
 .app-shell.is-night .participant-section-heading h3,
@@ -5751,6 +5794,7 @@ h6,
 .app-shell.is-night .registration-journey-main span,
 .app-shell.is-night .registration-journey-chips span,
 .app-shell.is-night .registration-recipient-pill,
+.app-shell.is-night .registration-journey-preview p,
 .app-shell.is-night .registration-detail-tile span,
 .app-shell.is-night .participant-hero p,
 .app-shell.is-night .participant-section-heading p,
@@ -5768,6 +5812,7 @@ h6,
 .app-shell.is-night .poc-history-footer,
 .app-shell.is-night .registration-journey-stat,
 .app-shell.is-night .registration-journey-row,
+.app-shell.is-night .registration-journey-preview,
 .app-shell.is-night .participant-hero,
 .app-shell.is-night .participant-detail-tile,
 .app-shell.is-night .cohort-material-bank,

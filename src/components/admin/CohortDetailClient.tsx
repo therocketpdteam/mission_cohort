@@ -2658,7 +2658,16 @@ export function CohortDetailClient({ id }: { id: string }) {
               )}
             </SectionCard>
             <SectionCard title="Registration Communication Journey">
-              <RegistrationCommunicationJourney communications={registrationDetail.communications} pocEmail={registrationDetail.primaryContactEmail} />
+              <RegistrationCommunicationJourney
+                communications={registrationDetail.communications}
+                pocEmail={registrationDetail.primaryContactEmail}
+                onChanged={async () => {
+                  if (registrationDetail?.id) {
+                    setRegistrationDetail(await adminApi<AdminRow>(`/api/registrations?id=${registrationDetail.id}`));
+                  }
+                  await load();
+                }}
+              />
             </SectionCard>
             <SectionCard
               title="POC Communication History"

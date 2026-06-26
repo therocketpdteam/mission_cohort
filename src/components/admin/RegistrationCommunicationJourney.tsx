@@ -1,7 +1,10 @@
 "use client";
 
+import { useState } from "react";
+import { Button } from "@/components/ui/primitives";
+import { adminApi } from "@/lib/adminApi";
 import { formatProperDisplay, formatStatusLabel } from "@/lib/formatting";
-import { AdminRow, DateBadge, EmptyState, StatusChip } from "./common";
+import { AdminRow, DateBadge, EmptyState, StatusChip, useNotifier } from "./common";
 
 type JourneyGroupKey = "needs_attention" | "scheduled" | "sent" | "skipped" | "planned";
 
@@ -30,6 +33,25 @@ function deliverySummary(communication: AdminRow) {
   ].filter(Boolean);
 }
 
+function plainPreview(communication: AdminRow) {
+  const text = String(communication.bodyText ?? "").trim();
+  if (text) return text;
+
+  return String(communication.bodyHtml ?? "")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/\s+\n/g, "\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
+}
+
 function journeyGroupFor(communication: AdminRow): JourneyGroupKey {
   const status = String(communication.status ?? "").toUpperCase();
   const hasIssue = Boolean(communication.providerError) || ((communication.emailEvents ?? []) as AdminRow[]).some((event) => {
@@ -47,9 +69,11 @@ function journeyGroupFor(communication: AdminRow): JourneyGroupKey {
 function recipientContext(communication: AdminRow, fallbackEmail?: string | null) {
   if (communication.participant) {
     const name = formatProperDisplay(`${communication.participant.firstName ?? ""} ${communication.participant.lastName ?? ""}`.trim());
+    const email = communication.participant.email ? [String(communication.participant.email)] : [];
     return {
       type: "Participant",
-      label: [name, communication.participant.email].filter(Boolean).join(" · ")
+      label: [name, communication.participant.email].filter(Boolean).join(" · "),
+      emails: email
     };
   }
 
@@ -60,7 +84,8 @@ function recipientContext(communication: AdminRow, fallbackEmail?: string | null
 
   return {
     type: scope === "PARTICIPANTS" ? "Participant" : scope === "CUSTOM" ? "Custom" : "POC",
-    label: emails.join(", ") || "Recipient not assigned"
+    label: emails.join(", ") || "Recipient not assigned",
+    emails
   };
 }
 
@@ -70,12 +95,66 @@ function timingFor(communication: AdminRow) {
 
 export function RegistrationCommunicationJourney({
   communications,
-  pocEmail
+  pocEmail,
+  onChanged
 }: {
   communications?: AdminRow[] | null;
   pocEmail?: string | null;
+  onChanged?: () => Promise<void> | void;
 }) {
+  const { notifySuccess, notifyError } = useNotifier();
+  const [busyId, setBusyId] = useState("");
+  const [previewId, setPreviewId] = useState("");
   const rows = (communications ?? []) as AdminRow[];
+
+  async function runAction(communication: AdminRow, action: "cancel" | "review", recipientEmail?: string) {
+    setBusyId(`${communication.id}:${action}`);
+
+    try {
+      if (action === "cancel") {
+        await adminApi("/api/communications", { method: "PATCH", body: { id: communication.id, action: "cancel" } });
+        notifySuccess("Scheduled communication cancelled.");
+      } else if (recipientEmail) {
+        const result = await adminApi<AdminRow>("/api/communications", {
+          method: "PATCH",
+          body: {
+            action: "reviewRecipientIssue",
+            communicationId: communication.id,
+            recipientEmail,
+            reviewNote: "Reviewed from registration communication journey."
+          }
+        });
+        if (result?.migrationRequired) {
+          notifyError(result.message ?? "Production migration is required before issues can be reviewed.");
+          return;
+        }
+        notifySuccess("Issue marked reviewed.");
+      }
+
+      await onChanged?.();
+    } catch (error) {
+      notifyError((error as Error).message);
+    } finally {
+      setBusyId("");
+    }
+  }
+
+  async function resendToRecipient(communication: AdminRow, recipientEmail: string) {
+    setBusyId(`${communication.id}:resend`);
+
+    try {
+      await adminApi("/api/communications", {
+        method: "PATCH",
+        body: { action: "sendToRecipient", communicationId: communication.id, recipientEmail }
+      });
+      notifySuccess(`Message sent to ${recipientEmail}.`);
+      await onChanged?.();
+    } catch (error) {
+      notifyError((error as Error).message);
+    } finally {
+      setBusyId("");
+    }
+  }
 
   if (rows.length === 0) {
     return <EmptyState title="No communication journey yet" description="Scheduled, sent, skipped, and failed registration emails will appear here once this registration has a communication plan." />;
@@ -137,6 +216,16 @@ export function RegistrationCommunicationJourney({
                   const recipient = recipientContext(communication, pocEmail);
                   const chips = deliverySummary(communication);
                   const title = communication.template?.name ?? communication.subject ?? "Registration message";
+                  const groupKey = journeyGroupFor(communication);
+                  const firstRecipient = recipient.emails[0] ?? "";
+                  const canResend = Boolean(firstRecipient) && ["needs_attention", "sent"].includes(groupKey);
+                  const canCancel = ["DRAFT", "SCHEDULED", "FAILED"].includes(String(communication.status ?? "").toUpperCase()) && !communication.sentAt;
+                  const canReview = groupKey === "needs_attention" && Boolean(firstRecipient);
+                  const preview = plainPreview(communication);
+                  const openHref = firstRecipient
+                    ? `/communications?search=${encodeURIComponent(firstRecipient)}`
+                    : `/communications?search=${encodeURIComponent(title)}`;
+                  const showingPreview = previewId === communication.id;
 
                   return (
                     <div className="registration-journey-row" key={communication.id}>
@@ -153,6 +242,49 @@ export function RegistrationCommunicationJourney({
                       {chips.length ? (
                         <div className="registration-journey-chips">
                           {chips.map((chip) => <span key={chip}>{chip}</span>)}
+                        </div>
+                      ) : null}
+                      <div className="registration-journey-actions">
+                        <Button variant="text" size="small" onClick={() => setPreviewId(showingPreview ? "" : communication.id)}>
+                          {showingPreview ? "Hide preview" : "Preview"}
+                        </Button>
+                        {canResend ? (
+                          <Button
+                            variant="outlined"
+                            size="small"
+                            disabled={Boolean(busyId)}
+                            onClick={() => resendToRecipient(communication, firstRecipient)}
+                          >
+                            {busyId === `${communication.id}:resend` ? "Sending" : "Resend"}
+                          </Button>
+                        ) : null}
+                        {canReview ? (
+                          <Button
+                            variant="outlined"
+                            size="small"
+                            disabled={Boolean(busyId)}
+                            onClick={() => runAction(communication, "review", firstRecipient)}
+                          >
+                            {busyId === `${communication.id}:review` ? "Saving" : "Mark reviewed"}
+                          </Button>
+                        ) : null}
+                        {canCancel ? (
+                          <Button
+                            variant="text"
+                            size="small"
+                            color="error"
+                            disabled={Boolean(busyId)}
+                            onClick={() => runAction(communication, "cancel")}
+                          >
+                            {busyId === `${communication.id}:cancel` ? "Cancelling" : "Cancel"}
+                          </Button>
+                        ) : null}
+                        <Button href={openHref} variant="text" size="small">Open</Button>
+                      </div>
+                      {showingPreview ? (
+                        <div className="registration-journey-preview">
+                          <strong title={communication.subject}>{communication.subject ?? title}</strong>
+                          <p>{preview || "No message body has been saved for this communication yet."}</p>
                         </div>
                       ) : null}
                     </div>

@@ -706,7 +706,7 @@ function RegistrationDetailDialog({
                 <p>POC and participant confirmations, upcoming milestones, and skipped messages.</p>
               </div>
             </div>
-            <RegistrationCommunicationJourney communications={registration.communications} pocEmail={registration.primaryContactEmail} />
+            <RegistrationCommunicationJourney communications={registration.communications} pocEmail={registration.primaryContactEmail} onChanged={onChanged} />
           </section>
 
           <section className="registration-detail-section">

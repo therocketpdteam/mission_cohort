@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/auth";
 import {
   addCommunicationAttachment,
   attachResourceToCommunication,
+  cancelCommunication,
   createDefaultCohortSessionCommunications,
   createCommunicationDraft,
   createDefaultSessionCommunications,
@@ -115,6 +116,14 @@ export async function PATCH(request: Request) {
       }
 
       return ok(await sendCommunicationPlaceholder(body.id));
+    }
+
+    if (body.action === "cancel") {
+      if (!body.id) {
+        return fail("id is required", "BAD_REQUEST", 400);
+      }
+
+      return ok(await cancelCommunication({ id: body.id }));
     }
 
     if (body.action === "sendToRecipient") {
