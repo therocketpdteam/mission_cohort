@@ -2579,6 +2579,7 @@ h6,
 }
 
 .registration-change-impact,
+.registration-change-plan,
 .registration-preflight-notes {
   display: grid;
   gap: 8px;
@@ -2590,10 +2591,67 @@ h6,
 }
 
 .registration-change-impact strong,
+.registration-change-plan strong,
 .registration-preflight-notes strong {
   color: var(--color-primary-900);
   font-size: 0.8rem;
   font-weight: 820;
+}
+
+.registration-change-plan-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.registration-change-plan-heading span {
+  overflow: hidden;
+  color: var(--color-slate-500);
+  font-size: 0.72rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.registration-change-plan-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.registration-change-plan-card {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  border: 1px solid rgba(120, 118, 128, 0.18);
+  border-radius: 10px;
+  background: var(--color-surface-container-lowest);
+  padding: 9px;
+}
+
+.registration-change-plan-card > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.registration-change-plan-card strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.registration-change-plan-card > span {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--color-slate-600);
+  font-size: 0.75rem;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
 }
 
 .registration-change-impact ul {
@@ -2609,6 +2667,10 @@ h6,
   .registration-change-review-header {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .registration-change-plan-grid {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -5749,6 +5811,8 @@ h6,
 .app-shell.is-night .comms-recipient-row,
 .app-shell.is-night .registration-delivery-preflight,
 .app-shell.is-night .registration-preflight-tile,
+.app-shell.is-night .registration-change-plan,
+.app-shell.is-night .registration-change-plan-card,
 .app-shell.is-night .registration-change-impact,
 .app-shell.is-night .registration-preflight-notes {
   background: #151329;
@@ -5766,6 +5830,7 @@ h6,
 .app-shell.is-night .registration-hero h3,
 .app-shell.is-night .registration-section-heading h3,
 .app-shell.is-night .registration-preflight-tile strong,
+.app-shell.is-night .registration-change-plan strong,
 .app-shell.is-night .registration-change-impact strong,
 .app-shell.is-night .registration-preflight-notes strong,
 .app-shell.is-night .poc-history-row strong,
@@ -5785,6 +5850,8 @@ h6,
 .app-shell.is-night .registration-section-heading p,
 .app-shell.is-night .registration-preflight-tile span,
 .app-shell.is-night .registration-preflight-tile p,
+.app-shell.is-night .registration-change-plan-heading span,
+.app-shell.is-night .registration-change-plan-card > span,
 .app-shell.is-night .registration-change-impact ul,
 .app-shell.is-night .registration-preflight-notes span,
 .app-shell.is-night .poc-history-row span,
@@ -5806,6 +5873,8 @@ h6,
 .app-shell.is-night .registration-detail-tile,
 .app-shell.is-night .registration-delivery-preflight,
 .app-shell.is-night .registration-preflight-tile,
+.app-shell.is-night .registration-change-plan,
+.app-shell.is-night .registration-change-plan-card,
 .app-shell.is-night .registration-change-impact,
 .app-shell.is-night .registration-preflight-notes,
 .app-shell.is-night .poc-history-row,

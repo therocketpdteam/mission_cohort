@@ -147,6 +147,7 @@ If a feature shows `Blocked`, keep the UI compatibility fallback in place and do
 - Published and Active registration edits save to Mission Control immediately but defer attendee-facing delivery until an operator selects `Apply Changes` in registration quick view.
 - A pending batch combines participant additions/removals with participant-count, total-amount, PO-number, and invoice-number changes. Repeated edits preserve the original value and latest value; reverting to the original removes that item from review.
 - Applying a batch sends confirmations only to newly added participants, updates linked future Google events once per session, refreshes a simple one-line invoice/PDF when relevant, and sends one consolidated POC summary.
+- Pending-change UI must show the client communication plan before Apply: POC summary recipient, participant confirmation recipients, calendar refresh impact, and invoice/PDF readiness or review blockers.
 - Removed participants have unsent journey messages cancelled immediately, but Google attendee removal waits for Apply so multiple changes generate one coordinated update.
 - Custom multi-line invoices are never rewritten automatically when seats or totals change. Apply remains pending and asks the operator to review the invoice first.
 - Draft cohorts do not accumulate delivery batches because normal delivery is already blocked. Jotform intake remains an automatic registration path and does not use the manual edit batch.

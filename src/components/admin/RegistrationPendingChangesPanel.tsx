@@ -43,6 +43,39 @@ function blockedSafetyRecipients(registration: AdminRow) {
   return [...blocked];
 }
 
+function invoiceReadiness(registration: AdminRow, invoiceRelevant: boolean) {
+  const invoice = ((registration.invoiceDrafts ?? []) as AdminRow[]).find((row) => !["VOIDED", "CANCELLED"].includes(String(row.status ?? "")));
+  if (!invoiceRelevant) {
+    return {
+      tone: "Ready",
+      title: "No invoice refresh",
+      detail: "These changes do not affect invoice fields."
+    };
+  }
+  if (!invoice) {
+    return {
+      tone: "No invoice",
+      title: "No invoice draft",
+      detail: "Apply still sends the POC summary, but no invoice PDF will be attached."
+    };
+  }
+
+  const lineCount = Array.isArray(invoice.lineItems) ? invoice.lineItems.length : 0;
+  if (lineCount > 1) {
+    return {
+      tone: "Review invoice",
+      title: "Custom invoice needs review",
+      detail: "This invoice has custom line items. Review and save it before applying registration delivery changes."
+    };
+  }
+
+  return {
+    tone: invoice.pdfUrl ? "PDF refresh" : "PDF generate",
+    title: invoice.pdfUrl ? "Invoice PDF will refresh" : "Invoice PDF will generate",
+    detail: `${invoice.invoiceNumber ?? "Invoice draft"} will use the latest PO, seats, total, and invoice number before the POC summary sends.`
+  };
+}
+
 export function RegistrationPendingChangesPanel({
   registration,
   onApplied,
@@ -68,11 +101,47 @@ export function RegistrationPendingChangesPanel({
   ], [additions, fields, removals]);
   const blockedRecipients = blockedSafetyRecipients(registration);
   const pocEmail = normalizeEmail(registration.primaryContactEmail);
+  const invoiceRelevant = fields.some(([field]) => ["participantCount", "totalAmount", "purchaseOrderNumber", "invoiceNumber"].includes(field));
+  const attendeeChanges = additions.length > 0 || removals.length > 0;
+  const invoicePlan = invoiceReadiness(registration, invoiceRelevant);
+  const participantRecipients = additions.map((row: AdminRow) => normalizeEmail(row.email)).filter(Boolean);
+  const clientPlan = [
+    {
+      key: "poc-summary",
+      title: "POC summary email",
+      detail: pocEmail
+        ? `Sends one consolidated update to ${pocEmail}${invoiceRelevant ? " with invoice context when ready" : ""}.`
+        : "Blocked until the registration has a POC email.",
+      tone: pocEmail ? "Ready" : "Needs email"
+    },
+    {
+      key: "participant-confirmations",
+      title: "Participant confirmations",
+      detail: participantRecipients.length
+        ? `Sends registration confirmation to ${participantRecipients.join(", ")}.`
+        : "No newly added participant confirmations in this batch.",
+      tone: participantRecipients.length ? "Queued" : "No change"
+    },
+    {
+      key: "calendar-refresh",
+      title: "Calendar attendee refresh",
+      detail: attendeeChanges
+        ? "Future linked Google events update once after Apply, so roster changes stay coordinated."
+        : "No participant add/remove changes, so calendar attendees are unchanged.",
+      tone: attendeeChanges ? "Queued" : "No change"
+    },
+    {
+      key: "invoice-plan",
+      title: invoicePlan.title,
+      detail: invoicePlan.detail,
+      tone: invoicePlan.tone
+    }
+  ];
   const deliveryImpacts = [
     additions.length ? `${additions.length} new participant${additions.length === 1 ? "" : "s"} will receive registration confirmation emails.` : "",
     removals.length ? `${removals.length} removed participant${removals.length === 1 ? "" : "s"} will be removed from future linked Google events.` : "",
     additions.length || removals.length ? "Future linked Google calendar events update once when Apply runs." : "",
-    fields.some(([field]) => ["participantCount", "totalAmount", "purchaseOrderNumber", "invoiceNumber"].includes(field))
+    invoiceRelevant
       ? "Invoice-related fields may refresh the simple invoice/PDF before the POC summary is sent."
       : "",
     pocEmail ? `A consolidated POC summary sends to ${pocEmail}.` : "A POC email is required before the summary can be sent.",
@@ -115,6 +184,23 @@ export function RegistrationPendingChangesPanel({
             <StatusChip value={row.tone} />
           </div>
         ))}
+      </div>
+      <div className="registration-change-plan">
+        <div className="registration-change-plan-heading">
+          <strong>Client communication plan</strong>
+          <span>Preview before Apply sends or refreshes anything</span>
+        </div>
+        <div className="registration-change-plan-grid">
+          {clientPlan.map((item) => (
+            <div className="registration-change-plan-card" key={item.key}>
+              <div>
+                <strong>{item.title}</strong>
+                <StatusChip value={item.tone} />
+              </div>
+              <span>{item.detail}</span>
+            </div>
+          ))}
+        </div>
       </div>
       <div className="registration-change-impact">
         <strong>Apply will coordinate</strong>
