@@ -94,7 +94,7 @@ const defaultOrganizationInvoiceProfile: AdminRow = {
   website: "",
   taxId: "",
   paymentInstructions: "Please include the invoice number with payment.",
-  footerNote: "Thank you for partnering with RocketPD."
+  footerNote: "In Demand Group, LLC"
 };
 const smartMappingTargets = [
   "formId",

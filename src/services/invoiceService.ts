@@ -299,6 +299,14 @@ async function invoicePdfInput(invoice: Awaited<ReturnType<typeof createInvoiceD
     invoiceNumber: invoice.invoiceNumber ?? invoice.id.slice(-8),
     status: String(invoice.status),
     organizationName: organization?.name ?? "Organization",
+    organizationAddressLines: [
+      organization?.addressLine1,
+      organization?.addressLine2,
+      [
+        organization?.city,
+        [organization?.state, organization?.zip].filter(Boolean).join(" ")
+      ].filter(Boolean).join(", ")
+    ].filter((line): line is string => Boolean(line)),
     contactName: invoice.registration?.billingContactName ?? invoice.registration?.primaryContactName,
     contactEmail: invoice.registration?.billingContactEmail ?? invoice.registration?.primaryContactEmail,
     cohortTitle: invoice.cohort.title,

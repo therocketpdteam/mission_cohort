@@ -17,7 +17,7 @@ export const organizationInvoiceProfileSchema = z.object({
   website: z.string().trim().optional().default(""),
   taxId: z.string().trim().optional().default(""),
   paymentInstructions: z.string().trim().optional().default("Please include the invoice number with payment."),
-  footerNote: z.string().trim().optional().default("Thank you for partnering with RocketPD.")
+  footerNote: z.string().trim().optional().default("In Demand Group, LLC")
 });
 
 export type OrganizationInvoiceProfile = z.infer<typeof organizationInvoiceProfileSchema>;
