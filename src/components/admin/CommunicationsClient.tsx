@@ -11,7 +11,8 @@ import {
 } from "@/components/ui/icons";
 import { Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem, Stack, Tab, Tabs, TextField, Typography } from "@/components/ui/primitives";
 import { GridColDef } from "./common";
-import { ChangeEvent, useEffect, useMemo, useState } from "react";
+import type { ChangeEvent, SyntheticEvent } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { adminApi, uploadAdminFile } from "@/lib/adminApi";
 import { formatProperDisplay, formatStatusLabel } from "@/lib/formatting";
 import { mergeFields, renderMergeFields, sampleMergeContext } from "@/modules/email/mergeFields";
@@ -228,6 +229,13 @@ function TemplateEditorDialog({
   const [values, setValues] = useState<AdminRow>({ type: "CUSTOM", active: true, bodyText: "" });
   const [saving, setSaving] = useState(false);
   const [activeField, setActiveField] = useState<"subject" | "bodyText">("bodyText");
+  const subjectInputId = useId();
+  const bodyInputId = useId();
+  const selectionRef = useRef<Record<"subject" | "bodyText", { start: number; end: number }>>({
+    subject: { start: 0, end: 0 },
+    bodyText: { start: 0, end: 0 }
+  });
+  const pendingCursorRef = useRef<{ field: "subject" | "bodyText"; position: number } | null>(null);
   const bodyText = String(values.bodyText ?? "");
   const renderedSubject = renderMergeFields(String(values.subject ?? ""), sampleMergeContext, true);
   const renderedBody = renderMergeFields(bodyText, sampleMergeContext, true);
@@ -237,19 +245,68 @@ function TemplateEditorDialog({
     if (open) {
       setValues(editing ? { ...editing, bodyText: templateText(editing) } : { type: "CUSTOM", active: true, bodyText: "" });
       setActiveField("bodyText");
+      selectionRef.current = {
+        subject: { start: String(editing?.subject ?? "").length, end: String(editing?.subject ?? "").length },
+        bodyText: { start: String(editing ? templateText(editing) : "").length, end: String(editing ? templateText(editing) : "").length }
+      };
     }
   }, [editing, open]);
+
+  useEffect(() => {
+    const pending = pendingCursorRef.current;
+    if (!pending) return;
+
+    const element = document.getElementById(pending.field === "subject" ? subjectInputId : bodyInputId) as
+      | HTMLInputElement
+      | HTMLTextAreaElement
+      | null;
+
+    if (element) {
+      element.focus();
+      element.setSelectionRange(pending.position, pending.position);
+      selectionRef.current[pending.field] = { start: pending.position, end: pending.position };
+    }
+
+    pendingCursorRef.current = null;
+  }, [bodyInputId, subjectInputId, values.bodyText, values.subject]);
 
   function setValue(field: string, value: unknown) {
     setValues((current) => ({ ...current, [field]: value }));
   }
 
+  function rememberSelection(field: "subject" | "bodyText", element: HTMLInputElement | HTMLTextAreaElement) {
+    setActiveField(field);
+    const position = element.value.length;
+    selectionRef.current[field] = {
+      start: element.selectionStart ?? position,
+      end: element.selectionEnd ?? position
+    };
+  }
+
+  function rememberSubjectSelection(event: SyntheticEvent<HTMLInputElement | HTMLTextAreaElement>) {
+    rememberSelection("subject", event.currentTarget);
+  }
+
+  function rememberBodySelection(event: SyntheticEvent<HTMLInputElement | HTMLTextAreaElement>) {
+    rememberSelection("bodyText", event.currentTarget);
+  }
+
   function insertMergeField(field: string) {
     const token = `{{${field}}}`;
+    const targetField = activeField;
     setValues((current) => {
-      const currentValue = String(current[activeField] ?? "");
-      const separator = currentValue && !currentValue.endsWith(" ") && !currentValue.endsWith("\n") ? " " : "";
-      return { ...current, [activeField]: `${currentValue}${separator}${token}` };
+      const currentValue = String(current[targetField] ?? "");
+      const savedSelection = selectionRef.current[targetField] ?? { start: currentValue.length, end: currentValue.length };
+      const start = Math.min(savedSelection.start, currentValue.length);
+      const end = Math.min(savedSelection.end, currentValue.length);
+      const before = currentValue.slice(0, start);
+      const after = currentValue.slice(end);
+      const leadingSpace = before && !/\s$/.test(before) ? " " : "";
+      const trailingSpace = after && !/^\s/.test(after) ? " " : "";
+      const nextValue = `${before}${leadingSpace}${token}${trailingSpace}${after}`;
+      const nextCursor = before.length + leadingSpace.length + token.length + trailingSpace.length;
+      pendingCursorRef.current = { field: targetField, position: nextCursor };
+      return { ...current, [targetField]: nextValue };
     });
   }
 
@@ -291,18 +348,26 @@ function TemplateEditorDialog({
               </TextField>
             </div>
             <TextField
+              id={subjectInputId}
               label="Subject"
               value={values.subject ?? ""}
-              onFocus={() => setActiveField("subject")}
+              onClick={rememberSubjectSelection}
+              onFocus={rememberSubjectSelection}
+              onKeyUp={rememberSubjectSelection}
+              onSelect={rememberSubjectSelection}
               onChange={(event) => setValue("subject", event.target.value)}
               required
             />
             <TextField
+              id={bodyInputId}
               label="Email body"
               multiline
               minRows={10}
               value={bodyText}
-              onFocus={() => setActiveField("bodyText")}
+              onClick={rememberBodySelection}
+              onFocus={rememberBodySelection}
+              onKeyUp={rememberBodySelection}
+              onSelect={rememberBodySelection}
               onChange={(event) => setValue("bodyText", event.target.value)}
               helperText="Write this like a normal email. Blank lines become paragraph breaks."
               required
@@ -315,7 +380,7 @@ function TemplateEditorDialog({
           <aside className="template-editor-side">
             <div>
               <h3>Merge fields</h3>
-              <p>Click a field to insert it into the {activeField === "subject" ? "subject" : "email body"}.</p>
+              <p>Place your cursor in the subject or email body, then click a field to insert it there.</p>
             </div>
             <div className="comms-field-cloud">
               {mergeFields.map((field) => (
