@@ -60,12 +60,16 @@ export async function sendRegistrationConfirmation(registrationId: string) {
     bodyText: "Hello {{registration.primaryContactName}}, your registration for {{cohort.title}} is confirmed.",
     context: {
       cohort: {
+        ...registration.cohort,
         title: registration.cohort.title,
         description: registration.cohort.description,
         startDate: registration.cohort.startDate,
-        presenterName: `${registration.cohort.presenter.firstName} ${registration.cohort.presenter.lastName}`
+        presenterName: `${registration.cohort.presenter.firstName} ${registration.cohort.presenter.lastName}`,
+        presenterFirstName: registration.cohort.presenter.firstName,
+        presenterLastName: registration.cohort.presenter.lastName,
+        presenterEmail: registration.cohort.presenter.email
       },
-      organization: { name: registration.organization.name },
+      organization: registration.organization,
       registration
     }
   });

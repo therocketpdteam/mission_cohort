@@ -934,10 +934,14 @@ export async function sendCommunication(id: string, options?: { recipients?: str
       attachments: communication.attachments,
       context: options?.context ?? {
         cohort: {
+          ...communication.cohort,
           title: communication.cohort.title,
           description: communication.cohort.description,
           startDate: communication.cohort.startDate,
-          presenterName: `${communication.cohort.presenter.firstName} ${communication.cohort.presenter.lastName}`
+          presenterName: `${communication.cohort.presenter.firstName} ${communication.cohort.presenter.lastName}`,
+          presenterFirstName: communication.cohort.presenter.firstName,
+          presenterLastName: communication.cohort.presenter.lastName,
+          presenterEmail: communication.cohort.presenter.email
         },
         session: communication.session ?? undefined,
         participant: communication.participant ?? undefined,
@@ -1218,10 +1222,14 @@ export async function sendTemplateToParticipant(input: { templateId: string; par
     recipients: [participant.email],
     context: {
         cohort: {
+          ...participant.cohort,
           title: participant.cohort.title,
           description: participant.cohort.description,
           startDate: participant.cohort.startDate,
-          presenterName: `${participant.cohort.presenter.firstName} ${participant.cohort.presenter.lastName}`
+          presenterName: `${participant.cohort.presenter.firstName} ${participant.cohort.presenter.lastName}`,
+          presenterFirstName: participant.cohort.presenter.firstName,
+          presenterLastName: participant.cohort.presenter.lastName,
+          presenterEmail: participant.cohort.presenter.email
       },
       participant,
       organization: participant.organization,
@@ -1248,10 +1256,14 @@ export async function sendTemplateToRegistrations(input: { templateId: string; r
       recipients: [registration.primaryContactEmail],
       context: {
         cohort: {
+          ...registration.cohort,
           title: registration.cohort.title,
           description: registration.cohort.description,
           startDate: registration.cohort.startDate,
-          presenterName: `${registration.cohort.presenter.firstName} ${registration.cohort.presenter.lastName}`
+          presenterName: `${registration.cohort.presenter.firstName} ${registration.cohort.presenter.lastName}`,
+          presenterFirstName: registration.cohort.presenter.firstName,
+          presenterLastName: registration.cohort.presenter.lastName,
+          presenterEmail: registration.cohort.presenter.email
         },
         organization: registration.organization,
         registration

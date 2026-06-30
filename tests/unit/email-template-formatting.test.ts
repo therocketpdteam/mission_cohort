@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { textToEmailHtml } from "../../src/modules/email/templateFormatting";
+import { renderMergeFields, sampleMergeContext, textToEmailHtml } from "../../src/modules/email";
+import { defaultTemplates } from "../../src/services/communicationService";
 
 test("renders email body formatting into safe HTML", () => {
   const html = textToEmailHtml([
@@ -23,4 +24,13 @@ test("escapes raw HTML while preserving supported formatting", () => {
   assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
   assert.match(html, /<strong>safe<\/strong>/);
   assert.match(html, /href="#"/);
+});
+
+test("default communication templates only use registered merge fields", () => {
+  const warnings = defaultTemplates.flatMap((template) => [
+    ...renderMergeFields(template.subject, sampleMergeContext, true).warnings,
+    ...renderMergeFields(template.bodyText, sampleMergeContext, true).warnings
+  ]);
+
+  assert.deepEqual(warnings, []);
 });

@@ -448,9 +448,18 @@ export async function sendInvoiceDocument(id: string, receipt = false) {
   const sent = await sendCommunication(communication.id, {
     recipients,
     context: {
-      cohort: { title: invoice.cohort.title, startDate: invoice.cohort.startDate },
-      organization: organization ? { name: organization.name } : undefined,
-      registration: invoice.registration ?? undefined
+      cohort: {
+        ...invoice.cohort,
+        title: invoice.cohort.title,
+        description: invoice.cohort.description,
+        startDate: invoice.cohort.startDate,
+        presenterName: `${invoice.cohort.presenter.firstName} ${invoice.cohort.presenter.lastName}`,
+        presenterFirstName: invoice.cohort.presenter.firstName,
+        presenterLastName: invoice.cohort.presenter.lastName,
+        presenterEmail: invoice.cohort.presenter.email
+      },
+      organization: organization ?? undefined,
+      registration: invoice.registration ? { ...invoice.registration, invoiceUrl: url } : undefined
     }
   });
 
