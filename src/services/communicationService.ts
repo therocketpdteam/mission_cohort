@@ -9,130 +9,389 @@ import {
   communicationTemplateUpdateSchema
 } from "@/validators/communication";
 import { logAuditEventAsync } from "./auditService";
-import { generateSessionReminderSchedule } from "@/modules/email";
+import { generateSessionReminderSchedule, textToEmailHtml } from "@/modules/email";
 import { sendEmail } from "@/services/emailService";
 import { deletePrivateAppFile } from "@/services/storageService";
 import { assertCohortDeliveryAllowed, getSendGridSetup } from "@/services/integrationSetupService";
 
-const defaultTemplates: Array<{
+type DefaultTemplate = {
   type: TemplateType;
   name: string;
   subject: string;
   bodyHtml: string;
   bodyText: string;
-}> = [
-  {
+};
+
+function defaultEmailTemplate(template: Omit<DefaultTemplate, "bodyHtml"> & { bodyHtml?: string }): DefaultTemplate {
+  return {
+    ...template,
+    bodyHtml: template.bodyHtml ?? textToEmailHtml(template.bodyText)
+  };
+}
+
+const defaultTemplates: DefaultTemplate[] = [
+  defaultEmailTemplate({
     type: TemplateType.REGISTRATION_CONFIRMATION,
     name: "Registration Confirmation",
     subject: "Registration confirmation: {{cohort.title}}",
-    bodyHtml: "<p>Hello {{registration.primaryContactName}},</p><p>Your registration for <strong>{{cohort.title}}</strong> has been received.</p>",
-    bodyText: "Hello {{registration.primaryContactName}}, your registration for {{cohort.title}} has been received."
-  },
-  {
+    bodyText: `Hello {{registration.primaryContactName}},
+
+Thank you for signing up for **{{cohort.title}}** with {{cohort.presenterName}}.
+
+This email confirms your initial registration in the live-virtual cohort experience.
+
+If you registered a team or group, someone from RocketPD will reach out shortly to confirm participant names and emails and to make sure calendar invitations and session links are set up correctly.
+
+If you requested a purchase order, a RocketPD team member will help make sure you have the information and forms needed for purchase and accounting.
+
+As we get closer to launch, you and any registered team members can expect:
+
+- Calendar invites to the sessions, including sign-in links
+- A kickoff email at least one week before the first session
+- Reminder emails before each session
+- Periodic thought-leader resources, recordings, and next steps
+- A post-event email with follow-up information and a survey
+- Certificates of completion when requested by your school or district in advance
+
+Thank you again for registering. We can’t wait to get started.
+
+Questions at any time? Reply to this message or contact info@rocketpd.com.
+
+The RocketPD Team`
+  }),
+  defaultEmailTemplate({
     type: TemplateType.WEEK_BEFORE_REMINDER,
     name: "1 Week Before Session",
     subject: "One week reminder: {{session.title}}",
-    bodyHtml: "<p>Hello {{participant.firstName}},</p><p>{{session.title}} for {{cohort.title}} is coming up in one week.</p>",
-    bodyText: "Hello {{participant.firstName}}, {{session.title}} for {{cohort.title}} is coming up in one week."
-  },
-  {
+    bodyText: `Hello {{participant.firstName}},
+
+You’re receiving this because you are registered for **{{session.title}}** in RocketPD’s **{{cohort.title}}** cohort with {{cohort.presenterName}}.
+
+The session is coming up on {{session.startTime}}.
+
+[Join the session]({{session.meetingUrl}})
+
+A few important notes:
+
+- Please use the Zoom link in this email or in your calendar invitation.
+- The meeting room will open about 10 minutes before the session begins.
+- Live attendance is encouraged, and recordings/resources will be shared when available.
+- If you have questions about the portal, recordings, certificates, or the cohort experience, email info@rocketpd.com.
+
+We look forward to learning alongside you.
+
+The RocketPD Team`
+  }),
+  defaultEmailTemplate({
     type: TemplateType.DAY_BEFORE_REMINDER,
     name: "24 Hours Before Session",
-    subject: "Tomorrow: {{session.title}}",
-    bodyHtml: "<p>Hello {{participant.firstName}},</p><p>This is your 24-hour reminder for {{session.title}}.</p>",
-    bodyText: "Hello {{participant.firstName}}, this is your 24-hour reminder for {{session.title}}."
-  },
-  {
+    subject: "Reminder: {{cohort.title}} session is live tomorrow",
+    bodyText: `Hello {{participant.firstName}},
+
+This is a quick reminder that **{{session.title}}** for **{{cohort.title}}**, with {{cohort.presenterName}}, is tomorrow at {{session.startTime}}.
+
+Please see your calendar invitation or use the link below to sign in. The meeting room will be open 10 minutes before the session begins.
+
+[Join the session]({{session.meetingUrl}})
+
+Questions or trouble signing in? Email info@rocketpd.com.
+
+The RocketPD Team`
+  }),
+  defaultEmailTemplate({
     type: TemplateType.HOUR_BEFORE_REMINDER,
     name: "60 Minutes Before Session",
-    subject: "Starting soon: {{session.title}}",
-    bodyHtml: "<p>Hello {{participant.firstName}},</p><p>{{session.title}} starts in about 60 minutes.</p>",
-    bodyText: "Hello {{participant.firstName}}, {{session.title}} starts in about 60 minutes."
-  },
-  {
+    subject: "60 minutes away: {{cohort.title}}",
+    bodyText: `Hi {{participant.firstName}},
+
+{{cohort.presenterName}} is excited to begin **{{session.title}}** in about one hour.
+
+Please use the link below or the one in your calendar invitation to join.
+
+[Join the session]({{session.meetingUrl}})
+
+If you have questions or run into any issues, contact us at (855) 757-6253 or info@rocketpd.com.
+
+{{cohort.presenterName}} is looking forward to seeing you there.
+
+The RocketPD Team`
+  }),
+  defaultEmailTemplate({
     type: TemplateType.FOLLOW_UP,
     name: "24 Hours Post Session",
     subject: "Follow-up: {{session.title}}",
-    bodyHtml: "<p>Hello {{participant.firstName}},</p><p>Thank you for attending {{session.title}}. Resources and next steps will be shared here.</p>",
-    bodyText: "Hello {{participant.firstName}}, thank you for attending {{session.title}}. Resources and next steps will be shared here."
-  },
-  {
+    bodyText: `Hi {{participant.firstName}},
+
+What a great session yesterday.
+
+As promised, we’re sharing resources for **{{session.title}}** in **{{cohort.title}}**.
+
+[Access the cohort resources]({{session.resourcesUrl}})
+
+Recordings are typically uploaded to the RocketPD Learning Portal within 24 hours after each scheduled session and remain available for up to 30 days after the final session.
+
+If this is your first time logging in, you may be asked to create a password. Your username is the email address used for your registration.
+
+Your experience is everything to us. If you have questions about resources, recordings, the learning community, or anything inside your RocketPD portal, please reach out to info@rocketpd.com.
+
+Thank you,
+The RocketPD Team`
+  }),
+  defaultEmailTemplate({
     type: TemplateType.PAYMENT_REMINDER,
     name: "Payment Reminder",
     subject: "Payment reminder: {{cohort.title}}",
-    bodyHtml: "<p>Hello {{registration.primaryContactName}},</p><p>This is a friendly reminder about payment status for {{cohort.title}}.</p>",
-    bodyText: "Hello {{registration.primaryContactName}}, this is a friendly reminder about payment status for {{cohort.title}}."
-  },
-  {
+    bodyText: `Hello {{registration.primaryContactName}},
+
+This is a friendly reminder about payment for **{{cohort.title}}**.
+
+Current payment status: **{{registration.paymentStatus}}**
+Invoice number: {{registration.invoiceNumber}}
+
+[View the invoice]({{registration.invoiceUrl}})
+
+If your organization requires a purchase order, W-9, or any additional accounting documentation, reply to this email and we’ll help right away.
+
+[Here is your W-9 for your convenience]({{registration.w9Url}})
+
+Thank you,
+The RocketPD Team`
+  }),
+  defaultEmailTemplate({
     type: TemplateType.CUSTOM,
     name: "Participant List Request",
     subject: "Participant list needed: {{cohort.title}}",
-    bodyHtml: "<p>Hello {{registration.primaryContactName}},</p><p>We are preparing <strong>{{cohort.title}}</strong> and still need the participant roster for {{organization.name}}.</p><p>Please reply with the participant names and emails when ready.</p>",
-    bodyText: "Hello {{registration.primaryContactName}}, we are preparing {{cohort.title}} and still need the participant roster for {{organization.name}}. Please reply with the participant names and emails when ready."
-  },
-  {
+    bodyText: `Hello {{registration.primaryContactName}},
+
+Hope you are well.
+
+We are excited to have {{organization.name}} as part of **{{cohort.title}}**.
+
+You registered more than one person for this cohort, and we still need the participant names and work email addresses so every participant receives calendar invitations, meeting links, reminders, and resources.
+
+Please reply with each participant on a separate line, like this:
+
+- First Last, email@school.org
+- First Last, email@school.org
+
+You can also reply with an Excel file if that is easier.
+
+We will not share these names or email addresses outside RocketPD without permission.
+
+Questions? Reply here or contact info@rocketpd.com.
+
+Kind regards,
+The RocketPD Team`
+  }),
+  defaultEmailTemplate({
     type: TemplateType.CUSTOM,
     name: "Supporting Documents Request",
     subject: "Supporting documents needed: {{cohort.title}}",
-    bodyHtml: "<p>Hello {{registration.primaryContactName}},</p><p>We are preparing <strong>{{cohort.title}}</strong> and need the remaining supporting documents for {{organization.name}}.</p><p>Please reply with the needed documentation when available.</p>",
-    bodyText: "Hello {{registration.primaryContactName}}, we are preparing {{cohort.title}} and need the remaining supporting documents for {{organization.name}}. Please reply with the needed documentation when available."
-  },
-  {
+    bodyText: `Hello {{registration.primaryContactName}},
+
+We are preparing **{{cohort.title}}** for {{organization.name}} and want to make sure purchasing/accounting has what it needs.
+
+Available documents:
+
+- [Here is your W-9 for your convenience]({{registration.w9Url}})
+- [Here is your invoice]({{registration.invoiceUrl}})
+
+If you need a PO number added, a revised invoice date, updated participant count, or any other adjustment, reply directly to this message and we’ll take care of it.
+
+Thank you,
+The RocketPD Team`
+  }),
+  defaultEmailTemplate({
     type: TemplateType.CUSTOM,
     name: "Cohort Cancellation",
     subject: "Cancelled: {{cohort.title}}",
-    bodyHtml: "<p>The remaining sessions for <strong>{{cohort.title}}</strong> have been cancelled.</p><p>Google Calendar invitations have been removed. Please contact the RocketPD team if you have any questions.</p>",
-    bodyText: "The remaining sessions for {{cohort.title}} have been cancelled. Google Calendar invitations have been removed. Please contact the RocketPD team if you have any questions."
-  },
-  {
+    bodyText: `Hello,
+
+The remaining sessions for **{{cohort.title}}** have been cancelled.
+
+Google Calendar invitations have been removed. Please contact the RocketPD team at info@rocketpd.com if you have any questions or need support.
+
+The RocketPD Team`
+  }),
+  defaultEmailTemplate({
     type: TemplateType.CUSTOM,
     name: "Session Cancellation",
     subject: "Cancelled: {{session.title}} | {{cohort.title}}",
-    bodyHtml: "<p><strong>{{session.title}}</strong> for {{cohort.title}} has been cancelled.</p><p>The Google Calendar invitation has been removed. Please contact the RocketPD team if you have any questions.</p>",
-    bodyText: "{{session.title}} for {{cohort.title}} has been cancelled. The Google Calendar invitation has been removed. Please contact the RocketPD team if you have any questions."
-  },
-  {
+    bodyText: `Hello,
+
+**{{session.title}}** for **{{cohort.title}}** has been cancelled.
+
+The Google Calendar invitation has been removed. Please contact the RocketPD team at info@rocketpd.com if you have any questions.
+
+The RocketPD Team`
+  }),
+  defaultEmailTemplate({
     type: TemplateType.CUSTOM,
     name: "Session Updated",
     subject: "Updated: {{session.title}} | {{cohort.title}}",
-    bodyHtml: "<p><strong>{{session.title}}</strong> for {{cohort.title}} has been updated.</p><p>The session is now scheduled for {{session.startTime}}. Your Google Calendar invitation has also been updated.</p><p>Please contact the RocketPD team if you have any questions.</p>",
-    bodyText: "{{session.title}} for {{cohort.title}} has been updated. The session is now scheduled for {{session.startTime}}. Your Google Calendar invitation has also been updated. Please contact the RocketPD team if you have any questions."
-  },
-  {
+    bodyText: `Hello,
+
+**{{session.title}}** for **{{cohort.title}}** has been updated.
+
+The session is now scheduled for {{session.startTime}}. Your Google Calendar invitation has also been updated.
+
+Please contact the RocketPD team at info@rocketpd.com if you have any questions.
+
+The RocketPD Team`
+  }),
+  defaultEmailTemplate({
     type: TemplateType.CUSTOM,
     name: "POC Registration Confirmation",
     subject: "Registration received: {{cohort.title}}",
-    bodyHtml: "<p>Hello {{registration.primaryContactName}},</p><p>We received the registration for <strong>{{organization.name}}</strong> in <strong>{{cohort.title}}</strong>.</p><p>Available registration documents are attached below. We will continue to keep you updated about roster and payment needs.</p>",
-    bodyText: "Hello {{registration.primaryContactName}}, we received the registration for {{organization.name}} in {{cohort.title}}. Available registration documents are attached below."
-  },
-  {
+    bodyText: `Hello {{registration.primaryContactName}},
+
+Hope you are well.
+
+We received the registration for **{{organization.name}}** in **{{cohort.title}}** with {{cohort.presenterName}}.
+
+Registration summary:
+
+- Participants registered: {{registration.participantCount}}
+- Payment status: {{registration.paymentStatus}}
+- Invoice number: {{registration.invoiceNumber}}
+
+Available documents:
+
+- [Here is your W-9 for your convenience]({{registration.w9Url}})
+- [Here is your invoice]({{registration.invoiceUrl}})
+
+If you registered a team and already shared participant information, we are reviewing it and will let you know if we have questions.
+
+If you registered a team and have not shared participant information yet, please reply with each participant’s name and work email address so we can send calendar invitations, meeting links, reminders, and resources.
+
+Thank you again for signing up for this cohort. We’re looking forward to a great experience.
+
+Kind regards,
+The RocketPD Team`
+  }),
+  defaultEmailTemplate({
     type: TemplateType.CUSTOM,
     name: "Participant Registration Confirmation",
     subject: "You're registered: {{cohort.title}}",
-    bodyHtml: "<p>Hello {{participant.firstName}},</p><p>You are registered for <strong>{{cohort.title}}</strong>.</p><p>You will receive calendar invitations and future session reminders at this email address.</p>",
-    bodyText: "Hello {{participant.firstName}}, you are registered for {{cohort.title}}. You will receive calendar invitations and future session reminders at this email address."
-  },
-  {
+    bodyText: `Hello {{participant.firstName}},
+
+You’re receiving this because you, or someone on your team, registered you to participate in RocketPD’s **{{cohort.title}}** cohort with {{cohort.presenterName}}.
+
+We couldn’t be more excited to start this journey with you.
+
+You will receive calendar invitations and meeting links at this email address, plus reminder emails as each session approaches.
+
+What to expect:
+
+- Calendar invitations for each live session
+- A kickoff email before the first session
+- Reminder emails before each session
+- Resources and recordings when available
+- A feedback survey and certificate information after the cohort
+
+Questions? Email info@rocketpd.com.
+
+The RocketPD Team`
+  }),
+  defaultEmailTemplate({
     type: TemplateType.CUSTOM,
     name: "One Month Before Cohort",
-    subject: "One month until {{cohort.title}}",
-    bodyHtml: "<p>Hello {{participant.firstName}},</p><p><strong>{{cohort.title}}</strong> begins in about one month.</p><p>Your calendar invitations contain the latest session details.</p>",
-    bodyText: "Hello {{participant.firstName}}, {{cohort.title}} begins in about one month. Your calendar invitations contain the latest session details."
-  },
-  {
+    subject: "Getting ready for {{cohort.title}} with {{cohort.presenterName}}",
+    bodyText: `Hello {{participant.firstName}},
+
+Thank you again for registering for **{{cohort.title}}** with {{cohort.presenterName}}.
+
+As a reminder, your first session starts on {{session.startTime}}.
+
+You will receive calendar invitations with links to access each session, along with reminder emails before each session.
+
+Want to start your learning early? Here are three simple steps:
+
+- Review the cohort description and goals.
+- Watch for any RocketPD resources shared before kickoff.
+- Make sure the calendar invitations are visible on your calendar.
+
+Expect more information and resources from us one week before the first live cohort session.
+
+If you have questions about registration, billing, the schedule, content, or the learning experience, contact us at info@rocketpd.com.
+
+The RocketPD Team`
+  }),
+  defaultEmailTemplate({
     type: TemplateType.CUSTOM,
     name: "One Week Before Cohort",
-    subject: "One week until {{cohort.title}}",
-    bodyHtml: "<p>Hello {{participant.firstName}},</p><p><strong>{{cohort.title}}</strong> begins in one week.</p><p>Please review your calendar invitations for the latest session details.</p>",
-    bodyText: "Hello {{participant.firstName}}, {{cohort.title}} begins in one week. Please review your calendar invitations for the latest session details."
-  },
-  {
+    subject: "Kick-off: {{cohort.title}}",
+    bodyText: `Hello {{participant.firstName}},
+
+You’re receiving this because you, or someone on your team, registered you for RocketPD’s **{{cohort.title}}** cohort with {{cohort.presenterName}}.
+
+We couldn’t be more excited to start this journey with you.
+
+As a reminder, the first session kicks off on {{session.startTime}}.
+
+[Here is your sign-in link]({{session.meetingUrl}})
+
+How to prepare:
+
+- Review your calendar invitation and make sure the session link is available.
+- Join a few minutes early so we can help with any access issues.
+- Watch for portal/resource information from RocketPD as the cohort begins.
+
+Recordings:
+
+Live attendance is encouraged. When recordings are available, they are typically posted within 24 hours after the live session and remain available for a limited time after the cohort concludes.
+
+Certificates:
+
+If certificates are part of your cohort experience, you will receive survey/certificate instructions after completion.
+
+Questions about the portal, recordings, certificates, or the cohort experience? Email info@rocketpd.com.
+
+Can’t wait to learn alongside you.
+
+The RocketPD Team`
+  }),
+  defaultEmailTemplate({
     type: TemplateType.CUSTOM,
     name: "Registration Changes Summary",
     subject: "Registration updates: {{cohort.title}}",
-    bodyHtml: "<p>Hello {{registration.primaryContactName}},</p><p>The requested registration updates have been applied for <strong>{{cohort.title}}</strong>.</p>",
-    bodyText: "Hello {{registration.primaryContactName}}, the requested registration updates have been applied for {{cohort.title}}."
-  }
+    bodyText: `Hello {{registration.primaryContactName}},
+
+The requested registration updates have been applied for **{{cohort.title}}**.
+
+If this update affected participants, calendar invitations and participant communications will reflect the updated roster.
+
+If this update affected billing, your invoice/receipt information will be updated as needed.
+
+Questions? Reply to this message or contact info@rocketpd.com.
+
+The RocketPD Team`
+  }),
+  defaultEmailTemplate({
+    type: TemplateType.CUSTOM,
+    name: "Post Cohort Feedback",
+    subject: "{{participant.firstName}}, share your feedback and receive your certificate",
+    bodyText: `Hello {{participant.firstName}},
+
+This is Corey, one of the co-founders at RocketPD.
+
+Recently, you participated in **{{cohort.title}}** with {{cohort.presenterName}}. As a condition of your participation, you may be eligible for a custom certificate of completion that you can share with your administration for professional development hours or units.
+
+To obtain your certificate, please complete the brief learning survey linked below. Once complete, your certificate will be sent to the email address we have on file.
+
+[Yes, take the survey](https://rocketpd.com/survey)
+
+Why a survey?
+
+We have one goal at RocketPD: to support educators everywhere through high-quality professional learning. Your voice is one of the most important ways we improve the experience for educators like you.
+
+As a reminder, cohort recordings and resources are available for a limited time after the final session.
+
+If you do not receive your certificate, cannot find it, or need support, email info@rocketpd.com and someone will help.
+
+Thank you,
+The RocketPD Team`
+  })
 ];
 
 const sessionTemplateTypes = [
@@ -651,6 +910,7 @@ export async function sendCommunication(id: string, options?: { recipients?: str
       context: options?.context ?? {
         cohort: {
           title: communication.cohort.title,
+          description: communication.cohort.description,
           startDate: communication.cohort.startDate,
           presenterName: `${communication.cohort.presenter.firstName} ${communication.cohort.presenter.lastName}`
         },
@@ -932,10 +1192,11 @@ export async function sendTemplateToParticipant(input: { templateId: string; par
   return sendCommunication(communication.id, {
     recipients: [participant.email],
     context: {
-      cohort: {
-        title: participant.cohort.title,
-        startDate: participant.cohort.startDate,
-        presenterName: `${participant.cohort.presenter.firstName} ${participant.cohort.presenter.lastName}`
+        cohort: {
+          title: participant.cohort.title,
+          description: participant.cohort.description,
+          startDate: participant.cohort.startDate,
+          presenterName: `${participant.cohort.presenter.firstName} ${participant.cohort.presenter.lastName}`
       },
       participant,
       organization: participant.organization,
@@ -963,6 +1224,7 @@ export async function sendTemplateToRegistrations(input: { templateId: string; r
       context: {
         cohort: {
           title: registration.cohort.title,
+          description: registration.cohort.description,
           startDate: registration.cohort.startDate,
           presenterName: `${registration.cohort.presenter.firstName} ${registration.cohort.presenter.lastName}`
         },

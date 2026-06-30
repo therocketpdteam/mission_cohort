@@ -87,6 +87,7 @@ async function upsertJourneyCommunication(input: {
   cohortId: string;
   registrationId: string;
   participantId?: string;
+  sessionId?: string;
   template: { id: string; subject: string; bodyHtml: string; bodyText: string | null };
   recipientEmail: string;
   scheduledFor?: Date;
@@ -104,6 +105,7 @@ async function upsertJourneyCommunication(input: {
     cohortId: input.cohortId,
     registrationId: input.registrationId,
     participantId: input.participantId,
+    sessionId: input.sessionId,
     templateId: input.template.id,
     subject: input.template.subject,
     bodyHtml: input.template.bodyHtml,
@@ -278,6 +280,7 @@ export async function planRegistrationJourneys(
         cohortId: registration.cohortId,
         registrationId: registration.id,
         participantId: participant.id,
+        sessionId: firstSession?.id,
         template: template(milestone.templateName),
         recipientEmail: email,
         scheduledFor: milestone.scheduledFor,

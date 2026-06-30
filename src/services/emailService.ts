@@ -46,7 +46,7 @@ export function validateMergeFields(template: string) {
 export async function sendRegistrationConfirmation(registrationId: string) {
   const registration = await prisma.registration.findUnique({
     where: { id: registrationId },
-    include: { cohort: { include: { presenter: true } }, organization: true, participants: true }
+    include: { cohort: { include: { presenter: true } }, organization: true, participants: true, invoiceDrafts: { orderBy: { updatedAt: "desc" } } }
   });
 
   if (!registration) {
@@ -61,6 +61,7 @@ export async function sendRegistrationConfirmation(registrationId: string) {
     context: {
       cohort: {
         title: registration.cohort.title,
+        description: registration.cohort.description,
         startDate: registration.cohort.startDate,
         presenterName: `${registration.cohort.presenter.firstName} ${registration.cohort.presenter.lastName}`
       },

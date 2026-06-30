@@ -13,17 +13,27 @@ export type RenderMergeResult = {
 
 const allowedFields = new Set([
   "cohort.title",
+  "cohort.description",
   "cohort.startDate",
   "cohort.presenterName",
   "session.title",
   "session.startTime",
+  "session.endTime",
+  "session.meetingUrl",
+  "session.location",
+  "session.recordingUrl",
+  "session.resourcesUrl",
   "participant.firstName",
   "participant.lastName",
   "participant.email",
   "organization.name",
+  "organization.city",
+  "organization.state",
   "registration.primaryContactName",
   "registration.invoiceNumber",
   "registration.paymentStatus",
+  "registration.participantCount",
+  "registration.totalAmount",
   "registration.w9Url",
   "registration.invoiceUrl"
 ]);
@@ -33,12 +43,18 @@ export const mergeFields = Array.from(allowedFields);
 export const sampleMergeContext: MergeFieldContext = {
   cohort: {
     title: "Instructional Leadership Spring Cohort",
+    description: "A live-virtual professional learning cohort for instructional leaders.",
     startDate: "May 12, 2026",
     presenterName: "Maya Rivera"
   },
   session: {
     title: "Leadership Foundations",
-    startTime: "May 12, 2026 at 10:00 AM"
+    startTime: "May 12, 2026 at 10:00 AM",
+    endTime: "May 12, 2026 at 11:30 AM",
+    meetingUrl: "https://zoom.us/j/123456789",
+    location: "Zoom",
+    recordingUrl: "https://learn.rocketpd.com/recordings",
+    resourcesUrl: "https://learn.rocketpd.com/resources"
   },
   participant: {
     firstName: "Jordan",
@@ -46,12 +62,16 @@ export const sampleMergeContext: MergeFieldContext = {
     email: "jordan.kim@example.com"
   },
   organization: {
-    name: "Northview School District"
+    name: "Northview School District",
+    city: "Atlanta",
+    state: "GA"
   },
   registration: {
     primaryContactName: "Avery Brooks",
     invoiceNumber: "INV-1001",
     paymentStatus: "INVOICED",
+    participantCount: "4",
+    totalAmount: "$3,180",
     w9Url: "https://rocketpd.com/w9.pdf",
     invoiceUrl: "https://rocketpd.com/invoices/INV-1001.pdf"
   }
