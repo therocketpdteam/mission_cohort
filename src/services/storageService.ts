@@ -2,12 +2,13 @@ import { env } from "@/lib/env";
 import { createSupabaseAdminClient } from "@/lib/supabase";
 import { randomUUID } from "node:crypto";
 
-export type UploadPurpose = "cohort-thumbnail" | "invoice" | "receipt" | "material" | "email-attachment" | "payout-proof";
+export type UploadPurpose = "cohort-thumbnail" | "organization-logo" | "invoice" | "receipt" | "material" | "email-attachment" | "payout-proof";
 
-const publicPurposes = new Set<UploadPurpose>(["cohort-thumbnail"]);
+const publicPurposes = new Set<UploadPurpose>(["cohort-thumbnail", "organization-logo"]);
 
 const acceptedTypes: Record<UploadPurpose, RegExp> = {
   "cohort-thumbnail": /^image\/(png|jpe?g|webp|gif)$/i,
+  "organization-logo": /^image\/png$/i,
   invoice: /^application\/pdf$/i,
   receipt: /^application\/pdf$/i,
   material: /^(application\/pdf|image\/|video\/|text\/|application\/vnd\.openxmlformats-officedocument|application\/msword)/i,
@@ -17,6 +18,7 @@ const acceptedTypes: Record<UploadPurpose, RegExp> = {
 
 const maxBytes: Record<UploadPurpose, number> = {
   "cohort-thumbnail": 5 * 1024 * 1024,
+  "organization-logo": 2 * 1024 * 1024,
   invoice: 10 * 1024 * 1024,
   receipt: 10 * 1024 * 1024,
   material: 20 * 1024 * 1024,

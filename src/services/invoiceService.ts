@@ -153,6 +153,30 @@ function defaultLineItemDescription(cohort: { title: string; description?: strin
   return [cohort.title, cohort.description].filter(Boolean).join(" - ");
 }
 
+async function fetchInvoiceLogo(logoUrl?: string | null) {
+  if (!logoUrl) {
+    return null;
+  }
+
+  try {
+    const response = await fetch(logoUrl, { cache: "no-store" });
+    const contentType = response.headers.get("content-type") ?? "";
+
+    if (!response.ok || !contentType.toLowerCase().startsWith("image/png")) {
+      return null;
+    }
+
+    const bytes = Buffer.from(await response.arrayBuffer());
+    if (bytes.byteLength > 2 * 1024 * 1024) {
+      return null;
+    }
+
+    return { bytes, contentType };
+  } catch {
+    return null;
+  }
+}
+
 export async function listInvoiceDrafts(cohortId?: string) {
   return prisma.invoiceDraft.findMany({
     where: cohortId ? { cohortId } : undefined,
@@ -292,9 +316,11 @@ async function invoicePdfInput(invoice: Awaited<ReturnType<typeof createInvoiceD
   const organization = invoice.organization ?? invoice.registration?.organization;
   const balanceAmount = Math.max(Number(invoice.totalAmount) - Number(invoice.paidAmount), 0);
   const invoiceProfile = await getOrganizationInvoiceProfile();
+  const logoImage = await fetchInvoiceLogo(invoiceProfile.logoUrl);
 
   return {
     issuer: invoiceProfile,
+    logoImage,
     documentType: receipt ? "receipt" as const : "invoice" as const,
     invoiceNumber: invoice.invoiceNumber ?? invoice.id.slice(-8),
     status: String(invoice.status),

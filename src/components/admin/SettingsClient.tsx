@@ -38,7 +38,7 @@ import {
 } from "@/components/ui/primitives";
 import { GridColDef } from "./common";
 import { useEffect, useMemo, useState } from "react";
-import { adminApi } from "@/lib/adminApi";
+import { adminApi, uploadAdminFile } from "@/lib/adminApi";
 import { buildRoadmapSummary, type RoadmapCardSummary, type RoadmapStatus } from "@/config/roadmap";
 import { formatCurrency, formatHumanLabel, formatProperDisplay, formatStatusLabel } from "@/lib/formatting";
 import {
@@ -93,6 +93,8 @@ const defaultOrganizationInvoiceProfile: AdminRow = {
   email: "",
   website: "",
   taxId: "",
+  logoUrl: "",
+  logoFileKey: "",
   paymentInstructions: "Please include the invoice number with payment.",
   footerNote: "In Demand Group, LLC"
 };
@@ -1438,6 +1440,7 @@ export function SettingsClient() {
   const [loadingGoogleCalendars, setLoadingGoogleCalendars] = useState(false);
   const [organizationInvoiceProfile, setOrganizationInvoiceProfile] = useState<AdminRow>(defaultOrganizationInvoiceProfile);
   const [savingOrganizationSettings, setSavingOrganizationSettings] = useState(false);
+  const [uploadingOrganizationLogo, setUploadingOrganizationLogo] = useState(false);
   const { notifySuccess, notifyError, snackbar } = useNotifier();
 
   async function load() {
@@ -1564,6 +1567,27 @@ export function SettingsClient() {
       notifyError((error as Error).message);
     } finally {
       setSavingOrganizationSettings(false);
+    }
+  }
+
+  async function uploadOrganizationLogo(file: File | null) {
+    if (!file) {
+      return;
+    }
+
+    setUploadingOrganizationLogo(true);
+    try {
+      const uploaded = await uploadAdminFile<{ fileKey?: string; url?: string }>(file, "organization-logo");
+      setOrganizationInvoiceProfile((current) => ({
+        ...current,
+        logoUrl: uploaded.url ?? "",
+        logoFileKey: uploaded.fileKey ?? ""
+      }));
+      notifySuccess("Logo uploaded. Save settings to use it on invoices.");
+    } catch (error) {
+      notifyError((error as Error).message);
+    } finally {
+      setUploadingOrganizationLogo(false);
     }
   }
 
@@ -2264,6 +2288,23 @@ export function SettingsClient() {
             <Typography color="text.secondary">
               These details appear on RocketPD invoices and receipts. The invoice description uses the cohort title and cohort description unless a draft has custom line items.
             </Typography>
+            <Stack direction={{ xs: "column", md: "row" }} spacing={2} alignItems={{ xs: "stretch", md: "center" }}>
+              <Box sx={{ border: "1px solid var(--color-outline-variant)", borderRadius: 2, p: 2, bgcolor: "var(--color-surface-container-lowest)", minWidth: 220 }}>
+                {organizationInvoiceProfile.logoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={String(organizationInvoiceProfile.logoUrl)} alt="Organization logo preview" style={{ maxWidth: "220px", maxHeight: "56px", objectFit: "contain", display: "block" }} />
+                ) : (
+                  <Typography fontWeight={700}>RocketPD</Typography>
+                )}
+              </Box>
+              <Stack spacing={0.75}>
+                <Button size="small" variant="outlined" component="label" disabled={uploadingOrganizationLogo}>
+                  {uploadingOrganizationLogo ? "Uploading..." : "Upload Invoice Logo"}
+                  <input hidden type="file" accept="image/png" onChange={(event) => void uploadOrganizationLogo(event.target.files?.[0] ?? null)} />
+                </Button>
+                <Typography variant="caption" color="text.secondary">PNG logo, used in invoice and receipt PDFs after settings are saved.</Typography>
+              </Stack>
+            </Stack>
             <Grid container spacing={1.5}>
               <Grid size={{ xs: 12, md: 6 }}>
                 <TextField fullWidth label="Display name" value={organizationInvoiceProfile.displayName ?? ""} onChange={(event) => updateOrganizationInvoiceProfile("displayName", event.target.value)} />
