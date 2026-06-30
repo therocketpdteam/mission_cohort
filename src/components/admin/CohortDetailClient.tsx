@@ -162,6 +162,11 @@ function money(value: unknown) {
   return `$${Number(value ?? 0).toLocaleString()}`;
 }
 
+function formatDate(value: unknown) {
+  const date = value ? new Date(String(value)) : null;
+  return date && Number.isFinite(date.getTime()) ? date.toLocaleDateString("en-US") : "-";
+}
+
 function dateInputValue(value: unknown) {
   return value ? new Date(value as string | Date).toISOString().slice(0, 10) : "";
 }
@@ -1195,6 +1200,15 @@ export function CohortDetailClient({ id }: { id: string }) {
     const paymentMatch = !registrationPaymentFilter || registration.paymentStatus === registrationPaymentFilter;
     const rosterMatch = !registrationRosterFilter || registration.participantListStatus === registrationRosterFilter;
     return paymentMatch && rosterMatch;
+  }).sort((a, b) => {
+    const aTime = new Date(String(a.createdAt ?? 0)).getTime();
+    const bTime = new Date(String(b.createdAt ?? 0)).getTime();
+
+    if (Number.isFinite(aTime) && Number.isFinite(bTime) && aTime !== bTime) {
+      return bTime - aTime;
+    }
+
+    return String(a.primaryContactName ?? a.organization?.name ?? "").localeCompare(String(b.primaryContactName ?? b.organization?.name ?? ""));
   }), [registrationPaymentFilter, registrationRosterFilter, registrations]);
 
   const participantHistory = useMemo(() => {
@@ -1617,17 +1631,51 @@ export function CohortDetailClient({ id }: { id: string }) {
   ];
 
   const registrationColumns: GridColDef[] = [
-    { field: "primaryContactName", headerName: "Contact", flex: 1, minWidth: 180, valueGetter: (_value, row) => formatProperDisplay(row.primaryContactName ?? "") },
-    { field: "organization", headerName: "Organization", flex: 1, minWidth: 200, valueGetter: (_value, row) => formatProperDisplay(row.organization?.name ?? "") },
-    { field: "participantCount", headerName: "Participants", width: 120 },
-    { field: "participantListStatus", headerName: "Roster", width: 150, renderCell: (params) => <StatusChip value={params.value} /> },
-    { field: "paymentStatus", headerName: "Payment", width: 150, renderCell: (params) => <StatusChip value={params.value} /> },
-    { field: "invoiceNumber", headerName: "Invoice", width: 130 },
-    { field: "purchaseOrderNumber", headerName: "PO", width: 120 },
+    { field: "primaryContactName", headerName: "Contact", flex: 1, minWidth: 160, valueGetter: (_value, row) => formatProperDisplay(row.primaryContactName ?? "") },
+    { field: "organization", headerName: "Organization", flex: 1, minWidth: 180, valueGetter: (_value, row) => formatProperDisplay(row.organization?.name ?? "") },
+    {
+      field: "createdAt",
+      headerName: "Registered",
+      width: 116,
+      valueGetter: (_value, row) => row.createdAt ?? "",
+      valueFormatter: (value) => formatDate(value)
+    },
+    {
+      field: "quickView",
+      headerName: "Participants / Amount",
+      width: 160,
+      sortable: false,
+      renderCell: (params) => (
+        <div>
+          <span className="app-table-main" title={`${params.row.participantCount ?? 0} participant${Number(params.row.participantCount ?? 0) === 1 ? "" : "s"}`}>
+            {Number(params.row.participantCount ?? 0).toLocaleString()} participant{Number(params.row.participantCount ?? 0) === 1 ? "" : "s"}
+          </span>
+          <span className="app-table-sub" title={money(params.row.totalAmount)}>{money(params.row.totalAmount)}</span>
+        </div>
+      )
+    },
+    { field: "participantListStatus", headerName: "Roster", width: 132, renderCell: (params) => <StatusChip value={params.value} /> },
+    { field: "paymentStatus", headerName: "Payment", width: 132, renderCell: (params) => <StatusChip value={params.value} /> },
+    {
+      field: "billing",
+      headerName: "Billing",
+      width: 144,
+      sortable: false,
+      renderCell: (params) => {
+        const invoice = String(params.row.invoiceNumber ?? "").trim();
+        const po = String(params.row.purchaseOrderNumber ?? "").trim();
+        return (
+          <div>
+            <span className="app-table-main" title={invoice || "No invoice"}>{invoice || "No invoice"}</span>
+            <span className="app-table-sub" title={po || "No PO"}>{po ? `PO ${po}` : "No PO"}</span>
+          </div>
+        );
+      }
+    },
     {
       field: "actions",
       headerName: "Actions",
-      width: 84,
+      width: 76,
       sortable: false,
       renderCell: (params) => (
         <Box onClick={(event) => event.stopPropagation()}>
