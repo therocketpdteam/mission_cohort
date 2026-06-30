@@ -29,7 +29,7 @@ function defaultEmailTemplate(template: Omit<DefaultTemplate, "bodyHtml"> & { bo
   };
 }
 
-const defaultTemplates: DefaultTemplate[] = [
+export const defaultTemplates: DefaultTemplate[] = [
   defaultEmailTemplate({
     type: TemplateType.REGISTRATION_CONFIRMATION,
     name: "Registration Confirmation",
