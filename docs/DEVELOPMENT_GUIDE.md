@@ -156,6 +156,8 @@ If a feature shows `Blocked`, keep the UI compatibility fallback in place and do
 ## Invoice Workbench
 
 - Cohort `Distribution` is the finance home, but registration quick view must also expose linked invoice drafts so operators can create, edit, generate, open, and send documents without leaving the registration context.
+- Invoice PDFs use Settings > Organization Settings for the RocketPD issuer block. Keep legal name, address, contact, payment instructions, and footer copy editable there instead of hard-coding business details in the PDF builder.
+- Default invoice line descriptions should come from cohort title plus cohort description. Custom line items remain operator-owned and should not be overwritten silently.
 - New invoice numbers default to `{thought-leader-code}-{organization-name}`, such as `KM-RIVERSIDE-SCHOOL-DISTRICT`, with a numeric suffix when a duplicate exists. Operators may still override the value before saving when finance needs a special case.
 - Editing printable invoice fields, including line items, dates, PO number, status, paid amount, tax, notes, or invoice number, invalidates existing generated PDFs/receipts. Operators must regenerate the document after saving those changes.
 - QuickBooks fields remain references/status only in v1. Editing QuickBooks reference fields must not invalidate generated PDFs.

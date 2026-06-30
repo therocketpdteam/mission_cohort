@@ -5,6 +5,7 @@ import { dateInput, moneyInput, positiveIntInput } from "@/lib/validators";
 import { buildInvoicePdf } from "./pdfService";
 import { uploadAppFile } from "./storageService";
 import { addCommunicationAttachment, getSystemUserId, sendCommunication } from "./communicationService";
+import { getOrganizationInvoiceProfile } from "./appSettingsService";
 
 const lineItemSchema = z.object({
   id: z.string().optional(),
@@ -148,6 +149,10 @@ function dedupeEmails(values: Array<string | null | undefined>) {
     });
 }
 
+function defaultLineItemDescription(cohort: { title: string; description?: string | null }) {
+  return [cohort.title, cohort.description].filter(Boolean).join(" - ");
+}
+
 export async function listInvoiceDrafts(cohortId?: string) {
   return prisma.invoiceDraft.findMany({
     where: cohortId ? { cohortId } : undefined,
@@ -170,7 +175,7 @@ export async function createInvoiceDraft(input: z.input<typeof invoiceDraftInput
 
   const lineItems = data.lineItems ?? [
     {
-      description: registration ? `${registration.cohort.title} registration seats` : "Cohort registration",
+      description: registration ? defaultLineItemDescription(registration.cohort) : defaultLineItemDescription(fallbackCohort),
       quantity: registration?.participantCount ?? 1,
       unitAmount: registration?.participantCount ? Number(registration.totalAmount ?? 0) / Math.max(registration.participantCount, 1) : 0
     }
@@ -283,11 +288,13 @@ export async function updateInvoiceDraft(id: string, input: z.input<typeof invoi
   });
 }
 
-function invoicePdfInput(invoice: Awaited<ReturnType<typeof createInvoiceDraft>> | Awaited<ReturnType<typeof updateInvoiceDraft>>, receipt = false) {
+async function invoicePdfInput(invoice: Awaited<ReturnType<typeof createInvoiceDraft>> | Awaited<ReturnType<typeof updateInvoiceDraft>>, receipt = false) {
   const organization = invoice.organization ?? invoice.registration?.organization;
   const balanceAmount = Math.max(Number(invoice.totalAmount) - Number(invoice.paidAmount), 0);
+  const invoiceProfile = await getOrganizationInvoiceProfile();
 
   return {
+    issuer: invoiceProfile,
     documentType: receipt ? "receipt" as const : "invoice" as const,
     invoiceNumber: invoice.invoiceNumber ?? invoice.id.slice(-8),
     status: String(invoice.status),
@@ -295,6 +302,7 @@ function invoicePdfInput(invoice: Awaited<ReturnType<typeof createInvoiceDraft>>
     contactName: invoice.registration?.billingContactName ?? invoice.registration?.primaryContactName,
     contactEmail: invoice.registration?.billingContactEmail ?? invoice.registration?.primaryContactEmail,
     cohortTitle: invoice.cohort.title,
+    cohortDescription: invoice.cohort.description,
     purchaseOrderNumber: invoice.purchaseOrderNumber,
     issueDate: formatDate(invoice.issueDate),
     dueDate: formatDate(invoice.dueDate),
@@ -309,7 +317,8 @@ function invoicePdfInput(invoice: Awaited<ReturnType<typeof createInvoiceDraft>>
     totalAmount: money(invoice.totalAmount),
     paidAmount: money(invoice.paidAmount),
     balanceAmount: money(balanceAmount),
-    notes: invoice.notes
+    notes: invoice.notes || invoiceProfile.paymentInstructions,
+    footerNote: invoiceProfile.footerNote
   };
 }
 
@@ -323,7 +332,7 @@ export async function generateInvoicePdf(id: string, receipt = false) {
     throw Object.assign(new Error("Invoice draft not found."), { code: "NOT_FOUND", status: 404 });
   }
 
-  const pdf = buildInvoicePdf(invoicePdfInput(invoice, receipt));
+  const pdf = buildInvoicePdf(await invoicePdfInput(invoice, receipt));
   const upload = await uploadAppFile({
     purpose: receipt ? "receipt" : "invoice",
     fileName: `${receipt ? "receipt" : "invoice"}-${invoice.invoiceNumber ?? invoice.id}.pdf`,

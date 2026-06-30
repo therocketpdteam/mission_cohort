@@ -57,7 +57,7 @@ import {
   useNotifier
 } from "./common";
 
-const settingsTabs = ["System Health", "Admin Users", "Connected Tools", "Jotform Intake", "Road Map", "Advanced Setup"];
+const settingsTabs = ["System Health", "Admin Users", "Connected Tools", "Jotform Intake", "Road Map", "Organization Settings", "Advanced Setup"];
 const wizardSteps = ["Summary", "Routing", "Field Mapping", "Preview", "Save"];
 const roadmapStatusOrder: RoadmapStatus[] = ["done", "in_progress", "blocked", "planned"];
 const roadmapStatusLabels: Record<RoadmapStatus, string> = {
@@ -80,6 +80,21 @@ const healthToneClass: Record<string, string> = {
   healthy: "green",
   warning: "yellow",
   blocked: "red"
+};
+const defaultOrganizationInvoiceProfile: AdminRow = {
+  displayName: "RocketPD",
+  legalName: "RocketPD",
+  addressLine1: "",
+  addressLine2: "",
+  city: "",
+  state: "",
+  zip: "",
+  phone: "",
+  email: "",
+  website: "",
+  taxId: "",
+  paymentInstructions: "Please include the invoice number with payment.",
+  footerNote: "Thank you for partnering with RocketPD."
 };
 const smartMappingTargets = [
   "formId",
@@ -1421,10 +1436,12 @@ export function SettingsClient() {
   const [integrationHelpProvider, setIntegrationHelpProvider] = useState<AdminRow | null>(null);
   const [googleCalendars, setGoogleCalendars] = useState<AdminRow[]>([]);
   const [loadingGoogleCalendars, setLoadingGoogleCalendars] = useState(false);
+  const [organizationInvoiceProfile, setOrganizationInvoiceProfile] = useState<AdminRow>(defaultOrganizationInvoiceProfile);
+  const [savingOrganizationSettings, setSavingOrganizationSettings] = useState(false);
   const { notifySuccess, notifyError, snackbar } = useNotifier();
 
   async function load() {
-    const [healthData, systemHealthData, userRows, mappingRows, cohortRows, integrationRows, setupData, intakeData] = await Promise.all([
+    const [healthData, systemHealthData, userRows, mappingRows, cohortRows, integrationRows, setupData, intakeData, appSettingsData] = await Promise.all([
       adminApi<AdminRow>("/api/health"),
       adminApi<AdminRow>("/api/system-health").catch(() => null),
       adminApi<AdminRow[]>("/api/users").catch(() => []),
@@ -1432,7 +1449,8 @@ export function SettingsClient() {
       adminApi<AdminRow[]>("/api/cohorts").catch(() => []),
       adminApi<AdminRow>("/api/integrations/status").catch(() => null),
       adminApi<AdminRow>("/api/integrations/setup").catch(() => null),
-      adminApi<AdminRow>("/api/jotform/intake").catch(() => ({ setup: null, events: [] }))
+      adminApi<AdminRow>("/api/jotform/intake").catch(() => ({ setup: null, events: [] })),
+      adminApi<AdminRow>("/api/app-settings").catch(() => ({ organizationInvoiceProfile: defaultOrganizationInvoiceProfile }))
     ]);
     setHealth(healthData);
     setSystemHealth(systemHealthData);
@@ -1441,6 +1459,10 @@ export function SettingsClient() {
     setCohorts(cohortRows);
     setIntegrationStatus(integrationRows);
     setIntegrationSetup(setupData);
+    setOrganizationInvoiceProfile({
+      ...defaultOrganizationInvoiceProfile,
+      ...(appSettingsData?.organizationInvoiceProfile ?? {})
+    });
     setSetupForms((current) => ({
       SENDGRID: {
         fromEmail: setupData?.sendgrid?.fromEmail ?? current.SENDGRID?.fromEmail ?? "",
@@ -1517,6 +1539,32 @@ export function SettingsClient() {
         [field]: value
       }
     }));
+  }
+
+  function updateOrganizationInvoiceProfile(field: string, value: unknown) {
+    setOrganizationInvoiceProfile((current) => ({
+      ...current,
+      [field]: value
+    }));
+  }
+
+  async function saveOrganizationInvoiceProfile() {
+    setSavingOrganizationSettings(true);
+    try {
+      const result = await adminApi<AdminRow>("/api/app-settings", {
+        method: "PATCH",
+        body: { organizationInvoiceProfile }
+      });
+      setOrganizationInvoiceProfile({
+        ...defaultOrganizationInvoiceProfile,
+        ...(result.organizationInvoiceProfile ?? {})
+      });
+      notifySuccess("Organization invoice settings saved");
+    } catch (error) {
+      notifyError((error as Error).message);
+    } finally {
+      setSavingOrganizationSettings(false);
+    }
   }
 
   async function copyIntegrationValue(value: string, label: string) {
@@ -2208,6 +2256,67 @@ export function SettingsClient() {
       </TabPanel>
 
       <TabPanel active={activeTab} index={5}>
+        <SectionCard
+          title="Organization Settings"
+          action={<Button size="small" onClick={() => void saveOrganizationInvoiceProfile()} disabled={savingOrganizationSettings}>{savingOrganizationSettings ? "Saving..." : "Save Settings"}</Button>}
+        >
+          <Stack spacing={2}>
+            <Typography color="text.secondary">
+              These details appear on RocketPD invoices and receipts. The invoice description uses the cohort title and cohort description unless a draft has custom line items.
+            </Typography>
+            <Grid container spacing={1.5}>
+              <Grid size={{ xs: 12, md: 6 }}>
+                <TextField fullWidth label="Display name" value={organizationInvoiceProfile.displayName ?? ""} onChange={(event) => updateOrganizationInvoiceProfile("displayName", event.target.value)} />
+              </Grid>
+              <Grid size={{ xs: 12, md: 6 }}>
+                <TextField fullWidth label="Legal name" value={organizationInvoiceProfile.legalName ?? ""} onChange={(event) => updateOrganizationInvoiceProfile("legalName", event.target.value)} />
+              </Grid>
+              <Grid size={{ xs: 12, md: 6 }}>
+                <TextField fullWidth label="Address line 1" value={organizationInvoiceProfile.addressLine1 ?? ""} onChange={(event) => updateOrganizationInvoiceProfile("addressLine1", event.target.value)} />
+              </Grid>
+              <Grid size={{ xs: 12, md: 6 }}>
+                <TextField fullWidth label="Address line 2" value={organizationInvoiceProfile.addressLine2 ?? ""} onChange={(event) => updateOrganizationInvoiceProfile("addressLine2", event.target.value)} />
+              </Grid>
+              <Grid size={{ xs: 12, md: 5 }}>
+                <TextField fullWidth label="City" value={organizationInvoiceProfile.city ?? ""} onChange={(event) => updateOrganizationInvoiceProfile("city", event.target.value)} />
+              </Grid>
+              <Grid size={{ xs: 6, md: 3 }}>
+                <TextField fullWidth label="State" value={organizationInvoiceProfile.state ?? ""} onChange={(event) => updateOrganizationInvoiceProfile("state", event.target.value)} />
+              </Grid>
+              <Grid size={{ xs: 6, md: 4 }}>
+                <TextField fullWidth label="ZIP" value={organizationInvoiceProfile.zip ?? ""} onChange={(event) => updateOrganizationInvoiceProfile("zip", event.target.value)} />
+              </Grid>
+              <Grid size={{ xs: 12, md: 4 }}>
+                <TextField fullWidth label="Phone" value={organizationInvoiceProfile.phone ?? ""} onChange={(event) => updateOrganizationInvoiceProfile("phone", event.target.value)} />
+              </Grid>
+              <Grid size={{ xs: 12, md: 4 }}>
+                <TextField fullWidth label="Email" value={organizationInvoiceProfile.email ?? ""} onChange={(event) => updateOrganizationInvoiceProfile("email", event.target.value)} />
+              </Grid>
+              <Grid size={{ xs: 12, md: 4 }}>
+                <TextField fullWidth label="Website" value={organizationInvoiceProfile.website ?? ""} onChange={(event) => updateOrganizationInvoiceProfile("website", event.target.value)} />
+              </Grid>
+              <Grid size={{ xs: 12, md: 4 }}>
+                <TextField fullWidth label="Tax ID / EIN" value={organizationInvoiceProfile.taxId ?? ""} onChange={(event) => updateOrganizationInvoiceProfile("taxId", event.target.value)} />
+              </Grid>
+              <Grid size={{ xs: 12, md: 8 }}>
+                <TextField fullWidth label="Invoice footer note" value={organizationInvoiceProfile.footerNote ?? ""} onChange={(event) => updateOrganizationInvoiceProfile("footerNote", event.target.value)} />
+              </Grid>
+              <Grid size={{ xs: 12 }}>
+                <TextField
+                  fullWidth
+                  multiline
+                  minRows={3}
+                  label="Payment instructions / invoice notes"
+                  value={organizationInvoiceProfile.paymentInstructions ?? ""}
+                  onChange={(event) => updateOrganizationInvoiceProfile("paymentInstructions", event.target.value)}
+                />
+              </Grid>
+            </Grid>
+          </Stack>
+        </SectionCard>
+      </TabPanel>
+
+      <TabPanel active={activeTab} index={6}>
         <SectionCard title="Mapping Library" action={<Button size="small" startIcon={<AddIcon />} onClick={() => setDialogOpen(true)}>Add Mapping</Button>}>
           <Typography color="text.secondary" sx={{ mb: 2 }}>
             Most mapping should happen from the Jotform review wizard. Use this table only for quick enable/disable or routing edits.

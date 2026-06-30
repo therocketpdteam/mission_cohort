@@ -82,6 +82,19 @@ export function buildSimplePdf(title: string, lines: string[]) {
 }
 
 export type InvoicePdfInput = {
+  issuer: {
+    displayName: string;
+    legalName: string;
+    addressLine1?: string;
+    addressLine2?: string;
+    city?: string;
+    state?: string;
+    zip?: string;
+    phone?: string;
+    email?: string;
+    website?: string;
+    taxId?: string;
+  };
   documentType: "invoice" | "receipt";
   invoiceNumber: string;
   status: string;
@@ -89,6 +102,7 @@ export type InvoicePdfInput = {
   contactName?: string | null;
   contactEmail?: string | null;
   cohortTitle: string;
+  cohortDescription?: string | null;
   purchaseOrderNumber?: string | null;
   issueDate: string;
   dueDate: string;
@@ -99,55 +113,76 @@ export type InvoicePdfInput = {
   paidAmount: string;
   balanceAmount: string;
   notes?: string | null;
+  footerNote?: string | null;
 };
 
 export function buildInvoicePdf(input: InvoicePdfInput) {
   const isReceipt = input.documentType === "receipt";
-  const title = isReceipt ? "PAID RECEIPT" : "INVOICE";
+  const title = isReceipt ? "Receipt" : "Invoice";
+  const cityStateZip = [
+    input.issuer.city,
+    [input.issuer.state, input.issuer.zip].filter(Boolean).join(" ")
+  ].filter(Boolean).join(", ");
+  const issuerAddress = [
+    input.issuer.addressLine1,
+    input.issuer.addressLine2,
+    cityStateZip
+  ].filter(Boolean);
+  const issuerLines = [
+    input.issuer.legalName || input.issuer.displayName,
+    ...issuerAddress,
+    input.issuer.phone,
+    input.issuer.email,
+    input.issuer.website,
+    input.issuer.taxId ? `Tax ID: ${input.issuer.taxId}` : ""
+  ].filter((line): line is string => Boolean(line));
   const content: string[] = [
-    fillRect(0, 720, 612, 72, [37, 0, 90]),
-    fillRect(44, 684, 524, 1, [203, 213, 225]),
-    pdfText("RocketPD", 44, 752, { size: 22, font: "F2", color: [255, 255, 255] }),
-    pdfText("Mission Control Finance", 44, 733, { size: 10, color: [203, 213, 225] }),
-    pdfText(title, 568, 752, { size: 18, font: "F2", color: [255, 255, 255], align: "right" }),
-    pdfText(input.invoiceNumber, 568, 733, { size: 10, color: [203, 213, 225], align: "right" }),
-    pdfText(isReceipt ? "Payment received" : "Bill To", 44, 656, { size: 9, font: "F2", color: [99, 14, 212] }),
-    pdfText(input.organizationName, 44, 636, { size: 14, font: "F2" }),
-    input.contactName ? pdfText(input.contactName, 44, 618, { size: 10, color: [71, 85, 105] }) : "",
-    input.contactEmail ? pdfText(input.contactEmail, 44, 602, { size: 10, color: [71, 85, 105] }) : "",
-    fillRect(356, 610, 212, 72, [248, 250, 252]),
-    pdfText("Status", 372, 658, { size: 8, font: "F2", color: [100, 116, 139] }),
-    pdfText(isReceipt ? "PAID" : input.status, 568, 658, { size: 10, font: "F2", color: isReceipt ? [22, 163, 74] : [15, 23, 42], align: "right" }),
-    pdfText("Issue Date", 372, 638, { size: 8, font: "F2", color: [100, 116, 139] }),
-    pdfText(input.issueDate, 568, 638, { size: 10, align: "right" }),
-    pdfText(isReceipt ? "Receipt Date" : "Due Date", 372, 618, { size: 8, font: "F2", color: [100, 116, 139] }),
-    pdfText(isReceipt ? input.issueDate : input.dueDate, 568, 618, { size: 10, align: "right" }),
-    pdfText("Cohort", 44, 560, { size: 8, font: "F2", color: [100, 116, 139] }),
-    ...wrapText(input.cohortTitle, 86).slice(0, 2).map((line, index) => pdfText(line, 44, 542 - index * 15, { size: 10 })),
-    pdfText("PO Number", 356, 560, { size: 8, font: "F2", color: [100, 116, 139] }),
-    pdfText(input.purchaseOrderNumber || "-", 568, 542, { size: 10, align: "right" }),
-    fillRect(44, 492, 524, 28, [37, 0, 90]),
-    pdfText("Description", 58, 502, { size: 9, font: "F2", color: [255, 255, 255] }),
-    pdfText("Qty", 374, 502, { size: 9, font: "F2", color: [255, 255, 255], align: "right" }),
-    pdfText("Unit", 464, 502, { size: 9, font: "F2", color: [255, 255, 255], align: "right" }),
-    pdfText("Amount", 552, 502, { size: 9, font: "F2", color: [255, 255, 255], align: "right" })
+    pdfText(input.issuer.displayName || "RocketPD", 44, 742, { size: 24, font: "F2", color: [37, 0, 90] }),
+    pdfText(title, 44, 710, { size: 30, font: "F2", color: [15, 23, 42] }),
+    pdfText(input.invoiceNumber, 44, 690, { size: 10, color: [71, 85, 105] }),
+    ...issuerLines.slice(0, 7).map((line, index) => pdfText(line, 568, 744 - index * 14, { size: index === 0 ? 10 : 8.5, font: index === 0 ? "F2" : "F1", color: [71, 85, 105], align: "right" })),
+    strokeLine(44, 662, 568, 662, [203, 195, 216]),
+    pdfText(isReceipt ? "Payment received from" : "Bill To", 44, 628, { size: 8, font: "F2", color: [99, 14, 212] }),
+    pdfText(input.organizationName, 44, 608, { size: 14, font: "F2" }),
+    input.contactName ? pdfText(input.contactName, 44, 590, { size: 10, color: [71, 85, 105] }) : "",
+    input.contactEmail ? pdfText(input.contactEmail, 44, 574, { size: 10, color: [71, 85, 105] }) : "",
+    fillRect(356, 572, 212, 72, [248, 250, 252]),
+    pdfText("Status", 372, 620, { size: 8, font: "F2", color: [100, 116, 139] }),
+    pdfText(isReceipt ? "PAID" : input.status, 552, 620, { size: 10, font: "F2", color: isReceipt ? [22, 163, 74] : [15, 23, 42], align: "right" }),
+    pdfText("Issue Date", 372, 600, { size: 8, font: "F2", color: [100, 116, 139] }),
+    pdfText(input.issueDate, 552, 600, { size: 10, align: "right" }),
+    pdfText(isReceipt ? "Receipt Date" : "Due Date", 372, 580, { size: 8, font: "F2", color: [100, 116, 139] }),
+    pdfText(isReceipt ? input.issueDate : input.dueDate, 552, 580, { size: 10, align: "right" }),
+    pdfText("Cohort", 44, 526, { size: 8, font: "F2", color: [100, 116, 139] }),
+    ...wrapText(input.cohortTitle, 72).slice(0, 2).map((line, index) => pdfText(line, 44, 508 - index * 15, { size: 10, font: index === 0 ? "F2" : "F1" })),
+    input.cohortDescription ? pdfText(wrapText(input.cohortDescription, 74)[0] ?? "", 44, 478, { size: 8.5, color: [71, 85, 105] }) : "",
+    pdfText("PO Number", 356, 526, { size: 8, font: "F2", color: [100, 116, 139] }),
+    pdfText(input.purchaseOrderNumber || "-", 552, 508, { size: 10, align: "right" }),
+    fillRect(44, 438, 524, 26, [37, 0, 90]),
+    pdfText("Description", 58, 448, { size: 9, font: "F2", color: [255, 255, 255] }),
+    pdfText("Qty", 374, 448, { size: 9, font: "F2", color: [255, 255, 255], align: "right" }),
+    pdfText("Unit", 464, 448, { size: 9, font: "F2", color: [255, 255, 255], align: "right" }),
+    pdfText("Amount", 552, 448, { size: 9, font: "F2", color: [255, 255, 255], align: "right" })
   ].filter(Boolean);
 
-  let y = 466;
+  let y = 412;
   input.lineItems.slice(0, 8).forEach((item, index) => {
     if (index % 2 === 0) {
-      content.push(fillRect(44, y - 8, 524, 30, [248, 250, 252]));
+      content.push(fillRect(44, y - 8, 524, 34, [248, 250, 252]));
     }
-    const lines = wrapText(item.description, 50).slice(0, 2);
+    const lines = wrapText(item.description, 55).slice(0, 3);
     content.push(pdfText(lines[0], 58, y, { size: 9, font: "F2" }));
     if (lines[1]) {
       content.push(pdfText(lines[1], 58, y - 13, { size: 8, color: [71, 85, 105] }));
     }
+    if (lines[2]) {
+      content.push(pdfText(lines[2], 58, y - 25, { size: 8, color: [71, 85, 105] }));
+    }
     content.push(pdfText(String(item.quantity), 374, y, { size: 9, align: "right" }));
     content.push(pdfText(item.unitAmount, 464, y, { size: 9, align: "right" }));
     content.push(pdfText(item.totalAmount, 552, y, { size: 9, font: "F2", align: "right" }));
-    content.push(strokeLine(44, y - 14, 568, y - 14));
-    y -= 34;
+    content.push(strokeLine(44, y - 26, 568, y - 26));
+    y -= 42;
   });
 
   const totalsTop = Math.min(y - 10, 212);
@@ -170,7 +205,7 @@ export function buildInvoicePdf(input: InvoicePdfInput) {
     content.push(pdfText(line, 44, 154 - index * 14, { size: 9, color: [71, 85, 105] }));
   });
   content.push(strokeLine(44, 72, 568, 72));
-  content.push(pdfText("RocketPD | Generated by Mission Control", 44, 52, { size: 8, color: [100, 116, 139] }));
+  content.push(pdfText(input.footerNote || "RocketPD | Generated by Mission Control", 44, 52, { size: 8, color: [100, 116, 139] }));
   content.push(pdfText(new Date().toLocaleDateString(), 568, 52, { size: 8, color: [100, 116, 139], align: "right" }));
 
   return buildPdf(content.join("\n"));
