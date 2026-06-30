@@ -394,6 +394,25 @@ The RocketPD Team`
   })
 ];
 
+const legacyDefaultBodyTextByName: Record<string, string> = {
+  "Registration Confirmation": "Hello {{registration.primaryContactName}}, your registration for {{cohort.title}} has been received.",
+  "1 Week Before Session": "Hello {{participant.firstName}}, {{session.title}} for {{cohort.title}} is coming up in one week.",
+  "24 Hours Before Session": "Hello {{participant.firstName}}, this is your 24-hour reminder for {{session.title}}.",
+  "60 Minutes Before Session": "Hello {{participant.firstName}}, {{session.title}} starts in about 60 minutes.",
+  "24 Hours Post Session": "Hello {{participant.firstName}}, thank you for attending {{session.title}}. Resources and next steps will be shared here.",
+  "Payment Reminder": "Hello {{registration.primaryContactName}}, this is a friendly reminder about payment status for {{cohort.title}}.",
+  "Participant List Request": "Hello {{registration.primaryContactName}}, we are preparing {{cohort.title}} and still need the participant roster for {{organization.name}}. Please reply with the participant names and emails when ready.",
+  "Supporting Documents Request": "Hello {{registration.primaryContactName}}, we are preparing {{cohort.title}} and need the remaining supporting documents for {{organization.name}}. Please reply with the needed documentation when available.",
+  "Cohort Cancellation": "The remaining sessions for {{cohort.title}} have been cancelled. Google Calendar invitations have been removed. Please contact the RocketPD team if you have any questions.",
+  "Session Cancellation": "{{session.title}} for {{cohort.title}} has been cancelled. The Google Calendar invitation has been removed. Please contact the RocketPD team if you have any questions.",
+  "Session Updated": "{{session.title}} for {{cohort.title}} has been updated. The session is now scheduled for {{session.startTime}}. Your Google Calendar invitation has also been updated. Please contact the RocketPD team if you have any questions.",
+  "POC Registration Confirmation": "Hello {{registration.primaryContactName}}, we received the registration for {{organization.name}} in {{cohort.title}}. Available registration documents are attached below.",
+  "Participant Registration Confirmation": "Hello {{participant.firstName}}, you are registered for {{cohort.title}}. You will receive calendar invitations and future session reminders at this email address.",
+  "One Month Before Cohort": "Hello {{participant.firstName}}, {{cohort.title}} begins in about one month. Your calendar invitations contain the latest session details.",
+  "One Week Before Cohort": "Hello {{participant.firstName}}, {{cohort.title}} begins in one week. Please review your calendar invitations for the latest session details.",
+  "Registration Changes Summary": "Hello {{registration.primaryContactName}}, the requested registration updates have been applied for {{cohort.title}}."
+};
+
 const sessionTemplateTypes = [
   TemplateType.WEEK_BEFORE_REMINDER,
   TemplateType.DAY_BEFORE_REMINDER,
@@ -422,11 +441,17 @@ export async function ensureDefaultCommunicationTemplates() {
 
   for (const template of defaultTemplates) {
     const existing = await prisma.communicationTemplate.findFirst({ where: { type: template.type, name: template.name } });
+    const shouldRefreshLegacyDefault = Boolean(existing && legacyDefaultBodyTextByName[template.name]?.trim() === existing.bodyText?.trim());
     templates.push(
       existing
         ? await prisma.communicationTemplate.update({
             where: { id: existing.id },
-            data: { active: existing.active, subject: existing.subject || template.subject, bodyHtml: existing.bodyHtml || template.bodyHtml, bodyText: existing.bodyText || template.bodyText }
+            data: {
+              active: existing.active,
+              subject: shouldRefreshLegacyDefault || !existing.subject ? template.subject : existing.subject,
+              bodyHtml: shouldRefreshLegacyDefault || !existing.bodyHtml ? template.bodyHtml : existing.bodyHtml,
+              bodyText: shouldRefreshLegacyDefault || !existing.bodyText ? template.bodyText : existing.bodyText
+            }
           })
         : await prisma.communicationTemplate.create({ data: { ...template, active: true } })
     );
