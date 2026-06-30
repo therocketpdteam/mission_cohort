@@ -341,16 +341,16 @@ export function buildInvoicePdf(input: InvoicePdfInput) {
   const logoWidth = logoImage ? logoHeight * (logoImage.width / logoImage.height) : 0;
   const logoX = 56;
   const logoY = 716 + (45 - logoHeight) / 2;
-  const rightLabelX = 552;
-  const rightValueX = 552;
+  const rightLabelX = 568;
+  const rightValueX = 568;
   const amountX = 568;
   const content: string[] = [
     fillRect(0, 642, 612, 150, purple),
-    logoImage ? fillRect(44, 713, 210, 45, [255, 255, 255]) : pdfText("Rocket", 44, 728, { size: 30, font: "F2", color: [255, 255, 255] }),
-    logoImage ? drawImage("Logo", logoX, logoY, logoWidth, logoHeight) : fillRect(151, 715, 47, 35, accent),
+    logoImage ? drawImage("Logo", logoX, logoY, logoWidth, logoHeight) : pdfText("Rocket", 44, 728, { size: 30, font: "F2", color: [255, 255, 255] }),
+    logoImage ? "" : fillRect(151, 715, 47, 35, accent),
     logoImage ? "" : pdfText("PD", 158, 728, { size: 28, font: "F2", color: [255, 255, 255] }),
     pdfText(title, 44, 684, { size: 42, font: "F2", color: [255, 255, 255] }),
-    ...issuerLines.slice(0, 5).map((line, index) => pdfText(line, 552, 730 - index * 16, { size: index === 0 ? 12 : 9.5, font: index === 0 ? "F2" : "F1", color: [255, 255, 255], align: "right" })),
+    ...issuerLines.slice(0, 5).map((line, index) => pdfText(line, 568, 730 - index * 16, { size: index === 0 ? 12 : 9.5, font: index === 0 ? "F2" : "F1", color: [255, 255, 255], align: "right" })),
     pdfText(isReceipt ? "PAYMENT RECEIVED FROM:" : "BILL TO:", 44, 594, { size: 9, font: "F2", color: ink }),
     input.contactName ? pdfText(input.contactName, 44, 571, { size: 13, font: "F2", color: ink }) : "",
     pdfText(input.organizationName, 44, input.contactName ? 550 : 571, { size: 11, color: muted }),
@@ -391,14 +391,16 @@ export function buildInvoicePdf(input: InvoicePdfInput) {
     y -= 104;
   });
 
-  content.push(pdfText("PAYMENT", 44, 214, { size: 9, font: "F2", color: ink }));
-  content.push(pdfText(isReceipt ? `Paid ${input.paidAmount}` : "-", 44, 194, { size: 10, color: muted }));
-  content.push(pdfText("Subtotal", 448, 244, { size: 9, color: muted, align: "right" }));
-  content.push(pdfText(input.subtotalAmount, amountX, 244, { size: 9, color: ink, align: "right" }));
-  content.push(pdfText("Tax", 448, 226, { size: 9, color: muted, align: "right" }));
-  content.push(pdfText(input.taxAmount, amountX, 226, { size: 9, color: ink, align: "right" }));
-  content.push(pdfText(isReceipt ? "Balance Due" : "Balance", 448, 208, { size: 9, color: muted, align: "right" }));
-  content.push(pdfText(input.balanceAmount, amountX, 208, { size: 9, color: ink, align: "right" }));
+  if (isReceipt) {
+    content.push(pdfText("PAYMENT", 44, 270, { size: 9, font: "F2", color: ink }));
+    content.push(pdfText(`Paid ${input.paidAmount}`, 44, 251, { size: 10, color: muted }));
+  }
+  content.push(pdfText("Subtotal", 466, 270, { size: 9, color: muted, align: "right" }));
+  content.push(pdfText(input.subtotalAmount, amountX, 270, { size: 9, color: ink, align: "right" }));
+  content.push(pdfText("Tax", 466, 251, { size: 9, color: muted, align: "right" }));
+  content.push(pdfText(input.taxAmount, amountX, 251, { size: 9, color: ink, align: "right" }));
+  content.push(pdfText(isReceipt ? "Balance Due" : "Balance", 466, 232, { size: 9, color: muted, align: "right" }));
+  content.push(pdfText(input.balanceAmount, amountX, 232, { size: 9, color: ink, align: "right" }));
 
   const noteLines = wrapText(input.notes || (isReceipt ? "Thank you. This receipt confirms payment recorded by RocketPD." : "Please address checks to RocketPD."), 42).slice(0, 4);
   content.push(fillRect(0, 58, 408, 96, lavender));

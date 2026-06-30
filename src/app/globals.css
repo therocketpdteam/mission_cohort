@@ -937,16 +937,29 @@ h6,
 .invoice-preview-frame {
   display: block;
   width: 100%;
-  height: min(76vh, 860px);
-  border: 1px solid var(--color-outline-variant);
-  border-radius: 10px;
-  background: var(--color-surface-container-lowest);
+  height: calc(100vh - 150px);
+  min-height: 620px;
+  border: 0;
+  border-radius: 0;
+  background: #fff;
+}
+
+.invoice-preview-modal {
+  width: min(100%, 1180px);
+  height: calc(100vh - 32px);
+}
+
+.invoice-preview-body {
+  display: flex;
+  min-height: 0;
+  padding: 0;
+  background: #fff;
 }
 
 .ui-modal-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 70;
+  z-index: 140;
   display: grid;
   place-items: center;
   padding: 20px;

@@ -2494,17 +2494,16 @@ export function CohortDetailClient({ id }: { id: string }) {
         }}
         onError={notifyError}
       />
-      <Dialog open={Boolean(invoicePreview)} onClose={() => setInvoicePreview(null)} maxWidth="lg" fullWidth>
+      <Dialog open={Boolean(invoicePreview)} onClose={() => setInvoicePreview(null)} maxWidth="xl" fullWidth PaperProps={{ className: "invoice-preview-modal" }}>
         <DialogTitle>{invoicePreview?.title ?? "Invoice PDF"}</DialogTitle>
-        <DialogContent>
+        <DialogContent className="invoice-preview-body">
           {invoicePreview?.url ? (
-            <iframe className="invoice-preview-frame" src={invoicePreview.url} title={invoicePreview.title} />
+            <iframe className="invoice-preview-frame" src={`${invoicePreview.url}#toolbar=1&navpanes=0&scrollbar=1&view=FitH`} title={invoicePreview.title} />
           ) : (
             <Typography color="text.secondary">Generate the PDF before previewing it.</Typography>
           )}
         </DialogContent>
         <DialogActions>
-          {invoicePreview?.url && <Button href={invoicePreview.url} target="_blank" rel="noreferrer" variant="outlined">Open in New Tab</Button>}
           <Button onClick={() => setInvoicePreview(null)}>Close</Button>
         </DialogActions>
       </Dialog>
