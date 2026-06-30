@@ -59,17 +59,7 @@ function money(value: unknown) {
   return `$${Number(value ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-function slugPart(value: string) {
-  return value
-    .normalize("NFKD")
-    .replace(/[^\w\s-]/g, "")
-    .trim()
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-")
-    .toUpperCase();
-}
-
-function presenterInvoiceCode(presenter?: { firstName?: string | null; lastName?: string | null } | null) {
+export function presenterInvoiceCode(presenter?: { firstName?: string | null; lastName?: string | null } | null) {
   const fullName = `${presenter?.firstName ?? ""} ${presenter?.lastName ?? ""}`.trim();
   const known: Record<string, string> = {
     "kim marshall": "KM",
@@ -86,36 +76,70 @@ function presenterInvoiceCode(presenter?: { firstName?: string | null; lastName?
   return (words.length ? words.map((word) => word[0]).join("") : "RPD").slice(0, 3).toUpperCase();
 }
 
+const invoiceSequenceFloor = 354;
+const invoiceSequencePattern = /^[A-Z]{2,4}-\d{4}-(\d+)$/i;
+
+type InvoiceNumberCohortInput = {
+  startDate?: Date | string | null;
+  presenter?: { firstName?: string | null; lastName?: string | null } | null;
+  sessions?: Array<{ startTime?: Date | string | null }>;
+};
+
+export function invoiceYearFromCohort(cohort: InvoiceNumberCohortInput) {
+  const firstSession = [...(cohort.sessions ?? [])]
+    .filter((session) => session.startTime)
+    .sort((a, b) => new Date(String(a.startTime)).getTime() - new Date(String(b.startTime)).getTime())[0];
+  const date = new Date(String(firstSession?.startTime ?? cohort.startDate ?? new Date()));
+  return Number.isFinite(date.getTime()) ? date.getFullYear() : new Date().getFullYear();
+}
+
+export function nextInvoiceSequence(invoiceNumbers: Array<string | null | undefined>) {
+  const maxExisting = invoiceNumbers.reduce((max, invoiceNumber) => {
+    const match = String(invoiceNumber ?? "").trim().match(invoiceSequencePattern);
+    const value = match ? Number(match[1]) : 0;
+    return Number.isFinite(value) ? Math.max(max, value) : max;
+  }, invoiceSequenceFloor);
+
+  return maxExisting + 1;
+}
+
+export function formatInvoiceNumber(input: { presenterCode: string; year: number; sequence: number }) {
+  return `${input.presenterCode}-${input.year}-${String(input.sequence).padStart(3, "0")}`;
+}
+
 async function defaultInvoiceNumber(input: {
   id: string;
-  cohort: { presenter?: { firstName?: string | null; lastName?: string | null } | null };
-  organizationName?: string | null;
+  cohort: InvoiceNumberCohortInput;
   invoiceDraftClient?: Pick<typeof prisma.invoiceDraft, "findMany">;
+  registrationClient?: Pick<typeof prisma.registration, "findMany">;
+  paymentRecordClient?: Pick<typeof prisma.paymentRecord, "findMany">;
 }) {
-  const base = [
-    presenterInvoiceCode(input.cohort.presenter),
-    slugPart(input.organizationName || "COHORT")
-  ].filter(Boolean).join("-");
   const invoiceDraftClient = input.invoiceDraftClient ?? prisma.invoiceDraft;
-  const existing = await invoiceDraftClient.findMany({
-    where: {
-      id: { not: input.id },
-      invoiceNumber: {
-        startsWith: base
-      }
-    },
-    select: { invoiceNumber: true }
+  const registrationClient = input.registrationClient ?? prisma.registration;
+  const paymentRecordClient = input.paymentRecordClient ?? prisma.paymentRecord;
+  const [invoiceDrafts, registrations, payments] = await Promise.all([
+    invoiceDraftClient.findMany({
+      where: {
+        id: { not: input.id },
+        invoiceNumber: { not: null }
+      },
+      select: { invoiceNumber: true }
+    }),
+    registrationClient.findMany({
+      where: { invoiceNumber: { not: null } },
+      select: { invoiceNumber: true }
+    }),
+    paymentRecordClient.findMany({
+      where: { invoiceNumber: { not: null } },
+      select: { invoiceNumber: true }
+    })
+  ]);
+
+  return formatInvoiceNumber({
+    presenterCode: presenterInvoiceCode(input.cohort.presenter),
+    year: invoiceYearFromCohort(input.cohort),
+    sequence: nextInvoiceSequence([...invoiceDrafts, ...registrations, ...payments].map((row) => row.invoiceNumber))
   });
-
-  if (!existing.some((row) => row.invoiceNumber === base)) {
-    return base;
-  }
-
-  let suffix = existing.length + 1;
-  while (existing.some((row) => row.invoiceNumber === `${base}-${suffix}`)) {
-    suffix += 1;
-  }
-  return `${base}-${suffix}`;
 }
 
 const printableInvoiceFields = new Set([
@@ -188,10 +212,16 @@ export async function listInvoiceDrafts(cohortId?: string) {
 export async function createInvoiceDraft(input: z.input<typeof invoiceDraftInputSchema>) {
   const data = invoiceDraftInputSchema.parse(input);
   const fallbackRegistration = data.registrationId
-    ? await prisma.registration.findUnique({ where: { id: data.registrationId }, include: { organization: true, cohort: { include: { presenter: true } } } })
+    ? await prisma.registration.findUnique({
+        where: { id: data.registrationId },
+        include: { organization: true, cohort: { include: { presenter: true, sessions: { orderBy: { startTime: "asc" } } } } }
+      })
     : null;
   const registration = await fallbackRegistration;
-  const fallbackCohort = registration?.cohort ?? await prisma.cohort.findUniqueOrThrow({ where: { id: data.cohortId }, include: { presenter: true } });
+  const fallbackCohort = registration?.cohort ?? await prisma.cohort.findUniqueOrThrow({
+    where: { id: data.cohortId },
+    include: { presenter: true, sessions: { orderBy: { startTime: "asc" } } }
+  });
 
   if (registration?.archivedAt) {
     throw Object.assign(new Error("Archived registrations cannot be invoiced."), { code: "BAD_REQUEST", status: 400 });
@@ -237,28 +267,41 @@ export async function createInvoiceDraft(input: z.input<typeof invoiceDraftInput
     });
 
     if (created.invoiceNumber) {
+      if (created.registrationId) {
+        await tx.registration.update({
+          where: { id: created.registrationId },
+          data: { invoiceNumber: created.invoiceNumber }
+        });
+      }
+
       return tx.invoiceDraft.findUniqueOrThrow({
         where: { id: created.id },
         include: invoiceInclude()
       });
     }
 
-    const organizationName = registration?.organization?.name ?? (data.organizationId
-      ? (await tx.organization.findUnique({ where: { id: data.organizationId }, select: { name: true } }))?.name
-      : null);
-
-    return tx.invoiceDraft.update({
+    const updated = await tx.invoiceDraft.update({
       where: { id: created.id },
       data: {
         invoiceNumber: await defaultInvoiceNumber({
           id: created.id,
           cohort: fallbackCohort,
-          organizationName,
-          invoiceDraftClient: tx.invoiceDraft
+          invoiceDraftClient: tx.invoiceDraft,
+          registrationClient: tx.registration,
+          paymentRecordClient: tx.paymentRecord
         })
       },
       include: invoiceInclude()
     });
+
+    if (updated.registrationId && updated.invoiceNumber) {
+      await tx.registration.update({
+        where: { id: updated.registrationId },
+        data: { invoiceNumber: updated.invoiceNumber }
+      });
+    }
+
+    return updated;
   });
 }
 
@@ -282,7 +325,7 @@ export async function updateInvoiceDraft(id: string, input: z.input<typeof invoi
       });
     }
 
-    return tx.invoiceDraft.update({
+    const updated = await tx.invoiceDraft.update({
       where: { id },
       data: {
         invoiceNumber: data.invoiceNumber,
@@ -309,6 +352,15 @@ export async function updateInvoiceDraft(id: string, input: z.input<typeof invoi
       },
       include: invoiceInclude()
     });
+
+    if (updated.registrationId && data.invoiceNumber !== undefined) {
+      await tx.registration.update({
+        where: { id: updated.registrationId },
+        data: { invoiceNumber: updated.invoiceNumber }
+      });
+    }
+
+    return updated;
   });
 }
 
