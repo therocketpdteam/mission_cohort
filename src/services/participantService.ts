@@ -1,7 +1,7 @@
 import { OperationsTaskCategory, OperationsTaskStatus, ParticipantListStatus, ParticipantStatus } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { deriveParticipantListStatus } from "@/lib/rosterStatus";
+import { countParticipantsMissingTitles, deriveParticipantListStatus } from "@/lib/rosterStatus";
 import { participantCreateSchema, participantUpdateSchema } from "@/validators/participant";
 import { logAuditEventAsync } from "./auditService";
 import { queueParticipantCrmSync } from "./crmSyncService";
@@ -24,6 +24,10 @@ export async function syncRegistrationParticipantListStatus(registrationId: stri
   const registration = await prisma.registration.findUnique({
     where: { id: registrationId },
     include: {
+      participants: {
+        where: { status: ParticipantStatus.REGISTERED },
+        select: { title: true }
+      },
       _count: {
         select: { participants: { where: { status: ParticipantStatus.REGISTERED } } }
       }
@@ -35,7 +39,8 @@ export async function syncRegistrationParticipantListStatus(registrationId: stri
   }
 
   const actualCount = registration._count.participants;
-  const status = deriveParticipantListStatus(registration.participantCount, actualCount);
+  const missingTitleCount = countParticipantsMissingTitles(registration.participants);
+  const status = deriveParticipantListStatus(registration.participantCount, actualCount, missingTitleCount);
 
   await prisma.registration.update({
     where: { id: registrationId },
@@ -52,7 +57,7 @@ export async function syncRegistrationParticipantListStatus(registrationId: stri
       data: {
         status: OperationsTaskStatus.COMPLETED,
         completedAt: new Date(),
-        description: `Roster completed automatically at ${actualCount}/${registration.participantCount || actualCount} participants.`
+        description: `Roster completed automatically at ${actualCount}/${registration.participantCount || actualCount} participants with titles.`
       }
     });
   } else if (status === ParticipantListStatus.NEEDED || status === ParticipantListStatus.PARTIAL) {
@@ -65,14 +70,16 @@ export async function syncRegistrationParticipantListStatus(registrationId: stri
       data: {
         status: OperationsTaskStatus.OPEN,
         completedAt: null,
-        description: status === ParticipantListStatus.PARTIAL
-          ? `Roster is partial at ${actualCount}/${registration.participantCount} participants.`
+        description: missingTitleCount > 0
+          ? `Roster is missing ${missingTitleCount} participant title${missingTitleCount === 1 ? "" : "s"}.`
+          : status === ParticipantListStatus.PARTIAL
+            ? `Roster is partial at ${actualCount}/${registration.participantCount} participants.`
           : "Registration still needs a participant roster."
       }
     });
   }
 
-  return { status, actualCount, expectedCount: registration.participantCount };
+  return { status, actualCount, expectedCount: registration.participantCount, missingTitleCount };
 }
 
 export async function addParticipant(input: z.input<typeof participantCreateSchema>, options: ParticipantMutationOptions = {}) {
@@ -106,6 +113,7 @@ export async function updateParticipant(id: string, input: z.input<typeof partic
   const data = participantUpdateSchema.parse(input);
   const existing = await prisma.participant.findUniqueOrThrow({ where: { id } });
   const participant = await prisma.participant.update({ where: { id }, data });
+  await syncRegistrationParticipantListStatus(participant.registrationId);
   void queueParticipantCrmSync(participant.id, "participant.updated").catch(() => undefined);
   if (existing.email.toLowerCase() !== participant.email.toLowerCase() || participant.status !== ParticipantStatus.REGISTERED) {
     await cancelParticipantJourneys([participant.id], participant.status !== ParticipantStatus.REGISTERED ? "Participant is no longer registered." : "Participant email changed.");

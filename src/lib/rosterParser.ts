@@ -9,10 +9,12 @@ export type ParsedRosterParticipant = {
 export type ParsedRosterResult = {
   participants: ParsedRosterParticipant[];
   errors: string[];
+  warnings: string[];
 };
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const emailInTextPattern = /[^\s<>,;]+@[^\s<>,;]+\.[^\s<>,;]+/;
+const titleHintPattern = /\b(?:administrator|assistant|coach|consultant|coordinator|counselor|curriculum|dean|director|educator|facilitator|head|instruction|instructor|leader|literacy|manager|math|officer|principal|professor|school|science|specialist|superintendent|teacher|title)\b/i;
 
 function cleanCell(value: string) {
   return value.replace(/^"|"$/g, "").trim();
@@ -20,14 +22,14 @@ function cleanCell(value: string) {
 
 function splitDelimitedLine(line: string) {
   if (line.includes("\t")) {
-    return line.split("\t").map(cleanCell);
+    return { delimiter: "tab" as const, columns: line.split("\t").map(cleanCell) };
   }
 
   if (line.includes(",")) {
-    return line.split(",").map(cleanCell);
+    return { delimiter: "comma" as const, columns: line.split(",").map(cleanCell) };
   }
 
-  return [];
+  return { delimiter: "none" as const, columns: [] };
 }
 
 function splitName(value: string) {
@@ -38,6 +40,10 @@ function splitName(value: string) {
   };
 }
 
+function shouldTreatThirdColumnAsEmailWithTitle(name: string, possibleTitle: string) {
+  return name.trim().includes(" ") || !possibleTitle.trim() || titleHintPattern.test(possibleTitle);
+}
+
 export function parseRosterText(text: string): ParsedRosterResult {
   const lines = text
     .split(/\r?\n/)
@@ -45,10 +51,11 @@ export function parseRosterText(text: string): ParsedRosterResult {
     .filter(Boolean);
   const participants: ParsedRosterParticipant[] = [];
   const errors: string[] = [];
+  const warnings: string[] = [];
   const seenEmails = new Set<string>();
 
   for (const [index, line] of lines.entries()) {
-    const columns = splitDelimitedLine(line);
+    const { delimiter, columns } = splitDelimitedLine(line);
     const emailMatch = line.match(emailInTextPattern);
     let firstName = "";
     let lastName = "";
@@ -57,11 +64,20 @@ export function parseRosterText(text: string): ParsedRosterResult {
     let phone = "";
 
     if (columns.length >= 3 && emailPattern.test(columns[2]?.toLowerCase() ?? "")) {
-      firstName = columns[0] ?? "";
-      lastName = columns[1] ?? "";
-      email = columns[2]?.toLowerCase() ?? "";
-      title = columns[3] ?? "";
-      phone = columns[4] ?? "";
+      if (delimiter === "comma" && shouldTreatThirdColumnAsEmailWithTitle(columns[0] ?? "", columns[1] ?? "")) {
+        const name = splitName(columns[0] ?? "");
+        firstName = name.firstName;
+        lastName = name.lastName;
+        title = columns[1] ?? "";
+        email = columns[2]?.toLowerCase() ?? "";
+        phone = columns[3] ?? "";
+      } else {
+        firstName = columns[0] ?? "";
+        lastName = columns[1] ?? "";
+        email = columns[2]?.toLowerCase() ?? "";
+        title = columns[3] ?? "";
+        phone = columns[4] ?? "";
+      }
     } else if (columns.length >= 2 && emailPattern.test(columns[1]?.toLowerCase() ?? "")) {
       const name = splitName(columns[0] ?? "");
       firstName = name.firstName;
@@ -89,6 +105,9 @@ export function parseRosterText(text: string): ParsedRosterResult {
     }
 
     seenEmails.add(email);
+    if (!title) {
+      warnings.push(`Line ${index + 1} is missing participant title.`);
+    }
     participants.push({
       firstName,
       lastName: lastName || "-",
@@ -98,5 +117,5 @@ export function parseRosterText(text: string): ParsedRosterResult {
     });
   }
 
-  return { participants, errors };
+  return { participants, errors, warnings };
 }

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { ParticipantListStatus } from "@prisma/client";
-import { deriveParticipantListStatus, shouldDefaultPrimaryContactParticipant } from "../../src/lib/rosterStatus";
+import { countParticipantsMissingTitles, deriveParticipantListStatus, shouldDefaultPrimaryContactParticipant } from "../../src/lib/rosterStatus";
 
 test("defaults the POC only for an empty one-seat registration", () => {
   assert.equal(shouldDefaultPrimaryContactParticipant(1, 0), true);
@@ -15,4 +15,10 @@ test("derives roster status from expected and saved participant counts", () => {
   assert.equal(deriveParticipantListStatus(2, 1), ParticipantListStatus.PARTIAL);
   assert.equal(deriveParticipantListStatus(2, 2), ParticipantListStatus.COMPLETE);
   assert.equal(deriveParticipantListStatus(2, 3), ParticipantListStatus.COMPLETE);
+});
+
+test("keeps roster partial when saved participants are missing titles", () => {
+  assert.equal(countParticipantsMissingTitles([{ title: "Principal" }, { title: "" }, { title: null }]), 2);
+  assert.equal(deriveParticipantListStatus(2, 2, 1), ParticipantListStatus.PARTIAL);
+  assert.equal(deriveParticipantListStatus(0, 1, 1), ParticipantListStatus.PARTIAL);
 });

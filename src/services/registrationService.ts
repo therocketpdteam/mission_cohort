@@ -75,6 +75,7 @@ export async function createRegistration(input: z.input<typeof registrationCreat
     registrationId: registration.id,
     participantCount: registration.participantCount,
     actualParticipantCount: roster?.actualCount ?? 0,
+    missingParticipantTitleCount: roster?.missingTitleCount ?? 0,
     paymentStatus: registration.paymentStatus,
     hasSupportingDocs: Boolean(registration.w9Url || registration.invoiceUrl || registration.confirmationDocsSentAt)
   });

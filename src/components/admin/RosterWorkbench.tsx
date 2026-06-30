@@ -34,7 +34,10 @@ export function RosterWorkbench({
   const duplicateCount = parsed.participants.length - newParticipants.length;
   const expected = Number(registration.participantCount ?? 0);
   const projectedTotal = existingParticipants.length + newParticipants.length;
-  const savedComplete = expected > 0 && existingParticipants.length >= expected;
+  const existingMissingTitleCount = existingParticipants.filter((participant) => !String(participant.title ?? "").trim()).length;
+  const newMissingTitleCount = newParticipants.filter((participant) => !participant.title?.trim()).length;
+  const projectedMissingTitleCount = existingMissingTitleCount + newMissingTitleCount;
+  const savedComplete = expected > 0 && existingParticipants.length >= expected && existingMissingTitleCount === 0;
   const savedPartial = expected > 0 && existingParticipants.length > 0 && existingParticipants.length < expected;
   const primaryContactEmail = String(registration.primaryContactEmail ?? "").toLowerCase();
   const primaryContactMissing = Boolean(primaryContactEmail && !existingEmails.has(primaryContactEmail));
@@ -62,14 +65,14 @@ export function RosterWorkbench({
           <p>
             {savedComplete
               ? "Roster is complete. New valid rows can still be added if the team grows."
-              : savedPartial
-                ? "Roster is partial. Paste the remaining names and emails when they arrive."
-                : "Paste names and emails from a message, spreadsheet, or CSV."}
+              : savedPartial || existingMissingTitleCount > 0
+                ? "Roster is partial. Paste missing people or add participant titles when they arrive."
+                : "Paste names, titles, and emails from a message, spreadsheet, or CSV."}
           </p>
         </div>
         <Stack direction="row" flexWrap="wrap" useFlexGap gap={1} alignItems="center" justifyContent="flex-end">
           {canAddPrimaryContact ? <Button size="small" variant="outlined" onClick={onAddPrimaryContact}>Add POC to roster</Button> : null}
-          <StatusChip value={projectedTotal >= expected && expected > 0 ? "COMPLETE" : projectedTotal > 0 ? "PARTIAL" : "NEEDED"} />
+          <StatusChip value={projectedTotal >= expected && expected > 0 && projectedMissingTitleCount === 0 ? "COMPLETE" : projectedTotal > 0 ? "PARTIAL" : "NEEDED"} />
         </Stack>
       </div>
       {savedComplete && (
@@ -82,13 +85,18 @@ export function RosterWorkbench({
           Roster partial at {existingParticipants.length}/{expected} participants. The participant-list follow-up stays open until the count is complete.
         </div>
       )}
+      {existingMissingTitleCount > 0 && (
+        <div className="roster-workbench-state is-partial">
+          {existingMissingTitleCount} saved participant{existingMissingTitleCount === 1 ? "" : "s"} missing title. The participant-list follow-up stays open until titles are added.
+        </div>
+      )}
       {showSavedParticipants && existingParticipants.length > 0 ? (
         <div className="quick-view-list">
           {existingParticipants.map((participant) => (
             <div className="quick-view-list-row" key={participant.id}>
               <div>
                 <strong>{formatProperDisplay(`${participant.firstName ?? ""} ${participant.lastName ?? ""}`)}</strong>
-                <span>{participant.email}</span>
+                <span>{[participant.email, participant.title || "Missing title"].filter(Boolean).join(" · ")}</span>
               </div>
               {onRemoveParticipant ? <Button size="small" variant="text" color="error" onClick={() => onRemoveParticipant(participant.id)}>Remove</Button> : null}
             </div>
@@ -101,15 +109,22 @@ export function RosterWorkbench({
         minRows={5}
         value={rosterText}
         onChange={(event) => setRosterText(event.target.value)}
-        placeholder={"Ada Lovelace, ada@example.com\nGrace Hopper, grace@example.com, Math Coach"}
-        helperText="Accepted: Full Name, email; First, Last, email; tab-separated spreadsheet rows; or Full Name email@example.com."
+        placeholder={"Ada Lovelace, Math Coach, ada@example.com\nGrace Hopper, Principal, grace@example.com"}
+        helperText="Preferred: Full Name, Title, email. Also accepted: Full Name, email; tab-separated spreadsheet rows; or Full Name email@example.com."
       />
       <div className="roster-workbench-summary">
         <span>{existingParticipants.length} saved</span>
         <span>{newParticipants.length} ready to add</span>
         <span>{duplicateCount} already exists</span>
+        <span>{newMissingTitleCount} missing title</span>
         <span>{parsed.errors.length} needs review</span>
       </div>
+      {parsed.warnings.length > 0 && (
+        <div className="roster-workbench-errors">
+          {parsed.warnings.slice(0, 4).map((warning) => <span key={warning}>{warning}</span>)}
+          {parsed.warnings.length > 4 && <span>{parsed.warnings.length - 4} more title warnings.</span>}
+        </div>
+      )}
       {parsed.errors.length > 0 && (
         <div className="roster-workbench-errors">
           {parsed.errors.slice(0, 4).map((error) => <span key={error}>{error}</span>)}

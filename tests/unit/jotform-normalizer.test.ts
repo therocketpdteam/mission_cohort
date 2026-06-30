@@ -58,7 +58,7 @@ test("normalizes a URL-routed Jotform registration with explicit payment status"
       "Payment Status": "successful",
       "Total Cost": "$1,250.00",
       "Get Page URL": "https://www.rocketpd.com/cohorts/summer-leadership?utm_source=newsletter",
-      "Participant Roster": "Ada Lovelace, ada@example.com\nGrace Hopper, grace@example.com"
+      "Participant Roster": "Ada Lovelace, Math Coach, ada@example.com\nGrace Hopper, Principal, grace@example.com"
     },
     [urlMapping]
   );
@@ -71,6 +71,7 @@ test("normalizes a URL-routed Jotform registration with explicit payment status"
   assert.equal(normalized.organization.state, "South Dakota");
   assert.equal(normalized.registration.utmSource, "newsletter");
   assert.equal(normalized.participants.length, 2);
+  assert.equal(normalized.participants[0].title, "Math Coach");
 });
 
 test("parses structured and formatted Jotform address fields", () => {
@@ -189,12 +190,14 @@ test("previews unmapped forms as needing mapping while hiding noisy fields", () 
   assert.equal(preview.fieldOptions.some((option: any) => option.key === "customParams"), false);
 });
 
-test("parses valid participants and reports roster line errors", () => {
-  const result = parseParticipantCsvText("Ada Lovelace, ada@example.com\nBroken Person\nGrace Hopper grace@example.com");
+test("parses participant titles and reports roster title warnings", () => {
+  const result = parseParticipantCsvText("Ada Lovelace, Math Coach, ada@example.com\nBroken Person\nGrace Hopper grace@example.com");
 
   assert.equal(result.participants.length, 2);
-  assert.equal(result.errors.length, 1);
+  assert.equal(result.participants[0].title, "Math Coach");
+  assert.equal(result.errors.length, 2);
   assert.match(result.errors[0], /Line 2/);
+  assert.match(result.errors[1], /missing participant title/);
 });
 
 test("maps common Jotform payment status values explicitly", () => {

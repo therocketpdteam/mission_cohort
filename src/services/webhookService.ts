@@ -1,6 +1,5 @@
 import {
   OrganizationType,
-  ParticipantListStatus,
   PaymentMethod,
   PaymentStatus,
   Prisma,
@@ -10,6 +9,7 @@ import {
 } from "@prisma/client";
 import { env } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
+import { countParticipantsMissingTitles, deriveParticipantListStatus } from "@/lib/rosterStatus";
 import { normalizeJotformRegistrationPayload } from "@/modules/jotform";
 import { getDecryptedIntegrationConnection } from "@/services/integrationService";
 import { listActiveJotformFormMappings } from "@/services/jotformMappingService";
@@ -219,6 +219,12 @@ export async function processRegistrationWebhook(payload: Record<string, any>, o
           })
         : null;
 
+    const shouldReplaceParticipants = !existingRegistration || participantsInput.length > 0;
+    const participantsForStatus = shouldReplaceParticipants ? participantsInput : existingRegistration?.participants ?? [];
+    const actualParticipantCount = participantsForStatus.length;
+    const missingParticipantTitleCount = countParticipantsMissingTitles(participantsForStatus);
+    const participantListStatus = deriveParticipantListStatus(participantCount, actualParticipantCount, missingParticipantTitleCount);
+
     const registrationData = {
       cohortId,
       organizationId: organization.id,
@@ -234,14 +240,7 @@ export async function processRegistrationWebhook(payload: Record<string, any>, o
       paymentStatus: (registrationInput.paymentStatus as PaymentStatus) ?? PaymentStatus.PENDING,
       invoiceNumber: stringValue(registrationInput.invoiceNumber) || undefined,
       purchaseOrderNumber: stringValue(registrationInput.purchaseOrderNumber) || undefined,
-      participantListStatus:
-        participantCount === 0
-          ? ParticipantListStatus.NOT_REQUESTED
-          : participantsInput.length >= participantCount
-            ? ParticipantListStatus.COMPLETE
-            : participantsInput.length > 0
-              ? ParticipantListStatus.PARTIAL
-              : ParticipantListStatus.NEEDED,
+      participantListStatus,
       supportingDocumentStatus:
         w9Url || invoiceUrl || confirmationDocsSentAt
           ? confirmationDocsSentAt
@@ -277,8 +276,6 @@ export async function processRegistrationWebhook(payload: Record<string, any>, o
           data: registrationData
         })
       : await prisma.registration.create({ data: registrationData });
-
-    const shouldReplaceParticipants = !existingRegistration || participantsInput.length > 0;
 
     if (existingRegistration && shouldReplaceParticipants) {
       await cancelParticipantJourneys(existingRegistration.participants.map((participant) => participant.id), "Participant roster replaced by a newer intake revision.");
@@ -379,6 +376,7 @@ export async function processRegistrationWebhook(payload: Record<string, any>, o
           registrationId: registration.id,
           participantCount: registration.participantCount,
           actualParticipantCount: participants.length,
+          missingParticipantTitleCount,
           paymentStatus: registration.paymentStatus,
           hasSupportingDocs: Boolean(registration.w9Url || registration.invoiceUrl || registration.confirmationDocsSentAt)
         });

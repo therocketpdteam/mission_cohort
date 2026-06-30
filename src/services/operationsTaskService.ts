@@ -71,17 +71,21 @@ export async function createDefaultRegistrationOperationsTasks(input: {
   registrationId: string;
   participantCount: number;
   actualParticipantCount: number;
+  missingParticipantTitleCount?: number;
   paymentStatus: string;
   hasSupportingDocs: boolean;
 }) {
   const tasks: Array<z.input<typeof operationsTaskCreateSchema>> = [];
 
-  if (input.participantCount > input.actualParticipantCount) {
+  if (input.participantCount > input.actualParticipantCount || Number(input.missingParticipantTitleCount ?? 0) > 0) {
+    const missingTitleCount = Number(input.missingParticipantTitleCount ?? 0);
     tasks.push({
       cohortId: input.cohortId,
       registrationId: input.registrationId,
       title: "Collect participant list",
-      description: "Registration was received without a complete participant roster.",
+      description: missingTitleCount > 0
+        ? `Registration roster is missing ${missingTitleCount} participant title${missingTitleCount === 1 ? "" : "s"}.`
+        : "Registration was received without a complete participant roster.",
       category: OperationsTaskCategory.PARTICIPANT_LIST,
       priority: OperationsTaskPriority.HIGH
     });

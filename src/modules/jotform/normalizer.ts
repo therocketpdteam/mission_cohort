@@ -1,5 +1,6 @@
 import { OrganizationType, PaymentMethod, PaymentStatus, RegistrationStatus } from "@prisma/client";
 import type { JotformFormMapping } from "@prisma/client";
+import { parseRosterText } from "@/lib/rosterParser";
 
 type UnknownRecord = Record<string, unknown>;
 type ParsedParticipant = {
@@ -171,7 +172,7 @@ export const jotformTargetFields: JotformTargetField[] = [
   { target: "utmTerm", label: "UTM term", category: "Source", aliases: ["utm_term", "utmTerm", "UTM Term"] },
   { target: "landingPageUrl", label: "Landing page URL", category: "Source", aliases: ["landingPageUrl", "landing_page_url", "Get Page URL", "lead_source", "q25_leadSource", "q59_typeA59"] },
   { target: "referrerUrl", label: "Referrer URL", category: "Source", aliases: ["referrerUrl", "referrer", "Referrer"] },
-  { target: "participantText", label: "Participant names/emails text box", category: "Participants", aliases: ["participantCsv", "participantsCsv", "participantText", "participantNamesEmails", "participantNamesAndEmails", "teamParticipants", "TeamParticipants", "namesAndEmails", "NamesEmails", "Please enter the names and email addresses of all participants, one per line, in the following format: Full Name, Email"] }
+  { target: "participantText", label: "Participant names/titles/emails text box", category: "Participants", aliases: ["participantCsv", "participantsCsv", "participantText", "participantNamesEmails", "participantNamesAndEmails", "teamParticipants", "TeamParticipants", "namesAndEmails", "NamesEmails", "Please enter the names and email addresses of all participants, one per line, in the following format: Full Name, Email", "Please enter the names, titles, and email addresses of all participants, one per line, in the following format: Full Name, Title, Email"] }
 ];
 
 function normalizeKey(value: string): string {
@@ -857,35 +858,8 @@ export function parseParticipantCsvText(text: unknown): { participants: ParsedPa
     return { participants: [], errors: [] };
   }
 
-  const lines = rawText
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-  const participants: Array<{ firstName: string; lastName: string; email: string }> = [];
-  const errors: string[] = [];
-
-  for (const [index, line] of lines.entries()) {
-    const emailMatch = line.match(emailInTextPattern);
-    const hasComma = line.includes(",");
-    const [commaNamePart = "", commaEmailPart = ""] = line.split(",").map((part) => part.trim());
-    const namePart = hasComma ? commaNamePart : line.replace(emailMatch?.[0] ?? "", "").trim();
-    const emailPart = hasComma ? commaEmailPart : emailMatch?.[0] ?? "";
-    const email = emailPart.toLowerCase();
-
-    if (!namePart || !emailPattern.test(email)) {
-      errors.push(`Line ${index + 1} must include "Full Name, email@example.com" or "Full Name email@example.com"`);
-      continue;
-    }
-
-    const [firstName = "", ...lastNameParts] = namePart.split(/\s+/);
-    participants.push({
-      firstName,
-      lastName: lastNameParts.join(" ") || "-",
-      email
-    });
-  }
-
-  return { participants, errors };
+  const result = parseRosterText(rawText);
+  return { participants: result.participants, errors: [...result.errors, ...result.warnings] };
 }
 
 function splitFullName(value: string): { firstName: string; lastName: string } {
@@ -1008,7 +982,8 @@ export function normalizeJotformRegistrationPayload(payload: UnknownRecord, mapp
     "TeamParticipants",
     "namesAndEmails",
     "NamesEmails",
-    "Please enter the names and email addresses of all participants, one per line, in the following format: Full Name, Email"
+    "Please enter the names and email addresses of all participants, one per line, in the following format: Full Name, Email",
+    "Please enter the names, titles, and email addresses of all participants, one per line, in the following format: Full Name, Title, Email"
   ]) ?? Object.values(flat).find((value) => readString(value).includes(",") && emailInTextPattern.test(readString(value)));
   const parsedParticipantText = parseParticipantCsvText(participantText);
   const participants = [
