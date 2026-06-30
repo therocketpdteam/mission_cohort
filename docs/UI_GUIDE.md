@@ -316,6 +316,14 @@ List Console Pattern:
 - Never return saved secrets to the browser. Saved client IDs, API keys, client secrets, verifier tokens, and webhook keys display only a masked saved-state placeholder and require a new value only when replacing them.
 - Outbound safety status must remain visible even when provider details are collapsed. Live-send controls must use explicit warning language.
 
+## Communication Templates
+
+- Template editing should feel like writing an email, not editing HTML. Keep the primary body input as readable body text with a compact formatting toolbar.
+- Supported body formatting markers are `**bold**`, `*italic*`, `- bullet`, `[readable link text](url-or-merge-field)`, and approved color markers such as `{purple:text}`, `{green:text}`, `{amber:text}`, and `{red:text}`.
+- Merge fields insert at the current cursor or selected text position. Do not make admins copy/paste tokens manually.
+- Document links should not expose naked URLs in normal email copy. Use readable hyperlinks such as `[Here is your W-9 for your convenience]({{registration.w9Url}})` and `[Here is your invoice]({{registration.invoiceUrl}})`.
+- Template preview must render the same formatting that SendGrid receives, while raw HTML in the body input remains escaped.
+
 ## Cohort Detail Pattern
 
 - The breadcrumb must read like a product path: `Mission Control / Cohorts / {Cohort title}`. Never expose raw cohort IDs in the visible path.

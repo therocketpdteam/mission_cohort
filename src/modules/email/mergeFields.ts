@@ -23,7 +23,9 @@ const allowedFields = new Set([
   "organization.name",
   "registration.primaryContactName",
   "registration.invoiceNumber",
-  "registration.paymentStatus"
+  "registration.paymentStatus",
+  "registration.w9Url",
+  "registration.invoiceUrl"
 ]);
 
 export const mergeFields = Array.from(allowedFields);
@@ -49,14 +51,20 @@ export const sampleMergeContext: MergeFieldContext = {
   registration: {
     primaryContactName: "Avery Brooks",
     invoiceNumber: "INV-1001",
-    paymentStatus: "INVOICED"
+    paymentStatus: "INVOICED",
+    w9Url: "https://rocketpd.com/w9.pdf",
+    invoiceUrl: "https://rocketpd.com/invoices/INV-1001.pdf"
   }
 };
 
 function getPathValue(context: MergeFieldContext, path: string) {
   const [namespace, key] = path.split(".");
   const scope = context[namespace as keyof MergeFieldContext];
-  const value = scope?.[key];
+  let value = scope?.[key];
+
+  if (namespace === "registration" && key === "invoiceUrl" && !value && Array.isArray(scope?.invoiceDrafts)) {
+    value = (scope.invoiceDrafts as Array<Record<string, unknown>>).find((invoice) => invoice.pdfUrl)?.pdfUrl;
+  }
 
   if (value instanceof Date) {
     return value.toLocaleString();

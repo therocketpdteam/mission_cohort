@@ -5472,6 +5472,42 @@ h6,
   margin-bottom: 0;
 }
 
+.comms-preview-frame ul {
+  margin: 0 0 12px;
+  padding-left: 20px;
+}
+
+.comms-preview-frame li {
+  margin: 4px 0;
+}
+
+.comms-preview-frame a {
+  color: var(--color-primary-700);
+  font-weight: 760;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.email-color-purple {
+  color: var(--color-primary-700);
+  font-weight: 760;
+}
+
+.email-color-green {
+  color: var(--color-success-600);
+  font-weight: 760;
+}
+
+.email-color-amber {
+  color: var(--color-warning-600);
+  font-weight: 760;
+}
+
+.email-color-red {
+  color: var(--color-danger-600);
+  font-weight: 760;
+}
+
 .comms-field-cloud {
   display: flex;
   flex-wrap: wrap;
@@ -5576,6 +5612,68 @@ h6,
   color: var(--color-slate-600);
   font-size: 0.84rem;
   font-weight: 760;
+}
+
+.template-format-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid var(--color-slate-200);
+  border-radius: 10px;
+  background: var(--color-surface-container-lowest);
+  padding: 8px;
+}
+
+.template-format-toolbar button {
+  min-height: 30px;
+  border: 1px solid rgba(38, 34, 84, 0.16);
+  border-radius: 8px;
+  background: var(--color-white);
+  padding: 5px 9px;
+  color: var(--color-slate-700);
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 780;
+  cursor: pointer;
+}
+
+.template-format-toolbar button:hover {
+  border-color: rgba(38, 34, 84, 0.3);
+  background: var(--color-slate-50);
+  color: var(--color-primary-700);
+}
+
+.template-format-toolbar button[data-color="purple"] {
+  color: var(--color-primary-700);
+}
+
+.template-format-toolbar button[data-color="green"] {
+  color: var(--color-success-600);
+}
+
+.template-format-toolbar button[data-color="amber"] {
+  color: var(--color-warning-600);
+}
+
+.template-format-toolbar button[data-color="red"] {
+  color: var(--color-danger-600);
+}
+
+.template-format-hint {
+  margin: -4px 0 0;
+  color: var(--color-slate-500);
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+.template-format-hint code {
+  border: 1px solid rgba(38, 34, 84, 0.1);
+  border-radius: 6px;
+  background: var(--color-slate-50);
+  padding: 1px 4px;
+  color: var(--color-primary-700);
+  font-size: 0.72rem;
 }
 
 .template-editor-side {
@@ -5816,6 +5914,8 @@ h6,
 .app-shell.is-night .comms-preview-frame,
 .app-shell.is-night .comms-message-body-frame,
 .app-shell.is-night .template-editor-side,
+.app-shell.is-night .template-format-toolbar,
+.app-shell.is-night .template-format-hint code,
 .app-shell.is-night .compose-message-side,
 .app-shell.is-night .compose-message-context,
 .app-shell.is-night .compose-recipient-summary,

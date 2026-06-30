@@ -613,7 +613,7 @@ export async function sendCommunication(id: string, options?: { recipients?: str
     include: {
       cohort: { include: { presenter: true } },
       session: true,
-      registration: { include: { organization: true } },
+      registration: { include: { organization: true, invoiceDrafts: { orderBy: { updatedAt: "desc" } } } },
       participant: true,
       template: true,
       createdBy: true,
@@ -915,7 +915,7 @@ async function createCommunicationFromTemplate(input: {
 export async function sendTemplateToParticipant(input: { templateId: string; participantId: string }) {
   const participant = await prisma.participant.findUnique({
     where: { id: input.participantId },
-    include: { cohort: { include: { presenter: true } }, organization: true, registration: true }
+    include: { cohort: { include: { presenter: true } }, organization: true, registration: { include: { invoiceDrafts: { orderBy: { updatedAt: "desc" } } } } }
   });
 
   if (!participant) {
@@ -947,7 +947,7 @@ export async function sendTemplateToParticipant(input: { templateId: string; par
 export async function sendTemplateToRegistrations(input: { templateId: string; registrationIds: string[] }) {
   const registrations = await prisma.registration.findMany({
     where: { id: { in: input.registrationIds }, archivedAt: null },
-    include: { cohort: { include: { presenter: true } }, organization: true }
+    include: { cohort: { include: { presenter: true } }, organization: true, invoiceDrafts: { orderBy: { updatedAt: "desc" } } }
   });
   const results = [];
 

@@ -16,6 +16,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { adminApi, uploadAdminFile } from "@/lib/adminApi";
 import { formatProperDisplay, formatStatusLabel } from "@/lib/formatting";
 import { mergeFields, renderMergeFields, sampleMergeContext } from "@/modules/email/mergeFields";
+import { htmlToTemplateText, textToEmailHtml } from "@/modules/email/templateFormatting";
 import {
   ActionGroup,
   AdminRow,
@@ -46,45 +47,6 @@ const templateTypes = [
 const tabs = ["Outbox", "Issues", "Templates"] as const;
 const communicationStatuses = ["DRAFT", "SCHEDULED", "SENDING", "SENT", "FAILED", "CANCELLED"];
 const recipientScopes = ["ALL_PARTICIPANTS", "PRIMARY_CONTACTS", "BILLING_CONTACTS", "CUSTOM"];
-
-function escapeHtml(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-function textToEmailHtml(value: string) {
-  const blocks = value
-    .split(/\n{2,}/)
-    .map((block) => block.trim())
-    .filter(Boolean);
-
-  if (blocks.length === 0) {
-    return "<p></p>";
-  }
-
-  return blocks
-    .map((block) => `<p>${escapeHtml(block).replace(/\n/g, "<br />")}</p>`)
-    .join("");
-}
-
-function htmlToTemplateText(value: string) {
-  return value
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<\/p>/gi, "\n\n")
-    .replace(/<[^>]*>/g, "")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, "\"")
-    .replace(/&#39;/g, "'")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
 
 function templateText(template?: AdminRow | null) {
   return String(template?.bodyText || htmlToTemplateText(String(template?.bodyHtml ?? "")) || "");
@@ -291,6 +253,19 @@ function TemplateEditorDialog({
     rememberSelection("bodyText", event.currentTarget);
   }
 
+  function replaceSelection(field: "subject" | "bodyText", replacement: string, cursorOffset = replacement.length) {
+    setValues((current) => {
+      const currentValue = String(current[field] ?? "");
+      const savedSelection = selectionRef.current[field] ?? { start: currentValue.length, end: currentValue.length };
+      const start = Math.min(savedSelection.start, currentValue.length);
+      const end = Math.min(savedSelection.end, currentValue.length);
+      const nextValue = `${currentValue.slice(0, start)}${replacement}${currentValue.slice(end)}`;
+      const nextCursor = start + cursorOffset;
+      pendingCursorRef.current = { field, position: nextCursor };
+      return { ...current, [field]: nextValue };
+    });
+  }
+
   function insertMergeField(field: string) {
     const token = `{{${field}}}`;
     const targetField = activeField;
@@ -308,6 +283,45 @@ function TemplateEditorDialog({
       pendingCursorRef.current = { field: targetField, position: nextCursor };
       return { ...current, [targetField]: nextValue };
     });
+  }
+
+  function formatBody(style: "bold" | "italic" | "bullet" | "link" | "purple" | "red" | "green" | "amber") {
+    const currentValue = bodyText;
+    const savedSelection = selectionRef.current.bodyText ?? { start: currentValue.length, end: currentValue.length };
+    const start = Math.min(savedSelection.start, currentValue.length);
+    const end = Math.min(savedSelection.end, currentValue.length);
+    const selected = currentValue.slice(start, end);
+
+    if (style === "bullet") {
+      const bulletText = selected
+        ? selected.split("\n").map((line) => line.trim() ? `- ${line.replace(/^[-*]\s+/, "")}` : line).join("\n")
+        : "- Bullet item";
+      replaceSelection("bodyText", bulletText, bulletText.length);
+      return;
+    }
+
+    if (style === "link") {
+      const label = selected || "Link text";
+      const replacement = `[${label}](https://example.com)`;
+      replaceSelection("bodyText", replacement, selected ? replacement.length : 1);
+      return;
+    }
+
+    const wrappers = {
+      bold: ["**", "**"],
+      italic: ["*", "*"],
+      purple: ["{purple:", "}"],
+      red: ["{red:", "}"],
+      green: ["{green:", "}"],
+      amber: ["{amber:", "}"]
+    } as const;
+    const [before, after] = wrappers[style];
+    const text = selected || "text";
+    replaceSelection("bodyText", `${before}${text}${after}`, selected ? before.length + text.length + after.length : before.length);
+  }
+
+  function insertDocumentLink(label: string, field: "registration.w9Url" | "registration.invoiceUrl") {
+    replaceSelection("bodyText", `[${label}]({{${field}}})`);
   }
 
   async function save() {
@@ -372,6 +386,25 @@ function TemplateEditorDialog({
               helperText="Write this like a normal email. Blank lines become paragraph breaks."
               required
             />
+            <div className="template-format-toolbar" aria-label="Email body formatting tools">
+              <button type="button" onClick={() => formatBody("bold")} title="Bold selected text"><strong>B</strong></button>
+              <button type="button" onClick={() => formatBody("italic")} title="Italic selected text"><em>I</em></button>
+              <button type="button" onClick={() => formatBody("bullet")} title="Add bullet points">• List</button>
+              <button type="button" onClick={() => formatBody("link")} title="Add hyperlink">Link</button>
+              <button type="button" onClick={() => formatBody("purple")} title="Purple emphasis" data-color="purple">Purple</button>
+              <button type="button" onClick={() => formatBody("green")} title="Green emphasis" data-color="green">Green</button>
+              <button type="button" onClick={() => formatBody("amber")} title="Amber emphasis" data-color="amber">Amber</button>
+              <button type="button" onClick={() => formatBody("red")} title="Red emphasis" data-color="red">Red</button>
+              <button type="button" onClick={() => insertDocumentLink("Here is your W-9 for your convenience", "registration.w9Url")}>
+                W-9 link
+              </button>
+              <button type="button" onClick={() => insertDocumentLink("Here is your invoice", "registration.invoiceUrl")}>
+                Invoice link
+              </button>
+            </div>
+            <p className="template-format-hint">
+              Formatting uses simple markers: <code>**bold**</code>, <code>*italic*</code>, <code>- bullet</code>, <code>[text](link)</code>, and <code>{"{purple:text}"}</code>.
+            </p>
             <label className="template-editor-active">
               <input type="checkbox" checked={Boolean(values.active)} onChange={(event) => setValue("active", event.target.checked)} />
               <span>Active template</span>
