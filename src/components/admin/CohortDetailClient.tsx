@@ -1641,25 +1641,29 @@ export function CohortDetailClient({ id }: { id: string }) {
       valueFormatter: (value) => formatDate(value)
     },
     {
-      field: "quickView",
-      headerName: "Participants / Amount",
-      width: 160,
-      sortable: false,
+      field: "participantCount",
+      headerName: "Participants",
+      width: 116,
+      valueGetter: (_value, row) => Number(row.participantCount ?? 0),
       renderCell: (params) => (
-        <div>
-          <span className="app-table-main" title={`${params.row.participantCount ?? 0} participant${Number(params.row.participantCount ?? 0) === 1 ? "" : "s"}`}>
-            {Number(params.row.participantCount ?? 0).toLocaleString()} participant{Number(params.row.participantCount ?? 0) === 1 ? "" : "s"}
-          </span>
-          <span className="app-table-sub" title={money(params.row.totalAmount)}>{money(params.row.totalAmount)}</span>
-        </div>
+        <span className="app-table-main" title={`${params.value} participant${Number(params.value ?? 0) === 1 ? "" : "s"}`}>
+          {Number(params.value ?? 0).toLocaleString()}
+        </span>
       )
     },
-    { field: "participantListStatus", headerName: "Roster", width: 132, renderCell: (params) => <StatusChip value={params.value} /> },
-    { field: "paymentStatus", headerName: "Payment", width: 132, renderCell: (params) => <StatusChip value={params.value} /> },
+    {
+      field: "totalAmount",
+      headerName: "Amount",
+      width: 116,
+      valueGetter: (_value, row) => Number(row.totalAmount ?? 0),
+      valueFormatter: (value) => money(value)
+    },
+    { field: "participantListStatus", headerName: "Roster", width: 124, renderCell: (params) => <StatusChip value={params.value} /> },
+    { field: "paymentStatus", headerName: "Payment", width: 124, renderCell: (params) => <StatusChip value={params.value} /> },
     {
       field: "billing",
       headerName: "Billing",
-      width: 144,
+      width: 136,
       sortable: false,
       renderCell: (params) => {
         const invoice = String(params.row.invoiceNumber ?? "").trim();
