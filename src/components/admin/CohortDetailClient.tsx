@@ -1527,6 +1527,20 @@ export function CohortDetailClient({ id }: { id: string }) {
     }
   }
 
+  async function reconcileQuickBooksLinks() {
+    try {
+      const invoiceIds = Array.from(new Set(invoiceDrafts.map((invoice) => invoice.quickBooksInvoiceRef).filter(Boolean)));
+      await adminApi(`/api/cohorts/${id}`, {
+        method: "PATCH",
+        body: { action: "reconcileQuickBooks", invoiceIds }
+      });
+      notifySuccess("QuickBooks links checked");
+      await load();
+    } catch (error) {
+      notifyError((error as Error).message);
+    }
+  }
+
   async function createQuickBooksInvoice(invoice: AdminRow) {
     try {
       await adminApi("/api/invoices", { method: "PATCH", body: { action: "createQuickBooksInvoice", id: invoice.id } });
@@ -2360,6 +2374,9 @@ export function CohortDetailClient({ id }: { id: string }) {
               <small>{financeHealth?.sendgridReady ? "Invoice and receipt send actions are enabled." : "PDFs can still be generated and opened; sending requires SENDGRID_API_KEY and SENDGRID_FROM_EMAIL."}</small>
               {!cohort?.quickBooksProjectRef && (
                 <Button size="small" variant="outlined" onClick={() => void syncQuickBooksProject()}>Link QuickBooks Project</Button>
+              )}
+              {(cohort?.quickBooksProjectRef || invoiceDrafts.some((invoice) => invoice.quickBooksInvoiceRef)) && (
+                <Button size="small" variant="outlined" onClick={() => void reconcileQuickBooksLinks()}>Check QuickBooks Links</Button>
               )}
             </div>
             <div className="invoice-workbench">

@@ -179,6 +179,26 @@ export async function fetchQuickBooksInvoice(input: {
   return response.json() as Promise<Record<string, any>>;
 }
 
+export async function fetchQuickBooksCustomer(input: {
+  realmId: string;
+  accessToken: string;
+  customerId: string;
+  environment?: string | null;
+}) {
+  const response = await fetch(`${getQuickBooksBaseUrl(input.environment)}/v3/company/${input.realmId}/customer/${input.customerId}?minorversion=75`, {
+    headers: {
+      Authorization: `Bearer ${input.accessToken}`,
+      Accept: "application/json"
+    }
+  });
+
+  if (!response.ok) {
+    throw await quickBooksError(response, "QuickBooks customer fetch failed");
+  }
+
+  return response.json() as Promise<Record<string, any>>;
+}
+
 function escapeQuickBooksQueryValue(value: string) {
   return value.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
 }

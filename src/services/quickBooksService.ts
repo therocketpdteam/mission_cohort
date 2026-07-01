@@ -13,6 +13,7 @@ import {
   createQuickBooksInvoice,
   createQuickBooksProject,
   exchangeQuickBooksCode,
+  fetchQuickBooksCustomer,
   fetchQuickBooksInvoice,
   findQuickBooksInvoiceByDocNumber,
   findQuickBooksProject,
@@ -99,6 +100,11 @@ function toQuickBooksDate(value?: Date | string | null) {
 
 function moneyNumber(value: unknown) {
   return Number(value ?? 0);
+}
+
+function isQuickBooksMissingReference(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return /not found|invalid reference id|element id .* not found|object not found/i.test(message);
 }
 
 async function quickBooksConnection() {
@@ -213,6 +219,71 @@ export async function ensureCohortQuickBooksProject(cohortId: string) {
         quickBooksRealmId: realmId,
         quickBooksSyncStatus: SyncStatus.ERROR,
         quickBooksSyncError: error instanceof Error ? error.message : "QuickBooks project sync failed.",
+        quickBooksLastSyncedAt: new Date()
+      }
+    });
+    throw error;
+  }
+}
+
+async function markCohortQuickBooksProjectMissing(cohortId: string, projectRef?: string | null) {
+  return prisma.cohort.update({
+    where: { id: cohortId },
+    data: {
+      quickBooksSyncStatus: SyncStatus.ERROR,
+      quickBooksSyncError: `QuickBooks Project${projectRef ? ` ${projectRef}` : ""} could not be found. It may have been deleted or belongs to a different QuickBooks company/environment.`,
+      quickBooksLastSyncedAt: new Date()
+    }
+  });
+}
+
+export async function reconcileCohortQuickBooksProject(cohortId: string) {
+  const cohort = await prisma.cohort.findUnique({ where: { id: cohortId } });
+
+  if (!cohort) {
+    throw Object.assign(new Error("Cohort not found."), { code: "NOT_FOUND", status: 404 });
+  }
+
+  if (!cohort.quickBooksProjectRef) {
+    return ensureCohortQuickBooksProject(cohortId);
+  }
+
+  const { setup, realmId, accessToken } = await quickBooksConnection();
+
+  try {
+    const result = await fetchQuickBooksCustomer({
+      realmId,
+      accessToken,
+      customerId: cohort.quickBooksProjectRef,
+      environment: setup.environment
+    });
+    const project = result.Customer ?? result;
+
+    if (project.Active === false) {
+      return markCohortQuickBooksProjectMissing(cohort.id, cohort.quickBooksProjectRef);
+    }
+
+    return prisma.cohort.update({
+      where: { id: cohort.id },
+      data: {
+        quickBooksProjectName: String(project.DisplayName ?? cohort.quickBooksProjectName ?? cohort.shortName ?? cohort.title),
+        quickBooksParentCustomerRef: String(project.ParentRef?.value ?? cohort.quickBooksParentCustomerRef ?? ""),
+        quickBooksRealmId: realmId,
+        quickBooksSyncStatus: SyncStatus.SYNCED,
+        quickBooksSyncError: null,
+        quickBooksLastSyncedAt: new Date()
+      }
+    });
+  } catch (error) {
+    if (isQuickBooksMissingReference(error)) {
+      return markCohortQuickBooksProjectMissing(cohort.id, cohort.quickBooksProjectRef);
+    }
+
+    await prisma.cohort.update({
+      where: { id: cohort.id },
+      data: {
+        quickBooksSyncStatus: SyncStatus.ERROR,
+        quickBooksSyncError: error instanceof Error ? error.message : "QuickBooks project reconciliation failed.",
         quickBooksLastSyncedAt: new Date()
       }
     });
@@ -444,6 +515,40 @@ export async function createQuickBooksInvoiceFromDraft(invoiceDraftId: string) {
   return { invoice, quickBooksInvoiceId: String(qbInvoice.Id ?? qbInvoice.id), reused: Boolean(existing) };
 }
 
+async function markQuickBooksInvoiceMissing(invoiceId: string, realmId?: string) {
+  const message = `QuickBooks invoice ${invoiceId} could not be found. It may have been deleted manually in QuickBooks and needs finance review.`;
+  const now = new Date();
+  const invoiceDrafts = await prisma.invoiceDraft.updateMany({
+    where: { quickBooksInvoiceRef: invoiceId },
+    data: {
+      quickBooksRealmId: realmId,
+      quickBooksSyncStatus: SyncStatus.ERROR,
+      quickBooksSyncError: message,
+      quickBooksLastSyncedAt: now
+    }
+  });
+  const registrations = await prisma.registration.updateMany({
+    where: { quickBooksInvoiceRef: invoiceId },
+    data: {
+      quickBooksRealmId: realmId,
+      quickBooksSyncStatus: SyncStatus.ERROR,
+      quickBooksSyncError: message,
+      quickBooksLastSyncedAt: now
+    }
+  });
+  const payments = await prisma.paymentRecord.updateMany({
+    where: { quickBooksInvoiceRef: invoiceId },
+    data: {
+      quickBooksRealmId: realmId,
+      quickBooksSyncStatus: SyncStatus.ERROR,
+      quickBooksSyncError: message,
+      quickBooksLastSyncedAt: now
+    }
+  });
+
+  return { invoiceId, invoiceStatus: QuickBooksInvoiceStatus.UNKNOWN, syncStatus: SyncStatus.ERROR, invoiceDrafts: invoiceDrafts.count, registrations: registrations.count, payments: payments.count, error: message };
+}
+
 export async function syncQuickBooksInvoice(invoiceId: string, realmId?: string) {
   const connection = await getDecryptedIntegrationConnection(IntegrationProvider.QUICKBOOKS);
 
@@ -457,12 +562,20 @@ export async function syncQuickBooksInvoice(invoiceId: string, realmId?: string)
     throw Object.assign(new Error("QuickBooks realm ID is missing."), { code: "BAD_REQUEST", status: 400 });
   }
 
-  const result = await fetchQuickBooksInvoice({
-    realmId: resolvedRealmId,
-    accessToken: connection.accessToken,
-    invoiceId,
-    environment: (await quickBooksSetupWithEnvFallback()).environment
-  });
+  let result: Record<string, any>;
+  try {
+    result = await fetchQuickBooksInvoice({
+      realmId: resolvedRealmId,
+      accessToken: connection.accessToken,
+      invoiceId,
+      environment: (await quickBooksSetupWithEnvFallback()).environment
+    });
+  } catch (error) {
+    if (isQuickBooksMissingReference(error)) {
+      return markQuickBooksInvoiceMissing(invoiceId, resolvedRealmId);
+    }
+    throw error;
+  }
   const invoice = result.Invoice ?? result;
   const invoiceStatus = invoiceStatusFromQuickBooks(invoice);
   const paymentStatus = paymentStatusFromInvoice(invoice, invoiceStatus);
@@ -622,16 +735,35 @@ export async function processQuickBooksWebhook(rawBody: string, signature?: stri
           realmId: notification.realmId
         }))
       )
-      .filter((entity: Record<string, any>) => ["Invoice", "Payment"].includes(entity.name));
+      .filter((entity: Record<string, any>) => ["Invoice", "Payment", "Customer"].includes(entity.name));
     const results = [];
 
     for (const entity of entities) {
       if (entity.name === "Invoice" && entity.id) {
-        results.push(await syncQuickBooksInvoice(String(entity.id), entity.realmId ? String(entity.realmId) : undefined));
+        if (String(entity.operation ?? "").toLowerCase() === "delete") {
+          results.push(await markQuickBooksInvoiceMissing(String(entity.id), entity.realmId ? String(entity.realmId) : undefined));
+        } else {
+          results.push(await syncQuickBooksInvoice(String(entity.id), entity.realmId ? String(entity.realmId) : undefined));
+        }
       }
 
       if (entity.name === "Payment" && entity.id) {
         results.push(await syncQuickBooksPayment(String(entity.id), entity.realmId ? String(entity.realmId) : undefined));
+      }
+
+      if (entity.name === "Customer" && entity.id) {
+        const cohorts = await prisma.cohort.findMany({
+          where: { quickBooksProjectRef: String(entity.id) },
+          select: { id: true, quickBooksProjectRef: true }
+        });
+
+        for (const cohort of cohorts) {
+          if (String(entity.operation ?? "").toLowerCase() === "delete") {
+            results.push(await markCohortQuickBooksProjectMissing(cohort.id, cohort.quickBooksProjectRef));
+          } else {
+            results.push(await reconcileCohortQuickBooksProject(cohort.id));
+          }
+        }
       }
     }
 
