@@ -85,13 +85,18 @@ export async function getQuickBooksSetup() {
   const setup = await getConnection(IntegrationProvider.QUICKBOOKS, "setup");
   const connection = await getConnection(IntegrationProvider.QUICKBOOKS, "default");
   const data = metadata(setup?.metadata);
+  const parentCustomerRef = String(data.parentCustomerRef ?? "");
+  const serviceItemRef = String(data.serviceItemRef ?? "");
 
   return {
     provider: "QUICKBOOKS",
     configured: Boolean(setup?.accountId && setup?.accessToken && data.redirectUri && setup?.refreshToken),
+    projectSyncConfigured: Boolean(parentCustomerRef && serviceItemRef),
     clientId: "",
     redirectUri: String(data.redirectUri ?? ""),
     environment: String(data.environment ?? "sandbox"),
+    parentCustomerRef,
+    serviceItemRef,
     hasClientSecret: maskedSecret(setup?.accessToken),
     hasClientId: maskedSecret(setup?.accountId),
     hasWebhookVerifierToken: maskedSecret(setup?.refreshToken),
@@ -202,6 +207,8 @@ export async function saveIntegrationSetup(provider: IntegrationSetupProvider, i
   const redirectUri = cleanString(input.redirectUri) || String(existingMetadata.redirectUri ?? "");
   const environment = cleanString(input.environment) || String(existingMetadata.environment ?? "sandbox");
   const webhookVerifierToken = cleanString(input.webhookVerifierToken);
+  const parentCustomerRef = cleanString(input.parentCustomerRef) || String(existingMetadata.parentCustomerRef ?? "");
+  const serviceItemRef = cleanString(input.serviceItemRef) || String(existingMetadata.serviceItemRef ?? "");
 
   if (!clientId || !redirectUri) {
     throw Object.assign(new Error("QuickBooks client ID and redirect URI are required."), { code: "BAD_REQUEST", status: 400 });
@@ -226,7 +233,9 @@ export async function saveIntegrationSetup(provider: IntegrationSetupProvider, i
     metadata: {
       ...existingMetadata,
       redirectUri,
-      environment
+      environment,
+      parentCustomerRef,
+      serviceItemRef
     } as Prisma.InputJsonValue
   });
 
@@ -288,6 +297,8 @@ export async function resolveQuickBooksSetup() {
     clientSecret: decryptSecret(setup?.accessToken),
     redirectUri: String(data.redirectUri ?? ""),
     webhookVerifierToken: decryptSecret(setup?.refreshToken),
-    environment: String(data.environment ?? "sandbox")
+    environment: String(data.environment ?? "sandbox"),
+    parentCustomerRef: String(data.parentCustomerRef ?? ""),
+    serviceItemRef: String(data.serviceItemRef ?? "")
   };
 }

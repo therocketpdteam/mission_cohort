@@ -8,6 +8,7 @@ import { createDefaultSessionCommunications } from "./communicationService";
 import { prepareCohortCalendarInvites } from "./calendarService";
 import { getCohortReadiness, withCohortLifecycle } from "./cohortLifecycle";
 import { activateCohortRegistrationJourneys } from "./registrationJourneyService";
+import { syncCohortQuickBooksProjectAfterCreate } from "./quickBooksService";
 
 const nestedSessionCreateSchema = z.object({
   title: z.string().min(1),
@@ -34,6 +35,7 @@ export async function createCohort(input: z.input<typeof cohortCreateSchema>) {
     description: "Cohort created",
     metadata: { title: cohort.title, slug: cohort.slug }
   });
+  await syncCohortQuickBooksProjectAfterCreate(cohort.id);
   return cohort;
 }
 
@@ -83,6 +85,8 @@ export async function createCohortWithSessions(input: z.input<typeof cohortWithS
   for (const session of cohort.sessions) {
     await createDefaultSessionCommunications(session.id);
   }
+
+  await syncCohortQuickBooksProjectAfterCreate(cohort.id);
 
   return cohort;
 }

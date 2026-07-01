@@ -90,6 +90,19 @@ const requiredSchema: SchemaRequirement[] = [
     tables: ["InvoiceDraft", "InvoiceLineItem"]
   },
   {
+    key: "quickBooksProjectSync",
+    label: "QuickBooks project sync",
+    detail: "Links cohorts to QuickBooks Projects and records invoice sync diagnostics.",
+    nextAction: "Run the 20260701120000 QuickBooks project sync migration.",
+    columns: [
+      ["Cohort", "quickBooksProjectRef"],
+      ["Cohort", "quickBooksSyncStatus"],
+      ["Cohort", "quickBooksSyncError"],
+      ["InvoiceDraft", "quickBooksSyncError"],
+      ["InvoiceDraft", "quickBooksLastSyncedAt"]
+    ]
+  },
+  {
     key: "distributionLedger",
     label: "Distribution ledger",
     detail: "Tracks TL share, payout records, and project return.",
@@ -338,6 +351,15 @@ async function integrationChecks(): Promise<HealthCheck[]> {
           ? "QuickBooks credentials are present in the environment. Use Connected Tools to move setup into the app."
           : "QuickBooks sync requires client credentials and webhook verifier.",
       nextAction: quickBooksSetup.configured || presence.quickBooksConfigured ? undefined : "Configure QuickBooks in Settings > Connected Tools."
+    },
+    {
+      key: "quickbooksProjectSync",
+      label: "QuickBooks project accounting",
+      status: quickBooksSetup.projectSyncConfigured ? "healthy" : "warning",
+      detail: quickBooksSetup.projectSyncConfigured
+        ? "RocketPD parent customer and registration service item refs are saved."
+        : "Cohort project creation needs a RocketPD parent customer ref and registration service item ref.",
+      nextAction: quickBooksSetup.projectSyncConfigured ? undefined : "Add both QuickBooks refs in Settings > Connected Tools."
     },
     {
       key: "cron",

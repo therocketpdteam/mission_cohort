@@ -737,7 +737,7 @@ function InvoiceEditorDialog({
         <div className="invoice-accounting-panel">
           <div>
             <Typography variant="subtitle2">Accounting references</Typography>
-            <Typography variant="body2" color="text.secondary">QuickBooks remains reference/status only in this version.</Typography>
+            <Typography variant="body2" color="text.secondary">QuickBooks customer ref is the cohort Project ref. Organizations stay in the invoice description.</Typography>
           </div>
           <div className="finance-dialog-grid">
             <TextField fullWidth label="QuickBooks customer ref" value={quickBooksCustomerRef} onChange={(event) => setQuickBooksCustomerRef(event.target.value)} />
@@ -1508,6 +1508,29 @@ export function CohortDetailClient({ id }: { id: string }) {
     try {
       await adminApi("/api/invoices", { method: "PATCH", body: { action: receipt ? "sendReceipt" : "sendInvoice", id: invoice.id } });
       notifySuccess(receipt ? "Receipt sent" : "Invoice sent");
+      await load();
+      if (registrationDetail?.id) {
+        await openRegistrationDetail(registrationDetail);
+      }
+    } catch (error) {
+      notifyError((error as Error).message);
+    }
+  }
+
+  async function syncQuickBooksProject() {
+    try {
+      await adminApi(`/api/cohorts/${id}`, { method: "PATCH", body: { action: "syncQuickBooksProject" } });
+      notifySuccess("QuickBooks project linked");
+      await load();
+    } catch (error) {
+      notifyError((error as Error).message);
+    }
+  }
+
+  async function createQuickBooksInvoice(invoice: AdminRow) {
+    try {
+      await adminApi("/api/invoices", { method: "PATCH", body: { action: "createQuickBooksInvoice", id: invoice.id } });
+      notifySuccess("Invoice synced to QuickBooks");
       await load();
       if (registrationDetail?.id) {
         await openRegistrationDetail(registrationDetail);
@@ -2293,7 +2316,7 @@ export function CohortDetailClient({ id }: { id: string }) {
                   <div className="section-inline-header">
                     <div>
                       <Typography variant="subtitle2">Distribution Controls</Typography>
-                      <Typography variant="body2" color="text.secondary">QuickBooks stays as reference/status in this sprint.</Typography>
+                      <Typography variant="body2" color="text.secondary">Invoices sync into this cohort’s QuickBooks Project under RocketPD.</Typography>
                     </div>
                     <Button size="small" onClick={saveDistributionSettings}>Save</Button>
                   </div>
@@ -2331,7 +2354,13 @@ export function CohortDetailClient({ id }: { id: string }) {
               <span className={financeHealth?.sendgridReady ? "is-ready" : "is-warning"}>
                 SendGrid {financeHealth?.sendgridReady ? "ready" : "not configured"}
               </span>
+              <span className={cohort?.quickBooksProjectRef ? "is-ready" : "is-warning"}>
+                QuickBooks {cohort?.quickBooksProjectRef ? "project linked" : formatStatusLabel(cohort?.quickBooksSyncStatus ?? "NOT_SYNCED")}
+              </span>
               <small>{financeHealth?.sendgridReady ? "Invoice and receipt send actions are enabled." : "PDFs can still be generated and opened; sending requires SENDGRID_API_KEY and SENDGRID_FROM_EMAIL."}</small>
+              {!cohort?.quickBooksProjectRef && (
+                <Button size="small" variant="outlined" onClick={() => void syncQuickBooksProject()}>Link QuickBooks Project</Button>
+              )}
             </div>
             <div className="invoice-workbench">
               {invoiceDrafts.map((invoice) => (
@@ -2347,6 +2376,7 @@ export function CohortDetailClient({ id }: { id: string }) {
                   <RowActionMenu
                     actions={[
                       { label: "Edit invoice", onClick: () => openInvoiceEditor(invoice) },
+                      { label: invoice.quickBooksInvoiceRef ? "Resync QuickBooks invoice" : "Create in QuickBooks", onClick: () => void createQuickBooksInvoice(invoice) },
                       { label: invoice.pdfUrl ? "Regenerate PDF" : "Generate PDF", onClick: () => void generateInvoiceDocument(invoice) },
                       ...(invoice.pdfUrl ? [{ label: "Preview PDF", onClick: () => openInvoicePreview(invoice.pdfUrl, `Invoice ${invoice.invoiceNumber ?? ""}`.trim()) }] : []),
                       { label: financeHealth?.sendgridReady === false ? "Send invoice unavailable" : "Send invoice", disabled: financeHealth?.sendgridReady === false, onClick: () => void sendInvoiceDocument(invoice) },
@@ -2650,6 +2680,7 @@ export function CohortDetailClient({ id }: { id: string }) {
                           <RowActionMenu
                             actions={[
                               { label: "Edit invoice", onClick: () => openInvoiceEditor(invoice, registrationDetail) },
+                              { label: invoice.quickBooksInvoiceRef ? "Resync QuickBooks invoice" : "Create in QuickBooks", onClick: () => void createQuickBooksInvoice(invoice) },
                               { label: invoice.pdfUrl ? "Regenerate PDF" : "Generate PDF", onClick: () => void generateInvoiceDocument(invoice) },
                               ...(invoice.pdfUrl ? [{ label: "Preview PDF", onClick: () => openInvoicePreview(invoice.pdfUrl, `Invoice ${invoice.invoiceNumber ?? ""}`.trim()) }] : []),
                               { label: financeHealth?.sendgridReady === false ? "Send invoice unavailable" : "Send invoice", disabled: financeHealth?.sendgridReady === false, onClick: () => void sendInvoiceDocument(invoice) },

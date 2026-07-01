@@ -232,6 +232,26 @@ const patches = [
     `
   },
   {
+    name: "quickbooks project sync",
+    sql: `
+      ALTER TABLE "Cohort" ADD COLUMN IF NOT EXISTS "quickBooksProjectRef" TEXT;
+      ALTER TABLE "Cohort" ADD COLUMN IF NOT EXISTS "quickBooksProjectName" TEXT;
+      ALTER TABLE "Cohort" ADD COLUMN IF NOT EXISTS "quickBooksParentCustomerRef" TEXT;
+      ALTER TABLE "Cohort" ADD COLUMN IF NOT EXISTS "quickBooksRealmId" TEXT;
+      ALTER TABLE "Cohort" ADD COLUMN IF NOT EXISTS "quickBooksSyncStatus" "SyncStatus" NOT NULL DEFAULT 'NOT_SYNCED';
+      ALTER TABLE "Cohort" ADD COLUMN IF NOT EXISTS "quickBooksSyncError" TEXT;
+      ALTER TABLE "Cohort" ADD COLUMN IF NOT EXISTS "quickBooksLastSyncedAt" TIMESTAMP(3);
+
+      ALTER TABLE "InvoiceDraft" ADD COLUMN IF NOT EXISTS "quickBooksSyncError" TEXT;
+      ALTER TABLE "InvoiceDraft" ADD COLUMN IF NOT EXISTS "quickBooksLastSyncedAt" TIMESTAMP(3);
+
+      CREATE INDEX IF NOT EXISTS "Cohort_quickBooksProjectRef_idx" ON "Cohort"("quickBooksProjectRef");
+      CREATE INDEX IF NOT EXISTS "Cohort_quickBooksSyncStatus_idx" ON "Cohort"("quickBooksSyncStatus");
+      CREATE INDEX IF NOT EXISTS "InvoiceDraft_quickBooksInvoiceRef_idx" ON "InvoiceDraft"("quickBooksInvoiceRef");
+      CREATE INDEX IF NOT EXISTS "InvoiceDraft_quickBooksSyncStatus_idx" ON "InvoiceDraft"("quickBooksSyncStatus");
+    `
+  },
+  {
     name: "foreign keys",
     sql: `
       DO $$

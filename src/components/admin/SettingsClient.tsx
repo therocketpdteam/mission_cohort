@@ -1488,7 +1488,9 @@ export function SettingsClient() {
         clientSecret: "",
         redirectUri: setupData?.quickBooks?.redirectUri ?? current.QUICKBOOKS?.redirectUri ?? "",
         environment: setupData?.quickBooks?.environment ?? current.QUICKBOOKS?.environment ?? "sandbox",
-        webhookVerifierToken: ""
+        webhookVerifierToken: "",
+        parentCustomerRef: setupData?.quickBooks?.parentCustomerRef ?? current.QUICKBOOKS?.parentCustomerRef ?? "",
+        serviceItemRef: setupData?.quickBooks?.serviceItemRef ?? current.QUICKBOOKS?.serviceItemRef ?? ""
       }
     }));
     setJotformSetup(intakeData?.setup ?? null);
@@ -1689,7 +1691,7 @@ export function SettingsClient() {
     {
       provider: "QUICKBOOKS",
       label: "QuickBooks",
-      description: "Financial reporting status sync for invoices and payments.",
+      description: "Cohort projects, invoice creation, and payment reconciliation.",
       checks: [healthCheck("quickbooks")].filter(Boolean),
       actions: [{ label: "Connect", href: "/api/integrations/quickbooks/connect", disabled: healthCheck("quickbooks")?.status !== "healthy" }],
       setup: integrationSetup?.quickBooks,
@@ -1699,7 +1701,8 @@ export function SettingsClient() {
       instructions: [
         "Create or open your Intuit Developer app.",
         "Copy the callback URL below into Redirect URIs.",
-        "Save the client credentials, environment, and webhook verifier token here."
+        "Save the client credentials, environment, webhook verifier token, RocketPD parent customer ref, and registration service item ref here.",
+        "Mission Control creates one QuickBooks Project per cohort under RocketPD and sends all cohort invoices into that project."
       ]
     },
     {
@@ -2129,6 +2132,20 @@ export function SettingsClient() {
                         <MenuItem value="sandbox">Sandbox</MenuItem>
                         <MenuItem value="production">Production</MenuItem>
                       </TextField>
+                      <TextField
+                        fullWidth
+                        label="RocketPD parent customer ref"
+                        value={setupForms.QUICKBOOKS?.parentCustomerRef ?? ""}
+                        onChange={(event) => updateSetupForm("QUICKBOOKS", "parentCustomerRef", event.target.value)}
+                        helperText="QuickBooks customer ID for RocketPD. Cohort projects are created under this customer."
+                      />
+                      <TextField
+                        fullWidth
+                        label="Registration service item ref"
+                        value={setupForms.QUICKBOOKS?.serviceItemRef ?? ""}
+                        onChange={(event) => updateSetupForm("QUICKBOOKS", "serviceItemRef", event.target.value)}
+                        helperText="QuickBooks Product/Service item ID used for cohort registration invoice lines."
+                      />
                       <TextField
                         fullWidth
                         label={provider.setup?.hasWebhookVerifierToken ? "Webhook verifier token (saved - paste only to replace)" : "Webhook verifier token"}

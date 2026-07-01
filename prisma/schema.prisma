@@ -350,6 +350,13 @@ model Cohort {
   cohortType                CohortType             @default(LIVE_VIRTUAL)
   thumbnailUrl              String?
   publicRegistrationEnabled Boolean                @default(false)
+  quickBooksProjectRef      String?
+  quickBooksProjectName     String?
+  quickBooksParentCustomerRef String?
+  quickBooksRealmId         String?
+  quickBooksSyncStatus      SyncStatus             @default(NOT_SYNCED)
+  quickBooksSyncError       String?
+  quickBooksLastSyncedAt    DateTime?
   createdAt                 DateTime               @default(now())
   updatedAt                 DateTime               @updatedAt
   presenter                 Presenter              @relation(fields: [presenterId], references: [id])
@@ -370,6 +377,8 @@ model Cohort {
   @@index([presenterId])
   @@index([status])
   @@index([startDate])
+  @@index([quickBooksProjectRef])
+  @@index([quickBooksSyncStatus])
 }
 
 model CohortSession {
@@ -761,6 +770,8 @@ model InvoiceDraft {
   quickBooksRealmId       String?
   quickBooksInvoiceStatus QuickBooksInvoiceStatus @default(UNKNOWN)
   quickBooksSyncStatus    SyncStatus              @default(NOT_SYNCED)
+  quickBooksSyncError     String?
+  quickBooksLastSyncedAt  DateTime?
   notes                   String?
   createdAt               DateTime                @default(now())
   updatedAt               DateTime                @updatedAt
@@ -774,6 +785,8 @@ model InvoiceDraft {
   @@index([organizationId])
   @@index([status])
   @@index([invoiceNumber])
+  @@index([quickBooksInvoiceRef])
+  @@index([quickBooksSyncStatus])
 }
 
 model InvoiceLineItem {
