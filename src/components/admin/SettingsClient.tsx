@@ -1438,6 +1438,8 @@ export function SettingsClient() {
   const [integrationHelpProvider, setIntegrationHelpProvider] = useState<AdminRow | null>(null);
   const [googleCalendars, setGoogleCalendars] = useState<AdminRow[]>([]);
   const [loadingGoogleCalendars, setLoadingGoogleCalendars] = useState(false);
+  const [quickBooksRefs, setQuickBooksRefs] = useState<{ customers: AdminRow[]; items: AdminRow[]; environment?: string; realmId?: string }>({ customers: [], items: [] });
+  const [loadingQuickBooksRefs, setLoadingQuickBooksRefs] = useState(false);
   const [organizationInvoiceProfile, setOrganizationInvoiceProfile] = useState<AdminRow>(defaultOrganizationInvoiceProfile);
   const [savingOrganizationSettings, setSavingOrganizationSettings] = useState(false);
   const [uploadingOrganizationLogo, setUploadingOrganizationLogo] = useState(false);
@@ -1631,6 +1633,24 @@ export function SettingsClient() {
       notifyError((error as Error).message);
     } finally {
       setLoadingGoogleCalendars(false);
+    }
+  }
+
+  async function loadQuickBooksRefs() {
+    setLoadingQuickBooksRefs(true);
+    try {
+      const refs = await adminApi<{ customers: AdminRow[]; items: AdminRow[]; environment?: string; realmId?: string }>("/api/integrations/setup?provider=QUICKBOOKS&action=listAccountingRefs");
+      setQuickBooksRefs({
+        customers: refs.customers ?? [],
+        items: refs.items ?? [],
+        environment: refs.environment,
+        realmId: refs.realmId
+      });
+      notifySuccess("QuickBooks customers and service items loaded");
+    } catch (error) {
+      notifyError((error as Error).message);
+    } finally {
+      setLoadingQuickBooksRefs(false);
     }
   }
 
@@ -2132,20 +2152,34 @@ export function SettingsClient() {
                         <MenuItem value="sandbox">Sandbox</MenuItem>
                         <MenuItem value="production">Production</MenuItem>
                       </TextField>
-                      <TextField
-                        fullWidth
-                        label="RocketPD parent customer ref"
-                        value={setupForms.QUICKBOOKS?.parentCustomerRef ?? ""}
-                        onChange={(event) => updateSetupForm("QUICKBOOKS", "parentCustomerRef", event.target.value)}
-                        helperText="QuickBooks customer ID for RocketPD. Cohort projects are created under this customer."
-                      />
-                      <TextField
-                        fullWidth
-                        label="Registration service item ref"
-                        value={setupForms.QUICKBOOKS?.serviceItemRef ?? ""}
-                        onChange={(event) => updateSetupForm("QUICKBOOKS", "serviceItemRef", event.target.value)}
-                        helperText="QuickBooks Product/Service item ID used for cohort registration invoice lines."
-                      />
+                      <div className="integration-calendar-picker">
+                        <div className="integration-copy-row">
+                          <TextField select fullWidth label="RocketPD parent customer" value={setupForms.QUICKBOOKS?.parentCustomerRef ?? ""} onChange={(event) => updateSetupForm("QUICKBOOKS", "parentCustomerRef", event.target.value)} helperText="Pick the RocketPD customer in the connected QuickBooks company. Cohort projects are created under this customer.">
+                            <MenuItem value="">Choose QuickBooks customer</MenuItem>
+                            {(quickBooksRefs.customers.length > 0 ? quickBooksRefs.customers : provider.setup?.parentCustomerRef ? [{ id: provider.setup.parentCustomerRef, fullyQualifiedName: `Saved customer ref ${provider.setup.parentCustomerRef}` }] : []).map((customer) => (
+                              <MenuItem value={customer.id} key={customer.id}>
+                                {customer.fullyQualifiedName ?? customer.name ?? customer.id}
+                              </MenuItem>
+                            ))}
+                          </TextField>
+                          <Button size="small" variant="outlined" onClick={() => void loadQuickBooksRefs()} disabled={loadingQuickBooksRefs || provider.setup?.connectedAccount?.status !== "CONNECTED"}>
+                            {loadingQuickBooksRefs ? "Loading..." : "Load QuickBooks refs"}
+                          </Button>
+                        </div>
+                        <TextField select fullWidth label="Registration service item" value={setupForms.QUICKBOOKS?.serviceItemRef ?? ""} onChange={(event) => updateSetupForm("QUICKBOOKS", "serviceItemRef", event.target.value)} helperText="Pick the Product/Service item Mission Control should use on cohort invoice lines.">
+                          <MenuItem value="">Choose Product/Service item</MenuItem>
+                          {(quickBooksRefs.items.length > 0 ? quickBooksRefs.items : provider.setup?.serviceItemRef ? [{ id: provider.setup.serviceItemRef, fullyQualifiedName: `Saved item ref ${provider.setup.serviceItemRef}` }] : []).map((item) => (
+                            <MenuItem value={item.id} key={item.id}>
+                              {[item.fullyQualifiedName ?? item.name ?? item.id, item.type].filter(Boolean).join(" · ")}
+                            </MenuItem>
+                          ))}
+                        </TextField>
+                        {quickBooksRefs.realmId && (
+                          <Typography variant="caption" color="text.secondary">
+                            Loaded from QuickBooks {quickBooksRefs.environment} company {quickBooksRefs.realmId}.
+                          </Typography>
+                        )}
+                      </div>
                       <TextField
                         fullWidth
                         label={provider.setup?.hasWebhookVerifierToken ? "Webhook verifier token (saved - paste only to replace)" : "Webhook verifier token"}

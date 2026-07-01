@@ -2,6 +2,7 @@ import { handleApiError, ok } from "@/lib/api";
 import { MUTATION_ROLES, requireRole } from "@/lib/auth";
 import { getIntegrationSetups, saveIntegrationSetup } from "@/services/integrationSetupService";
 import { listConnectedGoogleCalendars } from "@/services/calendarService";
+import { listQuickBooksAccountingRefs } from "@/services/quickBooksService";
 import { getOutboundAutomationAudit, resetUnsentCohortAutomation } from "@/services/outboundResetService";
 import { Role } from "@prisma/client";
 
@@ -12,6 +13,10 @@ export async function GET(request: Request) {
 
     if (params.get("provider") === "GOOGLE_CALENDAR" && params.get("action") === "listCalendars") {
       return ok(await listConnectedGoogleCalendars());
+    }
+
+    if (params.get("provider") === "QUICKBOOKS" && params.get("action") === "listAccountingRefs") {
+      return ok(await listQuickBooksAccountingRefs());
     }
 
     if (params.get("action") === "outboundAudit") {

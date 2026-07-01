@@ -17,6 +17,7 @@ import {
   findQuickBooksInvoiceByDocNumber,
   findQuickBooksProject,
   getQuickBooksConnectUrl,
+  queryQuickBooks,
   refreshQuickBooksToken,
   verifyQuickBooksWebhookSignature,
   voidQuickBooksInvoice
@@ -217,6 +218,47 @@ export async function ensureCohortQuickBooksProject(cohortId: string) {
     });
     throw error;
   }
+}
+
+export async function listQuickBooksAccountingRefs() {
+  const { setup, realmId, accessToken } = await quickBooksConnection();
+  const [customerResult, itemResult] = await Promise.all([
+    queryQuickBooks({
+      realmId,
+      accessToken,
+      environment: setup.environment,
+      query: "select * from Customer startposition 1 maxresults 1000"
+    }),
+    queryQuickBooks({
+      realmId,
+      accessToken,
+      environment: setup.environment,
+      query: "select * from Item startposition 1 maxresults 1000"
+    })
+  ]);
+
+  const customers = ((customerResult.QueryResponse?.Customer ?? []) as Record<string, any>[])
+    .filter((customer) => customer.Active !== false && customer.Job !== true)
+    .map((customer) => ({
+      id: String(customer.Id ?? ""),
+      name: String(customer.DisplayName ?? customer.FullyQualifiedName ?? customer.Id ?? ""),
+      fullyQualifiedName: String(customer.FullyQualifiedName ?? customer.DisplayName ?? customer.Id ?? "")
+    }))
+    .filter((customer) => customer.id)
+    .sort((a, b) => a.fullyQualifiedName.localeCompare(b.fullyQualifiedName));
+
+  const items = ((itemResult.QueryResponse?.Item ?? []) as Record<string, any>[])
+    .filter((item) => item.Active !== false)
+    .map((item) => ({
+      id: String(item.Id ?? ""),
+      name: String(item.Name ?? item.FullyQualifiedName ?? item.Id ?? ""),
+      type: String(item.Type ?? ""),
+      fullyQualifiedName: String(item.FullyQualifiedName ?? item.Name ?? item.Id ?? "")
+    }))
+    .filter((item) => item.id)
+    .sort((a, b) => a.fullyQualifiedName.localeCompare(b.fullyQualifiedName));
+
+  return { customers, items, environment: setup.environment ?? "sandbox", realmId };
 }
 
 async function tryEnsureCohortQuickBooksProject(cohortId: string) {
