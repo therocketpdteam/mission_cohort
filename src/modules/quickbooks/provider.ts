@@ -26,6 +26,29 @@ function getQuickBooksBaseUrl(environment?: string | null) {
   return environment === "production" ? productionBaseUrl : sandboxBaseUrl;
 }
 
+async function quickBooksError(response: Response, fallback: string) {
+  const body = await response.text().catch(() => "");
+  let detail = body.trim();
+
+  try {
+    const parsed = JSON.parse(body) as Record<string, any>;
+    const faults = parsed.Fault?.Error;
+    if (Array.isArray(faults) && faults.length > 0) {
+      detail = faults
+        .map((fault) => [fault.Message, fault.Detail].filter(Boolean).join(": "))
+        .filter(Boolean)
+        .join("; ");
+    }
+  } catch {
+    // Keep raw text if QuickBooks does not return JSON.
+  }
+
+  return Object.assign(new Error(`${fallback} with status ${response.status}${detail ? `: ${detail}` : ""}`), {
+    code: "BAD_REQUEST",
+    status: 400
+  });
+}
+
 export function getQuickBooksConnectUrl(state = "mission-control", config?: QuickBooksOAuthConfig) {
   const resolved = quickBooksConfig(config);
 
@@ -71,10 +94,7 @@ export async function exchangeQuickBooksCode(code: string, config?: QuickBooksOA
   });
 
   if (!response.ok) {
-    throw Object.assign(new Error(`QuickBooks token exchange failed with status ${response.status}`), {
-      code: "BAD_REQUEST",
-      status: 400
-    });
+    throw await quickBooksError(response, "QuickBooks token exchange failed");
   }
 
   return response.json() as Promise<{
@@ -110,10 +130,7 @@ export async function refreshQuickBooksToken(refreshToken: string, config?: Quic
   });
 
   if (!response.ok) {
-    throw Object.assign(new Error(`QuickBooks token refresh failed with status ${response.status}`), {
-      code: "BAD_REQUEST",
-      status: 400
-    });
+    throw await quickBooksError(response, "QuickBooks token refresh failed");
   }
 
   return response.json() as Promise<{
@@ -156,10 +173,7 @@ export async function fetchQuickBooksInvoice(input: {
   });
 
   if (!response.ok) {
-    throw Object.assign(new Error(`QuickBooks invoice fetch failed with status ${response.status}`), {
-      code: "BAD_REQUEST",
-      status: 400
-    });
+    throw await quickBooksError(response, "QuickBooks invoice fetch failed");
   }
 
   return response.json() as Promise<Record<string, any>>;
@@ -187,10 +201,7 @@ export async function queryQuickBooks(input: {
   });
 
   if (!response.ok) {
-    throw Object.assign(new Error(`QuickBooks query failed with status ${response.status}`), {
-      code: "BAD_REQUEST",
-      status: 400
-    });
+    throw await quickBooksError(response, "QuickBooks query failed");
   }
 
   return response.json() as Promise<Record<string, any>>;
@@ -203,16 +214,20 @@ export async function findQuickBooksProject(input: {
   projectName: string;
   environment?: string | null;
 }) {
-  const escapedName = escapeQuickBooksQueryValue(input.projectName);
-  const escapedParent = escapeQuickBooksQueryValue(input.parentCustomerRef);
+  const normalizedProjectName = input.projectName.trim().toLowerCase();
+  const normalizedParentRef = input.parentCustomerRef.trim();
   const result = await queryQuickBooks({
     realmId: input.realmId,
     accessToken: input.accessToken,
     environment: input.environment,
-    query: `select * from Customer where DisplayName = '${escapedName}' and ParentRef = '${escapedParent}' and Job = true`
+    query: "select * from Customer startposition 1 maxresults 1000"
   });
 
-  return (result.QueryResponse?.Customer ?? [])[0] as Record<string, any> | undefined;
+  return ((result.QueryResponse?.Customer ?? []) as Record<string, any>[]).find((customer) => (
+    String(customer.DisplayName ?? "").trim().toLowerCase() === normalizedProjectName &&
+    String(customer.ParentRef?.value ?? "").trim() === normalizedParentRef &&
+    customer.Job === true
+  ));
 }
 
 export async function createQuickBooksProject(input: {
@@ -240,10 +255,7 @@ export async function createQuickBooksProject(input: {
   });
 
   if (!response.ok) {
-    throw Object.assign(new Error(`QuickBooks project creation failed with status ${response.status}`), {
-      code: "BAD_REQUEST",
-      status: 400
-    });
+    throw await quickBooksError(response, "QuickBooks project creation failed");
   }
 
   const result = await response.json() as Record<string, any>;
@@ -284,10 +296,7 @@ export async function createQuickBooksInvoice(input: {
   });
 
   if (!response.ok) {
-    throw Object.assign(new Error(`QuickBooks invoice creation failed with status ${response.status}`), {
-      code: "BAD_REQUEST",
-      status: 400
-    });
+    throw await quickBooksError(response, "QuickBooks invoice creation failed");
   }
 
   const result = await response.json() as Record<string, any>;
@@ -311,10 +320,7 @@ export async function voidQuickBooksInvoice(input: {
   });
 
   if (!response.ok) {
-    throw Object.assign(new Error(`QuickBooks invoice void failed with status ${response.status}`), {
-      code: "BAD_REQUEST",
-      status: 400
-    });
+    throw await quickBooksError(response, "QuickBooks invoice void failed");
   }
 
   return response.json() as Promise<Record<string, any>>;
