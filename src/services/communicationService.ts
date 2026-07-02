@@ -203,6 +203,19 @@ The RocketPD Team`
   }),
   defaultEmailTemplate({
     type: TemplateType.CUSTOM,
+    name: "Registration Cancellation",
+    subject: "Registration update: {{cohort.title}}",
+    bodyText: `Hello {{registration.primaryContactName}},
+
+This is to confirm that the registration for **{{organization.name}}** in **{{cohort.title}}** has been removed.
+
+If this was unexpected or you need help moving the registration to a different cohort, please reply to this message and the RocketPD team will help.
+
+Thank you,
+The RocketPD Team`
+  }),
+  defaultEmailTemplate({
+    type: TemplateType.CUSTOM,
     name: "Cohort Cancellation",
     subject: "Cancelled: {{cohort.title}}",
     bodyText: `Hello,
@@ -403,6 +416,7 @@ const legacyDefaultBodyTextByName: Record<string, string> = {
   "Payment Reminder": "Hello {{registration.primaryContactName}}, this is a friendly reminder about payment status for {{cohort.title}}.",
   "Participant List Request": "Hello {{registration.primaryContactName}}, we are preparing {{cohort.title}} and still need the participant roster for {{organization.name}}. Please reply with the participant names and emails when ready.",
   "Supporting Documents Request": "Hello {{registration.primaryContactName}}, we are preparing {{cohort.title}} and need the remaining supporting documents for {{organization.name}}. Please reply with the needed documentation when available.",
+  "Registration Cancellation": "Hello {{registration.primaryContactName}}, this is to confirm that the registration for {{organization.name}} in {{cohort.title}} has been removed.",
   "Cohort Cancellation": "The remaining sessions for {{cohort.title}} have been cancelled. Google Calendar invitations have been removed. Please contact the RocketPD team if you have any questions.",
   "Session Cancellation": "{{session.title}} for {{cohort.title}} has been cancelled. The Google Calendar invitation has been removed. Please contact the RocketPD team if you have any questions.",
   "Session Updated": "{{session.title}} for {{cohort.title}} has been updated. The session is now scheduled for {{session.startTime}}. Your Google Calendar invitation has also been updated. Please contact the RocketPD team if you have any questions.",

@@ -15,9 +15,11 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControlLabel,
   Grid,
   MenuItem,
   Stack,
+  Switch,
   TextField,
   Typography
 } from "@/components/ui/primitives";
@@ -818,6 +820,140 @@ function DetailTile({ label, value, tone }: { label: string; value?: unknown; to
   );
 }
 
+export function RegistrationRemovalDialog({
+  open,
+  action,
+  registration,
+  templates,
+  onClose,
+  onRemoved,
+  onSuccess,
+  onError
+}: {
+  open: boolean;
+  action: "archive" | "delete" | "restore" | null;
+  registration: AdminRow | null;
+  templates: AdminRow[];
+  onClose: () => void;
+  onRemoved: () => Promise<void>;
+  onSuccess: (message: string) => void;
+  onError: (message: string) => void;
+}) {
+  const activeTemplates = templates.filter((template) => template.active);
+  const defaultTemplate = activeTemplates.find((template) => template.name === "Registration Cancellation") ?? activeTemplates.find((template) => template.type === "CUSTOM") ?? activeTemplates[0];
+  const [notify, setNotify] = useState(false);
+  const [templateId, setTemplateId] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setNotify(false);
+      setTemplateId(String(defaultTemplate?.id ?? ""));
+      setBusy(false);
+    }
+  }, [defaultTemplate?.id, open]);
+
+  async function runAction() {
+    if (!action || !registration?.id) {
+      return;
+    }
+
+    setBusy(true);
+    try {
+      if (notify && action !== "restore") {
+        if (!templateId) {
+          throw new Error("Choose a notification template or turn notification off.");
+        }
+
+        await adminApi("/api/communications", {
+          method: "PATCH",
+          body: { action: "sendTemplateToRegistrations", templateId, registrationIds: [registration.id] }
+        });
+      }
+
+      if (action === "delete") {
+        await adminApi(`/api/registrations?id=${encodeURIComponent(String(registration.id))}`, { method: "DELETE" });
+        onSuccess(notify ? "Notification sent and registration permanently deleted" : "Registration permanently deleted");
+      } else {
+        await adminApi("/api/registrations", {
+          method: "PATCH",
+          body: {
+            id: registration.id,
+            action,
+            ...(action === "archive" ? { reason: notify ? "Removed from cohort after notification" : "Removed from cohort without notification" } : {})
+          }
+        });
+        onSuccess(action === "restore" ? "Registration restored" : notify ? "Notification sent and registration removed" : "Registration removed");
+      }
+
+      await onRemoved();
+      onClose();
+    } catch (error) {
+      onError((error as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const title = action === "delete" ? "Delete registration permanently?" : action === "restore" ? "Restore registration?" : "Remove registration from cohort?";
+  const buttonLabel = busy
+    ? "Working..."
+    : action === "delete"
+      ? "Delete permanently"
+      : action === "restore"
+        ? "Restore"
+        : "Remove registration";
+
+  return (
+    <Dialog open={open} onClose={busy ? undefined : onClose} fullWidth maxWidth="sm">
+      <DialogTitle>{title}</DialogTitle>
+      <DialogContent>
+        <Stack spacing={1.5}>
+          <Typography>
+            {registration
+              ? `${formatProperDisplay(String(registration.primaryContactName ?? ""))} · ${registration.primaryContactEmail ?? ""}`
+              : ""}
+          </Typography>
+          {action === "delete" ? (
+            <Alert severity="warning">
+              Permanent delete removes the registration, participants, payments, and registration tasks. Records with invoices or QuickBooks references are blocked and should be removed with Archive instead.
+            </Alert>
+          ) : action === "archive" ? (
+            <Alert severity="info">
+              Remove archives the registration from active cohort work without deleting history, finance context, or audit trails.
+            </Alert>
+          ) : (
+            <Alert severity="info">Restore brings this registration back into normal operational lists.</Alert>
+          )}
+          {action && action !== "restore" ? (
+            <>
+              <FormControlLabel
+                control={<Switch checked={notify} onChange={(event) => setNotify(event.target.checked)} />}
+                label="Notify the POC before removing"
+              />
+              {notify ? (
+                <TextField select fullWidth label="Notification template" value={templateId} onChange={(event) => setTemplateId(event.target.value)}>
+                  {activeTemplates.map((template) => (
+                    <MenuItem value={template.id} key={template.id}>
+                      {template.name}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              ) : null}
+            </>
+          ) : null}
+        </Stack>
+      </DialogContent>
+      <DialogActions>
+        <Button variant="outlined" onClick={onClose} disabled={busy}>Cancel</Button>
+        <Button color={action === "delete" ? "error" : "primary"} onClick={runAction} disabled={busy}>
+          {buttonLabel}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
 export function RegistrationsClient() {
   const [rows, setRows] = useState<AdminRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -966,41 +1102,6 @@ export function RegistrationsClient() {
       }
 
       setSelectedIds([]);
-      await load();
-    } catch (error) {
-      notifyError((error as Error).message);
-    }
-  }
-
-  async function runLifecycleAction() {
-    if (!pendingLifecycleAction) {
-      return;
-    }
-
-    const { action, row } = pendingLifecycleAction;
-
-    try {
-      if (action === "delete") {
-        await adminApi(`/api/registrations?id=${encodeURIComponent(String(row.id))}`, { method: "DELETE" });
-        notifySuccess("Registration permanently deleted");
-      } else {
-        await adminApi("/api/registrations", {
-          method: "PATCH",
-          body: {
-            id: row.id,
-            action,
-            ...(action === "archive" ? { reason: "Archived from registration list" } : {})
-          }
-        });
-        notifySuccess(action === "archive" ? "Registration archived" : "Registration restored");
-      }
-
-      setPendingLifecycleAction(null);
-      setSelectedIds((current) => current.filter((id) => id !== row.id));
-      if (detail?.id === row.id && action === "delete") {
-        setDetailOpen(false);
-        setDetail(null);
-      }
       await load();
     } catch (error) {
       notifyError((error as Error).message);
@@ -1187,41 +1288,24 @@ export function RegistrationsClient() {
         onSuccess={notifySuccess}
         onError={notifyError}
       />
-      <Dialog open={Boolean(pendingLifecycleAction)} onClose={() => setPendingLifecycleAction(null)} fullWidth maxWidth="sm">
-        <DialogTitle>
-          {pendingLifecycleAction?.action === "delete"
-            ? "Delete registration permanently?"
-            : pendingLifecycleAction?.action === "restore"
-              ? "Restore registration?"
-              : "Archive registration?"}
-        </DialogTitle>
-        <DialogContent>
-          <Stack spacing={1.5}>
-            <Typography>
-              {pendingLifecycleAction?.row
-                ? `${formatProperDisplay(String(pendingLifecycleAction.row.primaryContactName ?? ""))} · ${pendingLifecycleAction.row.primaryContactEmail ?? ""}`
-                : ""}
-            </Typography>
-            {pendingLifecycleAction?.action === "delete" ? (
-              <Alert severity="warning">
-                Permanent delete removes the registration, participants, payments, and registration tasks. Jotform history is kept for audit. Records with invoices or QuickBooks references are blocked and should be archived instead.
-              </Alert>
-            ) : pendingLifecycleAction?.action === "archive" ? (
-              <Alert severity="info">
-                Archive hides this registration from normal operational lists without deleting history or finance context.
-              </Alert>
-            ) : (
-              <Alert severity="info">Restore brings this registration back into the normal operational lists.</Alert>
-            )}
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button variant="outlined" onClick={() => setPendingLifecycleAction(null)}>Cancel</Button>
-          <Button color={pendingLifecycleAction?.action === "delete" ? "error" : "primary"} onClick={runLifecycleAction}>
-            {pendingLifecycleAction?.action === "delete" ? "Delete permanently" : pendingLifecycleAction?.action === "restore" ? "Restore" : "Archive"}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <RegistrationRemovalDialog
+        open={Boolean(pendingLifecycleAction)}
+        action={pendingLifecycleAction?.action ?? null}
+        registration={pendingLifecycleAction?.row ?? null}
+        templates={templates}
+        onClose={() => setPendingLifecycleAction(null)}
+        onRemoved={async () => {
+          const removedId = pendingLifecycleAction?.row.id;
+          setSelectedIds((current) => current.filter((id) => id !== removedId));
+          if (detail?.id === removedId && pendingLifecycleAction?.action !== "restore") {
+            setDetailOpen(false);
+            setDetail(null);
+          }
+          await load();
+        }}
+        onSuccess={notifySuccess}
+        onError={notifyError}
+      />
       <Box>{snackbar}</Box>
     </PageStack>
   );

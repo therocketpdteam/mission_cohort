@@ -3,6 +3,7 @@
 import { AddIcon } from "@/components/ui/icons";
 import { CalendarMonthOutlined, EmailOutlined, GroupsOutlined, InsightsOutlined } from "@/components/ui/icons";
 import { CancelOutlined, CheckCircleOutline, SendOutlined } from "@/components/ui/icons";
+import { ArchiveOutlined, DeleteOutline } from "@/components/ui/icons";
 import { EditOutlined } from "@/components/ui/icons";
 import { VisibilityOutlined } from "@/components/ui/icons";
 import {
@@ -35,7 +36,7 @@ import { RegistrationPendingChangesPanel } from "./RegistrationPendingChangesPan
 import { RegistrationDeliveryPreflight } from "./RegistrationDeliveryPreflight";
 import { PocCommunicationHistory } from "./PocCommunicationHistory";
 import { RegistrationCommunicationJourney } from "./RegistrationCommunicationJourney";
-import { RegistrationEditor } from "./RegistrationsClient";
+import { RegistrationEditor, RegistrationRemovalDialog } from "./RegistrationsClient";
 import type { ParsedRosterParticipant } from "@/lib/rosterParser";
 import {
   AdminRow,
@@ -906,6 +907,7 @@ export function CohortDetailClient({ id }: { id: string }) {
   const [registrationRosterFilter, setRegistrationRosterFilter] = useState("");
   const [paymentDetail, setPaymentDetail] = useState<AdminRow | null>(null);
   const [registrationDetail, setRegistrationDetail] = useState<AdminRow | null>(null);
+  const [registrationRemovalAction, setRegistrationRemovalAction] = useState<{ action: "archive" | "delete"; row: AdminRow } | null>(null);
   const [registrationDialogOpen, setRegistrationDialogOpen] = useState(false);
   const [editingRegistration, setEditingRegistration] = useState<AdminRow | null>(null);
   const [registrationThread, setRegistrationThread] = useState<AdminRow[]>([]);
@@ -1751,7 +1753,10 @@ export function CohortDetailClient({ id }: { id: string }) {
           <RowActionMenu
             actions={[
               { label: "Quick view", onClick: () => void openRegistrationDetail(params.row) },
-              { label: "Create invoice", onClick: () => openInvoiceEditor(null, params.row) }
+              { label: "Edit registration", icon: <EditOutlined fontSize="small" />, onClick: () => openRegistrationEditor(params.row) },
+              { label: "Create invoice", onClick: () => openInvoiceEditor(null, params.row) },
+              { label: "Remove registration", icon: <ArchiveOutlined fontSize="small" />, onClick: () => setRegistrationRemovalAction({ action: "archive", row: params.row }) },
+              { label: "Delete permanently", icon: <DeleteOutline fontSize="small" />, color: "error", onClick: () => setRegistrationRemovalAction({ action: "delete", row: params.row }) }
             ]}
           />
         </Box>
@@ -2668,6 +2673,9 @@ export function CohortDetailClient({ id }: { id: string }) {
                 Open Communications
               </Button>
             )}
+            <Button variant="outlined" color="warning" onClick={() => setRegistrationRemovalAction({ action: "archive", row: registrationDetail })}>
+              Remove Registration
+            </Button>
           </div>
         ) : null}
       >
@@ -2834,6 +2842,21 @@ export function CohortDetailClient({ id }: { id: string }) {
             }
           }
         }}
+      />
+      <RegistrationRemovalDialog
+        open={Boolean(registrationRemovalAction)}
+        action={registrationRemovalAction?.action ?? null}
+        registration={registrationRemovalAction?.row ?? null}
+        templates={templates}
+        onClose={() => setRegistrationRemovalAction(null)}
+        onRemoved={async () => {
+          if (registrationDetail?.id === registrationRemovalAction?.row.id) {
+            setRegistrationDetail(null);
+          }
+          await load();
+        }}
+        onSuccess={notifySuccess}
+        onError={notifyError}
       />
       <QuickViewDrawer
         title="Participant Detail"
