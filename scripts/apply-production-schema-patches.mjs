@@ -232,6 +232,61 @@ const patches = [
     `
   },
   {
+    name: "historical imports",
+    sql: `
+      CREATE TABLE IF NOT EXISTS "HistoricalImportBatch" (
+        "id" TEXT NOT NULL,
+        "fileName" TEXT NOT NULL,
+        "mappingJson" JSONB,
+        "status" TEXT NOT NULL DEFAULT 'PREVIEWED',
+        "totalRows" INTEGER NOT NULL DEFAULT 0,
+        "validRows" INTEGER NOT NULL DEFAULT 0,
+        "warningRows" INTEGER NOT NULL DEFAULT 0,
+        "errorRows" INTEGER NOT NULL DEFAULT 0,
+        "importedCohorts" INTEGER NOT NULL DEFAULT 0,
+        "importedRegistrations" INTEGER NOT NULL DEFAULT 0,
+        "importedParticipants" INTEGER NOT NULL DEFAULT 0,
+        "importedPayments" INTEGER NOT NULL DEFAULT 0,
+        "createdById" TEXT,
+        "startedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "completedAt" TIMESTAMP(3),
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT "HistoricalImportBatch_pkey" PRIMARY KEY ("id")
+      );
+
+      CREATE TABLE IF NOT EXISTS "HistoricalImportRow" (
+        "id" TEXT NOT NULL,
+        "batchId" TEXT NOT NULL,
+        "rowNumber" INTEGER NOT NULL,
+        "rawRowJson" JSONB NOT NULL,
+        "normalizedJson" JSONB,
+        "warningsJson" JSONB,
+        "errorsJson" JSONB,
+        "importedEntityIdsJson" JSONB,
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT "HistoricalImportRow_pkey" PRIMARY KEY ("id")
+      );
+
+      CREATE INDEX IF NOT EXISTS "HistoricalImportBatch_status_idx" ON "HistoricalImportBatch"("status");
+      CREATE INDEX IF NOT EXISTS "HistoricalImportBatch_createdById_idx" ON "HistoricalImportBatch"("createdById");
+      CREATE INDEX IF NOT EXISTS "HistoricalImportBatch_startedAt_idx" ON "HistoricalImportBatch"("startedAt");
+      CREATE INDEX IF NOT EXISTS "HistoricalImportRow_batchId_idx" ON "HistoricalImportRow"("batchId");
+      CREATE INDEX IF NOT EXISTS "HistoricalImportRow_rowNumber_idx" ON "HistoricalImportRow"("rowNumber");
+
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'HistoricalImportBatch_createdById_fkey') THEN
+          ALTER TABLE "HistoricalImportBatch" ADD CONSTRAINT "HistoricalImportBatch_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+        END IF;
+
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'HistoricalImportRow_batchId_fkey') THEN
+          ALTER TABLE "HistoricalImportRow" ADD CONSTRAINT "HistoricalImportRow_batchId_fkey" FOREIGN KEY ("batchId") REFERENCES "HistoricalImportBatch"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+        END IF;
+      END $$;
+    `
+  },
+  {
     name: "quickbooks project sync",
     sql: `
       ALTER TABLE "Cohort" ADD COLUMN IF NOT EXISTS "quickBooksProjectRef" TEXT;

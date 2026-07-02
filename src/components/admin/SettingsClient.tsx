@@ -57,7 +57,7 @@ import {
   useNotifier
 } from "./common";
 
-const settingsTabs = ["System Health", "Admin Users", "Connected Tools", "Jotform Intake", "Road Map", "Organization Settings", "Advanced Setup"];
+const settingsTabs = ["System Health", "Admin Users", "Connected Tools", "Jotform Intake", "Historical Imports", "Road Map", "Organization Settings", "Advanced Setup"];
 const wizardSteps = ["Summary", "Routing", "Field Mapping", "Preview", "Save"];
 const roadmapStatusOrder: RoadmapStatus[] = ["done", "in_progress", "blocked", "planned"];
 const roadmapStatusLabels: Record<RoadmapStatus, string> = {
@@ -1328,6 +1328,207 @@ function RoadmapPanel() {
   );
 }
 
+function HistoricalImportsPanel({
+  batches,
+  csvText,
+  fileName,
+  mapping,
+  preview,
+  busy,
+  onFile,
+  onPreview,
+  onImport,
+  onMappingChange
+}: {
+  batches: AdminRow[];
+  csvText: string;
+  fileName: string;
+  mapping: Record<string, string>;
+  preview: AdminRow | null;
+  busy: boolean;
+  onFile: (file: File | null) => void;
+  onPreview: () => void;
+  onImport: () => void;
+  onMappingChange: (field: string, column: string) => void;
+}) {
+  const headers = (preview?.headers ?? []) as string[];
+  const supportedFields = (preview?.supportedFields ?? []) as AdminRow[];
+  const rows = ((preview?.rows ?? []) as AdminRow[]).slice(0, 10);
+  const summary = (preview?.summary ?? {}) as AdminRow;
+  const cohortSummary = ((summary.cohorts ?? []) as AdminRow[]).slice(0, 6);
+  const validRows = Number(summary.validRows ?? 0);
+
+  return (
+    <Stack spacing={2}>
+      <SectionCard
+        title="Historical Cohort Imports"
+        action={
+          <Stack direction="row" flexWrap="wrap" useFlexGap gap={1}>
+            <Button size="small" variant="outlined" component="label">
+              Upload CSV
+              <input hidden type="file" accept=".csv,text/csv" onChange={(event) => onFile(event.target.files?.[0] ?? null)} />
+            </Button>
+            <Button size="small" variant="outlined" onClick={onPreview} disabled={!csvText || busy}>
+              {busy ? "Working..." : "Preview CSV"}
+            </Button>
+            <Button size="small" onClick={onImport} disabled={!csvText || !preview || validRows === 0 || busy}>
+              Import Valid Rows
+            </Button>
+          </Stack>
+        }
+      >
+        <Stack spacing={2}>
+          <Alert severity="info">
+            Historical imports are data-only. They create closed cohort records for reporting, but never send emails, calendar invites, QuickBooks records, CRM tasks, or operations journeys.
+          </Alert>
+          <Grid container spacing={1.5}>
+            <Grid size={{ xs: 12, md: 3 }}><InfoTile label="File" value={fileName || "No CSV selected"} /></Grid>
+            <Grid size={{ xs: 6, md: 2 }}><InfoTile label="Rows" value={summary.totalRows ?? 0} /></Grid>
+            <Grid size={{ xs: 6, md: 2 }}><InfoTile label="Valid" value={summary.validRows ?? 0} /></Grid>
+            <Grid size={{ xs: 6, md: 2 }}><InfoTile label="Warnings" value={summary.warningRows ?? 0} /></Grid>
+            <Grid size={{ xs: 6, md: 2 }}><InfoTile label="Errors" value={summary.errorRows ?? 0} /></Grid>
+          </Grid>
+
+          {preview ? (
+            <>
+              <Box sx={{ borderTop: 1, borderColor: "divider", pt: 2 }}>
+                <Typography variant="h3">Field Mapping</Typography>
+                <Typography color="text.secondary" sx={{ mb: 1.5 }}>
+                  Confirm the columns before importing. Required fields need a mapped CSV column; similar rows only show warnings and will still import.
+                </Typography>
+                <Grid container spacing={1.25}>
+                  {supportedFields.map((field) => (
+                    <Grid size={{ xs: 12, md: 4 }} key={String(field.field)}>
+                      <TextField
+                        select
+                        fullWidth
+                        size="small"
+                        label={String(field.label)}
+                        value={mapping[String(field.field)] ?? ""}
+                        onChange={(event) => onMappingChange(String(field.field), event.target.value)}
+                      >
+                        <MenuItem value="">Not mapped</MenuItem>
+                        {headers.map((header) => (
+                          <MenuItem value={header} key={header}>
+                            {header}
+                          </MenuItem>
+                        ))}
+                      </TextField>
+                    </Grid>
+                  ))}
+                </Grid>
+              </Box>
+
+              <Grid container spacing={1.5}>
+                <Grid size={{ xs: 12, lg: 4 }}>
+                  <Box sx={{ borderTop: 1, borderColor: "divider", pt: 2 }}>
+                    <Typography variant="h3" sx={{ mb: 1 }}>Cohort Groups</Typography>
+                    {cohortSummary.length === 0 ? (
+                      <EmptyState title="No cohort groups yet" description="Preview a CSV to see cohort grouping." />
+                    ) : (
+                      <Stack spacing={1}>
+                        {cohortSummary.map((cohort) => (
+                          <Box key={String(cohort.title)} sx={{ border: 1, borderColor: "divider", borderRadius: 1, p: 1.25 }}>
+                            <Typography fontWeight={800}>{cohort.title}</Typography>
+                            <Typography variant="body2" color="text.secondary">
+                              {cohort.registrations} registrations · {cohort.participants} participants · {formatCurrency(Number(cohort.amount ?? 0))}
+                            </Typography>
+                          </Box>
+                        ))}
+                      </Stack>
+                    )}
+                  </Box>
+                </Grid>
+                <Grid size={{ xs: 12, lg: 8 }}>
+                  <Box sx={{ borderTop: 1, borderColor: "divider", pt: 2 }}>
+                    <Typography variant="h3" sx={{ mb: 1 }}>Row Preview</Typography>
+                    {rows.length === 0 ? (
+                      <EmptyState title="No preview rows" description="Upload and preview a CSV first." />
+                    ) : (
+                      <TableShell>
+                        <table className="native-table">
+                          <thead>
+                            <tr>
+                              <th>Row</th>
+                              <th>Cohort</th>
+                              <th>Organization</th>
+                              <th>POC</th>
+                              <th>Seats</th>
+                              <th>Amount</th>
+                              <th>Validation</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {rows.map((row) => {
+                              const normalized = (row.normalized ?? {}) as AdminRow;
+                              const warnings = (row.warnings ?? []) as string[];
+                              const errors = (row.errors ?? []) as string[];
+
+                              return (
+                                <tr key={String(row.rowNumber)}>
+                                  <td>{row.rowNumber}</td>
+                                  <td title={String(normalized.cohortTitle ?? normalized.cohortShortName ?? "")}>{normalized.cohortTitle ?? normalized.cohortShortName ?? "-"}</td>
+                                  <td title={String(normalized.organizationName ?? "")}>{normalized.organizationName ?? "-"}</td>
+                                  <td title={String(normalized.primaryContactEmail ?? "")}>{normalized.primaryContactName ?? "-"}</td>
+                                  <td>{normalized.participantCount ?? 0}</td>
+                                  <td>{formatCurrency(Number(normalized.totalAmount ?? 0))}</td>
+                                  <td>
+                                    <Stack spacing={0.5}>
+                                      {errors.length > 0 ? <StatusChip value={`${errors.length} ERRORS`} /> : <StatusChip value="VALID" />}
+                                      {warnings.length > 0 ? <StatusChip value={`${warnings.length} WARNINGS`} /> : null}
+                                    </Stack>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </TableShell>
+                    )}
+                  </Box>
+                </Grid>
+              </Grid>
+            </>
+          ) : null}
+        </Stack>
+      </SectionCard>
+
+      <SectionCard title="Prior Imports">
+        {batches.length === 0 ? (
+          <EmptyState title="No historical imports yet" description="Uploaded CSV batches and row outcomes will appear here." />
+        ) : (
+          <TableShell>
+            <table className="native-table">
+              <thead>
+                <tr>
+                  <th>File</th>
+                  <th>Status</th>
+                  <th>Rows</th>
+                  <th>Created</th>
+                  <th>Imported</th>
+                </tr>
+              </thead>
+              <tbody>
+                {batches.map((batch) => (
+                  <tr key={String(batch.id)}>
+                    <td title={String(batch.fileName)}>{batch.fileName}</td>
+                    <td><StatusChip value={String(batch.status ?? "UNKNOWN")} /></td>
+                    <td>{batch.validRows ?? 0} valid / {batch.errorRows ?? 0} errors</td>
+                    <td>{compactDate(String(batch.createdAt ?? ""))}</td>
+                    <td>
+                      {batch.importedCohorts ?? 0} cohorts · {batch.importedRegistrations ?? 0} registrations · {batch.importedParticipants ?? 0} participants
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </TableShell>
+        )}
+      </SectionCard>
+    </Stack>
+  );
+}
+
 function HealthBadge({ status }: { status?: string }) {
   const normalized = String(status ?? "warning");
   return <span className={`roadmap-status-badge is-${healthToneClass[normalized] ?? "yellow"}`}>{healthToneLabels[normalized] ?? formatStatusLabel(normalized)}</span>;
@@ -1425,6 +1626,12 @@ export function SettingsClient() {
   const [jotformSetup, setJotformSetup] = useState<AdminRow | null>(null);
   const [webhookEvents, setWebhookEvents] = useState<AdminRow[]>([]);
   const [mappingWizardEvent, setMappingWizardEvent] = useState<AdminRow | null>(null);
+  const [historicalImports, setHistoricalImports] = useState<AdminRow[]>([]);
+  const [historicalCsvText, setHistoricalCsvText] = useState("");
+  const [historicalFileName, setHistoricalFileName] = useState("");
+  const [historicalPreview, setHistoricalPreview] = useState<AdminRow | null>(null);
+  const [historicalMapping, setHistoricalMapping] = useState<Record<string, string>>({});
+  const [historicalImportBusy, setHistoricalImportBusy] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<AdminRow | null>(null);
   const [userDialogOpen, setUserDialogOpen] = useState(false);
@@ -1446,7 +1653,7 @@ export function SettingsClient() {
   const { notifySuccess, notifyError, snackbar } = useNotifier();
 
   async function load() {
-    const [healthData, systemHealthData, userRows, mappingRows, cohortRows, integrationRows, setupData, intakeData, appSettingsData] = await Promise.all([
+    const [healthData, systemHealthData, userRows, mappingRows, cohortRows, integrationRows, setupData, intakeData, historicalImportRows, appSettingsData] = await Promise.all([
       adminApi<AdminRow>("/api/health"),
       adminApi<AdminRow>("/api/system-health").catch(() => null),
       adminApi<AdminRow[]>("/api/users").catch(() => []),
@@ -1455,6 +1662,7 @@ export function SettingsClient() {
       adminApi<AdminRow>("/api/integrations/status").catch(() => null),
       adminApi<AdminRow>("/api/integrations/setup").catch(() => null),
       adminApi<AdminRow>("/api/jotform/intake").catch(() => ({ setup: null, events: [] })),
+      adminApi<AdminRow[]>("/api/historical-imports").catch(() => []),
       adminApi<AdminRow>("/api/app-settings").catch(() => ({ organizationInvoiceProfile: defaultOrganizationInvoiceProfile }))
     ]);
     setHealth(healthData);
@@ -1464,6 +1672,7 @@ export function SettingsClient() {
     setCohorts(cohortRows);
     setIntegrationStatus(integrationRows);
     setIntegrationSetup(setupData);
+    setHistoricalImports(historicalImportRows);
     setOrganizationInvoiceProfile({
       ...defaultOrganizationInvoiceProfile,
       ...(appSettingsData?.organizationInvoiceProfile ?? {})
@@ -1592,6 +1801,72 @@ export function SettingsClient() {
       notifyError((error as Error).message);
     } finally {
       setUploadingOrganizationLogo(false);
+    }
+  }
+
+  async function readHistoricalImportFile(file: File | null) {
+    if (!file) {
+      return;
+    }
+
+    try {
+      const text = await file.text();
+      setHistoricalCsvText(text);
+      setHistoricalFileName(file.name);
+      setHistoricalPreview(null);
+      setHistoricalMapping({});
+      notifySuccess("Historical CSV loaded");
+    } catch (error) {
+      notifyError((error as Error).message);
+    }
+  }
+
+  async function previewHistoricalCsv() {
+    setHistoricalImportBusy(true);
+    try {
+      const preview = await adminApi<AdminRow>("/api/historical-imports/preview", {
+        method: "POST",
+        body: {
+          fileName: historicalFileName,
+          csvText: historicalCsvText,
+          mapping: historicalMapping
+        }
+      });
+      setHistoricalPreview(preview);
+      setHistoricalMapping((preview.mapping ?? {}) as Record<string, string>);
+      notifySuccess("Historical CSV preview ready");
+    } catch (error) {
+      notifyError((error as Error).message);
+    } finally {
+      setHistoricalImportBusy(false);
+    }
+  }
+
+  function updateHistoricalMapping(field: string, column: string) {
+    setHistoricalMapping((current) => ({
+      ...current,
+      [field]: column
+    }));
+  }
+
+  async function importHistoricalCsv() {
+    setHistoricalImportBusy(true);
+    try {
+      const result = await adminApi<AdminRow>("/api/historical-imports", {
+        method: "POST",
+        body: {
+          fileName: historicalFileName || "historical-import.csv",
+          csvText: historicalCsvText,
+          mapping: historicalMapping
+        }
+      });
+      setHistoricalPreview((result.preview ?? historicalPreview) as AdminRow);
+      notifySuccess(`Historical import finished: ${result.importedRows ?? 0} rows imported`);
+      await load();
+    } catch (error) {
+      notifyError((error as Error).message);
+    } finally {
+      setHistoricalImportBusy(false);
     }
   }
 
@@ -2327,10 +2602,25 @@ export function SettingsClient() {
       </TabPanel>
 
       <TabPanel active={activeTab} index={4}>
-        <RoadmapPanel />
+        <HistoricalImportsPanel
+          batches={historicalImports}
+          csvText={historicalCsvText}
+          fileName={historicalFileName}
+          mapping={historicalMapping}
+          preview={historicalPreview}
+          busy={historicalImportBusy}
+          onFile={(file) => { void readHistoricalImportFile(file); }}
+          onPreview={() => { void previewHistoricalCsv(); }}
+          onImport={() => { void importHistoricalCsv(); }}
+          onMappingChange={updateHistoricalMapping}
+        />
       </TabPanel>
 
       <TabPanel active={activeTab} index={5}>
+        <RoadmapPanel />
+      </TabPanel>
+
+      <TabPanel active={activeTab} index={6}>
         <SectionCard
           title="Organization Settings"
           action={<Button size="small" onClick={() => void saveOrganizationInvoiceProfile()} disabled={savingOrganizationSettings}>{savingOrganizationSettings ? "Saving..." : "Save Settings"}</Button>}
@@ -2408,7 +2698,7 @@ export function SettingsClient() {
         </SectionCard>
       </TabPanel>
 
-      <TabPanel active={activeTab} index={6}>
+      <TabPanel active={activeTab} index={7}>
         <SectionCard title="Mapping Library" action={<Button size="small" startIcon={<AddIcon />} onClick={() => setDialogOpen(true)}>Add Mapping</Button>}>
           <Typography color="text.secondary" sx={{ mb: 2 }}>
             Most mapping should happen from the Jotform review wizard. Use this table only for quick enable/disable or routing edits.

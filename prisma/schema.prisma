@@ -277,6 +277,7 @@ model User {
   updatedAt             DateTime              @updatedAt
   createdCommunications CohortCommunication[]
   reviewedEmailEvents   EmailEvent[]          @relation("EmailEventReviewedBy")
+  historicalImportBatches HistoricalImportBatch[]
   auditLogs             AuditLog[]
 
   @@index([role])
@@ -288,6 +289,48 @@ model AppSetting {
   value     Json
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model HistoricalImportBatch {
+  id              String                @id @default(cuid())
+  fileName        String
+  mappingJson     Json?
+  status          String                @default("PREVIEWED")
+  totalRows       Int                   @default(0)
+  validRows       Int                   @default(0)
+  warningRows     Int                   @default(0)
+  errorRows       Int                   @default(0)
+  importedCohorts Int                   @default(0)
+  importedRegistrations Int             @default(0)
+  importedParticipants Int              @default(0)
+  importedPayments Int                  @default(0)
+  createdById     String?
+  startedAt       DateTime              @default(now())
+  completedAt     DateTime?
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+  createdBy       User?                 @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  rows            HistoricalImportRow[]
+
+  @@index([status])
+  @@index([createdById])
+  @@index([startedAt])
+}
+
+model HistoricalImportRow {
+  id                 String                @id @default(cuid())
+  batchId            String
+  rowNumber          Int
+  rawRowJson         Json
+  normalizedJson     Json?
+  warningsJson       Json?
+  errorsJson         Json?
+  importedEntityIdsJson Json?
+  createdAt          DateTime              @default(now())
+  batch              HistoricalImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@index([batchId])
+  @@index([rowNumber])
 }
 
 model Organization {
