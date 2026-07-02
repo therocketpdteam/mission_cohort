@@ -1,6 +1,6 @@
 import { handleApiError, ok } from "@/lib/api";
 import { isMissingPrismaSchema, migrationRequiredResult } from "@/lib/prismaCompatibility";
-import { createInvoiceDraft, generateInvoicePdf, listInvoiceDrafts, sendInvoiceDocument, updateInvoiceDraft } from "@/services/invoiceService";
+import { createInvoiceDraft, generateInvoicePdf, listInvoiceDrafts, prepareAndSendRegistrationInvoicePackage, sendInvoiceDocument, updateInvoiceDraft } from "@/services/invoiceService";
 import { createQuickBooksInvoiceFromDraft } from "@/services/quickBooksService";
 
 export async function GET(request: Request) {
@@ -40,6 +40,13 @@ export async function PATCH(request: Request) {
 
     if (body.action === "sendReceipt") {
       return ok(await sendInvoiceDocument(body.id, true));
+    }
+
+    if (body.action === "sendRegistrationInvoicePackage") {
+      return ok(await prepareAndSendRegistrationInvoicePackage({
+        registrationId: body.registrationId,
+        invoiceId: body.id
+      }));
     }
 
     if (body.action === "createQuickBooksInvoice") {

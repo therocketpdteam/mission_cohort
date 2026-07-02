@@ -1517,6 +1517,34 @@ export function CohortDetailClient({ id }: { id: string }) {
     }
   }
 
+  async function sendRegistrationInvoicePackage(invoice: AdminRow, registrationId?: string | null) {
+    const resolvedRegistrationId = registrationId ?? invoice.registrationId;
+
+    if (!resolvedRegistrationId) {
+      notifyError("This invoice is not linked to a registration.");
+      return;
+    }
+
+    try {
+      const result = await adminApi<AdminRow>("/api/invoices", {
+        method: "PATCH",
+        body: {
+          action: "sendRegistrationInvoicePackage",
+          id: invoice.id,
+          registrationId: resolvedRegistrationId
+        }
+      });
+      const recipients = Array.isArray(result.recipients) ? result.recipients.join(", ") : "the POC";
+      notifySuccess(`Invoice package sent to ${recipients}`);
+      await load();
+      if (registrationDetail?.id) {
+        await openRegistrationDetail(registrationDetail);
+      }
+    } catch (error) {
+      notifyError((error as Error).message);
+    }
+  }
+
   async function syncQuickBooksProject() {
     try {
       await adminApi(`/api/cohorts/${id}`, { method: "PATCH", body: { action: "syncQuickBooksProject" } });
@@ -2396,6 +2424,7 @@ export function CohortDetailClient({ id }: { id: string }) {
                       { label: invoice.quickBooksInvoiceRef ? "Resync QuickBooks invoice" : "Create in QuickBooks", onClick: () => void createQuickBooksInvoice(invoice) },
                       { label: invoice.pdfUrl ? "Regenerate PDF" : "Generate PDF", onClick: () => void generateInvoiceDocument(invoice) },
                       ...(invoice.pdfUrl ? [{ label: "Preview PDF", onClick: () => openInvoicePreview(invoice.pdfUrl, `Invoice ${invoice.invoiceNumber ?? ""}`.trim()) }] : []),
+                      { label: financeHealth?.sendgridReady === false ? "Invoice package unavailable" : "Prepare + send invoice package", disabled: financeHealth?.sendgridReady === false || !invoice.registrationId, onClick: () => void sendRegistrationInvoicePackage(invoice) },
                       { label: financeHealth?.sendgridReady === false ? "Send invoice unavailable" : "Send invoice", disabled: financeHealth?.sendgridReady === false, onClick: () => void sendInvoiceDocument(invoice) },
                       { label: invoice.receiptUrl ? "Regenerate receipt" : "Generate receipt", onClick: () => void generateInvoiceDocument(invoice, true) },
                       ...(invoice.receiptUrl ? [
@@ -2700,6 +2729,7 @@ export function CohortDetailClient({ id }: { id: string }) {
                               { label: invoice.quickBooksInvoiceRef ? "Resync QuickBooks invoice" : "Create in QuickBooks", onClick: () => void createQuickBooksInvoice(invoice) },
                               { label: invoice.pdfUrl ? "Regenerate PDF" : "Generate PDF", onClick: () => void generateInvoiceDocument(invoice) },
                               ...(invoice.pdfUrl ? [{ label: "Preview PDF", onClick: () => openInvoicePreview(invoice.pdfUrl, `Invoice ${invoice.invoiceNumber ?? ""}`.trim()) }] : []),
+                              { label: financeHealth?.sendgridReady === false ? "Invoice package unavailable" : "Prepare + send invoice package", disabled: financeHealth?.sendgridReady === false, onClick: () => void sendRegistrationInvoicePackage(invoice, registrationDetail.id) },
                               { label: financeHealth?.sendgridReady === false ? "Send invoice unavailable" : "Send invoice", disabled: financeHealth?.sendgridReady === false, onClick: () => void sendInvoiceDocument(invoice) },
                               { label: invoice.receiptUrl ? "Regenerate receipt" : "Generate receipt", onClick: () => void generateInvoiceDocument(invoice, true) },
                               ...(invoice.receiptUrl ? [

@@ -132,6 +132,7 @@ If a feature shows `Blocked`, keep the UI compatibility fallback in place and do
 - Cancelling/archiving a registration, removing a participant, changing a participant email, or replacing a Jotform roster cancels that recipient's unsent journey records before any new plan is created.
 - When a participant joins a Published or Active cohort, future linked Google events are refreshed so the new attendee receives the remaining calendar invitations.
 - Existing W-9 and generated invoice documents are attached to the POC confirmation when available. Creating or revising invoices remains a separate finance workflow.
+- Registration invoice packages are operator-triggered from the invoice workbench. The package must create or reuse the invoice draft, sync it to the cohort QuickBooks Project, generate the current PDF, then send the POC/billing email through Communications. If QuickBooks or PDF generation fails, Mission Control must stop before emailing the client.
 - Cohort publishing performs one cohort-level calendar preparation. Registration journey activation skips per-registration calendar refresh during that operation to prevent duplicate Google updates.
 
 ## Registration Roster Rules
@@ -160,10 +161,11 @@ If a feature shows `Blocked`, keep the UI compatibility fallback in place and do
 - Invoice logos are managed from Settings > Organization Settings and uploaded through the public `organization-logo` purpose. Use the uploaded PNG in generated PDFs when available and keep a text fallback so invoice generation never blocks on a logo fetch.
 - Default invoice line descriptions should come from cohort title plus cohort description. Custom line items remain operator-owned and should not be overwritten silently.
 - The invoice PDF visual should follow the RocketPD invoice template: strong purple brand header, bill-to and right-aligned invoice metadata body, readable item table, payment/notes section, centered legal footer, and a bottom total band. Keep generated PDFs polished enough to send directly to a client without exporting to another design tool.
-- New invoice numbers default to `{thought-leader-code}-{organization-name}`, such as `KM-RIVERSIDE-SCHOOL-DISTRICT`, with a numeric suffix when a duplicate exists. Operators may still override the value before saving when finance needs a special case.
+- New invoice numbers default to `{thought-leader-code}-{first-session-year}-{running-sequence}`, such as `KM-2026-355`. The running sequence starts from the current RocketPD finance sequence and continues across all thought leaders. Operators may still override the value before saving when finance needs a special case.
 - Editing printable invoice fields, including line items, dates, PO number, status, paid amount, tax, notes, or invoice number, invalidates existing generated PDFs/receipts. Operators must regenerate the document after saving those changes.
 - QuickBooks fields remain references/status only in v1. Editing QuickBooks reference fields must not invalidate generated PDFs.
 - Invoice and receipt sends use Communications with the generated PDF attached and dedupe billing plus POC recipient emails.
+- `Prepare + send invoice package` is the preferred client-facing invoice action for registration-linked drafts because it guards the sequence: QuickBooks first, PDF second, Communications send last.
 
 ## Registration Pricing And Attribution
 

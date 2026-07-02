@@ -1,4 +1,4 @@
-import { CommunicationStatus, InvoiceDraftStatus, RecipientScope } from "@prisma/client";
+import { CommunicationStatus, InvoiceDraftStatus, RecipientScope, SyncStatus } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { dateInput, moneyInput, positiveIntInput } from "@/lib/validators";
@@ -6,6 +6,7 @@ import { buildInvoicePdf } from "./pdfService";
 import { uploadAppFile } from "./storageService";
 import { addCommunicationAttachment, getSystemUserId, sendCommunication } from "./communicationService";
 import { getOrganizationInvoiceProfile } from "./appSettingsService";
+import { createQuickBooksInvoiceFromDraft } from "./quickBooksService";
 
 const lineItemSchema = z.object({
   id: z.string().optional(),
@@ -57,6 +58,15 @@ function formatDate(value: unknown) {
 
 function money(value: unknown) {
   return `$${Number(value ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function escapeHtml(value: unknown) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
 export function presenterInvoiceCode(presenter?: { firstName?: string | null; lastName?: string | null } | null) {
@@ -467,21 +477,25 @@ export async function sendInvoiceDocument(id: string, receipt = false) {
   const fileName = `${receipt ? "Receipt" : "Invoice"} ${invoice.invoiceNumber ?? invoice.id}.pdf`;
   const fileKey = receipt ? invoice.receiptFileKey : invoice.pdfFileKey;
   const url = receipt ? invoice.receiptUrl : invoice.pdfUrl;
+  const w9Url = receipt ? null : invoice.registration?.w9Url;
 
   if (!fileKey || !url) {
     throw Object.assign(new Error(`Generate the ${documentLabel} PDF before sending.`), { code: "BAD_REQUEST", status: 400 });
   }
 
+  const invoiceLink = `<a href="${escapeHtml(url)}">open your ${documentLabel}</a>`;
+  const w9Link = w9Url ? `<p>For your convenience, <a href="${escapeHtml(w9Url)}">here is RocketPD's W-9</a>.</p>` : "";
+  const w9Text = w9Url ? " RocketPD's W-9 is included for your convenience." : "";
   const communication = await prisma.cohortCommunication.create({
     data: {
       cohortId: invoice.cohortId,
       subject: `${receipt ? "Receipt" : "Invoice"} ${invoice.invoiceNumber ?? ""} for ${invoice.cohort.title}`.trim(),
       bodyHtml: receipt
-        ? `<p>Hello,</p><p>Your paid receipt for <strong>${invoice.cohort.title}</strong> is attached below.</p><p>Thank you.</p>`
-        : `<p>Hello,</p><p>Your invoice for <strong>${invoice.cohort.title}</strong> is attached below.</p><p>Total: <strong>${money(invoice.totalAmount)}</strong></p>`,
+        ? `<p>Hello,</p><p>Your paid receipt for <strong>${escapeHtml(invoice.cohort.title)}</strong> is attached below. You can also ${invoiceLink}.</p><p>Thank you.</p>`
+        : `<p>Hello,</p><p>Your invoice for <strong>${escapeHtml(invoice.cohort.title)}</strong> is attached below. You can also ${invoiceLink}.</p><p>Total: <strong>${money(invoice.totalAmount)}</strong></p>${w9Link}`,
       bodyText: receipt
         ? `Your paid receipt for ${invoice.cohort.title} is attached below.`
-        : `Your invoice for ${invoice.cohort.title} is attached below. Total: ${money(invoice.totalAmount)}.`,
+        : `Your invoice for ${invoice.cohort.title} is attached below. Total: ${money(invoice.totalAmount)}.${w9Text}`,
       status: CommunicationStatus.DRAFT,
       recipientScope: RecipientScope.CUSTOM,
       recipientEmails: recipients,
@@ -496,6 +510,17 @@ export async function sendInvoiceDocument(id: string, receipt = false) {
     fileKey,
     url
   });
+
+  if (w9Url) {
+    await addCommunicationAttachment({
+      communicationId: communication.id,
+      fileName: "RocketPD W-9.pdf",
+      contentType: "application/pdf",
+      provider: "external",
+      fileKey: `registration/${invoice.registration!.id}/w9`,
+      url: w9Url
+    });
+  }
 
   const sent = await sendCommunication(communication.id, {
     recipients,
@@ -522,4 +547,64 @@ export async function sendInvoiceDocument(id: string, receipt = false) {
   });
 
   return { invoice: updatedInvoice, communication: sent, recipients };
+}
+
+export async function prepareAndSendRegistrationInvoicePackage(input: { registrationId: string; invoiceId?: string }) {
+  const registration = await prisma.registration.findUnique({
+    where: { id: input.registrationId },
+    include: {
+      organization: true,
+      invoiceDrafts: { orderBy: { updatedAt: "desc" }, include: invoiceInclude() },
+      cohort: { include: { presenter: true, sessions: { orderBy: { startTime: "asc" } } } }
+    }
+  });
+
+  if (!registration) {
+    throw Object.assign(new Error("Registration not found."), { code: "NOT_FOUND", status: 404 });
+  }
+
+  if (registration.archivedAt) {
+    throw Object.assign(new Error("Archived registrations cannot receive invoice packages."), { code: "BAD_REQUEST", status: 400 });
+  }
+
+  let invoice = input.invoiceId
+    ? await prisma.invoiceDraft.findFirst({
+        where: { id: input.invoiceId, registrationId: registration.id },
+        include: invoiceInclude()
+      })
+    : registration.invoiceDrafts[0] ?? null;
+
+  if (input.invoiceId && !invoice) {
+    throw Object.assign(new Error("Invoice draft is not linked to this registration."), { code: "BAD_REQUEST", status: 400 });
+  }
+
+  if (!invoice) {
+    invoice = await createInvoiceDraft({
+      cohortId: registration.cohortId,
+      registrationId: registration.id,
+      organizationId: registration.organizationId ?? undefined
+    });
+  }
+
+  if (invoice.quickBooksSyncStatus === SyncStatus.ERROR) {
+    throw Object.assign(new Error(invoice.quickBooksSyncError || "QuickBooks invoice link needs review before emailing this invoice."), {
+      code: "BAD_REQUEST",
+      status: 400
+    });
+  }
+
+  const quickBooks = await createQuickBooksInvoiceFromDraft(invoice.id);
+  const generated = await generateInvoicePdf(invoice.id, false);
+  const sent = await sendInvoiceDocument(generated.id, false);
+
+  return {
+    invoice: sent.invoice,
+    quickBooks,
+    communication: sent.communication,
+    recipients: sent.recipients,
+    documents: {
+      invoicePdfUrl: sent.invoice.pdfUrl,
+      w9Attached: Boolean(registration.w9Url)
+    }
+  };
 }
