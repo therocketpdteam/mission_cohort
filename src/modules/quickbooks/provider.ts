@@ -268,6 +268,7 @@ export async function createQuickBooksProject(input: {
       DisplayName: input.projectName,
       Job: true,
       Active: true,
+      BillWithParent: false,
       ParentRef: {
         value: input.parentCustomerRef
       }

@@ -107,6 +107,10 @@ function isQuickBooksMissingReference(error: unknown) {
   return /not found|invalid reference id|element id .* not found|object not found/i.test(message);
 }
 
+function isQuickBooksProjectRecord(project: Record<string, any>, parentCustomerRef: string) {
+  return project.Job === true && String(project.ParentRef?.value ?? "").trim() === parentCustomerRef.trim();
+}
+
 async function quickBooksConnection() {
   const connection = await getDecryptedIntegrationConnection(IntegrationProvider.QUICKBOOKS);
 
@@ -258,16 +262,28 @@ export async function reconcileCohortQuickBooksProject(cohortId: string) {
       environment: setup.environment
     });
     const project = result.Customer ?? result;
+    const parentCustomerRef = requireProjectSetup(setup);
 
     if (project.Active === false) {
       return markCohortQuickBooksProjectMissing(cohort.id, cohort.quickBooksProjectRef);
+    }
+
+    if (!isQuickBooksProjectRecord(project, parentCustomerRef)) {
+      return prisma.cohort.update({
+        where: { id: cohort.id },
+        data: {
+          quickBooksSyncStatus: SyncStatus.ERROR,
+          quickBooksSyncError: `QuickBooks ref ${cohort.quickBooksProjectRef} is not a Project/job under the configured RocketPD parent customer. Select the correct RocketPD parent customer in Settings or relink this cohort.`,
+          quickBooksLastSyncedAt: new Date()
+        }
+      });
     }
 
     return prisma.cohort.update({
       where: { id: cohort.id },
       data: {
         quickBooksProjectName: String(project.DisplayName ?? cohort.quickBooksProjectName ?? cohort.shortName ?? cohort.title),
-        quickBooksParentCustomerRef: String(project.ParentRef?.value ?? cohort.quickBooksParentCustomerRef ?? ""),
+        quickBooksParentCustomerRef: parentCustomerRef,
         quickBooksRealmId: realmId,
         quickBooksSyncStatus: SyncStatus.SYNCED,
         quickBooksSyncError: null,

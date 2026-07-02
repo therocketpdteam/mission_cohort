@@ -1722,7 +1722,7 @@ export function SettingsClient() {
         "Create or open your Intuit Developer app.",
         "Copy the callback URL below into Redirect URIs.",
         "Save the client credentials, environment, webhook verifier token, RocketPD parent customer ref, and registration service item ref here.",
-        "Mission Control creates one QuickBooks Project per cohort under RocketPD. QuickBooks exposes projects through its customer/job structure, so they can look like sub-customers in some QBO screens."
+        "Mission Control creates one QuickBooks Project per cohort under RocketPD using Intuit's customer/job API shape: Job=true plus the RocketPD ParentRef. In some sandbox screens, QuickBooks still displays those project jobs in the customer/sub-customer hierarchy."
       ]
     },
     {
@@ -2154,7 +2154,7 @@ export function SettingsClient() {
                       </TextField>
                       <div className="integration-calendar-picker">
                         <div className="integration-copy-row">
-                          <TextField select fullWidth label="RocketPD parent customer" value={setupForms.QUICKBOOKS?.parentCustomerRef ?? ""} onChange={(event) => updateSetupForm("QUICKBOOKS", "parentCustomerRef", event.target.value)} helperText="Pick RocketPD in the connected QuickBooks company. Cohort Projects are created under this customer using QBO's customer/job API model.">
+                          <TextField select fullWidth label="RocketPD parent customer" value={setupForms.QUICKBOOKS?.parentCustomerRef ?? ""} onChange={(event) => updateSetupForm("QUICKBOOKS", "parentCustomerRef", event.target.value)} helperText="Pick RocketPD in the connected QuickBooks company. Cohort Projects are created as QBO customer/job records with Job=true under this parent.">
                             <MenuItem value="">Choose QuickBooks customer</MenuItem>
                             {(quickBooksRefs.customers.length > 0 ? quickBooksRefs.customers : provider.setup?.parentCustomerRef ? [{ id: provider.setup.parentCustomerRef, fullyQualifiedName: `Saved customer ref ${provider.setup.parentCustomerRef}` }] : []).map((customer) => (
                               <MenuItem value={customer.id} key={customer.id}>
