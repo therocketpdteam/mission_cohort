@@ -361,6 +361,7 @@ model Presenter {
   id           String   @id @default(cuid())
   firstName    String
   lastName     String
+  shortName    String?
   email        String   @unique
   bio          String?
   organization String?

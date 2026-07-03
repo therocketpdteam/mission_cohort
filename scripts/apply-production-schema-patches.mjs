@@ -287,6 +287,12 @@ const patches = [
     `
   },
   {
+    name: "presenter short names",
+    sql: `
+      ALTER TABLE "Presenter" ADD COLUMN IF NOT EXISTS "shortName" TEXT;
+    `
+  },
+  {
     name: "quickbooks project sync",
     sql: `
       ALTER TABLE "Cohort" ADD COLUMN IF NOT EXISTS "quickBooksProjectRef" TEXT;

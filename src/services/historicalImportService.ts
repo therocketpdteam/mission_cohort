@@ -17,6 +17,18 @@ import { normalizeUsStateCode } from "@/modules/jotform";
 
 export type HistoricalImportMapping = Record<string, string>;
 
+export type HistoricalCohortImportDetails = {
+  title?: string;
+  shortName?: string;
+  presenterId?: string;
+  presenterName?: string;
+  presenterEmail?: string;
+  presenterShortName?: string;
+  startDate?: string;
+  endDate?: string;
+  season?: string;
+};
+
 type CsvRow = {
   rowNumber: number;
   raw: Record<string, string>;
@@ -25,8 +37,10 @@ type CsvRow = {
 type NormalizedHistoricalRow = {
   cohortTitle: string;
   cohortShortName?: string;
+  presenterId?: string;
   presenterName: string;
   presenterEmail?: string;
+  presenterShortName?: string;
   startDate?: string;
   endDate?: string;
   season?: string;
@@ -91,6 +105,8 @@ const supportedFields = [
   "sessionDates"
 ] as const;
 
+const cohortDetailFields = new Set<string>(["cohortTitle", "cohortShortName", "presenterName", "presenterEmail", "startDate", "endDate", "season"]);
+
 const fieldLabels: Record<string, string> = {
   cohortTitle: "Cohort title",
   cohortShortName: "Cohort short name",
@@ -135,8 +151,8 @@ const suggestions: Record<string, RegExp[]> = {
   startDate: [/start.*date/, /^start$/, /first.*session/],
   endDate: [/end.*date/, /^end$/, /last.*session/],
   season: [/season/, /term/],
-  organizationName: [/organization/, /^org$/, /school/, /district/, /company/],
-  organizationAddressLine1: [/address( line 1)?$/, /street/],
+  organizationName: [/organization/, /^org$/, /school/, /^district$/, /company/],
+  organizationAddressLine1: [/address( line 1)?$/, /^address$/, /street/],
   organizationAddressLine2: [/address line 2/, /suite/, /unit/],
   organizationCity: [/^city$/, /town/],
   organizationState: [/^state$/, /province/],
@@ -144,17 +160,17 @@ const suggestions: Record<string, RegExp[]> = {
   organizationPhone: [/organization.*phone/, /school.*phone/],
   primaryContactName: [/poc.*name/, /contact.*name/, /registrant.*name/, /^name$/],
   primaryContactEmail: [/poc.*email/, /contact.*email/, /registrant.*email/, /^email$/],
-  primaryContactPhone: [/poc.*phone/, /contact.*phone/, /phone/],
+  primaryContactPhone: [/poc.*phone/, /contact.*phone/, /^phone$/],
   primaryContactTitle: [/poc.*title/, /contact.*title/, /^title$/],
-  participantCount: [/participant.*count/, /roster.*count/, /seats?/, /qty|quantity/, /^#$/],
+  participantCount: [/^participants$/, /^# participants$/, /participant.*count/, /roster.*count/, /seats?/, /qty|quantity/, /^#$/],
   participantText: [/participant.*list/, /roster/, /participants$/],
   participantNames: [/participant.*names?/],
   participantEmails: [/participant.*emails?/],
   participantTitles: [/participant.*titles?/],
-  totalAmount: [/amount/, /total/, /revenue/, /sales/, /price/],
-  paymentStatus: [/payment.*status/, /paid/],
+  totalAmount: [/^total$/, /total.*amount/, /amount/, /revenue/, /sales/, /price/],
+  paymentStatus: [/^status$/, /payment.*status/, /paid/],
   paymentMethod: [/payment.*method/, /method/],
-  invoiceNumber: [/invoice/],
+  invoiceNumber: [/invoice/, /^invoice #$/],
   purchaseOrderNumber: [/purchase.*order/, /^po/],
   source: [/source/, /channel/, /origin/],
   utmSource: [/utm.*source/],
@@ -219,7 +235,9 @@ export function suggestHistoricalImportMapping(headers: string[]): HistoricalImp
   const mapping: HistoricalImportMapping = {};
 
   for (const field of supportedFields) {
-    const match = normalized.find((header) => suggestions[field]?.some((pattern) => pattern.test(header.key)));
+    const match = suggestions[field]
+      ?.map((pattern) => normalized.find((header) => pattern.test(header.key)))
+      .find(Boolean);
     if (match) {
       mapping[field] = match.header;
     }
@@ -272,6 +290,7 @@ function parsePaymentStatus(input: string) {
 function parsePaymentMethod(input: string) {
   const raw = normalizedHeader(input);
   if (/credit|card/.test(raw)) return PaymentMethod.CREDIT_CARD;
+  if (/visa|master|mast|amex|discover/.test(raw)) return PaymentMethod.CREDIT_CARD;
   if (/purchase|po/.test(raw)) return PaymentMethod.PURCHASE_ORDER;
   if (/invoice|check/.test(raw)) return PaymentMethod.INVOICE;
   if (/comp/.test(raw)) return PaymentMethod.COMPED;
@@ -330,7 +349,218 @@ function parseSessionDates(value: string) {
     .map((date) => date.toISOString());
 }
 
-export function normalizeHistoricalImportRows(csvText: string, inputMapping?: HistoricalImportMapping) {
+function presenterInitials(name: string) {
+  const parts = clean(name).split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "TL";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0] ?? ""}${parts.at(-1)?.[0] ?? ""}`.toUpperCase();
+}
+
+function normalizedSeason(value?: string) {
+  const raw = clean(value);
+  const match = ["Spring", "Summer", "Fall", "Winter"].find((season) => season.toLowerCase() === raw.toLowerCase());
+  return match || raw;
+}
+
+function yearFromDate(value?: string) {
+  const date = parseDateValue(clean(value));
+  return date ? date.getUTCFullYear() : new Date().getUTCFullYear();
+}
+
+export function generatedHistoricalCohortShortName(cohort?: HistoricalCohortImportDetails) {
+  if (cohort?.shortName) return clean(cohort.shortName);
+  const leader = clean(cohort?.presenterShortName) || presenterInitials(clean(cohort?.presenterName));
+  const season = normalizedSeason(cohort?.season) || "Historical";
+  const year = yearFromDate(cohort?.startDate);
+  return [leader, season, year].filter(Boolean).join("-");
+}
+
+function normalizeCohortDetails(cohort?: HistoricalCohortImportDetails) {
+  const startDate = parseDateValue(clean(cohort?.startDate));
+  const endDate = parseDateValue(clean(cohort?.endDate)) ?? startDate;
+  return {
+    cohortTitle: clean(cohort?.title),
+    cohortShortName: generatedHistoricalCohortShortName(cohort),
+    presenterId: clean(cohort?.presenterId) || undefined,
+    presenterName: clean(cohort?.presenterName),
+    presenterEmail: clean(cohort?.presenterEmail) || undefined,
+    presenterShortName: clean(cohort?.presenterShortName) || undefined,
+    startDate: startDate?.toISOString(),
+    endDate: endDate?.toISOString(),
+    season: normalizedSeason(cohort?.season) || undefined
+  };
+}
+
+function hasSingleCohortDetails(cohort?: HistoricalCohortImportDetails) {
+  const details = normalizeCohortDetails(cohort);
+  return Boolean(details.cohortTitle || details.presenterName || details.startDate || details.season);
+}
+
+function isRegistrationStartRow(row: CsvRow, mapping: HistoricalImportMapping) {
+  return Boolean(
+    value(row, mapping, "organizationAddressLine1") ||
+      value(row, mapping, "organizationCity") ||
+      value(row, mapping, "organizationState") ||
+      value(row, mapping, "organizationZip") ||
+      value(row, mapping, "organizationPhone") ||
+      value(row, mapping, "participantCount") ||
+      value(row, mapping, "totalAmount") ||
+      value(row, mapping, "paymentStatus") ||
+      value(row, mapping, "invoiceNumber")
+  );
+}
+
+function participantFromRow(row: CsvRow, mapping: HistoricalImportMapping) {
+  const email = value(row, mapping, "primaryContactEmail").toLowerCase();
+  const nameValue = value(row, mapping, "primaryContactName") || (email ? email.split("@")[0] : "");
+  const name = splitName(nameValue);
+
+  if (!email && !nameValue) {
+    return null;
+  }
+
+  return {
+    firstName: name.firstName,
+    lastName: name.lastName,
+    email,
+    ...(value(row, mapping, "primaryContactTitle") ? { title: value(row, mapping, "primaryContactTitle") } : {}),
+    ...(value(row, mapping, "primaryContactPhone") ? { phone: value(row, mapping, "primaryContactPhone") } : {})
+  };
+}
+
+function isParsedParticipant(value: ReturnType<typeof participantFromRow>): value is ParsedRosterParticipant {
+  return Boolean(value?.email);
+}
+
+function buildGroupedHistoricalRows(csvText: string, inputMapping: HistoricalImportMapping | undefined, cohort: HistoricalCohortImportDetails) {
+  const parsed = parseHistoricalCsv(csvText);
+  const suggestedMapping = suggestHistoricalImportMapping(parsed.headers);
+  const mapping = { ...suggestedMapping, ...(inputMapping ?? {}) };
+  const details = normalizeCohortDetails(cohort);
+  const groups: Array<{ start: CsvRow; rows: CsvRow[] }> = [];
+  let current: { start: CsvRow; rows: CsvRow[] } | null = null;
+
+  for (const row of parsed.rows) {
+    if (isRegistrationStartRow(row, mapping) || !current) {
+      current = { start: row, rows: [row] };
+      groups.push(current);
+    } else {
+      current.rows.push(row);
+    }
+  }
+
+  const rows = groups.map((group) => {
+    const startRow = group.start;
+    const participants = group.rows.map((row) => participantFromRow(row, mapping)).filter(isParsedParticipant);
+    const participantWarnings = participants
+      .map((participant, index) => !participant.title ? `Participant ${index + 1} is missing title.` : "")
+      .filter(Boolean);
+    const primary = participants[0] ?? participantFromRow(startRow, mapping);
+    const participantCount = parseIntValue(value(startRow, mapping, "participantCount")) || participants.length || 1;
+    const fallbackOrganizationName = [primary?.firstName, primary?.lastName].filter(Boolean).join(" ");
+    const organizationName = value(startRow, mapping, "organizationName") || fallbackOrganizationName;
+    const normalized: NormalizedHistoricalRow & { presenterId?: string } = {
+      cohortTitle: details.cohortTitle,
+      cohortShortName: details.cohortShortName,
+      presenterName: details.presenterName,
+      presenterEmail: details.presenterEmail,
+      presenterShortName: details.presenterShortName,
+      presenterId: details.presenterId,
+      startDate: details.startDate,
+      endDate: details.endDate,
+      season: details.season,
+      organizationName,
+      organizationAddressLine1: value(startRow, mapping, "organizationAddressLine1") || undefined,
+      organizationAddressLine2: value(startRow, mapping, "organizationAddressLine2") || undefined,
+      organizationCity: value(startRow, mapping, "organizationCity") || undefined,
+      organizationState: normalizeUsStateCode(value(startRow, mapping, "organizationState")) || value(startRow, mapping, "organizationState") || undefined,
+      organizationZip: value(startRow, mapping, "organizationZip") || undefined,
+      organizationPhone: value(startRow, mapping, "organizationPhone") || undefined,
+      primaryContactName: [primary?.firstName, primary?.lastName].filter(Boolean).join(" "),
+      primaryContactEmail: primary?.email?.toLowerCase() ?? "",
+      primaryContactPhone: primary?.phone || value(startRow, mapping, "primaryContactPhone") || undefined,
+      primaryContactTitle: primary?.title || value(startRow, mapping, "primaryContactTitle") || undefined,
+      participantCount,
+      participants,
+      totalAmount: parseMoney(value(startRow, mapping, "totalAmount")),
+      paymentStatus: parsePaymentStatus(value(startRow, mapping, "paymentStatus")),
+      paymentMethod: parsePaymentMethod(value(startRow, mapping, "paymentMethod") || value(startRow, mapping, "notes")),
+      invoiceNumber: value(startRow, mapping, "invoiceNumber") || undefined,
+      purchaseOrderNumber: value(startRow, mapping, "purchaseOrderNumber") || undefined,
+      source: value(startRow, mapping, "source") || undefined,
+      utmSource: value(startRow, mapping, "utmSource") || undefined,
+      utmCampaign: value(startRow, mapping, "utmCampaign") || undefined,
+      notes: value(startRow, mapping, "notes") || undefined,
+      sessionDates: parseSessionDates(value(startRow, mapping, "sessionDates"))
+    };
+    const errors = [
+      !normalized.cohortTitle && !normalized.cohortShortName ? "Cohort title or short name is required." : "",
+      !normalized.presenterName && !normalized.presenterId ? "Presenter is required." : "",
+      !normalized.startDate ? "Cohort start date is required." : "",
+      !normalized.organizationName ? "Organization is required." : "",
+      !normalized.primaryContactName ? "POC name is required." : "",
+      !normalized.primaryContactEmail ? "POC email is required." : "",
+      !normalized.participantCount ? "Participant count is required." : ""
+    ].filter(Boolean);
+    const warnings = [
+      ...participantWarnings,
+      !value(startRow, mapping, "organizationName") && fallbackOrganizationName ? "Organization was blank; using the POC name as the organization label." : "",
+      normalized.organizationState && !normalizeUsStateCode(normalized.organizationState) ? "State could not be normalized to a two-letter code." : "",
+      normalized.participantCount > 0 && normalized.participants.length > 0 && normalized.participants.length !== normalized.participantCount
+        ? `Participant count is ${normalized.participantCount}, but ${normalized.participants.length} participant rows were parsed.`
+        : ""
+    ].filter(Boolean);
+
+    return {
+      rowNumber: startRow.rowNumber,
+      raw: {
+        ...startRow.raw,
+        __groupedRows: group.rows.map((row) => row.rowNumber).join(", ")
+      },
+      normalized,
+      warnings,
+      errors
+    };
+  });
+  appendDuplicateWarnings(rows);
+
+  return {
+    headers: parsed.headers,
+    supportedFields: supportedFields
+      .filter((field) => !cohortDetailFields.has(field))
+      .map((field) => ({ field, label: fieldLabels[field] })),
+    suggestedMapping,
+    mapping,
+    rows,
+    summary: summarizeRows(rows),
+    mode: "single_cohort_grouped"
+  };
+}
+
+function appendDuplicateWarnings(rows: Array<{ rowNumber: number; normalized: NormalizedHistoricalRow; warnings: string[] }>) {
+  const seenRegistrationKeys = new Map<string, number>();
+
+  for (const row of rows) {
+    const duplicateKey = [
+      cohortImportKey(row.normalized),
+      row.normalized.primaryContactEmail || slugify(row.normalized.primaryContactName),
+      slugify(row.normalized.organizationName)
+    ].join("|");
+    const firstRowNumber = seenRegistrationKeys.get(duplicateKey);
+
+    if (firstRowNumber) {
+      row.warnings.push(`Possible duplicate of CSV row ${firstRowNumber}; import will still create this historical registration.`);
+    } else {
+      seenRegistrationKeys.set(duplicateKey, row.rowNumber);
+    }
+  }
+}
+
+export function normalizeHistoricalImportRows(csvText: string, inputMapping?: HistoricalImportMapping, cohort?: HistoricalCohortImportDetails) {
+  if (hasSingleCohortDetails(cohort)) {
+    return buildGroupedHistoricalRows(csvText, inputMapping, cohort!);
+  }
+
   const parsed = parseHistoricalCsv(csvText);
   const suggestedMapping = suggestHistoricalImportMapping(parsed.headers);
   const mapping = { ...suggestedMapping, ...(inputMapping ?? {}) };
@@ -344,6 +574,7 @@ export function normalizeHistoricalImportRows(csvText: string, inputMapping?: Hi
       cohortShortName: value(row, mapping, "cohortShortName") || undefined,
       presenterName: value(row, mapping, "presenterName"),
       presenterEmail: value(row, mapping, "presenterEmail") || undefined,
+      presenterShortName: undefined,
       startDate: startDate?.toISOString(),
       endDate: endDate?.toISOString(),
       season: value(row, mapping, "season") || undefined,
@@ -391,22 +622,7 @@ export function normalizeHistoricalImportRows(csvText: string, inputMapping?: Hi
 
     return { rowNumber: row.rowNumber, raw: row.raw, normalized, warnings, errors };
   });
-  const seenRegistrationKeys = new Map<string, number>();
-
-  for (const row of rows) {
-    const duplicateKey = [
-      cohortImportKey(row.normalized),
-      row.normalized.primaryContactEmail || slugify(row.normalized.primaryContactName),
-      slugify(row.normalized.organizationName)
-    ].join("|");
-    const firstRowNumber = seenRegistrationKeys.get(duplicateKey);
-
-    if (firstRowNumber) {
-      row.warnings.push(`Possible duplicate of CSV row ${firstRowNumber}; import will still create this historical registration.`);
-    } else {
-      seenRegistrationKeys.set(duplicateKey, row.rowNumber);
-    }
-  }
+  appendDuplicateWarnings(rows);
 
   return {
     headers: parsed.headers,
@@ -462,9 +678,22 @@ function presenterEmailFallback(name: string) {
 }
 
 async function findOrCreatePresenter(tx: Prisma.TransactionClient, row: NormalizedHistoricalRow) {
+  if (row.presenterId) {
+    const byId = await tx.presenter.findUnique({ where: { id: row.presenterId } });
+    if (byId) {
+      return row.presenterShortName && !byId.shortName
+        ? tx.presenter.update({ where: { id: byId.id }, data: { shortName: row.presenterShortName } })
+        : byId;
+    }
+  }
+
   if (row.presenterEmail) {
     const byEmail = await tx.presenter.findUnique({ where: { email: row.presenterEmail.toLowerCase() } });
-    if (byEmail) return byEmail;
+    if (byEmail) {
+      return row.presenterShortName && !byEmail.shortName
+        ? tx.presenter.update({ where: { id: byEmail.id }, data: { shortName: row.presenterShortName } })
+        : byEmail;
+    }
   }
 
   const name = splitName(row.presenterName);
@@ -474,13 +703,18 @@ async function findOrCreatePresenter(tx: Prisma.TransactionClient, row: Normaliz
       lastName: { equals: name.lastName, mode: "insensitive" }
     }
   });
-  if (byName) return byName;
+  if (byName) {
+    return row.presenterShortName && !byName.shortName
+      ? tx.presenter.update({ where: { id: byName.id }, data: { shortName: row.presenterShortName } })
+      : byName;
+  }
 
   return tx.presenter.create({
     data: {
       firstName: name.firstName,
       lastName: name.lastName,
       email: row.presenterEmail?.toLowerCase() || presenterEmailFallback(row.presenterName),
+      shortName: row.presenterShortName,
       active: false,
       notes: "Created by historical CSV import."
     }
@@ -587,8 +821,8 @@ async function findOrCreateOrganization(tx: Prisma.TransactionClient, row: Norma
   });
 }
 
-export async function previewHistoricalImport(input: { csvText: string; mapping?: HistoricalImportMapping }) {
-  return normalizeHistoricalImportRows(input.csvText, input.mapping);
+export async function previewHistoricalImport(input: { csvText: string; mapping?: HistoricalImportMapping; cohort?: HistoricalCohortImportDetails }) {
+  return normalizeHistoricalImportRows(input.csvText, input.mapping, input.cohort);
 }
 
 export async function listHistoricalImports() {
@@ -603,9 +837,10 @@ export async function importHistoricalCsv(input: {
   csvText: string;
   fileName: string;
   mapping?: HistoricalImportMapping;
+  cohort?: HistoricalCohortImportDetails;
   createdById?: string;
 }) {
-  const preview = normalizeHistoricalImportRows(input.csvText, input.mapping);
+  const preview = normalizeHistoricalImportRows(input.csvText, input.mapping, input.cohort);
   const importableRows = preview.rows.filter((row) => row.errors.length === 0);
 
   return prisma.$transaction(async (tx) => {

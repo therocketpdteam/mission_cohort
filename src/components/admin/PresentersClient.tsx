@@ -27,6 +27,7 @@ import {
 const presenterFields: FieldConfig[] = [
   { name: "firstName", label: "First name", required: true },
   { name: "lastName", label: "Last name", required: true },
+  { name: "shortName", label: "Short name", placeholder: "KM" },
   { name: "email", label: "Email", type: "email", required: true },
   { name: "organization", label: "Organization" },
   { name: "phone", label: "Phone" },
@@ -61,6 +62,7 @@ export function PresentersClient() {
 
   const columns: GridColDef[] = [
     { field: "name", headerName: "Name", flex: 1, minWidth: 180, valueGetter: (_value, row) => formatProperDisplay(`${row.firstName} ${row.lastName}`) },
+    { field: "shortName", headerName: "Short", width: 100 },
     { field: "email", headerName: "Email", flex: 1, minWidth: 220 },
     { field: "organization", headerName: "Organization", flex: 1, minWidth: 200, valueGetter: (_value, row) => formatProperDisplay(row.organization ?? "") },
     { field: "active", headerName: "Active", width: 120, renderCell: (params) => <StatusChip value={params.value} /> },

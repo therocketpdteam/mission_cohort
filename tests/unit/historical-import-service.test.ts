@@ -53,3 +53,34 @@ test("keeps invalid historical rows out of the importable preview", () => {
   assert.match(preview.rows[0].errors.join(" "), /Presenter/);
   assert.match(preview.rows[0].errors.join(" "), /POC name/);
 });
+
+test("groups single-cohort roster CSV rows into registrations with the first row as POC", () => {
+  const groupedCsv = [
+    "Key,District,Address,City,State,Zip,Primary contact,Name,,Email,Phone,Participants,Amount,Adtnl. team,Total,Status,# Participants,Add Participants,POC,Date,Invoice #,Notes",
+    ",Cesa 3,1300 Industrial Drive,Fennimore,WI,53809,X,Ellie Olson,,eolson@cesa3.org,(608) 379-2218,3,,,\"$2,385\",Paid,,,,3/25/2025,KM-244,Check no. 00062222",
+    ",Cesa 3,,,,,,Lisa Arneson,,larneson@cesa3.org,,,,,,,,,,,,",
+    ",Cesa 3,,,,,,Laura Veglahn,,lveglahn@cesa4.k12.wi.us,,,,,,,,,,,,",
+    ",St. George School,Po Box 153,Tenants Harbor,ME,4860,X,Jessica Mcgreevy,,j.mcgreevy@stgeorgemsu.org,(207) 372-6312,1,,,$795,Paid,,,,3/31/2025,KM-246,Check no. 010693"
+  ].join("\n");
+  const preview = normalizeHistoricalImportRows(groupedCsv, undefined, {
+    title: "Rethinking teacher supervision, coaching & evaluation",
+    presenterName: "Kim Marshall",
+    presenterShortName: "KM",
+    startDate: "2025-09-01",
+    endDate: "2025-12-01",
+    season: "Fall"
+  });
+
+  assert.equal("mode" in preview ? preview.mode : "", "single_cohort_grouped");
+  assert.equal(preview.summary.validRows, 2);
+  assert.equal(preview.rows[0].normalized.cohortShortName, "KM-Fall-2025");
+  assert.equal(preview.rows[0].normalized.organizationName, "Cesa 3");
+  assert.equal(preview.rows[0].normalized.primaryContactName, "Ellie Olson");
+  assert.equal(preview.rows[0].normalized.primaryContactEmail, "eolson@cesa3.org");
+  assert.equal(preview.rows[0].normalized.participants.length, 3);
+  assert.equal(preview.rows[0].normalized.participantCount, 3);
+  assert.equal(preview.rows[0].normalized.totalAmount, 2385);
+  assert.equal(preview.rows[0].normalized.paymentMethod, PaymentMethod.INVOICE);
+  assert.equal(preview.rows[1].normalized.organizationState, "ME");
+  assert.equal(preview.supportedFields.some((field) => field.field === "cohortTitle"), false);
+});

@@ -1332,23 +1332,29 @@ function HistoricalImportsPanel({
   batches,
   csvText,
   fileName,
+  presenters,
+  cohortDetails,
   mapping,
   preview,
   busy,
   onFile,
   onPreview,
   onImport,
+  onCohortChange,
   onMappingChange
 }: {
   batches: AdminRow[];
   csvText: string;
   fileName: string;
+  presenters: AdminRow[];
+  cohortDetails: AdminRow;
   mapping: Record<string, string>;
   preview: AdminRow | null;
   busy: boolean;
   onFile: (file: File | null) => void;
   onPreview: () => void;
   onImport: () => void;
+  onCohortChange: (field: string, value: unknown) => void;
   onMappingChange: (field: string, column: string) => void;
 }) {
   const headers = (preview?.headers ?? []) as string[];
@@ -1357,6 +1363,15 @@ function HistoricalImportsPanel({
   const summary = (preview?.summary ?? {}) as AdminRow;
   const cohortSummary = ((summary.cohorts ?? []) as AdminRow[]).slice(0, 6);
   const validRows = Number(summary.validRows ?? 0);
+  const selectedPresenter = presenters.find((presenter) => presenter.id === cohortDetails.presenterId);
+
+  function handlePresenterChange(presenterId: string) {
+    const presenter = presenters.find((row) => row.id === presenterId);
+    onCohortChange("presenterId", presenter?.id ?? "");
+    onCohortChange("presenterName", presenter ? `${presenter.firstName ?? ""} ${presenter.lastName ?? ""}`.trim() : "");
+    onCohortChange("presenterEmail", presenter?.email ?? "");
+    onCohortChange("presenterShortName", presenter?.shortName ?? "");
+  }
 
   return (
     <Stack spacing={2}>
@@ -1381,6 +1396,54 @@ function HistoricalImportsPanel({
           <Alert severity="info">
             Historical imports are data-only. They create closed cohort records for reporting, but never send emails, calendar invites, QuickBooks records, CRM tasks, or operations journeys.
           </Alert>
+          <Box sx={{ border: 1, borderColor: "divider", borderRadius: 1, p: 2, bgcolor: "var(--color-surface-container-lowest)" }}>
+            <Typography variant="h3">Cohort Attributes</Typography>
+            <Typography color="text.secondary" sx={{ mb: 1.5 }}>
+              Fill these once for this CSV. The importer groups CSV rows into registrations and uses the first person row in each organization group as the POC.
+            </Typography>
+            <Grid container spacing={1.25}>
+              <Grid size={{ xs: 12, md: 6 }}>
+                <TextField fullWidth size="small" label="Cohort title" value={cohortDetails.title ?? ""} onChange={(event) => onCohortChange("title", event.target.value)} />
+              </Grid>
+              <Grid size={{ xs: 12, md: 3 }}>
+                <TextField select fullWidth size="small" label="Presenter" value={cohortDetails.presenterId ?? ""} onChange={(event) => handlePresenterChange(event.target.value)}>
+                  <MenuItem value="">Create / type presenter below</MenuItem>
+                  {presenters.map((presenter) => (
+                    <MenuItem value={presenter.id} key={presenter.id}>
+                      {[formatProperDisplay(`${presenter.firstName ?? ""} ${presenter.lastName ?? ""}`), presenter.shortName].filter(Boolean).join(" · ")}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              </Grid>
+              <Grid size={{ xs: 12, md: 3 }}>
+                <TextField fullWidth size="small" label="TL short name" value={cohortDetails.presenterShortName ?? selectedPresenter?.shortName ?? ""} onChange={(event) => onCohortChange("presenterShortName", event.target.value.toUpperCase())} />
+              </Grid>
+              <Grid size={{ xs: 12, md: 4 }}>
+                <TextField fullWidth size="small" label="Presenter name" value={cohortDetails.presenterName ?? ""} onChange={(event) => onCohortChange("presenterName", event.target.value)} />
+              </Grid>
+              <Grid size={{ xs: 12, md: 4 }}>
+                <TextField fullWidth size="small" type="email" label="Presenter email" value={cohortDetails.presenterEmail ?? ""} onChange={(event) => onCohortChange("presenterEmail", event.target.value)} />
+              </Grid>
+              <Grid size={{ xs: 12, md: 4 }}>
+                <TextField fullWidth size="small" label="Cohort short name" value={cohortDetails.shortName ?? ""} onChange={(event) => onCohortChange("shortName", event.target.value)} helperText="Leave blank to generate from TL, season, and year." />
+              </Grid>
+              <Grid size={{ xs: 12, md: 3 }}>
+                <TextField select fullWidth size="small" label="Season" value={cohortDetails.season ?? ""} onChange={(event) => onCohortChange("season", event.target.value)}>
+                  <MenuItem value="">Choose season</MenuItem>
+                  {["Summer", "Fall", "Spring", "Winter"].map((season) => <MenuItem value={season} key={season}>{season}</MenuItem>)}
+                </TextField>
+              </Grid>
+              <Grid size={{ xs: 12, md: 3 }}>
+                <TextField fullWidth size="small" type="date" label="Start date" value={cohortDetails.startDate ?? ""} onChange={(event) => onCohortChange("startDate", event.target.value)} />
+              </Grid>
+              <Grid size={{ xs: 12, md: 3 }}>
+                <TextField fullWidth size="small" type="date" label="End date" value={cohortDetails.endDate ?? ""} onChange={(event) => onCohortChange("endDate", event.target.value)} />
+              </Grid>
+              <Grid size={{ xs: 12, md: 3 }}>
+                <InfoTile label="Generated short name" value={cohortDetails.shortName || [cohortDetails.presenterShortName || "TL", cohortDetails.season || "Season", cohortDetails.startDate ? new Date(String(cohortDetails.startDate)).getUTCFullYear() : "Year"].join("-")} />
+              </Grid>
+            </Grid>
+          </Box>
           <Grid container spacing={1.5}>
             <Grid size={{ xs: 12, md: 3 }}><InfoTile label="File" value={fileName || "No CSV selected"} /></Grid>
             <Grid size={{ xs: 6, md: 2 }}><InfoTile label="Rows" value={summary.totalRows ?? 0} /></Grid>
@@ -1622,6 +1685,7 @@ export function SettingsClient() {
   const [users, setUsers] = useState<AdminRow[]>([]);
   const [mappings, setMappings] = useState<AdminRow[]>([]);
   const [cohorts, setCohorts] = useState<AdminRow[]>([]);
+  const [presenters, setPresenters] = useState<AdminRow[]>([]);
   const [integrationStatus, setIntegrationStatus] = useState<AdminRow | null>(null);
   const [jotformSetup, setJotformSetup] = useState<AdminRow | null>(null);
   const [webhookEvents, setWebhookEvents] = useState<AdminRow[]>([]);
@@ -1631,6 +1695,7 @@ export function SettingsClient() {
   const [historicalFileName, setHistoricalFileName] = useState("");
   const [historicalPreview, setHistoricalPreview] = useState<AdminRow | null>(null);
   const [historicalMapping, setHistoricalMapping] = useState<Record<string, string>>({});
+  const [historicalCohortDetails, setHistoricalCohortDetails] = useState<AdminRow>({ season: "" });
   const [historicalImportBusy, setHistoricalImportBusy] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<AdminRow | null>(null);
@@ -1653,12 +1718,13 @@ export function SettingsClient() {
   const { notifySuccess, notifyError, snackbar } = useNotifier();
 
   async function load() {
-    const [healthData, systemHealthData, userRows, mappingRows, cohortRows, integrationRows, setupData, intakeData, historicalImportRows, appSettingsData] = await Promise.all([
+    const [healthData, systemHealthData, userRows, mappingRows, cohortRows, presenterRows, integrationRows, setupData, intakeData, historicalImportRows, appSettingsData] = await Promise.all([
       adminApi<AdminRow>("/api/health"),
       adminApi<AdminRow>("/api/system-health").catch(() => null),
       adminApi<AdminRow[]>("/api/users").catch(() => []),
       adminApi<AdminRow[]>("/api/jotform/mappings").catch(() => []),
       adminApi<AdminRow[]>("/api/cohorts").catch(() => []),
+      adminApi<AdminRow[]>("/api/presenters").catch(() => []),
       adminApi<AdminRow>("/api/integrations/status").catch(() => null),
       adminApi<AdminRow>("/api/integrations/setup").catch(() => null),
       adminApi<AdminRow>("/api/jotform/intake").catch(() => ({ setup: null, events: [] })),
@@ -1670,6 +1736,7 @@ export function SettingsClient() {
     setUsers(userRows);
     setMappings(mappingRows);
     setCohorts(cohortRows);
+    setPresenters(presenterRows);
     setIntegrationStatus(integrationRows);
     setIntegrationSetup(setupData);
     setHistoricalImports(historicalImportRows);
@@ -1815,6 +1882,10 @@ export function SettingsClient() {
       setHistoricalFileName(file.name);
       setHistoricalPreview(null);
       setHistoricalMapping({});
+      setHistoricalCohortDetails((current) => ({
+        ...current,
+        title: current.title || file.name.replace(/\.csv$/i, "").replace(/^[A-Z]{2,4}\s+(Spring|Summer|Fall|Winter)\s+\d{4}\s+-\s+/i, "").trim()
+      }));
       notifySuccess("Historical CSV loaded");
     } catch (error) {
       notifyError((error as Error).message);
@@ -1829,7 +1900,8 @@ export function SettingsClient() {
         body: {
           fileName: historicalFileName,
           csvText: historicalCsvText,
-          mapping: historicalMapping
+          mapping: historicalMapping,
+          cohort: historicalCohortDetails
         }
       });
       setHistoricalPreview(preview);
@@ -1849,6 +1921,14 @@ export function SettingsClient() {
     }));
   }
 
+  function updateHistoricalCohortDetails(field: string, value: unknown) {
+    setHistoricalCohortDetails((current) => ({
+      ...current,
+      [field]: value
+    }));
+    setHistoricalPreview(null);
+  }
+
   async function importHistoricalCsv() {
     setHistoricalImportBusy(true);
     try {
@@ -1857,7 +1937,8 @@ export function SettingsClient() {
         body: {
           fileName: historicalFileName || "historical-import.csv",
           csvText: historicalCsvText,
-          mapping: historicalMapping
+          mapping: historicalMapping,
+          cohort: historicalCohortDetails
         }
       });
       setHistoricalPreview((result.preview ?? historicalPreview) as AdminRow);
@@ -2606,12 +2687,15 @@ export function SettingsClient() {
           batches={historicalImports}
           csvText={historicalCsvText}
           fileName={historicalFileName}
+          presenters={presenters}
+          cohortDetails={historicalCohortDetails}
           mapping={historicalMapping}
           preview={historicalPreview}
           busy={historicalImportBusy}
           onFile={(file) => { void readHistoricalImportFile(file); }}
           onPreview={() => { void previewHistoricalCsv(); }}
           onImport={() => { void importHistoricalCsv(); }}
+          onCohortChange={updateHistoricalCohortDetails}
           onMappingChange={updateHistoricalMapping}
         />
       </TabPanel>

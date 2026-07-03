@@ -17,7 +17,8 @@ async function readImportBody(request: Request) {
     return {
       fileName: file.name,
       csvText: await file.text(),
-      mapping: typeof mappingValue === "string" && mappingValue ? JSON.parse(mappingValue) : undefined
+      mapping: typeof mappingValue === "string" && mappingValue ? JSON.parse(mappingValue) : undefined,
+      cohort: typeof form.get("cohort") === "string" && form.get("cohort") ? JSON.parse(String(form.get("cohort"))) : undefined
     };
   }
 
@@ -25,7 +26,8 @@ async function readImportBody(request: Request) {
   return {
     fileName: body.fileName,
     csvText: body.csvText,
-    mapping: body.mapping
+    mapping: body.mapping,
+    cohort: body.cohort
   };
 }
 
@@ -51,6 +53,7 @@ export async function POST(request: Request) {
       csvText: body.csvText,
       fileName: body.fileName || "historical-import.csv",
       mapping: body.mapping,
+      cohort: body.cohort,
       createdById: user.id
     }));
   } catch (error) {

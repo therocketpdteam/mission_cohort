@@ -1,0 +1,2 @@
+ALTER TABLE "Presenter" ADD COLUMN IF NOT EXISTS "shortName" TEXT;
+
