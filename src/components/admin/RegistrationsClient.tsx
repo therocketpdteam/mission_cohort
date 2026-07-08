@@ -6,11 +6,13 @@ import { CancelOutlined } from "@/components/ui/icons";
 import { CheckCircleOutline } from "@/components/ui/icons";
 import { DeleteOutline } from "@/components/ui/icons";
 import { EditOutlined } from "@/components/ui/icons";
+import { ExpandMoreOutlined } from "@/components/ui/icons";
 import {
   Alert,
   Autocomplete,
   Box,
   Button,
+  Collapse,
   Dialog,
   DialogActions,
   DialogContent,
@@ -146,6 +148,9 @@ export function RegistrationEditor({
   const [organization, setOrganization] = useState<AdminRow | null>(null);
   const [organizationSearch, setOrganizationSearch] = useState("");
   const [lastAutoTotal, setLastAutoTotal] = useState<number | null>(null);
+  const [financeRefsOpen, setFinanceRefsOpen] = useState(false);
+  const [attributionOpen, setAttributionOpen] = useState(false);
+  const [creatingOrganization, setCreatingOrganization] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -159,6 +164,8 @@ export function RegistrationEditor({
       setOrganization(organizations.find((item) => item.id === editing?.organizationId) ?? editing?.organization ?? null);
       setOrganizationSearch(editing?.organization?.name ?? "");
       setLastAutoTotal(registrationTotalForCohort(selectedCohort, nextValues.participantCount));
+      setFinanceRefsOpen(Boolean(editing?.quickBooksCustomerRef || editing?.quickBooksInvoiceRef || editing?.quickBooksRealmId));
+      setAttributionOpen(Boolean(editing?.utmSource || editing?.utmMedium || editing?.utmCampaign || editing?.utmContent || editing?.utmTerm || editing?.landingPageUrl || editing?.referrerUrl));
       setError(null);
     }
   }, [cohorts, defaultCohortId, editing, open, organizations]);
@@ -190,11 +197,20 @@ export function RegistrationEditor({
       return;
     }
 
-    const created = await adminApi<AdminRow>("/api/organizations", {
-      method: "POST",
-      body: { name: organizationSearch.trim(), type: "DISTRICT" }
-    });
-    setOrganization(created);
+    setCreatingOrganization(true);
+    setError(null);
+    try {
+      const created = await adminApi<AdminRow>("/api/organizations", {
+        method: "POST",
+        body: { name: organizationSearch.trim(), type: "DISTRICT" }
+      });
+      setOrganization(created);
+      setOrganizationSearch(created.name ?? organizationSearch.trim());
+    } catch (organizationError) {
+      setError((organizationError as Error).message);
+    } finally {
+      setCreatingOrganization(false);
+    }
   }
 
   async function save() {
@@ -213,6 +229,8 @@ export function RegistrationEditor({
           id: editing?.id,
           cohortId: cohort.id,
           organizationId: organization.id,
+          billingContactName: values.billingContactName || values.primaryContactName,
+          billingContactEmail: values.billingContactEmail || values.primaryContactEmail,
           deferNotifications: Boolean(editing && ["PUBLISHED", "ACTIVE"].includes(String(cohort.derivedStatus ?? cohort.status)))
         }
       });
@@ -248,13 +266,27 @@ export function RegistrationEditor({
                 options={organizations}
                 value={organization}
                 inputValue={organizationSearch}
-                onInputChange={(_event, value) => setOrganizationSearch(value)}
+                onInputChange={(_event, value) => {
+                  setOrganizationSearch(value);
+                  if (organization && value !== (organization.name ?? "")) {
+                    setOrganization(null);
+                  }
+                }}
                 onChange={(_event, value) => setOrganization(value)}
                 getOptionLabel={(option) => option.name ?? ""}
-                renderInput={(params) => <TextField {...params} label="Organization" required />}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Organization"
+                    required
+                    helperText="Select an existing organization or type a new name and create it."
+                  />
+                )}
               />
               {!organization && organizationSearch.trim() && (
-                <Button startIcon={<AddIcon />} onClick={createOrganizationInline}>Create</Button>
+                <Button type="button" startIcon={<AddIcon />} onClick={createOrganizationInline} disabled={creatingOrganization}>
+                  {creatingOrganization ? "Creating" : "Create"}
+                </Button>
               )}
             </Stack>
           </Grid>
@@ -271,10 +303,25 @@ export function RegistrationEditor({
             <TextField fullWidth label="Primary contact title" value={values.primaryContactTitle ?? ""} onChange={(event) => setValue("primaryContactTitle", event.target.value)} />
           </Grid>
           <Grid size={{ xs: 12, md: 4 }}>
-            <TextField fullWidth label="Billing contact name" value={values.billingContactName ?? ""} onChange={(event) => setValue("billingContactName", event.target.value)} />
+            <TextField
+              fullWidth
+              label="Billing contact name"
+              value={values.billingContactName ?? ""}
+              onChange={(event) => setValue("billingContactName", event.target.value)}
+              placeholder={values.primaryContactName ?? ""}
+              helperText="Defaults to the primary contact."
+            />
           </Grid>
           <Grid size={{ xs: 12, md: 4 }}>
-            <TextField fullWidth label="Billing contact email" type="email" value={values.billingContactEmail ?? ""} onChange={(event) => setValue("billingContactEmail", event.target.value)} />
+            <TextField
+              fullWidth
+              label="Billing contact email"
+              type="email"
+              value={values.billingContactEmail ?? ""}
+              onChange={(event) => setValue("billingContactEmail", event.target.value)}
+              placeholder={values.primaryContactEmail ?? ""}
+              helperText="Defaults to the primary contact email."
+            />
           </Grid>
           <Grid size={{ xs: 12, md: 3 }}>
             <TextField fullWidth label="Participant count" type="number" value={values.participantCount ?? 0} onChange={(event) => setValue("participantCount", Number(event.target.value))} />
@@ -307,41 +354,60 @@ export function RegistrationEditor({
                 : "No cohort price is configured yet; enter the total manually."}
             />
           </Grid>
-          <Grid size={{ xs: 12, md: 6 }}>
-            <TextField fullWidth label="QuickBooks customer ref" value={values.quickBooksCustomerRef ?? ""} onChange={(event) => setValue("quickBooksCustomerRef", event.target.value)} />
-          </Grid>
-          <Grid size={{ xs: 12, md: 6 }}>
-            <TextField fullWidth label="QuickBooks invoice ref" value={values.quickBooksInvoiceRef ?? ""} onChange={(event) => setValue("quickBooksInvoiceRef", event.target.value)} />
-          </Grid>
-          <Grid size={{ xs: 12, md: 6 }}>
-            <TextField fullWidth label="QuickBooks realm ID" value={values.quickBooksRealmId ?? ""} onChange={(event) => setValue("quickBooksRealmId", event.target.value)} />
-          </Grid>
           <Grid size={{ xs: 12 }}>
             <div className="registration-editor-subsection">
-              <div>
-                <Typography variant="subtitle2">Tracking</Typography>
-                <Typography variant="body2" color="text.secondary">UTM fields power source filters and reports. Leave blank when the link did not include them.</Typography>
-              </div>
-              <Grid container spacing={2}>
-                <Grid size={{ xs: 12, md: 4 }}>
-                  <TextField fullWidth label="UTM source" value={values.utmSource ?? ""} onChange={(event) => setValue("utmSource", event.target.value)} />
+              <Stack direction={{ xs: "column", md: "row" }} spacing={1} justifyContent="space-between" alignItems={{ xs: "stretch", md: "center" }}>
+                <div>
+                  <Typography variant="subtitle2">Advanced fields</Typography>
+                  <Typography variant="body2" color="text.secondary">Optional repair fields for finance sync and source attribution.</Typography>
+                </div>
+                <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
+                  <Button type="button" variant="outlined" size="small" endIcon={<ExpandMoreOutlined />} onClick={() => setFinanceRefsOpen((current) => !current)}>
+                    {financeRefsOpen ? "Hide QuickBooks refs" : "QuickBooks refs"}
+                  </Button>
+                  <Button type="button" variant="outlined" size="small" endIcon={<ExpandMoreOutlined />} onClick={() => setAttributionOpen((current) => !current)}>
+                    {attributionOpen ? "Hide attribution" : "Attribution"}
+                  </Button>
+                </Stack>
+              </Stack>
+              <Collapse in={financeRefsOpen}>
+                <Grid container spacing={2}>
+                  <Grid size={{ xs: 12, md: 4 }}>
+                    <TextField fullWidth label="QuickBooks customer ref" value={values.quickBooksCustomerRef ?? ""} onChange={(event) => setValue("quickBooksCustomerRef", event.target.value)} helperText="Usually set by QuickBooks invoice/project sync." />
+                  </Grid>
+                  <Grid size={{ xs: 12, md: 4 }}>
+                    <TextField fullWidth label="QuickBooks invoice ref" value={values.quickBooksInvoiceRef ?? ""} onChange={(event) => setValue("quickBooksInvoiceRef", event.target.value)} helperText="Usually filled after creating the invoice in QuickBooks." />
+                  </Grid>
+                  <Grid size={{ xs: 12, md: 4 }}>
+                    <TextField fullWidth label="QuickBooks realm ID" value={values.quickBooksRealmId ?? ""} onChange={(event) => setValue("quickBooksRealmId", event.target.value)} helperText="Usually inherited from the connected QuickBooks account." />
+                  </Grid>
                 </Grid>
-                <Grid size={{ xs: 12, md: 4 }}>
-                  <TextField fullWidth label="UTM medium" value={values.utmMedium ?? ""} onChange={(event) => setValue("utmMedium", event.target.value)} />
+              </Collapse>
+              <Collapse in={attributionOpen}>
+                <Grid container spacing={2}>
+                  <Grid size={{ xs: 12, md: 4 }}>
+                    <TextField fullWidth label="UTM source" value={values.utmSource ?? ""} onChange={(event) => setValue("utmSource", event.target.value)} />
+                  </Grid>
+                  <Grid size={{ xs: 12, md: 4 }}>
+                    <TextField fullWidth label="UTM medium" value={values.utmMedium ?? ""} onChange={(event) => setValue("utmMedium", event.target.value)} />
+                  </Grid>
+                  <Grid size={{ xs: 12, md: 4 }}>
+                    <TextField fullWidth label="UTM campaign" value={values.utmCampaign ?? ""} onChange={(event) => setValue("utmCampaign", event.target.value)} />
+                  </Grid>
+                  <Grid size={{ xs: 12, md: 4 }}>
+                    <TextField fullWidth label="UTM content" value={values.utmContent ?? ""} onChange={(event) => setValue("utmContent", event.target.value)} />
+                  </Grid>
+                  <Grid size={{ xs: 12, md: 4 }}>
+                    <TextField fullWidth label="UTM term" value={values.utmTerm ?? ""} onChange={(event) => setValue("utmTerm", event.target.value)} />
+                  </Grid>
+                  <Grid size={{ xs: 12, md: 4 }}>
+                    <TextField fullWidth label="Landing page URL" value={values.landingPageUrl ?? ""} onChange={(event) => setValue("landingPageUrl", event.target.value)} />
+                  </Grid>
+                  <Grid size={{ xs: 12 }}>
+                    <TextField fullWidth label="Referrer URL" value={values.referrerUrl ?? ""} onChange={(event) => setValue("referrerUrl", event.target.value)} />
+                  </Grid>
                 </Grid>
-                <Grid size={{ xs: 12, md: 4 }}>
-                  <TextField fullWidth label="UTM campaign" value={values.utmCampaign ?? ""} onChange={(event) => setValue("utmCampaign", event.target.value)} />
-                </Grid>
-                <Grid size={{ xs: 12, md: 4 }}>
-                  <TextField fullWidth label="UTM content" value={values.utmContent ?? ""} onChange={(event) => setValue("utmContent", event.target.value)} />
-                </Grid>
-                <Grid size={{ xs: 12, md: 4 }}>
-                  <TextField fullWidth label="UTM term" value={values.utmTerm ?? ""} onChange={(event) => setValue("utmTerm", event.target.value)} />
-                </Grid>
-                <Grid size={{ xs: 12, md: 4 }}>
-                  <TextField fullWidth label="Landing page URL" value={values.landingPageUrl ?? ""} onChange={(event) => setValue("landingPageUrl", event.target.value)} />
-                </Grid>
-              </Grid>
+              </Collapse>
             </div>
           </Grid>
           <Grid size={{ xs: 12 }}>
