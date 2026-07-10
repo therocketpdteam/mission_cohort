@@ -82,6 +82,8 @@ QUICKBOOKS_WEBHOOK_VERIFIER_TOKEN
 QUICKBOOKS_ENVIRONMENT
 CRM_WEBHOOK_URL
 CRM_WEBHOOK_SECRET
+CRM_REGISTRATION_WEBHOOK_URL
+CRM_REGISTRATION_WEBHOOK_SECRET
 MUX_TOKEN_ID
 MUX_TOKEN_SECRET
 MUX_WEBHOOK_SECRET
@@ -272,7 +274,11 @@ CRM outbound sync uses:
 ```bash
 CRM_WEBHOOK_URL
 CRM_WEBHOOK_SECRET
+CRM_REGISTRATION_WEBHOOK_URL
+CRM_REGISTRATION_WEBHOOK_SECRET
 ```
+
+`CRM_REGISTRATION_WEBHOOK_URL` posts exact cohort registrations to the RocketPD CRM. It uses `Authorization: Bearer <CRM_REGISTRATION_WEBHOOK_SECRET>` and can be manually tested with `pnpm crm:sync-registration <registrationId> --dry-run` before sending to staging.
 
 Mux video resource metadata uses:
 
@@ -569,7 +575,7 @@ Errors use:
 ## Security Notes
 
 - `.env` files are ignored by git.
-- `SUPABASE_SERVICE_ROLE_KEY`, `SENDGRID_API_KEY`, `QUICKBOOKS_CLIENT_SECRET`, `CRM_WEBHOOK_SECRET`, `MUX_TOKEN_SECRET`, `INTEGRATION_ENCRYPTION_KEY`, `WEBHOOK_SECRET`, `CRON_SECRET`, and webhook verifier secrets are server-only values and must not be exposed in browser code.
+- `SUPABASE_SERVICE_ROLE_KEY`, `SENDGRID_API_KEY`, `QUICKBOOKS_CLIENT_SECRET`, `CRM_WEBHOOK_SECRET`, `CRM_REGISTRATION_WEBHOOK_SECRET`, `MUX_TOKEN_SECRET`, `INTEGRATION_ENCRYPTION_KEY`, `WEBHOOK_SECRET`, `CRON_SECRET`, and webhook verifier secrets are server-only values and must not be exposed in browser code.
 - Public browser code only references `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
 - Webhook secret validation is enforced when `WEBHOOK_SECRET` is configured.
 - Scheduled job secret validation is enforced when `CRON_SECRET` is configured.

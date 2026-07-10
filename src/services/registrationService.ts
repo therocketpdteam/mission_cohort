@@ -6,6 +6,7 @@ import { registrationCreateSchema, registrationUpdateSchema } from "@/validators
 import { logAuditEventAsync } from "./auditService";
 import { createDefaultRegistrationOperationsTasks } from "./operationsTaskService";
 import { queueParticipantCrmSync, queueRegistrationCrmSync } from "./crmSyncService";
+import { syncRegistrationToCrmWebhook } from "./crmRegistrationWebhookService";
 import { voidRegistrationQuickBooksInvoice } from "./quickBooksService";
 import { cancelRegistrationJourneys, planRegistrationJourneys } from "./registrationJourneyService";
 import { syncRegistrationParticipantListStatus } from "./participantService";
@@ -80,6 +81,9 @@ export async function createRegistration(input: z.input<typeof registrationCreat
     hasSupportingDocs: Boolean(registration.w9Url || registration.invoiceUrl || registration.confirmationDocsSentAt)
   });
   void queueRegistrationCrmSync(registration.id, "registration.created").catch(() => undefined);
+  void syncRegistrationToCrmWebhook(registration.id, "registration.created").catch((error) => {
+    console.error("CRM registration webhook scheduling failed", { registrationId: registration.id, error: error instanceof Error ? error.message : "Unknown error" });
+  });
   const journey = await planRegistrationJourneys(registration.id);
   return { ...registration, participantListStatus: roster?.status ?? registration.participantListStatus, journey };
 }
@@ -101,6 +105,9 @@ export async function updateRegistration(
   );
   const roster = await syncRegistrationParticipantListStatus(registration.id);
   void queueRegistrationCrmSync(registration.id, "registration.updated").catch(() => undefined);
+  void syncRegistrationToCrmWebhook(registration.id, "registration.updated").catch((error) => {
+    console.error("CRM registration webhook scheduling failed", { registrationId: registration.id, error: error instanceof Error ? error.message : "Unknown error" });
+  });
   if (options.deferNotifications) {
     const cohort = await prisma.cohort.findUniqueOrThrow({ where: { id: registration.cohortId }, select: { status: true } });
     if (shouldDeferRegistrationDelivery(cohort.status)) {
@@ -295,6 +302,9 @@ export async function bulkUpdateRegistrations(input: {
 
   for (const id of ids) {
     void queueRegistrationCrmSync(id, "registration.bulk_updated").catch(() => undefined);
+    void syncRegistrationToCrmWebhook(id, "registration.bulk_updated").catch((error) => {
+      console.error("CRM registration webhook scheduling failed", { registrationId: id, error: error instanceof Error ? error.message : "Unknown error" });
+    });
     if (input.action === "cancel" || input.action === "archive") {
       await cancelRegistrationJourneys(id, input.action === "cancel" ? "Registration cancelled." : "Registration archived.");
     } else if (input.action === "restore") {
