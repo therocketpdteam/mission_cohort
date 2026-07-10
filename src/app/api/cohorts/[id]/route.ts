@@ -1,5 +1,6 @@
 import { fail, handleApiError, ok } from "@/lib/api";
 import { getCohortById, publishCohort, updateCohort } from "@/services/cohortService";
+import { syncCohortTotalsToCrm } from "@/services/crmRegistrationWebhookService";
 import { ensureCohortQuickBooksProject, reconcileCohortQuickBooksProject, syncQuickBooksInvoice } from "@/services/quickBooksService";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -33,6 +34,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       const project = await reconcileCohortQuickBooksProject(id);
       const invoices = await Promise.all((body.invoiceIds ?? []).map((invoiceId: string) => syncQuickBooksInvoice(invoiceId)));
       return ok({ project, invoices });
+    }
+
+    if (body.action === "syncCrm") {
+      return ok(await syncCohortTotalsToCrm(id, "manual.cohort_sync"), { status: 202 });
     }
 
     return ok(await updateCohort(id, body));

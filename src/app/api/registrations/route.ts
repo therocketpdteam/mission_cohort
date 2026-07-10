@@ -12,6 +12,7 @@ import {
   updateRegistration
 } from "@/services/registrationService";
 import { applyRegistrationChanges } from "@/services/registrationChangeService";
+import { syncRegistrationToCrm } from "@/services/crmRegistrationWebhookService";
 
 export async function GET(request: Request) {
   try {
@@ -67,6 +68,10 @@ export async function PATCH(request: Request) {
 
     if (body.action === "applyChanges") {
       return ok(await applyRegistrationChanges(body.id));
+    }
+
+    if (body.action === "syncCrm") {
+      return ok(await syncRegistrationToCrm(body.id, { eventType: "manual.registration_sync" }), { status: 202 });
     }
 
     return ok(await updateRegistration(body.id, body, { deferNotifications: true }));

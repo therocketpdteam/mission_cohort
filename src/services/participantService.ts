@@ -5,6 +5,7 @@ import { countParticipantsMissingTitles, deriveParticipantListStatus } from "@/l
 import { participantCreateSchema, participantUpdateSchema } from "@/validators/participant";
 import { logAuditEventAsync } from "./auditService";
 import { queueParticipantCrmSync } from "./crmSyncService";
+import { syncRegistrationToCrm, syncRemovedParticipantToCrm } from "./crmRegistrationWebhookService";
 import { getRecipientCommunicationSummary } from "./communicationService";
 import { cancelParticipantJourneys, planRegistrationJourneys } from "./registrationJourneyService";
 import { shouldDeferRegistrationDelivery, stageParticipantAddition, stageParticipantRemoval } from "./registrationChangeService";
@@ -100,6 +101,9 @@ export async function addParticipant(input: z.input<typeof participantCreateSche
   });
   await syncRegistrationParticipantListStatus(participant.registrationId);
   void queueParticipantCrmSync(participant.id, "participant.created").catch(() => undefined);
+  void syncRegistrationToCrm(participant.registrationId, { eventType: "participant.created" }).catch((error) => {
+    console.error("CRM Mission Cohort webhook scheduling failed", { registrationId: participant.registrationId, error: error instanceof Error ? error.message : "Unknown error" });
+  });
   const registration = await prisma.registration.findUniqueOrThrow({ where: { id: participant.registrationId }, include: { cohort: true } });
   if (options.deferNotifications && shouldDeferRegistrationDelivery(registration.cohort.status)) {
     await stageParticipantAddition(participant.registrationId, participantChangeRow(participant));
@@ -115,6 +119,9 @@ export async function updateParticipant(id: string, input: z.input<typeof partic
   const participant = await prisma.participant.update({ where: { id }, data });
   await syncRegistrationParticipantListStatus(participant.registrationId);
   void queueParticipantCrmSync(participant.id, "participant.updated").catch(() => undefined);
+  void syncRegistrationToCrm(participant.registrationId, { eventType: "participant.updated" }).catch((error) => {
+    console.error("CRM Mission Cohort webhook scheduling failed", { registrationId: participant.registrationId, error: error instanceof Error ? error.message : "Unknown error" });
+  });
   if (existing.email.toLowerCase() !== participant.email.toLowerCase() || participant.status !== ParticipantStatus.REGISTERED) {
     await cancelParticipantJourneys([participant.id], participant.status !== ParticipantStatus.REGISTERED ? "Participant is no longer registered." : "Participant email changed.");
   }
@@ -139,6 +146,9 @@ export async function removeParticipant(id: string, options: ParticipantMutation
   await cancelParticipantJourneys([id], "Participant removed from registration.");
   const participant = await prisma.participant.delete({ where: { id } });
   await syncRegistrationParticipantListStatus(participant.registrationId);
+  void syncRemovedParticipantToCrm({ ...existing, registrationId: existing.registrationId }).catch((error) => {
+    console.error("CRM Mission Cohort webhook scheduling failed", { registrationId: existing.registrationId, error: error instanceof Error ? error.message : "Unknown error" });
+  });
   if (options.deferNotifications && shouldDeferRegistrationDelivery(existing.registration.cohort.status)) {
     await stageParticipantRemoval(participant.registrationId, participantChangeRow(existing));
   }

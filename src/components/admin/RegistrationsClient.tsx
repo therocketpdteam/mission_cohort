@@ -446,6 +446,7 @@ function RegistrationDetailDialog({
   const [error, setError] = useState<string | null>(null);
   const [sendingTaskId, setSendingTaskId] = useState("");
   const [completingTaskId, setCompletingTaskId] = useState("");
+  const [syncingCrm, setSyncingCrm] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -574,6 +575,29 @@ function RegistrationDetailDialog({
     }
   }
 
+  async function syncCrm() {
+    if (!registration?.id) {
+      return;
+    }
+
+    setSyncingCrm(true);
+    setError(null);
+    try {
+      await adminApi("/api/registrations", {
+        method: "PATCH",
+        body: { id: registration.id, action: "syncCrm" }
+      });
+      onSuccess("Registration synced to CRM.");
+      await onChanged();
+    } catch (syncError) {
+      const message = (syncError as Error).message;
+      setError(message);
+      onError(message);
+    } finally {
+      setSyncingCrm(false);
+    }
+  }
+
   function revisionSummary(event: AdminRow) {
     const summary = event.normalizedSummary && typeof event.normalizedSummary === "object" ? event.normalizedSummary : {};
     const amount = Number(summary.totalAmount ?? 0);
@@ -680,6 +704,7 @@ function RegistrationDetailDialog({
       actions={
         registration ? (
           <>
+            <Button variant="outlined" onClick={syncCrm} disabled={syncingCrm}>{syncingCrm ? "Syncing CRM" : "Sync to CRM"}</Button>
             <Button variant="outlined" onClick={syncQuickBooks}>Sync QuickBooks</Button>
             <Button variant="outlined" color="warning" onClick={voidQuickBooksInvoice}>Void QB Invoice</Button>
             <Button onClick={onClose}>Done</Button>

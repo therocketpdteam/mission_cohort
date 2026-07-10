@@ -1557,6 +1557,16 @@ export function CohortDetailClient({ id }: { id: string }) {
     }
   }
 
+  async function syncCohortCrm() {
+    try {
+      await adminApi(`/api/cohorts/${id}`, { method: "PATCH", body: { action: "syncCrm" } });
+      notifySuccess("Cohort synced to CRM");
+      await load();
+    } catch (error) {
+      notifyError((error as Error).message);
+    }
+  }
+
   async function reconcileQuickBooksLinks() {
     try {
       const invoiceIds = Array.from(new Set(invoiceDrafts.map((invoice) => invoice.quickBooksInvoiceRef).filter(Boolean)));
@@ -2405,6 +2415,7 @@ export function CohortDetailClient({ id }: { id: string }) {
                 QuickBooks {cohort?.quickBooksProjectRef ? "project linked" : formatStatusLabel(cohort?.quickBooksSyncStatus ?? "NOT_SYNCED")}
               </span>
               <small>{financeHealth?.sendgridReady ? "Invoice and receipt send actions are enabled." : "PDFs can still be generated and opened; sending requires SENDGRID_API_KEY and SENDGRID_FROM_EMAIL."}</small>
+              <Button size="small" variant="outlined" onClick={() => void syncCohortCrm()}>Sync to CRM</Button>
               {!cohort?.quickBooksProjectRef && (
                 <Button size="small" variant="outlined" onClick={() => void syncQuickBooksProject()}>Link QuickBooks Project</Button>
               )}

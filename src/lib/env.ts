@@ -26,6 +26,8 @@ const envSchema = z.object({
   CRM_WEBHOOK_SECRET: optionalString,
   CRM_REGISTRATION_WEBHOOK_URL: optionalString,
   CRM_REGISTRATION_WEBHOOK_SECRET: optionalString,
+  CRM_MISSION_COHORT_WEBHOOK_URL: optionalString,
+  CRM_MISSION_COHORT_WEBHOOK_SECRET: optionalString,
   MUX_TOKEN_ID: optionalString,
   MUX_TOKEN_SECRET: optionalString,
   MUX_WEBHOOK_SECRET: optionalString,
@@ -63,7 +65,10 @@ export function getEnvPresence() {
     ),
     sendgridWebhookConfigured: Boolean(env.SENDGRID_WEBHOOK_PUBLIC_KEY),
     crmConfigured: Boolean(env.CRM_WEBHOOK_URL && env.CRM_WEBHOOK_SECRET),
-    crmRegistrationWebhookConfigured: Boolean(env.CRM_REGISTRATION_WEBHOOK_URL && env.CRM_REGISTRATION_WEBHOOK_SECRET),
+    crmRegistrationWebhookConfigured: Boolean(
+      (env.CRM_MISSION_COHORT_WEBHOOK_URL || env.CRM_REGISTRATION_WEBHOOK_URL) &&
+        (env.CRM_MISSION_COHORT_WEBHOOK_SECRET || env.CRM_REGISTRATION_WEBHOOK_SECRET)
+    ),
     muxConfigured: Boolean(env.MUX_TOKEN_ID && env.MUX_TOKEN_SECRET),
     authBootstrapConfigured: Boolean(env.AUTH_BOOTSTRAP_SECRET),
     webhookSecretConfigured: Boolean(env.WEBHOOK_SECRET),

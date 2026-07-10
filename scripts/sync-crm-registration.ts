@@ -33,12 +33,12 @@ function loadEnv() {
 
   const loaded = candidates.filter(loadEnvFile);
 
-  if (!process.env.CRM_REGISTRATION_WEBHOOK_URL) {
-    process.env.CRM_REGISTRATION_WEBHOOK_URL = STAGING_WEBHOOK_URL;
+  if (!process.env.CRM_MISSION_COHORT_WEBHOOK_URL && !process.env.CRM_REGISTRATION_WEBHOOK_URL) {
+    process.env.CRM_MISSION_COHORT_WEBHOOK_URL = STAGING_WEBHOOK_URL;
   }
 
-  if (!process.env.CRM_REGISTRATION_WEBHOOK_SECRET && process.env.MISSION_COHORT_WEBHOOK_SECRET) {
-    process.env.CRM_REGISTRATION_WEBHOOK_SECRET = process.env.MISSION_COHORT_WEBHOOK_SECRET;
+  if (!process.env.CRM_MISSION_COHORT_WEBHOOK_SECRET && !process.env.CRM_REGISTRATION_WEBHOOK_SECRET && process.env.MISSION_COHORT_WEBHOOK_SECRET) {
+    process.env.CRM_MISSION_COHORT_WEBHOOK_SECRET = process.env.MISSION_COHORT_WEBHOOK_SECRET;
   }
 
   return loaded;

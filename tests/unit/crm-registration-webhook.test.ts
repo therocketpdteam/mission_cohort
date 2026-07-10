@@ -3,6 +3,8 @@ import test from "node:test";
 import { AttendanceStatus, ParticipantStatus, RegistrationStatus } from "@prisma/client";
 import {
   buildCrmRegistrationWebhookPayload,
+  buildCrmRegistrationWebhookPayloads,
+  calculateCohortTotals,
   crmFriendlyCohortShortName,
   mapRegistrationToCrmStatus,
   type CrmRegistrationRecord
@@ -15,8 +17,11 @@ function registration(overrides: Partial<CrmRegistrationRecord> = {}): CrmRegist
     primaryContactEmail: "BRENT.JONS@WESTADA.ORG",
     primaryContactPhone: "208-555-1212",
     primaryContactTitle: "Teacher",
+    participantCount: 1,
+    totalAmount: 795,
     status: RegistrationStatus.CONFIRMED,
     createdAt: new Date("2026-07-10T15:00:00.000Z"),
+    updatedAt: new Date("2026-07-10T15:30:00.000Z"),
     archivedAt: null,
     cohort: {
       id: "cohort-456",
@@ -25,6 +30,7 @@ function registration(overrides: Partial<CrmRegistrationRecord> = {}): CrmRegist
       startDate: new Date("2026-07-28T00:00:00.000Z"),
       endDate: new Date("2026-08-30T00:00:00.000Z"),
       presenter: {
+        id: "presenter-789",
         firstName: "Peter",
         lastName: "Liljedahl",
         shortName: "PL"
@@ -43,13 +49,16 @@ test("builds the CRM registration webhook payload with cohort, participant, acco
   const payload = buildCrmRegistrationWebhookPayload(registration());
 
   assert.deepEqual(payload, {
+    organizationSlug: "rocketpd",
     missionCohortId: "cohort-456",
     missionParticipantId: "registration-123",
-    shortName: "PL Summer 2026",
     cohortName: "Building Thinking Classrooms",
+    shortName: "PL Summer 2026",
     startsAt: "2026-07-28T00:00:00.000Z",
     endsAt: "2026-08-30T00:00:00.000Z",
-    productName: "Cohorts",
+    productId: null,
+    productName: "Building Thinking Classrooms",
+    thoughtLeaderId: "presenter-789",
     thoughtLeaderName: "Peter Liljedahl",
     participant: {
       email: "brent.jons@westada.org",
@@ -62,7 +71,61 @@ test("builds the CRM registration webhook payload with cohort, participant, acco
     accountName: "West Ada School District",
     accountDomain: "westada.org",
     status: "registered",
-    registeredAt: "2026-07-10T15:00:00.000Z"
+    registeredAt: "2026-07-10T15:00:00.000Z",
+    occurredAt: "2026-07-10T15:30:00.000Z",
+    seatValue: 795,
+    totalCohortValue: 795,
+    activeRegistrantCount: 1,
+    withdrawnCount: 0
+  });
+});
+
+test("builds one CRM payload per saved participant with cohort totals", () => {
+  const row = registration({
+    participantCount: 2,
+    totalAmount: 1590,
+    participants: [
+      {
+        id: "participant-1",
+        firstName: "Brent",
+        lastName: "Jons",
+        email: "brent.jons@westada.org",
+        title: "Director",
+        phone: null,
+        status: ParticipantStatus.REGISTERED,
+        attendanceStatus: AttendanceStatus.UNKNOWN
+      },
+      {
+        id: "participant-2",
+        firstName: "Alex",
+        lastName: "Rivera",
+        email: "alex.rivera@westada.org",
+        title: "Teacher",
+        phone: null,
+        status: ParticipantStatus.REGISTERED,
+        attendanceStatus: AttendanceStatus.UNKNOWN
+      }
+    ]
+  });
+  const payloads = buildCrmRegistrationWebhookPayloads(row);
+
+  assert.equal(payloads.length, 2);
+  assert.deepEqual(payloads.map((payload) => payload.missionParticipantId), ["participant-1", "participant-2"]);
+  assert.equal(payloads[0]?.seatValue, 795);
+  assert.equal(payloads[0]?.totalCohortValue, 1590);
+  assert.equal(payloads[0]?.activeRegistrantCount, 2);
+});
+
+test("calculates active value, active count, and withdrawn count for cohort totals", () => {
+  const totals = calculateCohortTotals([
+    registration({ participantCount: 2, totalAmount: 1590 }),
+    registration({ participantCount: 1, totalAmount: 795, status: RegistrationStatus.CANCELLED })
+  ]);
+
+  assert.deepEqual(totals, {
+    totalCohortValue: 1590,
+    activeRegistrantCount: 2,
+    withdrawnCount: 1
   });
 });
 
@@ -74,6 +137,14 @@ test("maps registration and participant status changes to CRM membership statuse
   assert.equal(mapRegistrationToCrmStatus({ status: RegistrationStatus.CONFIRMED, archivedAt: null }), "registered");
   assert.equal(mapRegistrationToCrmStatus({ status: RegistrationStatus.CANCELLED, archivedAt: null }), "cancelled");
   assert.equal(mapRegistrationToCrmStatus({ status: RegistrationStatus.COMPLETED, archivedAt: null }), "completed");
+  assert.equal(mapRegistrationToCrmStatus({ status: RegistrationStatus.CONFIRMED, archivedAt: new Date("2026-07-12T18:00:00.000Z") }), "withdrawn");
+  assert.equal(
+    mapRegistrationToCrmStatus(
+      { status: RegistrationStatus.CONFIRMED, archivedAt: null },
+      { status: ParticipantStatus.REGISTERED, attendanceStatus: AttendanceStatus.ABSENT }
+    ),
+    "no_show"
+  );
   assert.equal(
     mapRegistrationToCrmStatus(
       { status: RegistrationStatus.CONFIRMED, archivedAt: null },

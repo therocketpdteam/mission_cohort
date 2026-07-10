@@ -9,6 +9,7 @@ import { prepareCohortCalendarInvites } from "./calendarService";
 import { getCohortReadiness, withCohortLifecycle } from "./cohortLifecycle";
 import { activateCohortRegistrationJourneys } from "./registrationJourneyService";
 import { syncCohortQuickBooksProjectAfterCreate } from "./quickBooksService";
+import { syncCohortTotalsToCrm } from "./crmRegistrationWebhookService";
 
 const nestedSessionCreateSchema = z.object({
   title: z.string().min(1),
@@ -100,6 +101,9 @@ export async function updateCohort(id: string, input: z.input<typeof cohortUpdat
     action: "UPDATED",
     description: "Cohort updated",
     metadata: { title: cohort.title, status: cohort.status }
+  });
+  void syncCohortTotalsToCrm(cohort.id, "cohort.updated").catch((error) => {
+    console.error("CRM Mission Cohort cohort sync scheduling failed", { cohortId: cohort.id, error: error instanceof Error ? error.message : "Unknown error" });
   });
   return cohort;
 }
