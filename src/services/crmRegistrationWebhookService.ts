@@ -1,4 +1,4 @@
-import { AttendanceStatus, CrmSyncEventStatus, ParticipantStatus, Prisma, RegistrationStatus } from "@prisma/client";
+import { AttendanceStatus, CrmSyncEventStatus, ParticipantStatus, PaymentStatus, Prisma, RegistrationStatus } from "@prisma/client";
 import { env } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
 
@@ -18,6 +18,7 @@ export type CrmRegistrationStatus =
 export type CrmRegistrationWebhookPayload = {
   organizationSlug: "rocketpd";
   missionCohortId: string;
+  missionRegistrationId: string;
   missionParticipantId: string;
   cohortName: string;
   shortName: string;
@@ -37,13 +38,21 @@ export type CrmRegistrationWebhookPayload = {
   };
   accountName?: string | null;
   accountDomain?: string | null;
+  paidOrganizationName?: string | null;
+  paidOrganizationDomain?: string | null;
   status: CrmRegistrationStatus;
+  registrationPaymentStatus?: string | null;
+  registrationNotes?: string | null;
   registeredAt: string;
   occurredAt: string;
   withdrawnAt?: string;
   cancelledAt?: string;
   seatValue: number;
+  collectedValue: number;
+  registrationTotalValue: number;
+  registrationCollectedValue: number;
   totalCohortValue: number;
+  collectedCohortValue: number;
   activeRegistrantCount: number;
   withdrawnCount: number;
 };
@@ -56,6 +65,8 @@ export type CrmRegistrationRecord = {
   primaryContactTitle?: string | null;
   participantCount: number;
   totalAmount: Prisma.Decimal | number | string;
+  paymentStatus?: PaymentStatus | string | null;
+  notes?: string | null;
   status: RegistrationStatus;
   createdAt: Date;
   updatedAt: Date;
@@ -78,6 +89,8 @@ export type CrmRegistrationRecord = {
     website?: string | null;
   };
   participants?: CrmParticipantRecord[];
+  paymentRecords?: CrmPaymentRecord[];
+  invoiceDrafts?: CrmInvoiceDraftRecord[];
 };
 
 export type CrmParticipantRecord = {
@@ -91,12 +104,25 @@ export type CrmParticipantRecord = {
   attendanceStatus: AttendanceStatus;
 };
 
+export type CrmPaymentRecord = {
+  amount: Prisma.Decimal | number | string;
+  status: PaymentStatus | string;
+};
+
+export type CrmInvoiceDraftRecord = {
+  paidAmount?: Prisma.Decimal | number | string | null;
+  status?: string | null;
+};
+
 type CohortTotalsRegistration = {
   status: RegistrationStatus;
+  paymentStatus?: PaymentStatus | string | null;
   participantCount: number;
   totalAmount: Prisma.Decimal | number | string;
   archivedAt?: Date | null;
   participants?: Array<Pick<CrmParticipantRecord, "status">>;
+  paymentRecords?: CrmPaymentRecord[];
+  invoiceDrafts?: CrmInvoiceDraftRecord[];
 };
 
 type CrmRegistrationWebhookConfig = {
@@ -213,17 +239,46 @@ function withdrawnSeatCount(registration: CohortTotalsRegistration) {
   return 0;
 }
 
+function isPaidPaymentStatus(value?: PaymentStatus | string | null) {
+  return String(value ?? "").toUpperCase() === PaymentStatus.PAID;
+}
+
+function isCollectedPaymentRecord(value?: PaymentStatus | string | null) {
+  const normalized = String(value ?? "").toUpperCase();
+  return normalized === PaymentStatus.PAID || normalized === PaymentStatus.PARTIALLY_PAID;
+}
+
+function collectedAmount(registration: CohortTotalsRegistration) {
+  if (activeSeatCount(registration) === 0) {
+    return 0;
+  }
+
+  const paidFromRecords = (registration.paymentRecords ?? [])
+    .filter((payment) => isCollectedPaymentRecord(payment.status))
+    .reduce((sum, payment) => sum + moneyNumber(payment.amount), 0);
+  const paidFromInvoices = (registration.invoiceDrafts ?? [])
+    .reduce((sum, invoice) => sum + moneyNumber(invoice.paidAmount), 0);
+  const explicitPaid = Math.max(paidFromRecords, paidFromInvoices);
+
+  if (explicitPaid > 0) {
+    return explicitPaid;
+  }
+
+  return isPaidPaymentStatus(registration.paymentStatus) ? moneyNumber(registration.totalAmount) : 0;
+}
+
 export function calculateCohortTotals(registrations: CohortTotalsRegistration[]) {
   return registrations.reduce(
     (totals, registration) => {
       const activeSeats = activeSeatCount(registration);
       return {
         totalCohortValue: totals.totalCohortValue + (activeSeats > 0 ? moneyNumber(registration.totalAmount) : 0),
+        collectedCohortValue: totals.collectedCohortValue + collectedAmount(registration),
         activeRegistrantCount: totals.activeRegistrantCount + activeSeats,
         withdrawnCount: totals.withdrawnCount + withdrawnSeatCount(registration)
       };
     },
-    { totalCohortValue: 0, activeRegistrantCount: 0, withdrawnCount: 0 }
+    { totalCohortValue: 0, collectedCohortValue: 0, activeRegistrantCount: 0, withdrawnCount: 0 }
   );
 }
 
@@ -281,6 +336,11 @@ function seatValue(registration: CrmRegistrationRecord) {
   return moneyNumber(registration.totalAmount) / seats;
 }
 
+function collectedSeatValue(registration: CrmRegistrationRecord) {
+  const seats = Math.max(1, Number(registration.participantCount ?? 0), registration.participants?.length ?? 0);
+  return collectedAmount(registration) / seats;
+}
+
 export function buildCrmRegistrationWebhookPayloads(
   registration: CrmRegistrationRecord,
   totals = calculateCohortTotals([registration]),
@@ -298,6 +358,7 @@ export function buildCrmRegistrationWebhookPayloads(
     return {
       organizationSlug: "rocketpd",
       missionCohortId: registration.cohort.id,
+      missionRegistrationId: registration.id,
       missionParticipantId: participant.id,
       cohortName: registration.cohort.title,
       shortName,
@@ -317,14 +378,22 @@ export function buildCrmRegistrationWebhookPayloads(
       },
       accountName: registration.organization.name,
       accountDomain: domainFromUrl(registration.organization.website) ?? domainFromEmail(email),
+      paidOrganizationName: registration.organization.name,
+      paidOrganizationDomain: domainFromUrl(registration.organization.website) ?? domainFromEmail(email),
       status,
+      registrationPaymentStatus: registration.paymentStatus ?? null,
+      registrationNotes: registration.notes ?? null,
       registeredAt: isoDate(registration.createdAt),
       occurredAt,
       ...(status === "withdrawn" ? { withdrawnAt: isoDate(registration.archivedAt ?? registration.updatedAt) } : {}),
       ...(status === "cancelled" ? { cancelledAt: occurredAt } : {}),
       ...(baseStatus === "withdrawn" && status !== "withdrawn" ? { withdrawnAt: isoDate(registration.archivedAt ?? registration.updatedAt) } : {}),
       seatValue: seatValue(registration),
+      collectedValue: collectedSeatValue(registration),
+      registrationTotalValue: moneyNumber(registration.totalAmount),
+      registrationCollectedValue: collectedAmount(registration),
       totalCohortValue: totals.totalCohortValue,
+      collectedCohortValue: totals.collectedCohortValue,
       activeRegistrantCount: totals.activeRegistrantCount,
       withdrawnCount: totals.withdrawnCount
     };
@@ -463,7 +532,7 @@ export async function postCrmRegistrationWebhookPayload(
 async function cohortRegistrations(cohortId: string) {
   return prisma.registration.findMany({
     where: { cohortId },
-    include: { participants: true }
+    include: { participants: true, paymentRecords: true, invoiceDrafts: true }
   });
 }
 
@@ -473,7 +542,9 @@ async function registrationForCrm(registrationId: string) {
     include: {
       cohort: { include: { presenter: true } },
       organization: true,
-      participants: true
+      participants: true,
+      paymentRecords: true,
+      invoiceDrafts: true
     }
   });
 }
@@ -530,7 +601,9 @@ export async function syncCohortTotalsToCrm(cohortId: string, eventType = "cohor
     include: {
       cohort: { include: { presenter: true } },
       organization: true,
-      participants: true
+      participants: true,
+      paymentRecords: true,
+      invoiceDrafts: true
     },
     orderBy: { createdAt: "asc" }
   });

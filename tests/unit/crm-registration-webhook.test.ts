@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { AttendanceStatus, ParticipantStatus, RegistrationStatus } from "@prisma/client";
+import { AttendanceStatus, ParticipantStatus, PaymentStatus, RegistrationStatus } from "@prisma/client";
 import {
   buildCrmRegistrationWebhookPayload,
   buildCrmRegistrationWebhookPayloads,
@@ -20,6 +20,8 @@ function registration(overrides: Partial<CrmRegistrationRecord> = {}): CrmRegist
     primaryContactTitle: "Teacher",
     participantCount: 1,
     totalAmount: 795,
+    paymentStatus: PaymentStatus.PENDING,
+    notes: null,
     status: RegistrationStatus.CONFIRMED,
     createdAt: new Date("2026-07-10T15:00:00.000Z"),
     updatedAt: new Date("2026-07-10T15:30:00.000Z"),
@@ -42,6 +44,8 @@ function registration(overrides: Partial<CrmRegistrationRecord> = {}): CrmRegist
       website: "https://www.westada.org"
     },
     participants: [],
+    paymentRecords: [],
+    invoiceDrafts: [],
     ...overrides
   };
 }
@@ -52,6 +56,7 @@ test("builds the CRM registration webhook payload with cohort, participant, acco
   assert.deepEqual(payload, {
     organizationSlug: "rocketpd",
     missionCohortId: "cohort-456",
+    missionRegistrationId: "registration-123",
     missionParticipantId: "registration-123",
     cohortName: "Building Thinking Classrooms",
     shortName: "PL Summer 2026",
@@ -71,11 +76,19 @@ test("builds the CRM registration webhook payload with cohort, participant, acco
     },
     accountName: "West Ada School District",
     accountDomain: "westada.org",
+    paidOrganizationName: "West Ada School District",
+    paidOrganizationDomain: "westada.org",
     status: "registered",
+    registrationPaymentStatus: PaymentStatus.PENDING,
+    registrationNotes: null,
     registeredAt: "2026-07-10T15:00:00.000Z",
     occurredAt: "2026-07-10T15:30:00.000Z",
     seatValue: 795,
+    collectedValue: 0,
+    registrationTotalValue: 795,
+    registrationCollectedValue: 0,
     totalCohortValue: 795,
+    collectedCohortValue: 0,
     activeRegistrantCount: 1,
     withdrawnCount: 0
   });
@@ -113,21 +126,80 @@ test("builds one CRM payload per saved participant with cohort totals", () => {
   assert.equal(payloads.length, 2);
   assert.deepEqual(payloads.map((payload) => payload.missionParticipantId), ["participant-1", "participant-2"]);
   assert.equal(payloads[0]?.seatValue, 795);
+  assert.equal(payloads[0]?.collectedValue, 0);
   assert.equal(payloads[0]?.totalCohortValue, 1590);
+  assert.equal(payloads[0]?.collectedCohortValue, 0);
   assert.equal(payloads[0]?.activeRegistrantCount, 2);
 });
 
-test("calculates active value, active count, and withdrawn count for cohort totals", () => {
+test("calculates active value, collected value, active count, and withdrawn count for cohort totals", () => {
   const totals = calculateCohortTotals([
-    registration({ participantCount: 2, totalAmount: 1590 }),
+    registration({
+      participantCount: 2,
+      totalAmount: 1590,
+      paymentRecords: [{ amount: 795, status: PaymentStatus.PARTIALLY_PAID }]
+    }),
+    registration({ participantCount: 1, totalAmount: 795, paymentStatus: PaymentStatus.PAID }),
     registration({ participantCount: 1, totalAmount: 795, status: RegistrationStatus.CANCELLED })
   ]);
 
   assert.deepEqual(totals, {
-    totalCohortValue: 1590,
-    activeRegistrantCount: 2,
+    totalCohortValue: 2385,
+    collectedCohortValue: 1590,
+    activeRegistrantCount: 3,
     withdrawnCount: 1
   });
+});
+
+test("sends collected cohort and per-seat collected values in CRM payloads", () => {
+  const row = registration({
+    participantCount: 2,
+    totalAmount: 1590,
+    paymentRecords: [{ amount: 795, status: PaymentStatus.PARTIALLY_PAID }],
+    participants: [
+      {
+        id: "participant-1",
+        firstName: "Brent",
+        lastName: "Jons",
+        email: "brent.jons@westada.org",
+        title: "Director",
+        phone: null,
+        status: ParticipantStatus.REGISTERED,
+        attendanceStatus: AttendanceStatus.UNKNOWN
+      },
+      {
+        id: "participant-2",
+        firstName: "Alex",
+        lastName: "Rivera",
+        email: "alex.rivera@westada.org",
+        title: "Teacher",
+        phone: null,
+        status: ParticipantStatus.REGISTERED,
+        attendanceStatus: AttendanceStatus.UNKNOWN
+      }
+    ]
+  });
+  const totals = calculateCohortTotals([row]);
+  const payloads = buildCrmRegistrationWebhookPayloads(row, totals);
+
+  assert.equal(totals.totalCohortValue, 1590);
+  assert.equal(totals.collectedCohortValue, 795);
+  assert.equal(payloads[0]?.collectedCohortValue, 795);
+  assert.equal(payloads[0]?.collectedValue, 397.5);
+  assert.equal(Math.round((payloads[0]!.collectedCohortValue / payloads[0]!.totalCohortValue) * 100), 50);
+});
+
+test("uses invoice paid amounts when payment records are not available", () => {
+  const row = registration({
+    participantCount: 1,
+    totalAmount: 795,
+    invoiceDrafts: [{ paidAmount: 795, status: "PAID" }]
+  });
+  const payload = buildCrmRegistrationWebhookPayload(row);
+
+  assert.equal(payload.collectedValue, 795);
+  assert.equal(payload.registrationCollectedValue, 795);
+  assert.equal(payload.collectedCohortValue, 795);
 });
 
 test("uses the saved cohort short name before generating a fallback", () => {

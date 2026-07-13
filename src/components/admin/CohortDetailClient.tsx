@@ -163,6 +163,55 @@ function money(value: unknown) {
   return `$${Number(value ?? 0).toLocaleString()}`;
 }
 
+function moneyNumber(value: unknown) {
+  return Number(value ?? 0);
+}
+
+function registrationRelatedRows(registration: AdminRow, rows: AdminRow[] | undefined, fallbackKey: "paymentRecords" | "invoiceDrafts") {
+  const related = rows?.filter((row) => row.registrationId === registration.id);
+  return related?.length ? related : ((registration[fallbackKey] ?? []) as AdminRow[]);
+}
+
+function registrationCollectedAmount(registration: AdminRow, paymentRows?: AdminRow[], invoiceRows?: AdminRow[]) {
+  const paidFromRecords = registrationRelatedRows(registration, paymentRows, "paymentRecords")
+    .filter((payment) => ["PAID", "PARTIALLY_PAID"].includes(String(payment.status ?? "").toUpperCase()))
+    .reduce((sum, payment) => sum + moneyNumber(payment.amount), 0);
+  const paidFromInvoices = registrationRelatedRows(registration, invoiceRows, "invoiceDrafts")
+    .reduce((sum, invoice) => sum + moneyNumber(invoice.paidAmount), 0);
+  const explicitPaid = Math.max(paidFromRecords, paidFromInvoices);
+
+  if (explicitPaid > 0) {
+    return explicitPaid;
+  }
+
+  return String(registration.paymentStatus ?? "").toUpperCase() === "PAID" ? moneyNumber(registration.totalAmount) : 0;
+}
+
+function registrationBillingStatus(registration: AdminRow, paymentRows?: AdminRow[], invoiceRows?: AdminRow[]) {
+  const paymentStatus = String(registration.paymentStatus ?? "").toUpperCase();
+  const registrationStatus = String(registration.status ?? "").toUpperCase();
+  const total = moneyNumber(registration.totalAmount);
+  const collected = registrationCollectedAmount(registration, paymentRows, invoiceRows);
+
+  if (registration.archivedAt || registrationStatus === "CANCELLED") {
+    return "Withdrawn";
+  }
+
+  if (total > 0 && collected >= total) {
+    return "Paid";
+  }
+
+  if (collected > 0 || paymentStatus === "PARTIALLY_PAID") {
+    return "Partial Paid";
+  }
+
+  if (["CANCELLED", "REFUNDED"].includes(paymentStatus)) {
+    return "Uncollectable";
+  }
+
+  return "Invoiced";
+}
+
 function formatDate(value: unknown) {
   const date = value ? new Date(String(value)) : null;
   return date && Number.isFinite(date.getTime()) ? date.toLocaleDateString("en-US") : "-";
@@ -1730,13 +1779,28 @@ export function CohortDetailClient({ id }: { id: string }) {
     },
     {
       field: "totalAmount",
-      headerName: "Amount",
-      width: 116,
+      headerName: "Value",
+      width: 112,
       valueGetter: (_value, row) => Number(row.totalAmount ?? 0),
       valueFormatter: (value) => money(value)
     },
+    {
+      field: "collectedAmount",
+      headerName: "Collected",
+      width: 124,
+      sortable: false,
+      valueGetter: (_value, row) => registrationCollectedAmount(row, payments, invoiceDrafts),
+      valueFormatter: (value) => money(value)
+    },
+    {
+      field: "billingStatus",
+      headerName: "Status",
+      width: 132,
+      sortable: false,
+      valueGetter: (_value, row) => registrationBillingStatus(row, payments, invoiceDrafts),
+      renderCell: (params) => <StatusChip value={params.value} />
+    },
     { field: "participantListStatus", headerName: "Roster", width: 124, renderCell: (params) => <StatusChip value={params.value} /> },
-    { field: "paymentStatus", headerName: "Payment", width: 124, renderCell: (params) => <StatusChip value={params.value} /> },
     {
       field: "billing",
       headerName: "Billing",
@@ -1752,6 +1816,17 @@ export function CohortDetailClient({ id }: { id: string }) {
           </div>
         );
       }
+    },
+    {
+      field: "notes",
+      headerName: "Notes",
+      flex: 1,
+      minWidth: 180,
+      renderCell: (params) => (
+        <span className="app-table-sub" title={String(params.value ?? "No notes")}>
+          {params.value ? String(params.value) : "No notes"}
+        </span>
+      )
     },
     {
       field: "actions",
@@ -2708,8 +2783,9 @@ export function CohortDetailClient({ id }: { id: string }) {
               <DetailField label="Phone" value={registrationDetail.primaryContactPhone} />
               <DetailField label="Organization" value={registrationDetail.organization?.name} proper />
               <DetailField label="Participants" value={registrationDetail.participantCount} />
-              <DetailField label="Total" value={money(registrationDetail.totalAmount)} />
-              <DetailField label="Payment" value={formatStatusLabel(registrationDetail.paymentStatus)} />
+              <DetailField label="Value" value={money(registrationDetail.totalAmount)} />
+              <DetailField label="Collected" value={money(registrationCollectedAmount(registrationDetail, payments, invoiceDrafts))} />
+              <DetailField label="Status" value={registrationBillingStatus(registrationDetail, payments, invoiceDrafts)} />
               <DetailField label="Roster" value={formatStatusLabel(registrationDetail.participantListStatus)} />
               <DetailField label="Invoice" value={registrationDetail.invoiceNumber} />
               <DetailField label="PO" value={registrationDetail.purchaseOrderNumber} />
