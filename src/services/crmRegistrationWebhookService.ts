@@ -43,12 +43,25 @@ export type CrmRegistrationWebhookPayload = {
   status: CrmRegistrationStatus;
   registrationPaymentStatus?: string | null;
   registrationNotes?: string | null;
+  source?: string | null;
+  sourceLabel?: string | null;
+  utmSource?: string | null;
+  utmMedium?: string | null;
+  utmCampaign?: string | null;
+  utmContent?: string | null;
+  utmTerm?: string | null;
+  landingPageUrl?: string | null;
+  referrerUrl?: string | null;
+  externalSource?: string | null;
+  externalSubmissionId?: string | null;
   registeredAt: string;
   occurredAt: string;
   withdrawnAt?: string;
   cancelledAt?: string;
   seatValue: number;
   collectedValue: number;
+  teamSize: number;
+  registrationValue: number;
   registrationTotalValue: number;
   registrationCollectedValue: number;
   totalCohortValue: number;
@@ -67,6 +80,16 @@ export type CrmRegistrationRecord = {
   totalAmount: Prisma.Decimal | number | string;
   paymentStatus?: PaymentStatus | string | null;
   notes?: string | null;
+  source?: string | null;
+  utmSource?: string | null;
+  utmMedium?: string | null;
+  utmCampaign?: string | null;
+  utmContent?: string | null;
+  utmTerm?: string | null;
+  landingPageUrl?: string | null;
+  referrerUrl?: string | null;
+  externalSource?: string | null;
+  externalSubmissionId?: string | null;
   status: RegistrationStatus;
   createdAt: Date;
   updatedAt: Date;
@@ -341,6 +364,28 @@ function collectedSeatValue(registration: CrmRegistrationRecord) {
   return collectedAmount(registration) / seats;
 }
 
+function registrationSourceLabel(registration: CrmRegistrationRecord) {
+  const utmCampaign = registration.utmCampaign?.trim();
+  const utmSource = registration.utmSource?.trim();
+  const source = registration.source?.trim();
+  const externalSource = registration.externalSource?.trim();
+  const referrer = registration.referrerUrl?.trim();
+
+  if (utmCampaign && utmSource) return `${utmCampaign} (${utmSource})`;
+  if (utmCampaign) return utmCampaign;
+  if (source) return source;
+  if (externalSource) return externalSource;
+  if (referrer) {
+    try {
+      return new URL(referrer).hostname.replace(/^www\./, "");
+    } catch {
+      return referrer;
+    }
+  }
+
+  return "Cohort Tool";
+}
+
 export function buildCrmRegistrationWebhookPayloads(
   registration: CrmRegistrationRecord,
   totals = calculateCohortTotals([registration]),
@@ -383,6 +428,17 @@ export function buildCrmRegistrationWebhookPayloads(
       status,
       registrationPaymentStatus: registration.paymentStatus ?? null,
       registrationNotes: registration.notes ?? null,
+      source: registration.source ?? null,
+      sourceLabel: registrationSourceLabel(registration),
+      utmSource: registration.utmSource ?? null,
+      utmMedium: registration.utmMedium ?? null,
+      utmCampaign: registration.utmCampaign ?? null,
+      utmContent: registration.utmContent ?? null,
+      utmTerm: registration.utmTerm ?? null,
+      landingPageUrl: registration.landingPageUrl ?? null,
+      referrerUrl: registration.referrerUrl ?? null,
+      externalSource: registration.externalSource ?? null,
+      externalSubmissionId: registration.externalSubmissionId ?? null,
       registeredAt: isoDate(registration.createdAt),
       occurredAt,
       ...(status === "withdrawn" ? { withdrawnAt: isoDate(registration.archivedAt ?? registration.updatedAt) } : {}),
@@ -390,6 +446,8 @@ export function buildCrmRegistrationWebhookPayloads(
       ...(baseStatus === "withdrawn" && status !== "withdrawn" ? { withdrawnAt: isoDate(registration.archivedAt ?? registration.updatedAt) } : {}),
       seatValue: seatValue(registration),
       collectedValue: collectedSeatValue(registration),
+      teamSize: Math.max(1, Number(registration.participantCount ?? 0), registration.participants?.length ?? 0),
+      registrationValue: moneyNumber(registration.totalAmount),
       registrationTotalValue: moneyNumber(registration.totalAmount),
       registrationCollectedValue: collectedAmount(registration),
       totalCohortValue: totals.totalCohortValue,

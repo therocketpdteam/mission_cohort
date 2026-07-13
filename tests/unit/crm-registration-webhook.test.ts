@@ -81,10 +81,23 @@ test("builds the CRM registration webhook payload with cohort, participant, acco
     status: "registered",
     registrationPaymentStatus: PaymentStatus.PENDING,
     registrationNotes: null,
+    source: null,
+    sourceLabel: "Cohort Tool",
+    utmSource: null,
+    utmMedium: null,
+    utmCampaign: null,
+    utmContent: null,
+    utmTerm: null,
+    landingPageUrl: null,
+    referrerUrl: null,
+    externalSource: null,
+    externalSubmissionId: null,
     registeredAt: "2026-07-10T15:00:00.000Z",
     occurredAt: "2026-07-10T15:30:00.000Z",
     seatValue: 795,
     collectedValue: 0,
+    teamSize: 1,
+    registrationValue: 795,
     registrationTotalValue: 795,
     registrationCollectedValue: 0,
     totalCohortValue: 795,
@@ -127,6 +140,8 @@ test("builds one CRM payload per saved participant with cohort totals", () => {
   assert.deepEqual(payloads.map((payload) => payload.missionParticipantId), ["participant-1", "participant-2"]);
   assert.equal(payloads[0]?.seatValue, 795);
   assert.equal(payloads[0]?.collectedValue, 0);
+  assert.equal(payloads[0]?.teamSize, 2);
+  assert.equal(payloads[0]?.registrationValue, 1590);
   assert.equal(payloads[0]?.totalCohortValue, 1590);
   assert.equal(payloads[0]?.collectedCohortValue, 0);
   assert.equal(payloads[0]?.activeRegistrantCount, 2);
@@ -200,6 +215,24 @@ test("uses invoice paid amounts when payment records are not available", () => {
   assert.equal(payload.collectedValue, 795);
   assert.equal(payload.registrationCollectedValue, 795);
   assert.equal(payload.collectedCohortValue, 795);
+});
+
+test("sends registration source attribution for CRM readouts", () => {
+  const payload = buildCrmRegistrationWebhookPayload(registration({
+    source: "Website form",
+    utmSource: "campaign",
+    utmCampaign: "PL Fall 2026 campaign",
+    referrerUrl: "https://chatgpt.com/share/abc",
+    externalSource: "jotform",
+    externalSubmissionId: "submission-123"
+  }));
+
+  assert.equal(payload.sourceLabel, "PL Fall 2026 campaign (campaign)");
+  assert.equal(payload.source, "Website form");
+  assert.equal(payload.utmCampaign, "PL Fall 2026 campaign");
+  assert.equal(payload.referrerUrl, "https://chatgpt.com/share/abc");
+  assert.equal(payload.externalSource, "jotform");
+  assert.equal(payload.externalSubmissionId, "submission-123");
 });
 
 test("uses the saved cohort short name before generating a fallback", () => {
