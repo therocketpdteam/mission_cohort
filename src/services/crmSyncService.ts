@@ -1,6 +1,10 @@
 import { CrmSyncEventStatus, Prisma } from "@prisma/client";
 import { env } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
+import {
+  crmRegistrationWebhookHeaders,
+  isCrmRegistrationWebhookPayload
+} from "@/services/crmRegistrationWebhookService";
 
 export async function queueCrmSyncEvent(input: {
   eventType: string;
@@ -103,17 +107,28 @@ export async function processCrmSyncEvents(limit = 25) {
   const results = [];
 
   for (const event of events) {
-    if (!env.CRM_WEBHOOK_URL || !env.CRM_WEBHOOK_SECRET) {
+    const missionPayload = isCrmRegistrationWebhookPayload(event.payload);
+    const url = missionPayload
+      ? env.CRM_MISSION_COHORT_WEBHOOK_URL ?? env.CRM_REGISTRATION_WEBHOOK_URL
+      : env.CRM_WEBHOOK_URL;
+    const secret = missionPayload
+      ? env.CRM_MISSION_COHORT_WEBHOOK_SECRET ?? env.CRM_REGISTRATION_WEBHOOK_SECRET
+      : env.CRM_WEBHOOK_SECRET;
+    const missingConfigMessage = missionPayload
+      ? "CRM Mission Cohort webhook is not configured."
+      : "CRM webhook is not configured.";
+
+    if (!url || !secret) {
       await prisma.crmSyncEvent.update({
         where: { id: event.id },
         data: {
           status: CrmSyncEventStatus.FAILED,
           attempts: { increment: 1 },
           lastAttemptAt: new Date(),
-          errorMessage: "CRM webhook is not configured."
+          errorMessage: missingConfigMessage
         }
       });
-      results.push({ id: event.id, status: "failed", error: "CRM webhook is not configured." });
+      results.push({ id: event.id, status: "failed", error: missingConfigMessage });
       continue;
     }
 
@@ -123,22 +138,31 @@ export async function processCrmSyncEvents(limit = 25) {
     });
 
     try {
-      const response = await fetch(env.CRM_WEBHOOK_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-mission-control-secret": env.CRM_WEBHOOK_SECRET
-        },
-        body: JSON.stringify({
-          eventType: event.eventType,
-          entityType: event.entityType,
-          entityId: event.entityId,
-          payload: event.payload
-        })
-      });
+      const response = missionPayload
+        ? await fetch(url, {
+            method: "POST",
+            headers: crmRegistrationWebhookHeaders(secret, env.CRM_MISSION_COHORT_VERCEL_BYPASS_SECRET),
+            body: JSON.stringify(event.payload)
+          })
+        : await fetch(url, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-mission-control-secret": secret
+            },
+            body: JSON.stringify({
+              eventType: event.eventType,
+              entityType: event.entityType,
+              entityId: event.entityId,
+              payload: event.payload
+            })
+          });
 
       if (!response.ok) {
-        throw new Error(`CRM webhook failed with status ${response.status}`);
+        const responseText = await response.text().catch(() => "");
+        throw new Error(
+          `CRM webhook failed with status ${response.status}${responseText ? `: ${responseText.slice(0, 300)}` : ""}`
+        );
       }
 
       await prisma.crmSyncEvent.update({

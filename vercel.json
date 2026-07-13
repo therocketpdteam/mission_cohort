@@ -5,6 +5,10 @@
     {
       "path": "/api/jobs/send-scheduled-communications?limit=50",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/jobs/process-crm-sync?limit=25",
+      "schedule": "*/5 * * * *"
     }
   ]
 }

@@ -497,7 +497,30 @@ export function crmRegistrationWebhookHeaders(secret: string, vercelBypassSecret
   };
 }
 
-async function createSyncEvent(payload: CrmRegistrationWebhookPayload, eventType: string, registrationId?: string) {
+export function isCrmRegistrationWebhookPayload(value: unknown): value is CrmRegistrationWebhookPayload {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+
+  const payload = value as Partial<CrmRegistrationWebhookPayload>;
+  return Boolean(
+    payload.organizationSlug === "rocketpd" &&
+      payload.missionCohortId &&
+      payload.missionRegistrationId &&
+      payload.missionParticipantId &&
+      payload.participant &&
+      typeof payload.participant === "object" &&
+      !Array.isArray(payload.participant) &&
+      payload.participant.email
+  );
+}
+
+async function createSyncEvent(
+  payload: CrmRegistrationWebhookPayload,
+  eventType: string,
+  registrationId?: string,
+  status: CrmSyncEventStatus = CrmSyncEventStatus.SENDING
+) {
   return prisma.crmSyncEvent.create({
     data: {
       eventType,
@@ -505,11 +528,40 @@ async function createSyncEvent(payload: CrmRegistrationWebhookPayload, eventType
       entityId: payload.missionParticipantId,
       registrationId,
       payload: JSON.parse(JSON.stringify(payload)),
-      status: CrmSyncEventStatus.SENDING,
-      attempts: 1,
-      lastAttemptAt: new Date()
+      status,
+      attempts: status === CrmSyncEventStatus.SENDING ? 1 : 0,
+      lastAttemptAt: status === CrmSyncEventStatus.SENDING ? new Date() : undefined
     }
   });
+}
+
+async function queueSyncEvent(payload: CrmRegistrationWebhookPayload, eventType: string, registrationId?: string) {
+  const existing = await prisma.crmSyncEvent.findFirst({
+    where: {
+      eventType,
+      entityType: "Registration",
+      entityId: payload.missionParticipantId,
+      registrationId,
+      status: { in: [CrmSyncEventStatus.QUEUED, CrmSyncEventStatus.SENDING, CrmSyncEventStatus.FAILED] }
+    },
+    orderBy: { updatedAt: "desc" }
+  });
+
+  if (existing) {
+    return prisma.crmSyncEvent.update({
+      where: { id: existing.id },
+      data: {
+        payload: JSON.parse(JSON.stringify(payload)),
+        status: CrmSyncEventStatus.QUEUED,
+        attempts: 0,
+        lastAttemptAt: null,
+        sentAt: null,
+        errorMessage: null
+      }
+    });
+  }
+
+  return createSyncEvent(payload, eventType, registrationId, CrmSyncEventStatus.QUEUED);
 }
 
 async function updateSyncEvent(
@@ -670,10 +722,19 @@ export async function syncCohortTotalsToCrm(cohortId: string, eventType = "cohor
 
   for (const registration of registrations) {
     const payloads = buildCrmRegistrationWebhookPayloads(registration, totals);
-    results.push(...await postPayloads(payloads, registration.id, eventType));
+    for (const payload of payloads) {
+      const event = await queueSyncEvent(payload, eventType, registration.id);
+      results.push({
+        eventId: event.id,
+        registrationId: registration.id,
+        missionParticipantId: payload.missionParticipantId,
+        participantEmail: payload.participant.email,
+        status: event.status
+      });
+    }
   }
 
-  return { cohortId, registrations: registrations.length, payloads: results.length, results };
+  return { status: "queued" as const, cohortId, registrations: registrations.length, payloads: results.length, results };
 }
 
 export async function syncRemovedParticipantToCrm(participant: CrmParticipantRecord & { registrationId: string }) {

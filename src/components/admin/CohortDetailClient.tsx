@@ -1609,7 +1609,7 @@ export function CohortDetailClient({ id }: { id: string }) {
   async function syncCohortCrm() {
     try {
       await adminApi(`/api/cohorts/${id}`, { method: "PATCH", body: { action: "syncCrm" } });
-      notifySuccess("Cohort synced to CRM");
+      notifySuccess("Cohort CRM sync queued");
       await load();
     } catch (error) {
       notifyError((error as Error).message);
