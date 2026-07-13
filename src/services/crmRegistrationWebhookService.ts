@@ -102,6 +102,7 @@ type CohortTotalsRegistration = {
 type CrmRegistrationWebhookConfig = {
   url?: string;
   secret?: string;
+  vercelBypassSecret?: string;
   maxAttempts?: number;
   timeoutMs?: number;
   retryDelayMs?: number;
@@ -357,6 +358,18 @@ function crmWebhookSecret(config: CrmRegistrationWebhookConfig) {
   return config.secret ?? env.CRM_MISSION_COHORT_WEBHOOK_SECRET ?? env.CRM_REGISTRATION_WEBHOOK_SECRET;
 }
 
+function crmVercelBypassSecret(config: CrmRegistrationWebhookConfig) {
+  return config.vercelBypassSecret ?? env.CRM_MISSION_COHORT_VERCEL_BYPASS_SECRET;
+}
+
+export function crmRegistrationWebhookHeaders(secret: string, vercelBypassSecret?: string) {
+  return {
+    Authorization: `Bearer ${secret}`,
+    "Content-Type": "application/json",
+    ...(vercelBypassSecret ? { "x-vercel-protection-bypass": vercelBypassSecret } : {})
+  };
+}
+
 async function createSyncEvent(payload: CrmRegistrationWebhookPayload, eventType: string, registrationId?: string) {
   return prisma.crmSyncEvent.create({
     data: {
@@ -397,6 +410,7 @@ export async function postCrmRegistrationWebhookPayload(
 ): Promise<CrmRegistrationSyncResult> {
   const url = crmWebhookUrl(config);
   const secret = crmWebhookSecret(config);
+  const vercelBypassSecret = crmVercelBypassSecret(config);
   const maxAttempts = Math.max(1, config.maxAttempts ?? 3);
   const timeoutMs = config.timeoutMs ?? 10000;
   const retryDelayMs = config.retryDelayMs ?? 500;
@@ -416,10 +430,7 @@ export async function postCrmRegistrationWebhookPayload(
     try {
       const response = await fetchWithTimeout(url, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${secret}`,
-          "Content-Type": "application/json"
-        },
+        headers: crmRegistrationWebhookHeaders(secret, vercelBypassSecret),
         body: JSON.stringify(payload)
       }, timeoutMs);
       lastHttpStatus = response.status;

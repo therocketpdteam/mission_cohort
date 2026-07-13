@@ -6,6 +6,7 @@ import {
   buildCrmRegistrationWebhookPayloads,
   calculateCohortTotals,
   crmFriendlyCohortShortName,
+  crmRegistrationWebhookHeaders,
   mapRegistrationToCrmStatus,
   type CrmRegistrationRecord
 } from "../../src/services/crmRegistrationWebhookService";
@@ -152,4 +153,17 @@ test("maps registration and participant status changes to CRM membership statuse
     ),
     "attended"
   );
+});
+
+test("adds the Vercel protection bypass header only when configured", () => {
+  assert.deepEqual(crmRegistrationWebhookHeaders("crm-secret"), {
+    Authorization: "Bearer crm-secret",
+    "Content-Type": "application/json"
+  });
+
+  assert.deepEqual(crmRegistrationWebhookHeaders("crm-secret", "vercel-bypass"), {
+    Authorization: "Bearer crm-secret",
+    "Content-Type": "application/json",
+    "x-vercel-protection-bypass": "vercel-bypass"
+  });
 });

@@ -28,6 +28,7 @@ const envSchema = z.object({
   CRM_REGISTRATION_WEBHOOK_SECRET: optionalString,
   CRM_MISSION_COHORT_WEBHOOK_URL: optionalString,
   CRM_MISSION_COHORT_WEBHOOK_SECRET: optionalString,
+  CRM_MISSION_COHORT_VERCEL_BYPASS_SECRET: optionalString,
   MUX_TOKEN_ID: optionalString,
   MUX_TOKEN_SECRET: optionalString,
   MUX_WEBHOOK_SECRET: optionalString,
