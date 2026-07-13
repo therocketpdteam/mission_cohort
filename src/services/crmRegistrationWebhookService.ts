@@ -722,19 +722,19 @@ export async function syncCohortTotalsToCrm(cohortId: string, eventType = "cohor
 
   for (const registration of registrations) {
     const payloads = buildCrmRegistrationWebhookPayloads(registration, totals);
-    for (const payload of payloads) {
-      const event = await queueSyncEvent(payload, eventType, registration.id);
-      results.push({
-        eventId: event.id,
-        registrationId: registration.id,
-        missionParticipantId: payload.missionParticipantId,
-        participantEmail: payload.participant.email,
-        status: event.status
-      });
-    }
+    results.push(...await postPayloads(payloads, registration.id, eventType));
   }
 
-  return { status: "queued" as const, cohortId, registrations: registrations.length, payloads: results.length, results };
+  const sentCount = results.filter((item) => item.result.status === "sent").length;
+  return {
+    status: sentCount === results.length ? "sent" as const : "partial" as const,
+    cohortId,
+    registrations: registrations.length,
+    payloads: results.length,
+    sentCount,
+    failedCount: results.length - sentCount,
+    results
+  };
 }
 
 export async function syncRemovedParticipantToCrm(participant: CrmParticipantRecord & { registrationId: string }) {
