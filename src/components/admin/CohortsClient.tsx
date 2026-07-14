@@ -44,6 +44,7 @@ import {
 } from "./common";
 
 const statusOptions = ["DRAFT", "PUBLISHED", "ACTIVE", "COMPLETED", "CANCELLED"];
+const currentStatuses = new Set(["DRAFT", "PUBLISHED", "ACTIVE"]);
 const timezoneOptions = [
   { label: "EST", value: "America/New_York" },
   { label: "PST", value: "America/Los_Angeles" }
@@ -523,7 +524,7 @@ export function CohortsClient() {
   const [wizardOpen, setWizardOpen] = useState(false);
   const [editing, setEditing] = useState<AdminRow | null>(null);
   const [search, setSearch] = useState("");
-  const [status, setStatus] = useState("");
+  const [status, setStatus] = useState("CURRENT");
   const [presenterId, setPresenterId] = useState("");
   const [archiveUndo, setArchiveUndo] = useState<{ id: string; title: string; previousStatus: string } | null>(null);
   const { notifySuccess, notifyError, snackbar } = useNotifier();
@@ -552,7 +553,7 @@ export function CohortsClient() {
           .join(" ")
           .toLowerCase()
           .includes(search.toLowerCase());
-        const matchesStatus = status ? row.status === status : true;
+        const matchesStatus = status === "CURRENT" ? currentStatuses.has(row.status) : status ? row.status === status : true;
         const matchesPresenter = presenterId ? row.presenterId === presenterId : true;
         return matchesSearch && matchesStatus && matchesPresenter;
       }),
@@ -560,6 +561,7 @@ export function CohortsClient() {
   );
 
   const filterPills = [
+    { label: "Current", value: "CURRENT", count: rows.filter((row) => currentStatuses.has(row.status)).length },
     { label: "All", value: "", count: rows.length },
     ...statusOptions.map((value) => ({ label: formatStatusLabel(value), value, count: statusCount(rows, value) }))
   ];
@@ -582,6 +584,7 @@ export function CohortsClient() {
           {params.row.thumbnailUrl && <img className="cohort-cell-thumb" src={params.row.thumbnailUrl} alt="" />}
           <Stack spacing={0.5} sx={{ minWidth: 0, flex: 1 }}>
             <Typography className="cohort-cell-title" fontWeight={850}>{params.row.title}</Typography>
+            {params.row.shortName && <span className="cohort-short-name-pill">{params.row.shortName}</span>}
           </Stack>
         </div>
       )
