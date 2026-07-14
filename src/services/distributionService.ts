@@ -37,14 +37,8 @@ function percent(value: unknown) {
 }
 
 export async function getCohortDistribution(cohortId: string) {
-  const [cohort, distribution, payments, registrations] = await Promise.all([
-    prisma.cohort.findUnique({ where: { id: cohortId }, include: { presenter: true } }),
-    prisma.cohortDistribution.upsert({
-      where: { cohortId },
-      update: {},
-      create: { cohortId, commissionPercent: 30, tlSharePercent: 70 },
-      include: { payouts: { orderBy: { createdAt: "desc" }, include: { paymentRecord: true } } }
-    }),
+  const [cohort, payments, registrations] = await Promise.all([
+    prisma.cohort.findUnique({ where: { id: cohortId }, include: { presenter: true, distribution: true } }),
     prisma.paymentRecord.findMany({ where: { cohortId, registration: { archivedAt: null } } }),
     prisma.registration.findMany({ where: { cohortId, archivedAt: null } })
   ]);
@@ -52,6 +46,25 @@ export async function getCohortDistribution(cohortId: string) {
   if (!cohort) {
     throw Object.assign(new Error("Cohort not found."), { code: "NOT_FOUND", status: 404 });
   }
+
+  const distribution = await prisma.cohortDistribution.upsert({
+    where: { cohortId },
+    update: cohort.distribution && (!cohort.distribution.quickBooksVendorRef || !cohort.distribution.quickBooksExpenseAccountRef)
+      ? {
+        quickBooksVendorRef: cohort.distribution.quickBooksVendorRef ?? cohort.presenter.quickBooksVendorRef,
+        quickBooksExpenseAccountRef: cohort.distribution.quickBooksExpenseAccountRef ?? cohort.presenter.quickBooksExpenseAccountRef
+      }
+      : {},
+    create: {
+      cohortId,
+      commissionPercent: 30,
+      tlSharePercent: 70,
+      tlName: [cohort.presenter.firstName, cohort.presenter.lastName].filter(Boolean).join(" ") || undefined,
+      quickBooksVendorRef: cohort.presenter.quickBooksVendorRef,
+      quickBooksExpenseAccountRef: cohort.presenter.quickBooksExpenseAccountRef
+    },
+    include: { payouts: { orderBy: { createdAt: "desc" }, include: { paymentRecord: true } } }
+  });
 
   const soldAmount = registrations.reduce((sum, registration) => sum + Number(registration.totalAmount ?? 0), 0);
   const paidAmount = payments

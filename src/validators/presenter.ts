@@ -8,6 +8,8 @@ export const presenterCreateSchema = z.object({
   bio: z.string().optional(),
   organization: z.string().optional(),
   phone: z.string().optional(),
+  quickBooksVendorRef: z.string().optional(),
+  quickBooksExpenseAccountRef: z.string().optional(),
   notes: z.string().optional(),
   active: z.boolean().default(true)
 });

@@ -179,6 +179,46 @@ export async function fetchQuickBooksInvoice(input: {
   return response.json() as Promise<Record<string, any>>;
 }
 
+export async function fetchQuickBooksBill(input: {
+  realmId: string;
+  accessToken: string;
+  billId: string;
+  environment?: string | null;
+}) {
+  const response = await fetch(`${getQuickBooksBaseUrl(input.environment)}/v3/company/${input.realmId}/bill/${input.billId}?minorversion=75`, {
+    headers: {
+      Authorization: `Bearer ${input.accessToken}`,
+      Accept: "application/json"
+    }
+  });
+
+  if (!response.ok) {
+    throw await quickBooksError(response, "QuickBooks bill fetch failed");
+  }
+
+  return response.json() as Promise<Record<string, any>>;
+}
+
+export async function fetchQuickBooksBillPayment(input: {
+  realmId: string;
+  accessToken: string;
+  billPaymentId: string;
+  environment?: string | null;
+}) {
+  const response = await fetch(`${getQuickBooksBaseUrl(input.environment)}/v3/company/${input.realmId}/billpayment/${input.billPaymentId}?minorversion=75`, {
+    headers: {
+      Authorization: `Bearer ${input.accessToken}`,
+      Accept: "application/json"
+    }
+  });
+
+  if (!response.ok) {
+    throw await quickBooksError(response, "QuickBooks bill payment fetch failed");
+  }
+
+  return response.json() as Promise<Record<string, any>>;
+}
+
 export async function fetchQuickBooksCustomer(input: {
   realmId: string;
   accessToken: string;

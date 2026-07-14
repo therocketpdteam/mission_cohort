@@ -1,4 +1,5 @@
 import {
+  DistributionPayoutStatus,
   IntegrationConnectionStatus,
   IntegrationProvider,
   InvoiceDraftStatus,
@@ -14,6 +15,8 @@ import {
   createQuickBooksInvoice,
   createQuickBooksProject,
   exchangeQuickBooksCode,
+  fetchQuickBooksBill,
+  fetchQuickBooksBillPayment,
   fetchQuickBooksCustomer,
   fetchQuickBooksInvoice,
   findQuickBooksBillByDocNumber,
@@ -593,8 +596,8 @@ export async function createQuickBooksBillFromPayout(payoutId: string) {
 
   const distribution = payout.distribution;
   const cohort = distribution.cohort;
-  const vendorRef = distribution.quickBooksVendorRef?.trim();
-  const expenseAccountRef = distribution.quickBooksExpenseAccountRef?.trim();
+  const vendorRef = (distribution.quickBooksVendorRef ?? cohort.presenter.quickBooksVendorRef)?.trim();
+  const expenseAccountRef = (distribution.quickBooksExpenseAccountRef ?? cohort.presenter.quickBooksExpenseAccountRef)?.trim();
 
   if (!vendorRef) {
     throw Object.assign(new Error("QuickBooks vendor ref is required in Distribution Controls before creating a payout bill."), { code: "BAD_REQUEST", status: 400 });
@@ -679,6 +682,118 @@ export async function createQuickBooksBillFromPayout(payoutId: string) {
     });
     throw error;
   }
+}
+
+function payoutStatusFromBill(bill: Record<string, any>) {
+  const totalAmount = Number(bill.TotalAmt ?? 0);
+  const balance = Number(bill.Balance ?? totalAmount);
+
+  if (balance <= 0) {
+    return DistributionPayoutStatus.PAID;
+  }
+
+  if (totalAmount > 0 && balance < totalAmount) {
+    return DistributionPayoutStatus.PARTIAL;
+  }
+
+  return DistributionPayoutStatus.PLANNED;
+}
+
+async function markQuickBooksBillMissing(billId: string, realmId?: string) {
+  const message = `QuickBooks bill ${billId} could not be found. It may have been deleted manually in QuickBooks and needs finance review.`;
+  const payouts = await prisma.distributionPayout.updateMany({
+    where: { quickBooksBillRef: billId },
+    data: {
+      quickBooksRealmId: realmId,
+      quickBooksSyncStatus: SyncStatus.ERROR,
+      quickBooksSyncError: message,
+      quickBooksLastSyncedAt: new Date()
+    }
+  });
+
+  return { billId, syncStatus: SyncStatus.ERROR, payouts: payouts.count, error: message };
+}
+
+export async function syncQuickBooksBill(billId: string, realmId?: string) {
+  const connection = await getDecryptedIntegrationConnection(IntegrationProvider.QUICKBOOKS);
+
+  if (!connection?.accessToken) {
+    throw Object.assign(new Error("QuickBooks is not connected."), { code: "BAD_REQUEST", status: 400 });
+  }
+
+  const resolvedRealmId = realmId ?? connection.realmId;
+
+  if (!resolvedRealmId) {
+    throw Object.assign(new Error("QuickBooks realm ID is missing."), { code: "BAD_REQUEST", status: 400 });
+  }
+
+  let result: Record<string, any>;
+  try {
+    result = await fetchQuickBooksBill({
+      realmId: resolvedRealmId,
+      accessToken: connection.accessToken,
+      billId,
+      environment: (await quickBooksSetupWithEnvFallback()).environment
+    });
+  } catch (error) {
+    if (isQuickBooksMissingReference(error)) {
+      return markQuickBooksBillMissing(billId, resolvedRealmId);
+    }
+    throw error;
+  }
+
+  const bill = result.Bill ?? result;
+  const payoutStatus = payoutStatusFromBill(bill);
+  const payouts = await prisma.distributionPayout.updateMany({
+    where: { quickBooksBillRef: billId },
+    data: {
+      status: payoutStatus,
+      quickBooksRealmId: resolvedRealmId,
+      quickBooksSyncStatus: SyncStatus.SYNCED,
+      quickBooksSyncError: null,
+      quickBooksLastSyncedAt: new Date()
+    }
+  });
+
+  return { billId, payoutStatus, payouts: payouts.count };
+}
+
+export async function syncQuickBooksBillPayment(billPaymentId: string, realmId?: string) {
+  const connection = await getDecryptedIntegrationConnection(IntegrationProvider.QUICKBOOKS);
+
+  if (!connection?.accessToken) {
+    throw Object.assign(new Error("QuickBooks is not connected."), { code: "BAD_REQUEST", status: 400 });
+  }
+
+  const resolvedRealmId = realmId ?? connection.realmId;
+
+  if (!resolvedRealmId) {
+    throw Object.assign(new Error("QuickBooks realm ID is missing."), { code: "BAD_REQUEST", status: 400 });
+  }
+
+  const result = await fetchQuickBooksBillPayment({
+    realmId: resolvedRealmId,
+    accessToken: connection.accessToken,
+    billPaymentId,
+    environment: (await quickBooksSetupWithEnvFallback()).environment
+  });
+  const billPayment = result.BillPayment ?? result;
+  const billIds = new Set<string>();
+
+  for (const line of billPayment.Line ?? []) {
+    for (const linkedTxn of line.LinkedTxn ?? []) {
+      if (String(linkedTxn.TxnType ?? "").toLowerCase() === "bill" && linkedTxn.TxnId) {
+        billIds.add(String(linkedTxn.TxnId));
+      }
+    }
+  }
+
+  const results = [];
+  for (const billId of billIds) {
+    results.push(await syncQuickBooksBill(billId, resolvedRealmId));
+  }
+
+  return { billPaymentId, bills: billIds.size, results };
 }
 
 async function markQuickBooksInvoiceMissing(invoiceId: string, realmId?: string) {
@@ -901,7 +1016,7 @@ export async function processQuickBooksWebhook(rawBody: string, signature?: stri
           realmId: notification.realmId
         }))
       )
-      .filter((entity: Record<string, any>) => ["Invoice", "Payment", "Customer"].includes(entity.name));
+      .filter((entity: Record<string, any>) => ["Invoice", "Payment", "Customer", "Bill", "BillPayment"].includes(entity.name));
     const results = [];
 
     for (const entity of entities) {
@@ -915,6 +1030,18 @@ export async function processQuickBooksWebhook(rawBody: string, signature?: stri
 
       if (entity.name === "Payment" && entity.id) {
         results.push(await syncQuickBooksPayment(String(entity.id), entity.realmId ? String(entity.realmId) : undefined));
+      }
+
+      if (entity.name === "Bill" && entity.id) {
+        if (String(entity.operation ?? "").toLowerCase() === "delete") {
+          results.push(await markQuickBooksBillMissing(String(entity.id), entity.realmId ? String(entity.realmId) : undefined));
+        } else {
+          results.push(await syncQuickBooksBill(String(entity.id), entity.realmId ? String(entity.realmId) : undefined));
+        }
+      }
+
+      if (entity.name === "BillPayment" && entity.id) {
+        results.push(await syncQuickBooksBillPayment(String(entity.id), entity.realmId ? String(entity.realmId) : undefined));
       }
 
       if (entity.name === "Customer" && entity.id) {

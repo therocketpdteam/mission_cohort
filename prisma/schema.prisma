@@ -366,6 +366,8 @@ model Presenter {
   bio          String?
   organization String?
   phone        String?
+  quickBooksVendorRef String?
+  quickBooksExpenseAccountRef String?
   notes        String?
   active       Boolean  @default(true)
   createdAt    DateTime @default(now())
