@@ -2,6 +2,8 @@ import { handleApiError, ok } from "@/lib/api";
 import { MUTATION_ROLES, requireRole, requireUser } from "@/lib/auth";
 import { importHistoricalCsv, listHistoricalImports } from "@/services/historicalImportService";
 
+export const maxDuration = 60;
+
 async function readImportBody(request: Request) {
   const contentType = request.headers.get("content-type") ?? "";
 

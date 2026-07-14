@@ -1007,5 +1007,5 @@ export async function importHistoricalCsv(input: {
     });
 
     return { batch: completed, preview, importedRows: importableRows.length };
-  });
+  }, { maxWait: 10000, timeout: 60000 });
 }
