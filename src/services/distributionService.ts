@@ -8,6 +8,8 @@ export const distributionUpdateSchema = z.object({
   commissionPercent: z.coerce.number().min(0).max(100).default(30),
   tlName: z.string().optional(),
   tlSharePercent: z.coerce.number().min(0).max(100).optional(),
+  quickBooksVendorRef: z.string().optional(),
+  quickBooksExpenseAccountRef: z.string().optional(),
   notes: z.string().optional()
 });
 
@@ -92,12 +94,16 @@ export async function updateCohortDistribution(input: z.input<typeof distributio
       commissionPercent: data.commissionPercent,
       tlSharePercent: data.tlSharePercent ?? 100 - data.commissionPercent,
       tlName: data.tlName,
+      quickBooksVendorRef: data.quickBooksVendorRef,
+      quickBooksExpenseAccountRef: data.quickBooksExpenseAccountRef,
       notes: data.notes
     },
     update: {
       commissionPercent: data.commissionPercent,
       tlSharePercent: data.tlSharePercent ?? 100 - data.commissionPercent,
       tlName: data.tlName,
+      quickBooksVendorRef: data.quickBooksVendorRef,
+      quickBooksExpenseAccountRef: data.quickBooksExpenseAccountRef,
       notes: data.notes
     }
   });

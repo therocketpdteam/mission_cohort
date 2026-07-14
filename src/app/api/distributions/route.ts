@@ -1,6 +1,7 @@
 import { handleApiError, ok } from "@/lib/api";
 import { isMissingPrismaSchema, migrationRequiredResult } from "@/lib/prismaCompatibility";
 import { cancelDistributionPayout, createDistributionPayout, getCohortDistribution, updateCohortDistribution, updateDistributionPayout } from "@/services/distributionService";
+import { createQuickBooksBillFromPayout } from "@/services/quickBooksService";
 
 export async function GET(request: Request) {
   try {
@@ -30,6 +31,10 @@ export async function PATCH(request: Request) {
 
     if (body.action === "cancelPayout") {
       return ok(await cancelDistributionPayout(body.id));
+    }
+
+    if (body.action === "createQuickBooksBill") {
+      return ok(await createQuickBooksBillFromPayout(body.id));
     }
 
     return ok(await updateCohortDistribution(body));

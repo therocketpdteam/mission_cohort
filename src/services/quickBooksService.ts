@@ -10,11 +10,13 @@ import {
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
+  createQuickBooksBill,
   createQuickBooksInvoice,
   createQuickBooksProject,
   exchangeQuickBooksCode,
   fetchQuickBooksCustomer,
   fetchQuickBooksInvoice,
+  findQuickBooksBillByDocNumber,
   findQuickBooksInvoiceByDocNumber,
   findQuickBooksProject,
   getQuickBooksConnectUrl,
@@ -309,7 +311,7 @@ export async function reconcileCohortQuickBooksProject(cohortId: string) {
 
 export async function listQuickBooksAccountingRefs() {
   const { setup, realmId, accessToken } = await quickBooksConnection();
-  const [customerResult, itemResult] = await Promise.all([
+  const [customerResult, itemResult, vendorResult, accountResult] = await Promise.all([
     queryQuickBooks({
       realmId,
       accessToken,
@@ -321,6 +323,18 @@ export async function listQuickBooksAccountingRefs() {
       accessToken,
       environment: setup.environment,
       query: "select * from Item startposition 1 maxresults 1000"
+    }),
+    queryQuickBooks({
+      realmId,
+      accessToken,
+      environment: setup.environment,
+      query: "select * from Vendor startposition 1 maxresults 1000"
+    }),
+    queryQuickBooks({
+      realmId,
+      accessToken,
+      environment: setup.environment,
+      query: "select * from Account startposition 1 maxresults 1000"
     })
   ]);
 
@@ -345,7 +359,29 @@ export async function listQuickBooksAccountingRefs() {
     .filter((item) => item.id)
     .sort((a, b) => a.fullyQualifiedName.localeCompare(b.fullyQualifiedName));
 
-  return { customers, items, environment: setup.environment ?? "sandbox", realmId };
+  const vendors = ((vendorResult.QueryResponse?.Vendor ?? []) as Record<string, any>[])
+    .filter((vendor) => vendor.Active !== false)
+    .map((vendor) => ({
+      id: String(vendor.Id ?? ""),
+      name: String(vendor.DisplayName ?? vendor.CompanyName ?? vendor.Id ?? ""),
+      fullyQualifiedName: String(vendor.DisplayName ?? vendor.CompanyName ?? vendor.Id ?? "")
+    }))
+    .filter((vendor) => vendor.id)
+    .sort((a, b) => a.fullyQualifiedName.localeCompare(b.fullyQualifiedName));
+
+  const expenseAccountTypes = new Set(["Expense", "Other Expense", "Cost of Goods Sold"]);
+  const accounts = ((accountResult.QueryResponse?.Account ?? []) as Record<string, any>[])
+    .filter((account) => account.Active !== false && expenseAccountTypes.has(String(account.AccountType ?? "")))
+    .map((account) => ({
+      id: String(account.Id ?? ""),
+      name: String(account.Name ?? account.FullyQualifiedName ?? account.Id ?? ""),
+      type: String(account.AccountType ?? ""),
+      fullyQualifiedName: String(account.FullyQualifiedName ?? account.Name ?? account.Id ?? "")
+    }))
+    .filter((account) => account.id)
+    .sort((a, b) => a.fullyQualifiedName.localeCompare(b.fullyQualifiedName));
+
+  return { customers, items, vendors, accounts, environment: setup.environment ?? "sandbox", realmId };
 }
 
 async function tryEnsureCohortQuickBooksProject(cohortId: string) {
@@ -529,6 +565,120 @@ export async function createQuickBooksInvoiceFromDraft(invoiceDraftId: string) {
   }
 
   return { invoice, quickBooksInvoiceId: String(qbInvoice.Id ?? qbInvoice.id), reused: Boolean(existing) };
+}
+
+function payoutBillNumber(payoutId: string) {
+  return `MC-PAYOUT-${payoutId.slice(-8).toUpperCase()}`;
+}
+
+export async function createQuickBooksBillFromPayout(payoutId: string) {
+  const payout = await prisma.distributionPayout.findUnique({
+    where: { id: payoutId },
+    include: {
+      distribution: {
+        include: {
+          cohort: { include: { presenter: true } }
+        }
+      }
+    }
+  });
+
+  if (!payout) {
+    throw Object.assign(new Error("Payout not found."), { code: "NOT_FOUND", status: 404 });
+  }
+
+  if (payout.status === "CANCELLED") {
+    throw Object.assign(new Error("Cancelled payouts cannot be sent to QuickBooks."), { code: "BAD_REQUEST", status: 400 });
+  }
+
+  const distribution = payout.distribution;
+  const cohort = distribution.cohort;
+  const vendorRef = distribution.quickBooksVendorRef?.trim();
+  const expenseAccountRef = distribution.quickBooksExpenseAccountRef?.trim();
+
+  if (!vendorRef) {
+    throw Object.assign(new Error("QuickBooks vendor ref is required in Distribution Controls before creating a payout bill."), { code: "BAD_REQUEST", status: 400 });
+  }
+
+  if (!expenseAccountRef) {
+    throw Object.assign(new Error("QuickBooks expense account ref is required in Distribution Controls before creating a payout bill."), { code: "BAD_REQUEST", status: 400 });
+  }
+
+  const project = cohort.quickBooksProjectRef
+    ? cohort
+    : await ensureCohortQuickBooksProject(cohort.id);
+  const projectRef = project.quickBooksProjectRef?.trim();
+
+  if (!projectRef) {
+    throw Object.assign(new Error("QuickBooks project ref is missing for this cohort."), { code: "BAD_REQUEST", status: 400 });
+  }
+
+  const { setup, realmId, accessToken } = await quickBooksConnection();
+  const billNumber = payout.quickBooksBillNumber ?? payoutBillNumber(payout.id);
+  const thoughtLeaderName = distribution.tlName
+    || [cohort.presenter?.firstName, cohort.presenter?.lastName].filter(Boolean).join(" ")
+    || "Thought leader";
+  const cohortName = cohort.shortName || cohort.title;
+
+  try {
+    const existing = payout.quickBooksBillRef
+      ? undefined
+      : await findQuickBooksBillByDocNumber({
+        realmId,
+        accessToken,
+        docNumber: billNumber,
+        environment: setup.environment
+      });
+
+    const bill = existing ?? await createQuickBooksBill({
+      realmId,
+      accessToken,
+      environment: setup.environment,
+      bill: {
+        VendorRef: { value: vendorRef },
+        DocNumber: billNumber,
+        TxnDate: toQuickBooksDate(payout.paymentDate ?? new Date()),
+        PrivateNote: `Mission Cohort payout ${payout.id} for ${cohortName}`,
+        Line: [
+          {
+            Amount: moneyNumber(payout.amount),
+            DetailType: "AccountBasedExpenseLineDetail",
+            Description: `${thoughtLeaderName} payout for ${cohortName}`,
+            AccountBasedExpenseLineDetail: {
+              AccountRef: { value: expenseAccountRef },
+              CustomerRef: { value: projectRef },
+              BillableStatus: "NotBillable"
+            }
+          }
+        ]
+      }
+    });
+
+    return prisma.distributionPayout.update({
+      where: { id: payout.id },
+      data: {
+        quickBooksBillRef: String(bill.Id ?? bill.id),
+        quickBooksBillNumber: billNumber,
+        quickBooksRealmId: realmId,
+        quickBooksSyncStatus: SyncStatus.SYNCED,
+        quickBooksSyncError: null,
+        quickBooksLastSyncedAt: new Date()
+      },
+      include: { paymentRecord: true }
+    });
+  } catch (error) {
+    await prisma.distributionPayout.update({
+      where: { id: payout.id },
+      data: {
+        quickBooksBillNumber: billNumber,
+        quickBooksRealmId: realmId,
+        quickBooksSyncStatus: SyncStatus.ERROR,
+        quickBooksSyncError: error instanceof Error ? error.message : "QuickBooks bill creation failed.",
+        quickBooksLastSyncedAt: new Date()
+      }
+    });
+    throw error;
+  }
 }
 
 async function markQuickBooksInvoiceMissing(invoiceId: string, realmId?: string) {

@@ -1710,7 +1710,7 @@ export function SettingsClient() {
   const [integrationHelpProvider, setIntegrationHelpProvider] = useState<AdminRow | null>(null);
   const [googleCalendars, setGoogleCalendars] = useState<AdminRow[]>([]);
   const [loadingGoogleCalendars, setLoadingGoogleCalendars] = useState(false);
-  const [quickBooksRefs, setQuickBooksRefs] = useState<{ customers: AdminRow[]; items: AdminRow[]; environment?: string; realmId?: string }>({ customers: [], items: [] });
+  const [quickBooksRefs, setQuickBooksRefs] = useState<{ customers: AdminRow[]; items: AdminRow[]; vendors: AdminRow[]; accounts: AdminRow[]; environment?: string; realmId?: string }>({ customers: [], items: [], vendors: [], accounts: [] });
   const [loadingQuickBooksRefs, setLoadingQuickBooksRefs] = useState(false);
   const [organizationInvoiceProfile, setOrganizationInvoiceProfile] = useState<AdminRow>(defaultOrganizationInvoiceProfile);
   const [savingOrganizationSettings, setSavingOrganizationSettings] = useState(false);
@@ -2020,14 +2020,16 @@ export function SettingsClient() {
   async function loadQuickBooksRefs() {
     setLoadingQuickBooksRefs(true);
     try {
-      const refs = await adminApi<{ customers: AdminRow[]; items: AdminRow[]; environment?: string; realmId?: string }>("/api/integrations/setup?provider=QUICKBOOKS&action=listAccountingRefs");
+      const refs = await adminApi<{ customers: AdminRow[]; items: AdminRow[]; vendors: AdminRow[]; accounts: AdminRow[]; environment?: string; realmId?: string }>("/api/integrations/setup?provider=QUICKBOOKS&action=listAccountingRefs");
       setQuickBooksRefs({
         customers: refs.customers ?? [],
         items: refs.items ?? [],
+        vendors: refs.vendors ?? [],
+        accounts: refs.accounts ?? [],
         environment: refs.environment,
         realmId: refs.realmId
       });
-      notifySuccess("QuickBooks customers and service items loaded");
+      notifySuccess("QuickBooks accounting refs loaded");
     } catch (error) {
       notifyError((error as Error).message);
     } finally {

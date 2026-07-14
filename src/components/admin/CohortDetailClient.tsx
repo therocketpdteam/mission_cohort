@@ -972,7 +972,16 @@ export function CohortDetailClient({ id }: { id: string }) {
   const [invoicePreview, setInvoicePreview] = useState<{ url: string; title: string } | null>(null);
   const [payoutDialogOpen, setPayoutDialogOpen] = useState(false);
   const [editingPayout, setEditingPayout] = useState<AdminRow | null>(null);
-  const [distributionSettings, setDistributionSettings] = useState({ commissionPercent: "30", tlSharePercent: "70", tlName: "", notes: "" });
+  const [distributionSettings, setDistributionSettings] = useState({
+    commissionPercent: "30",
+    tlSharePercent: "70",
+    tlName: "",
+    quickBooksVendorRef: "",
+    quickBooksExpenseAccountRef: "",
+    notes: ""
+  });
+  const [quickBooksRefs, setQuickBooksRefs] = useState<{ vendors: AdminRow[]; accounts: AdminRow[]; environment?: string; realmId?: string }>({ vendors: [], accounts: [] });
+  const [loadingQuickBooksRefs, setLoadingQuickBooksRefs] = useState(false);
   const [financeHealth, setFinanceHealth] = useState<FinanceHealth | null>(null);
   const [preparingInvites, setPreparingInvites] = useState(false);
   const [creatingSessionEmails, setCreatingSessionEmails] = useState(false);
@@ -1207,6 +1216,8 @@ export function CohortDetailClient({ id }: { id: string }) {
       commissionPercent: String(distribution.distribution.commissionPercent ?? 30),
       tlSharePercent: String(distribution.distribution.tlSharePercent ?? 70),
       tlName: distribution.distribution.tlName ?? "",
+      quickBooksVendorRef: distribution.distribution.quickBooksVendorRef ?? "",
+      quickBooksExpenseAccountRef: distribution.distribution.quickBooksExpenseAccountRef ?? "",
       notes: distribution.distribution.notes ?? ""
     });
   }, [distribution]);
@@ -1288,7 +1299,7 @@ export function CohortDetailClient({ id }: { id: string }) {
       source: payout,
       date: payout.paymentDate ?? payout.createdAt,
       label: distribution?.distribution?.tlName ?? "TL payout",
-      helper: `Outgoing · ${formatStatusLabel(payout.status)}`,
+      helper: `Outgoing · ${formatStatusLabel(payout.status)} · QB ${formatStatusLabel(payout.quickBooksSyncStatus ?? "NOT_SYNCED")}`,
       amount: -Number(payout.amount ?? 0),
       status: payout.status
     }));
@@ -1507,6 +1518,8 @@ export function CohortDetailClient({ id }: { id: string }) {
           commissionPercent: Number(distributionSettings.commissionPercent),
           tlSharePercent: Number(distributionSettings.tlSharePercent),
           tlName: distributionSettings.tlName || undefined,
+          quickBooksVendorRef: distributionSettings.quickBooksVendorRef || undefined,
+          quickBooksExpenseAccountRef: distributionSettings.quickBooksExpenseAccountRef || undefined,
           notes: distributionSettings.notes || undefined
         }
       });
@@ -1514,6 +1527,24 @@ export function CohortDetailClient({ id }: { id: string }) {
       await load();
     } catch (error) {
       notifyError((error as Error).message);
+    }
+  }
+
+  async function loadQuickBooksRefs() {
+    setLoadingQuickBooksRefs(true);
+    try {
+      const refs = await adminApi<{ vendors: AdminRow[]; accounts: AdminRow[]; environment?: string; realmId?: string }>("/api/integrations/setup?provider=QUICKBOOKS&action=listAccountingRefs");
+      setQuickBooksRefs({
+        vendors: refs.vendors ?? [],
+        accounts: refs.accounts ?? [],
+        environment: refs.environment,
+        realmId: refs.realmId
+      });
+      notifySuccess("QuickBooks payout refs loaded");
+    } catch (error) {
+      notifyError((error as Error).message);
+    } finally {
+      setLoadingQuickBooksRefs(false);
     }
   }
 
@@ -1638,6 +1669,16 @@ export function CohortDetailClient({ id }: { id: string }) {
       if (registrationDetail?.id) {
         await openRegistrationDetail(registrationDetail);
       }
+    } catch (error) {
+      notifyError((error as Error).message);
+    }
+  }
+
+  async function createQuickBooksBill(payout: AdminRow) {
+    try {
+      await adminApi("/api/distributions", { method: "PATCH", body: { action: "createQuickBooksBill", id: payout.id } });
+      notifySuccess("Payout bill created in QuickBooks");
+      await load();
     } catch (error) {
       notifyError((error as Error).message);
     }
@@ -2450,14 +2491,36 @@ export function CohortDetailClient({ id }: { id: string }) {
                       <Typography variant="subtitle2">Distribution Controls</Typography>
                       <Typography variant="body2" color="text.secondary">Invoices sync into this cohort’s QuickBooks Project under RocketPD.</Typography>
                     </div>
-                    <Button size="small" onClick={saveDistributionSettings}>Save</Button>
+                    <div className="section-action-row">
+                      <Button size="small" variant="outlined" onClick={() => void loadQuickBooksRefs()} disabled={loadingQuickBooksRefs}>
+                        {loadingQuickBooksRefs ? "Loading..." : "Load QBO refs"}
+                      </Button>
+                      <Button size="small" onClick={saveDistributionSettings}>Save</Button>
+                    </div>
                   </div>
                   <div className="finance-settings-grid">
                     <TextField label="RPD %" type="number" value={distributionSettings.commissionPercent} onChange={(event) => setDistributionSettings((values) => ({ ...values, commissionPercent: event.target.value }))} />
                     <TextField label="TL %" type="number" value={distributionSettings.tlSharePercent} onChange={(event) => setDistributionSettings((values) => ({ ...values, tlSharePercent: event.target.value }))} />
                     <TextField label="TL name" value={distributionSettings.tlName} onChange={(event) => setDistributionSettings((values) => ({ ...values, tlName: event.target.value }))} />
+                    <TextField select label="QBO vendor" value={distributionSettings.quickBooksVendorRef} onChange={(event) => setDistributionSettings((values) => ({ ...values, quickBooksVendorRef: event.target.value }))}>
+                      <MenuItem value="">Choose vendor</MenuItem>
+                      {(quickBooksRefs.vendors.length > 0 ? quickBooksRefs.vendors : distributionSettings.quickBooksVendorRef ? [{ id: distributionSettings.quickBooksVendorRef, fullyQualifiedName: `Saved vendor ref ${distributionSettings.quickBooksVendorRef}` }] : []).map((vendor) => (
+                        <MenuItem value={vendor.id} key={vendor.id}>{vendor.fullyQualifiedName ?? vendor.name ?? vendor.id}</MenuItem>
+                      ))}
+                    </TextField>
+                    <TextField select label="QBO expense account" value={distributionSettings.quickBooksExpenseAccountRef} onChange={(event) => setDistributionSettings((values) => ({ ...values, quickBooksExpenseAccountRef: event.target.value }))}>
+                      <MenuItem value="">Choose expense account</MenuItem>
+                      {(quickBooksRefs.accounts.length > 0 ? quickBooksRefs.accounts : distributionSettings.quickBooksExpenseAccountRef ? [{ id: distributionSettings.quickBooksExpenseAccountRef, fullyQualifiedName: `Saved account ref ${distributionSettings.quickBooksExpenseAccountRef}` }] : []).map((account) => (
+                        <MenuItem value={account.id} key={account.id}>{[account.fullyQualifiedName ?? account.name ?? account.id, account.type].filter(Boolean).join(" · ")}</MenuItem>
+                      ))}
+                    </TextField>
                     <TextField label="Notes" value={distributionSettings.notes} onChange={(event) => setDistributionSettings((values) => ({ ...values, notes: event.target.value }))} />
                   </div>
+                  {quickBooksRefs.realmId && (
+                    <Typography variant="caption" color="text.secondary">
+                      Loaded from QuickBooks {quickBooksRefs.environment} company {quickBooksRefs.realmId}.
+                    </Typography>
+                  )}
                 </div>
               </div>
             ) : (
@@ -2547,6 +2610,7 @@ export function CohortDetailClient({ id }: { id: string }) {
                     <RowActionMenu
                       actions={[
                         { label: "Edit payout", onClick: () => { setEditingPayout(row.source); setPayoutDialogOpen(true); } },
+                        { label: row.source.quickBooksBillRef ? "Resync QuickBooks bill" : "Create QuickBooks bill", onClick: () => void createQuickBooksBill(row.source) },
                         ...(row.source.attachmentUrl ? [{ label: "Open proof", onClick: () => window.open(row.source.attachmentUrl, "_blank", "noreferrer") }] : []),
                         { label: "Cancel payout", onClick: () => void cancelPayout(row.source) }
                       ]}

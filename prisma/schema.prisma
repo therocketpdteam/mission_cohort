@@ -853,6 +853,8 @@ model CohortDistribution {
   commissionPercent Decimal              @default(30) @db.Decimal(5, 2)
   tlName            String?
   tlSharePercent    Decimal              @default(70) @db.Decimal(5, 2)
+  quickBooksVendorRef String?
+  quickBooksExpenseAccountRef String?
   notes             String?
   createdAt         DateTime             @default(now())
   updatedAt         DateTime             @updatedAt
@@ -869,6 +871,12 @@ model DistributionPayout {
   paymentDate       DateTime?
   attachmentFileKey String?
   attachmentUrl     String?
+  quickBooksBillRef String?
+  quickBooksBillNumber String?
+  quickBooksRealmId String?
+  quickBooksSyncStatus SyncStatus @default(NOT_SYNCED)
+  quickBooksSyncError String?
+  quickBooksLastSyncedAt DateTime?
   notes             String?
   createdAt         DateTime                 @default(now())
   updatedAt         DateTime                 @updatedAt
@@ -878,6 +886,8 @@ model DistributionPayout {
   @@index([distributionId])
   @@index([paymentRecordId])
   @@index([status])
+  @@index([quickBooksBillRef])
+  @@index([quickBooksSyncStatus])
 }
 
 model IntegrationConnection {

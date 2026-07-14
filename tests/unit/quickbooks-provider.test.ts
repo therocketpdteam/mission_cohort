@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createQuickBooksProject, findQuickBooksProject } from "../../src/modules/quickbooks/provider";
+import { createQuickBooksBill, createQuickBooksProject, findQuickBooksProject } from "../../src/modules/quickbooks/provider";
 
 test("finds QuickBooks projects by filtering customers client-side", async () => {
   const originalFetch = global.fetch;
@@ -72,6 +72,61 @@ test("creates QuickBooks projects as customer jobs under the parent customer", a
     assert.equal(requestBody.BillWithParent, false);
     assert.deepEqual(requestBody.ParentRef, { value: "42" });
     assert.equal(project.Id, "88");
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("creates QuickBooks bills with vendor, expense account, and project refs", async () => {
+  const originalFetch = global.fetch;
+  let requestBody: Record<string, any> = {};
+  let requestUrl = "";
+
+  global.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    requestUrl = String(input);
+    requestBody = JSON.parse(String(init?.body ?? "{}"));
+    return new Response(JSON.stringify({
+      Bill: {
+        Id: "bill-88",
+        DocNumber: requestBody.DocNumber,
+        VendorRef: requestBody.VendorRef,
+        Line: requestBody.Line
+      }
+    }), {
+      status: 200,
+      headers: { "content-type": "application/json" }
+    });
+  }) as typeof fetch;
+
+  try {
+    const bill = await createQuickBooksBill({
+      realmId: "realm",
+      accessToken: "token",
+      environment: "sandbox",
+      bill: {
+        VendorRef: { value: "vendor-42" },
+        DocNumber: "MC-PAYOUT-ABC123",
+        Line: [
+          {
+            Amount: 1200,
+            DetailType: "AccountBasedExpenseLineDetail",
+            Description: "TL payout for KM Fall 2025",
+            AccountBasedExpenseLineDetail: {
+              AccountRef: { value: "expense-77" },
+              CustomerRef: { value: "project-99" },
+              BillableStatus: "NotBillable"
+            }
+          }
+        ]
+      }
+    });
+
+    assert.match(requestUrl, /\/bill\?minorversion=75$/);
+    assert.deepEqual(requestBody.VendorRef, { value: "vendor-42" });
+    assert.equal(requestBody.Line[0].Amount, 1200);
+    assert.deepEqual(requestBody.Line[0].AccountBasedExpenseLineDetail.AccountRef, { value: "expense-77" });
+    assert.deepEqual(requestBody.Line[0].AccountBasedExpenseLineDetail.CustomerRef, { value: "project-99" });
+    assert.equal(bill.Id, "bill-88");
   } finally {
     global.fetch = originalFetch;
   }

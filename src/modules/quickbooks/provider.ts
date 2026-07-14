@@ -324,6 +324,47 @@ export async function createQuickBooksInvoice(input: {
   return result.Invoice ?? result;
 }
 
+export async function findQuickBooksBillByDocNumber(input: {
+  realmId: string;
+  accessToken: string;
+  docNumber: string;
+  environment?: string | null;
+}) {
+  const escapedDocNumber = escapeQuickBooksQueryValue(input.docNumber);
+  const result = await queryQuickBooks({
+    realmId: input.realmId,
+    accessToken: input.accessToken,
+    environment: input.environment,
+    query: `select * from Bill where DocNumber = '${escapedDocNumber}'`
+  });
+
+  return (result.QueryResponse?.Bill ?? [])[0] as Record<string, any> | undefined;
+}
+
+export async function createQuickBooksBill(input: {
+  realmId: string;
+  accessToken: string;
+  bill: Record<string, any>;
+  environment?: string | null;
+}) {
+  const response = await fetch(`${getQuickBooksBaseUrl(input.environment)}/v3/company/${input.realmId}/bill?minorversion=75`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${input.accessToken}`,
+      Accept: "application/json",
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(input.bill)
+  });
+
+  if (!response.ok) {
+    throw await quickBooksError(response, "QuickBooks bill creation failed");
+  }
+
+  const result = await response.json() as Record<string, any>;
+  return result.Bill ?? result;
+}
+
 export async function voidQuickBooksInvoice(input: {
   realmId: string;
   accessToken: string;
