@@ -50,15 +50,6 @@ function refLabel(row: AdminRow) {
   return String(row.fullyQualifiedName ?? row.name ?? row.id ?? "");
 }
 
-function filterRefs(rows: AdminRow[], query: string) {
-  const normalized = query.trim().toLowerCase();
-  if (!normalized) {
-    return rows.slice(0, 40);
-  }
-
-  return rows.filter((row) => refLabel(row).toLowerCase().includes(normalized)).slice(0, 40);
-}
-
 function PresenterDialog({
   open,
   presenter,
@@ -77,16 +68,12 @@ function PresenterDialog({
   onSubmit: (values: AdminRow) => Promise<void>;
 }) {
   const [values, setValues] = useState<AdminRow>(() => presenterInitialValues(presenter));
-  const [vendorSearch, setVendorSearch] = useState("");
-  const [accountSearch, setAccountSearch] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
     if (open) {
       setValues(presenterInitialValues(presenter));
-      setVendorSearch("");
-      setAccountSearch("");
       setError("");
     }
   }, [open, presenter]);
@@ -115,10 +102,10 @@ function PresenterDialog({
   }
 
   const vendorOptions = refs.vendors.length > 0
-    ? filterRefs(refs.vendors, vendorSearch)
+    ? refs.vendors
     : values.quickBooksVendorRef ? [{ id: values.quickBooksVendorRef, fullyQualifiedName: `Saved vendor ref ${values.quickBooksVendorRef}` }] : [];
   const accountOptions = refs.accounts.length > 0
-    ? filterRefs(refs.accounts, accountSearch)
+    ? refs.accounts
     : values.quickBooksExpenseAccountRef ? [{ id: values.quickBooksExpenseAccountRef, fullyQualifiedName: `Saved account ref ${values.quickBooksExpenseAccountRef}` }] : [];
 
   return (
@@ -145,12 +132,10 @@ function PresenterDialog({
                 </Button>
               </div>
             </div>
-            <TextField fullWidth label="Search QBO vendors" value={vendorSearch} onChange={(event) => setVendorSearch(event.currentTarget.value)} />
             <TextField select fullWidth label="QBO vendor" value={values.quickBooksVendorRef ?? ""} onChange={(event) => setValue("quickBooksVendorRef", event.currentTarget.value)}>
               <MenuItem value="">No vendor selected</MenuItem>
               {vendorOptions.map((vendor) => <MenuItem value={vendor.id} key={vendor.id}>{refLabel(vendor)}</MenuItem>)}
             </TextField>
-            <TextField fullWidth label="Search QBO expense accounts" value={accountSearch} onChange={(event) => setAccountSearch(event.currentTarget.value)} />
             <TextField select fullWidth label="QBO expense account" value={values.quickBooksExpenseAccountRef ?? ""} onChange={(event) => setValue("quickBooksExpenseAccountRef", event.currentTarget.value)}>
               <MenuItem value="">No expense account selected</MenuItem>
               {accountOptions.map((account) => <MenuItem value={account.id} key={account.id}>{[refLabel(account), account.type].filter(Boolean).join(" · ")}</MenuItem>)}

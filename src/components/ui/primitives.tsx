@@ -17,6 +17,14 @@ function clsx(...values: Array<string | false | null | undefined>) {
   return values.filter(Boolean).join(" ");
 }
 
+function searchableText(value: ReactNode): string {
+  if (value == null || typeof value === "boolean") return "";
+  if (typeof value === "string" || typeof value === "number") return String(value);
+  if (Array.isArray(value)) return value.map(searchableText).join(" ");
+  if (isValidElement(value)) return searchableText((value.props as { children?: ReactNode }).children);
+  return "";
+}
+
 type SxValue = Record<string, any>;
 
 const spacing = 8;
@@ -517,16 +525,22 @@ export function TextField({
       value: child.props.value == null ? "" : String(child.props.value),
       label: child.props.label ?? child.props.children,
       menuLabel: child.props.children,
+      searchText: searchableText(child.props.label ?? child.props.children).toLowerCase(),
       disabled: child.props.disabled
     }));
   const selectedOption = selectOptions.find((option) => option.value === selectValue) ?? selectOptions[0];
   const [selectOpen, setSelectOpen] = useState(false);
+  const [selectSearch, setSelectSearch] = useState("");
   const selectRef = useRef<HTMLLabelElement>(null);
+  const filteredSelectOptions = selectSearch.trim()
+    ? selectOptions.filter((option) => option.searchText.includes(selectSearch.trim().toLowerCase()))
+    : selectOptions;
 
   useEffect(() => {
     function close(event: MouseEvent) {
       if (!selectRef.current?.contains(event.target as Node)) {
         setSelectOpen(false);
+        setSelectSearch("");
       }
     }
 
@@ -538,6 +552,7 @@ export function TextField({
     const event = { target: { value }, currentTarget: { value } };
     props.onChange?.(event);
     setSelectOpen(false);
+    setSelectSearch("");
   }
 
   return (
@@ -559,7 +574,21 @@ export function TextField({
           <input type="hidden" name={props.name} value={selectValue} required={props.required} />
           {selectOpen && (
             <span className="ui-select-menu">
-              {selectOptions.map((option) => (
+              <span className="ui-select-search">
+                <input
+                  className="ui-input"
+                  placeholder="Search..."
+                  value={selectSearch}
+                  onChange={(event) => setSelectSearch(event.currentTarget.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                    }
+                  }}
+                  autoFocus
+                />
+              </span>
+              {filteredSelectOptions.map((option) => (
                 <button
                   type="button"
                   className={clsx("ui-select-option", option.value === selectValue && "is-selected")}
@@ -570,6 +599,7 @@ export function TextField({
                   {option.menuLabel}
                 </button>
               ))}
+              {filteredSelectOptions.length === 0 && <span className="ui-select-empty">No matches</span>}
             </span>
           )}
         </span>
