@@ -313,6 +313,30 @@ const patches = [
     `
   },
   {
+    name: "quickbooks payout bills",
+    sql: `
+      ALTER TABLE "CohortDistribution" ADD COLUMN IF NOT EXISTS "quickBooksVendorRef" TEXT;
+      ALTER TABLE "CohortDistribution" ADD COLUMN IF NOT EXISTS "quickBooksExpenseAccountRef" TEXT;
+
+      ALTER TABLE "DistributionPayout" ADD COLUMN IF NOT EXISTS "quickBooksBillRef" TEXT;
+      ALTER TABLE "DistributionPayout" ADD COLUMN IF NOT EXISTS "quickBooksBillNumber" TEXT;
+      ALTER TABLE "DistributionPayout" ADD COLUMN IF NOT EXISTS "quickBooksRealmId" TEXT;
+      ALTER TABLE "DistributionPayout" ADD COLUMN IF NOT EXISTS "quickBooksSyncStatus" "SyncStatus" NOT NULL DEFAULT 'NOT_SYNCED';
+      ALTER TABLE "DistributionPayout" ADD COLUMN IF NOT EXISTS "quickBooksSyncError" TEXT;
+      ALTER TABLE "DistributionPayout" ADD COLUMN IF NOT EXISTS "quickBooksLastSyncedAt" TIMESTAMP(3);
+
+      CREATE INDEX IF NOT EXISTS "DistributionPayout_quickBooksBillRef_idx" ON "DistributionPayout"("quickBooksBillRef");
+      CREATE INDEX IF NOT EXISTS "DistributionPayout_quickBooksSyncStatus_idx" ON "DistributionPayout"("quickBooksSyncStatus");
+    `
+  },
+  {
+    name: "presenter quickbooks payout defaults",
+    sql: `
+      ALTER TABLE "Presenter" ADD COLUMN IF NOT EXISTS "quickBooksVendorRef" TEXT;
+      ALTER TABLE "Presenter" ADD COLUMN IF NOT EXISTS "quickBooksExpenseAccountRef" TEXT;
+    `
+  },
+  {
     name: "foreign keys",
     sql: `
       DO $$
