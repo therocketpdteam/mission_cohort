@@ -5,7 +5,7 @@ import { PersonOffOutlined } from "@/components/ui/icons";
 import { Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem, TextField, Typography } from "@/components/ui/primitives";
 import { GridColDef } from "./common";
 import type { FormEvent } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
 import { formatProperDisplay } from "@/lib/formatting";
 import {
@@ -128,7 +128,7 @@ function PresenterDialog({
                   <Typography variant="body2" color="text.secondary">New cohort payout settings can inherit these refs.</Typography>
                 </div>
                 <Button type="button" size="small" variant="outlined" onClick={() => void onLoadRefs()} disabled={loadingRefs}>
-                  {loadingRefs ? "Loading..." : "Load QBO refs"}
+                  {loadingRefs ? "Loading..." : "Refresh QBO refs"}
                 </Button>
               </div>
             </div>
@@ -166,6 +166,7 @@ export function PresentersClient({ embedded = false }: { embedded?: boolean } = 
   const [search, setSearch] = useState("");
   const [quickBooksRefs, setQuickBooksRefs] = useState<QuickBooksRefState>({ vendors: [], accounts: [] });
   const [loadingQuickBooksRefs, setLoadingQuickBooksRefs] = useState(false);
+  const autoLoadedQuickBooksRefs = useRef(false);
   const { notifySuccess, notifyError, snackbar } = useNotifier();
 
   async function load() {
@@ -240,7 +241,18 @@ export function PresentersClient({ embedded = false }: { embedded?: boolean } = 
     }
   }
 
-  async function loadQuickBooksRefs() {
+  const quickBooksRefsLoaded = Boolean(quickBooksRefs.realmId || quickBooksRefs.vendors.length > 0 || quickBooksRefs.accounts.length > 0);
+
+  useEffect(() => {
+    if (!dialogOpen || quickBooksRefsLoaded || loadingQuickBooksRefs || autoLoadedQuickBooksRefs.current) {
+      return;
+    }
+
+    autoLoadedQuickBooksRefs.current = true;
+    void loadQuickBooksRefs({ silent: true });
+  }, [dialogOpen, loadingQuickBooksRefs, quickBooksRefsLoaded]);
+
+  async function loadQuickBooksRefs(options: { silent?: boolean } = {}) {
     setLoadingQuickBooksRefs(true);
     try {
       const refs = await adminApi<QuickBooksRefState>("/api/integrations/setup?provider=QUICKBOOKS&action=listAccountingRefs");
@@ -250,7 +262,9 @@ export function PresentersClient({ embedded = false }: { embedded?: boolean } = 
         environment: refs.environment,
         realmId: refs.realmId
       });
-      notifySuccess("QuickBooks vendor and expense refs loaded");
+      if (!options.silent) {
+        notifySuccess("QuickBooks vendor and expense refs loaded");
+      }
     } catch (error) {
       notifyError((error as Error).message);
     } finally {
@@ -266,7 +280,7 @@ export function PresentersClient({ embedded = false }: { embedded?: boolean } = 
           description="Manage thought leaders, delivery profiles, and QuickBooks payout defaults."
           action={(
             <div className="section-action-row">
-              <Button variant="outlined" onClick={() => void loadQuickBooksRefs()} disabled={loadingQuickBooksRefs}>{loadingQuickBooksRefs ? "Loading..." : "Load QBO refs"}</Button>
+              <Button variant="outlined" onClick={() => void loadQuickBooksRefs()} disabled={loadingQuickBooksRefs}>{loadingQuickBooksRefs ? "Loading..." : "Refresh QBO refs"}</Button>
               <ToolbarButton onClick={() => setDialogOpen(true)}>Create Thought Leader</ToolbarButton>
             </div>
           )}
@@ -276,7 +290,7 @@ export function PresentersClient({ embedded = false }: { embedded?: boolean } = 
         <TextField label="Search" value={search} onChange={(event) => setSearch(event.target.value)} />
         {embedded && (
           <>
-            <Button variant="outlined" onClick={() => void loadQuickBooksRefs()} disabled={loadingQuickBooksRefs}>{loadingQuickBooksRefs ? "Loading..." : "Load QBO refs"}</Button>
+            <Button variant="outlined" onClick={() => void loadQuickBooksRefs()} disabled={loadingQuickBooksRefs}>{loadingQuickBooksRefs ? "Loading..." : "Refresh QBO refs"}</Button>
             <ToolbarButton onClick={() => setDialogOpen(true)}>Create Thought Leader</ToolbarButton>
           </>
         )}
