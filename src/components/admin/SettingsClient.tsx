@@ -41,6 +41,7 @@ import { useEffect, useMemo, useState } from "react";
 import { adminApi, uploadAdminFile } from "@/lib/adminApi";
 import { buildRoadmapSummary, type RoadmapCardSummary, type RoadmapStatus } from "@/config/roadmap";
 import { formatCurrency, formatHumanLabel, formatProperDisplay, formatStatusLabel } from "@/lib/formatting";
+import { PresentersClient } from "./PresentersClient";
 import {
   AdminRow,
   AppDataGrid,
@@ -57,7 +58,7 @@ import {
   useNotifier
 } from "./common";
 
-const settingsTabs = ["System Health", "Admin Users", "Connected Tools", "Jotform Intake", "Historical Imports", "Road Map", "Organization Settings", "Advanced Setup"];
+const settingsTabs = ["System Health", "Admin Users", "Thought Leaders", "Connected Tools", "Jotform Intake", "Historical Imports", "Road Map", "Organization Settings", "Advanced Setup"];
 const wizardSteps = ["Summary", "Routing", "Field Mapping", "Preview", "Save"];
 const roadmapStatusOrder: RoadmapStatus[] = ["done", "in_progress", "blocked", "planned"];
 const roadmapStatusLabels: Record<RoadmapStatus, string> = {
@@ -2317,6 +2318,10 @@ export function SettingsClient() {
       </TabPanel>
 
       <TabPanel active={activeTab} index={2}>
+        <PresentersClient embedded />
+      </TabPanel>
+
+      <TabPanel active={activeTab} index={3}>
         <SectionCard title="Integration Hub">
           <Typography color="text.secondary" sx={{ mb: 2 }}>
             Use these checks before testing live cohort sends. Email and Google Calendar both need production configuration, and Google Calendar also needs an OAuth connection.
@@ -2638,7 +2643,7 @@ export function SettingsClient() {
         </Dialog>
       </TabPanel>
 
-      <TabPanel active={activeTab} index={3}>
+      <TabPanel active={activeTab} index={4}>
         <Stack spacing={2}>
           <SectionCard
             title="Connection"
@@ -2709,7 +2714,7 @@ export function SettingsClient() {
         </Stack>
       </TabPanel>
 
-      <TabPanel active={activeTab} index={4}>
+      <TabPanel active={activeTab} index={5}>
         <HistoricalImportsPanel
           batches={historicalImports}
           csvText={historicalCsvText}
@@ -2727,11 +2732,11 @@ export function SettingsClient() {
         />
       </TabPanel>
 
-      <TabPanel active={activeTab} index={5}>
+      <TabPanel active={activeTab} index={6}>
         <RoadmapPanel />
       </TabPanel>
 
-      <TabPanel active={activeTab} index={6}>
+      <TabPanel active={activeTab} index={7}>
         <SectionCard
           title="Organization Settings"
           action={<Button size="small" onClick={() => void saveOrganizationInvoiceProfile()} disabled={savingOrganizationSettings}>{savingOrganizationSettings ? "Saving..." : "Save Settings"}</Button>}
@@ -2809,7 +2814,7 @@ export function SettingsClient() {
         </SectionCard>
       </TabPanel>
 
-      <TabPanel active={activeTab} index={7}>
+      <TabPanel active={activeTab} index={8}>
         <SectionCard title="Mapping Library" action={<Button size="small" startIcon={<AddIcon />} onClick={() => setDialogOpen(true)}>Add Mapping</Button>}>
           <Typography color="text.secondary" sx={{ mb: 2 }}>
             Most mapping should happen from the Jotform review wizard. Use this table only for quick enable/disable or routing edits.

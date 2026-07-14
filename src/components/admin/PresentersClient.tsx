@@ -173,7 +173,7 @@ function PresenterDialog({
   );
 }
 
-export function PresentersClient() {
+export function PresentersClient({ embedded = false }: { embedded?: boolean } = {}) {
   const [rows, setRows] = useState<AdminRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -275,24 +275,32 @@ export function PresentersClient() {
 
   return (
     <PageStack>
-      <PageHeader
-        title="Presenters"
-        description="Manage presenters and thought leaders attached to cohort delivery."
-        action={(
-          <div className="section-action-row">
-            <Button variant="outlined" onClick={() => void loadQuickBooksRefs()} disabled={loadingQuickBooksRefs}>{loadingQuickBooksRefs ? "Loading..." : "Load QBO refs"}</Button>
-            <ToolbarButton onClick={() => setDialogOpen(true)}>Create Presenter</ToolbarButton>
-          </div>
-        )}
-      />
+      {!embedded && (
+        <PageHeader
+          title="Thought Leaders"
+          description="Manage thought leaders, delivery profiles, and QuickBooks payout defaults."
+          action={(
+            <div className="section-action-row">
+              <Button variant="outlined" onClick={() => void loadQuickBooksRefs()} disabled={loadingQuickBooksRefs}>{loadingQuickBooksRefs ? "Loading..." : "Load QBO refs"}</Button>
+              <ToolbarButton onClick={() => setDialogOpen(true)}>Create Thought Leader</ToolbarButton>
+            </div>
+          )}
+        />
+      )}
       <CompactFilterBar resultCount={filteredRows.length}>
         <TextField label="Search" value={search} onChange={(event) => setSearch(event.target.value)} />
+        {embedded && (
+          <>
+            <Button variant="outlined" onClick={() => void loadQuickBooksRefs()} disabled={loadingQuickBooksRefs}>{loadingQuickBooksRefs ? "Loading..." : "Load QBO refs"}</Button>
+            <ToolbarButton onClick={() => setDialogOpen(true)}>Create Thought Leader</ToolbarButton>
+          </>
+        )}
       </CompactFilterBar>
-      <SectionCard title="Presenter Directory">
+      <SectionCard title="Thought Leader Directory">
         <TableShell>
           <AppDataGrid rows={filteredRows} columns={columns} loading={loading} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} />
         </TableShell>
-        {!loading && filteredRows.length === 0 && <EmptyState title="No presenters found" description="Create a presenter to attach to cohorts." />}
+        {!loading && filteredRows.length === 0 && <EmptyState title="No thought leaders found" description="Create a thought leader to attach to cohorts and payout settings." />}
       </SectionCard>
       <PresenterDialog
         open={dialogOpen}
