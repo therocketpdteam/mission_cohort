@@ -9,7 +9,8 @@ import {
 const csv = [
   "Cohort,Short Name,Presenter,Start Date,Organization,City,State,ZIP,POC Name,Email,Participant Count,Participant Names,Participant Emails,Participant Titles,Amount,Payment Status,Payment Method,Source,Session Dates",
   "Building Thinking Classrooms,PL-Fall-2025,Peter Liljedahl,9/10/2025,Rapid City Schools,Rapid City,South Dakota,57701,Kim Sender,kim@example.com,2,\"Ada Lovelace;Grace Hopper\",\"ada@example.com;grace@example.com\",\"Coach;Principal\",\"$1,590\",Paid,Purchase Order,website,\"9/10/2025;9/17/2025\"",
-  "Building Thinking Classrooms,PL-Fall-2025,Peter Liljedahl,9/10/2025,Rapid City Schools,Rapid City,SD,57701,Kim Sender,kim@example.com,2,\"Alan Turing\",,\"Teacher\",795,,Credit Card,instantly,"
+  "Building Thinking Classrooms,PL-Fall-2025,Peter Liljedahl,9/10/2025,Rapid City Schools,Rapid City,SD,57701,Kim Sender,kim@example.com,2,\"Alan Turing\",,\"Teacher\",795,,Credit Card,instantly,",
+  "Building Thinking Classrooms,PL-Fall-2025,Peter Liljedahl,9/10/2025,Rapid City Schools,Rapid City,South Dakota,57701,Kim Sender,kim@example.com,2,\"Ada Lovelace;Grace Hopper\",\"ada@example.com;grace@example.com\",\"Coach;Principal\",\"$1,590\",Paid,Purchase Order,website,\"9/10/2025;9/17/2025\""
 ].join("\n");
 
 test("suggests historical import mappings from friendly CSV headers", () => {
@@ -28,9 +29,11 @@ test("normalizes historical CSV rows with paid defaults, state codes, sessions, 
   const first = preview.rows[0].normalized;
   const second = preview.rows[1];
 
-  assert.equal(preview.summary.totalRows, 2);
-  assert.equal(preview.summary.validRows, 2);
-  assert.equal(preview.summary.warningRows, 1);
+  const third = preview.rows[2];
+
+  assert.equal(preview.summary.totalRows, 3);
+  assert.equal(preview.summary.validRows, 3);
+  assert.equal(preview.summary.warningRows, 2);
   assert.equal(first.paymentStatus, PaymentStatus.PAID);
   assert.equal(first.paymentMethod, PaymentMethod.PURCHASE_ORDER);
   assert.equal(first.organizationState, "SD");
@@ -40,8 +43,8 @@ test("normalizes historical CSV rows with paid defaults, state codes, sessions, 
   assert.equal(first.sessionDates.length, 2);
   assert.equal(second.normalized.paymentStatus, PaymentStatus.PAID);
   assert.equal(second.normalized.paymentMethod, PaymentMethod.CREDIT_CARD);
-  assert.match(second.warnings.join(" "), /Possible duplicate/);
   assert.match(second.warnings.join(" "), /participant emails/);
+  assert.match(third.warnings.join(" "), /Possible duplicate/);
 });
 
 test("keeps invalid historical rows out of the importable preview", () => {
@@ -131,6 +134,7 @@ test("excludes POC-only rows from participants while preserving the registration
 
   assert.equal(preview.summary.totalRows, 2);
   assert.equal(preview.summary.validRows, 2);
+  assert.equal(preview.summary.warningRows, 0);
   assert.equal(preview.summary.cohorts[0]?.participants, 2);
   assert.equal(preview.mapping.purchaseOrderNumber, undefined);
   assert.equal(preview.rows[0].normalized.cohortShortName, "JG-Fall-2025");

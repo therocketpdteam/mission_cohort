@@ -470,9 +470,6 @@ function buildGroupedHistoricalRows(csvText: string, inputMapping: HistoricalImp
       .filter((row) => !isPocOnlyRow(row, mapping))
       .map((row) => participantFromRow(row, mapping))
       .filter(isParsedParticipant);
-    const participantWarnings = participants
-      .map((participant, index) => !participant.title ? `Participant ${index + 1} is missing title.` : "")
-      .filter(Boolean);
     const primary = participantFromRow(startRow, mapping) ?? participants[0];
     const participantCount = parseIntValue(value(startRow, mapping, "participantCount")) || participants.length || 1;
     const fallbackOrganizationName = [primary?.firstName, primary?.lastName].filter(Boolean).join(" ");
@@ -522,9 +519,7 @@ function buildGroupedHistoricalRows(csvText: string, inputMapping: HistoricalImp
       !normalized.participantCount ? "Participant count is required." : ""
     ].filter(Boolean);
     const warnings = [
-      ...participantWarnings,
       !value(startRow, mapping, "organizationName") && fallbackOrganizationName ? "Organization was blank; using the POC name as the organization label." : "",
-      normalized.organizationState && !normalizeUsStateCode(normalized.organizationState) ? "State could not be normalized to a two-letter code." : "",
       normalized.participantCount > 0 && normalized.participants.length > 0 && normalized.participants.length !== normalized.participantCount
         ? `Participant count is ${normalized.participantCount}, but ${normalized.participants.length} participant rows were parsed.`
         : ""
@@ -563,7 +558,8 @@ function appendDuplicateWarnings(rows: Array<{ rowNumber: number; normalized: No
     const duplicateKey = [
       cohortImportKey(row.normalized),
       row.normalized.primaryContactEmail || slugify(row.normalized.primaryContactName),
-      slugify(row.normalized.organizationName)
+      slugify(row.normalized.organizationName),
+      row.normalized.invoiceNumber || row.normalized.registrationDate || String(row.normalized.totalAmount)
     ].join("|");
     const firstRowNumber = seenRegistrationKeys.get(duplicateKey);
 

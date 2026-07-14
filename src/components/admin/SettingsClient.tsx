@@ -1878,35 +1878,60 @@ export function SettingsClient() {
 
     try {
       const text = await file.text();
+      const nextCohortDetails = {
+        ...historicalCohortDetails,
+        title: historicalCohortDetails.title || file.name.replace(/\.csv$/i, "").replace(/^[A-Z]{2,4}\s+(Spring|Summer|Fall|Winter)\s+\d{4}\s+-\s+/i, "").trim()
+      };
       setHistoricalCsvText(text);
       setHistoricalFileName(file.name);
       setHistoricalPreview(null);
       setHistoricalMapping({});
-      setHistoricalCohortDetails((current) => ({
-        ...current,
-        title: current.title || file.name.replace(/\.csv$/i, "").replace(/^[A-Z]{2,4}\s+(Spring|Summer|Fall|Winter)\s+\d{4}\s+-\s+/i, "").trim()
-      }));
-      notifySuccess("Historical CSV loaded");
+      setHistoricalCohortDetails(nextCohortDetails);
+      await previewHistoricalCsv({
+        csvText: text,
+        fileName: file.name,
+        mapping: {},
+        cohort: nextCohortDetails,
+        quiet: true
+      });
+      notifySuccess("Historical CSV loaded and previewed");
     } catch (error) {
       notifyError((error as Error).message);
     }
   }
 
-  async function previewHistoricalCsv() {
+  async function previewHistoricalCsv(overrides: {
+    csvText?: string;
+    fileName?: string;
+    mapping?: Record<string, string>;
+    cohort?: AdminRow;
+    quiet?: boolean;
+  } = {}) {
+    const csvText = overrides.csvText ?? historicalCsvText;
+    const fileName = overrides.fileName ?? historicalFileName;
+    const mapping = overrides.mapping ?? historicalMapping;
+    const cohort = overrides.cohort ?? historicalCohortDetails;
+
+    if (!csvText) {
+      return;
+    }
+
     setHistoricalImportBusy(true);
     try {
       const preview = await adminApi<AdminRow>("/api/historical-imports/preview", {
         method: "POST",
         body: {
-          fileName: historicalFileName,
-          csvText: historicalCsvText,
-          mapping: historicalMapping,
-          cohort: historicalCohortDetails
+          fileName,
+          csvText,
+          mapping,
+          cohort
         }
       });
       setHistoricalPreview(preview);
       setHistoricalMapping((preview.mapping ?? {}) as Record<string, string>);
-      notifySuccess("Historical CSV preview ready");
+      if (!overrides.quiet) {
+        notifySuccess("Historical CSV preview ready");
+      }
     } catch (error) {
       notifyError((error as Error).message);
     } finally {
