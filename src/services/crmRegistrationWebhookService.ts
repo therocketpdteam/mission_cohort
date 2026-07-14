@@ -100,6 +100,7 @@ export type CrmRegistrationRecord = {
     shortName?: string | null;
     startDate: Date;
     endDate: Date;
+    sessions?: Array<{ startTime: Date; endTime: Date }>;
     presenter?: {
       id?: string | null;
       firstName?: string | null;
@@ -395,6 +396,13 @@ export function buildCrmRegistrationWebhookPayloads(
   const thoughtLeaderName = compactName(registration.cohort.presenter?.firstName, registration.cohort.presenter?.lastName);
   const baseStatus = mapRegistrationToCrmStatus(registration);
   const occurredAt = isoDate(registration.updatedAt);
+  const sortedSessions = [...(registration.cohort.sessions ?? [])].sort(
+    (left, right) => left.startTime.getTime() - right.startTime.getTime()
+  );
+  const firstSession = sortedSessions[0];
+  const lastSession = sortedSessions.at(-1);
+  const startsAt = firstSession?.startTime ?? registration.cohort.startDate;
+  const endsAt = lastSession?.endTime ?? registration.cohort.endDate;
 
   return participantRowsForRegistration(registration, participantOverride).map((participant) => {
     const email = participant.email.trim().toLowerCase();
@@ -407,10 +415,10 @@ export function buildCrmRegistrationWebhookPayloads(
       missionParticipantId: participant.id,
       cohortName: registration.cohort.title,
       shortName,
-      startsAt: isoDate(registration.cohort.startDate),
-      endsAt: isoDate(registration.cohort.endDate),
+      startsAt: isoDate(startsAt),
+      endsAt: isoDate(endsAt),
       productId: null,
-      productName: registration.cohort.title,
+      productName: "Cohorts",
       thoughtLeaderId: registration.cohort.presenter?.id ?? null,
       thoughtLeaderName,
       participant: {
@@ -650,7 +658,7 @@ async function registrationForCrm(registrationId: string) {
   return prisma.registration.findUnique({
     where: { id: registrationId },
     include: {
-      cohort: { include: { presenter: true } },
+      cohort: { include: { presenter: true, sessions: { orderBy: { startTime: "asc" } } } },
       organization: true,
       participants: true,
       paymentRecords: true,
@@ -709,7 +717,7 @@ export async function syncCohortTotalsToCrm(cohortId: string, eventType = "cohor
   const registrations = await prisma.registration.findMany({
     where: { cohortId },
     include: {
-      cohort: { include: { presenter: true } },
+      cohort: { include: { presenter: true, sessions: { orderBy: { startTime: "asc" } } } },
       organization: true,
       participants: true,
       paymentRecords: true,

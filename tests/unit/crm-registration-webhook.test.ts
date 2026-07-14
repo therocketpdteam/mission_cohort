@@ -63,7 +63,7 @@ test("builds the CRM registration webhook payload with cohort, participant, acco
     startsAt: "2026-07-28T00:00:00.000Z",
     endsAt: "2026-08-30T00:00:00.000Z",
     productId: null,
-    productName: "Building Thinking Classrooms",
+    productName: "Cohorts",
     thoughtLeaderId: "presenter-789",
     thoughtLeaderName: "Peter Liljedahl",
     participant: {
@@ -105,6 +105,23 @@ test("builds the CRM registration webhook payload with cohort, participant, acco
     activeRegistrantCount: 1,
     withdrawnCount: 0
   });
+});
+
+test("uses scheduled session boundaries for CRM cohort dates when sessions exist", () => {
+  const payload = buildCrmRegistrationWebhookPayload(registration({
+    cohort: {
+      ...registration().cohort,
+      startDate: new Date("2026-07-01T00:00:00.000Z"),
+      endDate: new Date("2026-09-01T00:00:00.000Z"),
+      sessions: [
+        { startTime: new Date("2026-07-28T16:00:00.000Z"), endTime: new Date("2026-07-28T17:30:00.000Z") },
+        { startTime: new Date("2026-08-30T16:00:00.000Z"), endTime: new Date("2026-08-30T17:30:00.000Z") }
+      ]
+    }
+  }));
+
+  assert.equal(payload.startsAt, "2026-07-28T16:00:00.000Z");
+  assert.equal(payload.endsAt, "2026-08-30T17:30:00.000Z");
 });
 
 test("builds one CRM payload per saved participant with cohort totals", () => {
