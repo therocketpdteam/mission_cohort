@@ -25,6 +25,23 @@ function searchableText(value: ReactNode): string {
   return "";
 }
 
+function normalizeSearchText(value: string) {
+  return value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function searchMatches(searchText: string, query: string) {
+  const normalizedQuery = normalizeSearchText(query);
+  if (!normalizedQuery) return true;
+  const normalizedText = normalizeSearchText(searchText);
+  return normalizedQuery.split(" ").every((token) => normalizedText.includes(token));
+}
+
 type SxValue = Record<string, any>;
 
 const spacing = 8;
@@ -525,16 +542,19 @@ export function TextField({
       value: child.props.value == null ? "" : String(child.props.value),
       label: child.props.label ?? child.props.children,
       menuLabel: child.props.children,
-      searchText: searchableText(child.props.label ?? child.props.children).toLowerCase(),
+      searchText: [
+        child.props.searchText,
+        child.props.label,
+        child.props.children,
+        child.props.value
+      ].map(searchableText).join(" "),
       disabled: child.props.disabled
     }));
   const selectedOption = selectOptions.find((option) => option.value === selectValue) ?? selectOptions[0];
   const [selectOpen, setSelectOpen] = useState(false);
   const [selectSearch, setSelectSearch] = useState("");
   const selectRef = useRef<HTMLLabelElement>(null);
-  const filteredSelectOptions = selectSearch.trim()
-    ? selectOptions.filter((option) => option.searchText.includes(selectSearch.trim().toLowerCase()))
-    : selectOptions;
+  const filteredSelectOptions = selectOptions.filter((option) => searchMatches(option.searchText, selectSearch));
 
   useEffect(() => {
     function close(event: MouseEvent) {
@@ -626,7 +646,7 @@ export function TextField({
   );
 }
 
-export function MenuItem({ value, children, disabled, onClick, className, sx, label: _label, ...props }: HTMLAttributes<HTMLDivElement> & { value?: string | number; disabled?: boolean; sx?: SxValue | SxValue[]; label?: ReactNode }) {
+export function MenuItem({ value, children, disabled, onClick, className, sx, label: _label, searchText: _searchText, ...props }: HTMLAttributes<HTMLDivElement> & { value?: string | number; disabled?: boolean; sx?: SxValue | SxValue[]; label?: ReactNode; searchText?: string }) {
   return (
     <option value={value} disabled={disabled} className={className} {...(props as any)}>
       {children}

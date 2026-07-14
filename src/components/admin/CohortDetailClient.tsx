@@ -2505,13 +2505,13 @@ export function CohortDetailClient({ id }: { id: string }) {
                     <TextField select label="QBO vendor" value={distributionSettings.quickBooksVendorRef} onChange={(event) => setDistributionSettings((values) => ({ ...values, quickBooksVendorRef: event.target.value }))}>
                       <MenuItem value="">Choose vendor</MenuItem>
                       {(quickBooksRefs.vendors.length > 0 ? quickBooksRefs.vendors : distributionSettings.quickBooksVendorRef ? [{ id: distributionSettings.quickBooksVendorRef, fullyQualifiedName: `Saved vendor ref ${distributionSettings.quickBooksVendorRef}` }] : []).map((vendor) => (
-                        <MenuItem value={vendor.id} key={vendor.id}>{vendor.fullyQualifiedName ?? vendor.name ?? vendor.id}</MenuItem>
+                        <MenuItem value={vendor.id} searchText={vendor.searchText ?? vendor.fullyQualifiedName ?? vendor.name ?? vendor.id} key={vendor.id}>{vendor.fullyQualifiedName ?? vendor.name ?? vendor.id}</MenuItem>
                       ))}
                     </TextField>
                     <TextField select label="QBO expense account" value={distributionSettings.quickBooksExpenseAccountRef} onChange={(event) => setDistributionSettings((values) => ({ ...values, quickBooksExpenseAccountRef: event.target.value }))}>
                       <MenuItem value="">Choose expense account</MenuItem>
                       {(quickBooksRefs.accounts.length > 0 ? quickBooksRefs.accounts : distributionSettings.quickBooksExpenseAccountRef ? [{ id: distributionSettings.quickBooksExpenseAccountRef, fullyQualifiedName: `Saved account ref ${distributionSettings.quickBooksExpenseAccountRef}` }] : []).map((account) => (
-                        <MenuItem value={account.id} key={account.id}>{[account.fullyQualifiedName ?? account.name ?? account.id, account.type].filter(Boolean).join(" · ")}</MenuItem>
+                        <MenuItem value={account.id} searchText={account.searchText ?? account.fullyQualifiedName ?? account.name ?? account.id} key={account.id}>{[account.fullyQualifiedName ?? account.name ?? account.id, account.type, account.subtype].filter(Boolean).join(" · ")}</MenuItem>
                       ))}
                     </TextField>
                     <TextField label="Notes" value={distributionSettings.notes} onChange={(event) => setDistributionSettings((values) => ({ ...values, notes: event.target.value }))} />

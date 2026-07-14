@@ -134,11 +134,11 @@ function PresenterDialog({
             </div>
             <TextField select fullWidth label="QBO vendor" value={values.quickBooksVendorRef ?? ""} onChange={(event) => setValue("quickBooksVendorRef", event.currentTarget.value)}>
               <MenuItem value="">No vendor selected</MenuItem>
-              {vendorOptions.map((vendor) => <MenuItem value={vendor.id} key={vendor.id}>{refLabel(vendor)}</MenuItem>)}
+              {vendorOptions.map((vendor) => <MenuItem value={vendor.id} searchText={vendor.searchText ?? refLabel(vendor)} key={vendor.id}>{refLabel(vendor)}</MenuItem>)}
             </TextField>
             <TextField select fullWidth label="QBO expense account" value={values.quickBooksExpenseAccountRef ?? ""} onChange={(event) => setValue("quickBooksExpenseAccountRef", event.currentTarget.value)}>
               <MenuItem value="">No expense account selected</MenuItem>
-              {accountOptions.map((account) => <MenuItem value={account.id} key={account.id}>{[refLabel(account), account.type].filter(Boolean).join(" · ")}</MenuItem>)}
+              {accountOptions.map((account) => <MenuItem value={account.id} searchText={account.searchText ?? refLabel(account)} key={account.id}>{[refLabel(account), account.type, account.subtype].filter(Boolean).join(" · ")}</MenuItem>)}
             </TextField>
             {refs.realmId && (
               <div style={{ gridColumn: "1 / -1" }}>

@@ -107,6 +107,20 @@ function moneyNumber(value: unknown) {
   return Number(value ?? 0);
 }
 
+function compactQuickBooksText(...values: unknown[]) {
+  return values
+    .map((value) => String(value ?? "").trim())
+    .filter(Boolean)
+    .join(" ");
+}
+
+function quickBooksAccountLabel(account: Record<string, any>) {
+  return [account.AcctNum, account.FullyQualifiedName ?? account.Name ?? account.Id]
+    .map((value) => String(value ?? "").trim())
+    .filter(Boolean)
+    .join(" - ");
+}
+
 function isQuickBooksMissingReference(error: unknown) {
   const message = error instanceof Error ? error.message : String(error ?? "");
   return /not found|invalid reference id|element id .* not found|object not found/i.test(message);
@@ -364,22 +378,47 @@ export async function listQuickBooksAccountingRefs() {
 
   const vendors = ((vendorResult.QueryResponse?.Vendor ?? []) as Record<string, any>[])
     .filter((vendor) => vendor.Active !== false)
-    .map((vendor) => ({
-      id: String(vendor.Id ?? ""),
-      name: String(vendor.DisplayName ?? vendor.CompanyName ?? vendor.Id ?? ""),
-      fullyQualifiedName: String(vendor.DisplayName ?? vendor.CompanyName ?? vendor.Id ?? "")
-    }))
+    .map((vendor) => {
+      const individualName = compactQuickBooksText(vendor.GivenName, vendor.MiddleName, vendor.FamilyName);
+      const displayName = String(vendor.DisplayName ?? vendor.CompanyName ?? individualName ?? vendor.PrintOnCheckName ?? vendor.Id ?? "");
+
+      return {
+        id: String(vendor.Id ?? ""),
+        name: displayName,
+        fullyQualifiedName: displayName,
+        searchText: compactQuickBooksText(
+          vendor.DisplayName,
+          vendor.FullyQualifiedName,
+          vendor.CompanyName,
+          vendor.PrintOnCheckName,
+          individualName,
+          vendor.GivenName,
+          vendor.MiddleName,
+          vendor.FamilyName,
+          vendor.Id
+        )
+      };
+    })
     .filter((vendor) => vendor.id)
     .sort((a, b) => a.fullyQualifiedName.localeCompare(b.fullyQualifiedName));
 
-  const expenseAccountTypes = new Set(["Expense", "Other Expense", "Cost of Goods Sold"]);
   const accounts = ((accountResult.QueryResponse?.Account ?? []) as Record<string, any>[])
-    .filter((account) => account.Active !== false && expenseAccountTypes.has(String(account.AccountType ?? "")))
+    .filter((account) => account.Active !== false)
     .map((account) => ({
       id: String(account.Id ?? ""),
-      name: String(account.Name ?? account.FullyQualifiedName ?? account.Id ?? ""),
+      name: quickBooksAccountLabel(account),
       type: String(account.AccountType ?? ""),
-      fullyQualifiedName: String(account.FullyQualifiedName ?? account.Name ?? account.Id ?? "")
+      subtype: String(account.AccountSubType ?? ""),
+      fullyQualifiedName: quickBooksAccountLabel(account),
+      searchText: compactQuickBooksText(
+        account.AcctNum,
+        account.Name,
+        account.FullyQualifiedName,
+        account.AccountType,
+        account.AccountSubType,
+        account.Classification,
+        account.Id
+      )
     }))
     .filter((account) => account.id)
     .sort((a, b) => a.fullyQualifiedName.localeCompare(b.fullyQualifiedName));
