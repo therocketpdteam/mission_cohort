@@ -60,6 +60,7 @@ type NormalizedHistoricalRow = {
   totalAmount: number;
   paymentStatus: PaymentStatus;
   paymentMethod: PaymentMethod;
+  registrationDate?: string;
   invoiceNumber?: string;
   purchaseOrderNumber?: string;
   source?: string;
@@ -96,6 +97,8 @@ const supportedFields = [
   "totalAmount",
   "paymentStatus",
   "paymentMethod",
+  "registrationDate",
+  "pocOnlyFlag",
   "invoiceNumber",
   "purchaseOrderNumber",
   "source",
@@ -134,6 +137,8 @@ const fieldLabels: Record<string, string> = {
   totalAmount: "Total amount",
   paymentStatus: "Payment status",
   paymentMethod: "Payment method",
+  registrationDate: "Registration/payment date",
+  pocOnlyFlag: "POC-only flag",
   invoiceNumber: "Invoice number",
   purchaseOrderNumber: "PO number",
   source: "Source",
@@ -163,15 +168,17 @@ const suggestions: Record<string, RegExp[]> = {
   primaryContactPhone: [/poc.*phone/, /contact.*phone/, /^phone$/],
   primaryContactTitle: [/poc.*title/, /contact.*title/, /^title$/],
   participantCount: [/^participants$/, /^# participants$/, /participant.*count/, /roster.*count/, /seats?/, /qty|quantity/, /^#$/],
-  participantText: [/participant.*list/, /roster/, /participants$/],
+  participantText: [/participant.*list/, /roster/],
   participantNames: [/participant.*names?/],
   participantEmails: [/participant.*emails?/],
   participantTitles: [/participant.*titles?/],
   totalAmount: [/^total$/, /total.*amount/, /amount/, /revenue/, /sales/, /price/],
   paymentStatus: [/^status$/, /payment.*status/, /paid/],
   paymentMethod: [/payment.*method/, /method/],
+  registrationDate: [/^date$/, /registration.*date/, /payment.*date/, /invoice.*date/],
+  pocOnlyFlag: [/^poc$/, /poc.*only/, /admin.*contact/, /non.*participant/],
   invoiceNumber: [/invoice/, /^invoice #$/],
-  purchaseOrderNumber: [/purchase.*order/, /^po/],
+  purchaseOrderNumber: [/purchase.*order/, /^po($|\s|number|num)/],
   source: [/source/, /channel/, /origin/],
   utmSource: [/utm.*source/],
   utmCampaign: [/utm.*campaign/, /campaign/],
@@ -432,6 +439,14 @@ function isParsedParticipant(value: ReturnType<typeof participantFromRow>): valu
   return Boolean(value?.email);
 }
 
+function isMarked(value: string) {
+  return ["x", "yes", "true", "1"].includes(normalizedHeader(value));
+}
+
+function isPocOnlyRow(row: CsvRow, mapping: HistoricalImportMapping) {
+  return isMarked(value(row, mapping, "pocOnlyFlag"));
+}
+
 function buildGroupedHistoricalRows(csvText: string, inputMapping: HistoricalImportMapping | undefined, cohort: HistoricalCohortImportDetails) {
   const parsed = parseHistoricalCsv(csvText);
   const suggestedMapping = suggestHistoricalImportMapping(parsed.headers);
@@ -451,11 +466,14 @@ function buildGroupedHistoricalRows(csvText: string, inputMapping: HistoricalImp
 
   const rows = groups.map((group) => {
     const startRow = group.start;
-    const participants = group.rows.map((row) => participantFromRow(row, mapping)).filter(isParsedParticipant);
+    const participants = group.rows
+      .filter((row) => !isPocOnlyRow(row, mapping))
+      .map((row) => participantFromRow(row, mapping))
+      .filter(isParsedParticipant);
     const participantWarnings = participants
       .map((participant, index) => !participant.title ? `Participant ${index + 1} is missing title.` : "")
       .filter(Boolean);
-    const primary = participants[0] ?? participantFromRow(startRow, mapping);
+    const primary = participantFromRow(startRow, mapping) ?? participants[0];
     const participantCount = parseIntValue(value(startRow, mapping, "participantCount")) || participants.length || 1;
     const fallbackOrganizationName = [primary?.firstName, primary?.lastName].filter(Boolean).join(" ");
     const organizationName = value(startRow, mapping, "organizationName") || fallbackOrganizationName;
@@ -485,6 +503,7 @@ function buildGroupedHistoricalRows(csvText: string, inputMapping: HistoricalImp
       totalAmount: parseMoney(value(startRow, mapping, "totalAmount")),
       paymentStatus: parsePaymentStatus(value(startRow, mapping, "paymentStatus")),
       paymentMethod: parsePaymentMethod(value(startRow, mapping, "paymentMethod") || value(startRow, mapping, "notes")),
+      registrationDate: parseDateValue(value(startRow, mapping, "registrationDate"))?.toISOString(),
       invoiceNumber: value(startRow, mapping, "invoiceNumber") || undefined,
       purchaseOrderNumber: value(startRow, mapping, "purchaseOrderNumber") || undefined,
       source: value(startRow, mapping, "source") || undefined,
@@ -594,6 +613,7 @@ export function normalizeHistoricalImportRows(csvText: string, inputMapping?: Hi
       totalAmount: parseMoney(value(row, mapping, "totalAmount")),
       paymentStatus: parsePaymentStatus(value(row, mapping, "paymentStatus")),
       paymentMethod: parsePaymentMethod(value(row, mapping, "paymentMethod")),
+      registrationDate: parseDateValue(value(row, mapping, "registrationDate"))?.toISOString(),
       invoiceNumber: value(row, mapping, "invoiceNumber") || undefined,
       purchaseOrderNumber: value(row, mapping, "purchaseOrderNumber") || undefined,
       source: value(row, mapping, "source") || undefined,
@@ -647,7 +667,7 @@ function summarizeRows(rows: Array<{ normalized: NormalizedHistoricalRow; warnin
     };
     existing.rows += 1;
     existing.registrations += row.errors.length ? 0 : 1;
-    existing.participants += row.normalized.participantCount;
+    existing.participants += row.normalized.participants.length;
     existing.amount += row.normalized.totalAmount;
     cohorts.set(key, existing);
   }
@@ -821,6 +841,12 @@ async function findOrCreateOrganization(tx: Prisma.TransactionClient, row: Norma
   });
 }
 
+function registrationStatusForHistoricalRow(row: NormalizedHistoricalRow) {
+  return row.paymentStatus === PaymentStatus.CANCELLED || row.paymentStatus === PaymentStatus.REFUNDED
+    ? RegistrationStatus.CANCELLED
+    : RegistrationStatus.COMPLETED;
+}
+
 export async function previewHistoricalImport(input: { csvText: string; mapping?: HistoricalImportMapping; cohort?: HistoricalCohortImportDetails }) {
   return normalizeHistoricalImportRows(input.csvText, input.mapping, input.cohort);
 }
@@ -903,13 +929,14 @@ export async function importHistoricalCsv(input: {
           participantListStatus,
           totalAmount: row.normalized.totalAmount,
           participantCount: row.normalized.participantCount,
-          status: RegistrationStatus.COMPLETED,
+          status: registrationStatusForHistoricalRow(row.normalized),
           source: row.normalized.source || "historical_import",
           utmSource: row.normalized.utmSource,
           utmCampaign: row.normalized.utmCampaign,
           externalSource: "historical_import",
           externalSubmissionId: `${batch.id}:${row.rowNumber}`,
-          notes: [row.normalized.notes, "Historical import: data-only closed cohort record."].filter(Boolean).join("\n")
+          notes: [row.normalized.notes, "Historical import: data-only closed cohort record."].filter(Boolean).join("\n"),
+          createdAt: row.normalized.registrationDate ? new Date(row.normalized.registrationDate) : undefined
         }
       });
       entityCounts.registrations += 1;
@@ -941,8 +968,13 @@ export async function importHistoricalCsv(input: {
             status: row.normalized.paymentStatus,
             method: row.normalized.paymentMethod,
             invoiceNumber: row.normalized.invoiceNumber,
-            paymentDate: row.normalized.endDate ? new Date(row.normalized.endDate) : undefined,
-            notes: "Historical import payment record."
+            paymentDate: row.normalized.registrationDate
+              ? new Date(row.normalized.registrationDate)
+              : row.normalized.endDate
+                ? new Date(row.normalized.endDate)
+                : undefined,
+            notes: "Historical import payment record.",
+            createdAt: row.normalized.registrationDate ? new Date(row.normalized.registrationDate) : undefined
           }
         });
         entityCounts.payments += 1;

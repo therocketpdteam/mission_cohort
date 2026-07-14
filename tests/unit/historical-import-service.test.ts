@@ -84,3 +84,66 @@ test("groups single-cohort roster CSV rows into registrations with the first row
   assert.equal(preview.rows[1].normalized.organizationState, "ME");
   assert.equal(preview.supportedFields.some((field) => field.field === "cohortTitle"), false);
 });
+
+test("excludes POC-only rows from participants while preserving the registration contact and date", () => {
+  const headers = [
+    "Key",
+    "District",
+    "Address",
+    "City",
+    "State",
+    "Zip",
+    "Primary contact",
+    "Name",
+    "Title",
+    "Email",
+    "Phone",
+    "Participants",
+    "Amount",
+    "Adtnl. team",
+    "Total",
+    "Status",
+    "# Participants",
+    "Add Participants",
+    "POC",
+    "Date",
+    "Invoice #",
+    "Notes"
+  ];
+  const csvRow = (cells: string[]) => headers.map((_, index) => cells[index] ?? "").join(",");
+  const groupedCsv = [
+    headers.join(","),
+    csvRow(["abc", "San Benito High School District", "1220 Monterey St", "Hollister", "CA", "95023", "X", "Donna Wilkinson", "Admin", "dwilkinson@example.edu", "831-555-0100", "2", "", "", "$990", "Paid", "", "", "X", "9/26/2025", "JG-113", "Ignore me"]),
+    csvRow(["", "San Benito High School District", "", "", "", "", "", "Carissa Carsey", "Teacher", "ccarsey@example.edu"]),
+    csvRow(["", "San Benito High School District", "", "", "", "", "", "Allison Musich", "Teacher", "amusich@example.edu"]),
+    csvRow(["def", "Campbell Hall", "4533 Laurel Canyon Blvd", "Studio City", "CA", "91607", "X", "Carolyn Lagaly", "Admin", "lagalyc@example.edu", "", "1", "", "", "$495", "Refunded", "", "", "X", "8/6/2025", "JG-46", "Refunded"])
+  ].join("\n");
+  const preview = normalizeHistoricalImportRows(groupedCsv, { notes: "" }, {
+    title: "Build teaching confidence with powerful lesson design",
+    shortName: "JG-Fall-2025",
+    presenterName: "Jennifer Gonzalez",
+    presenterEmail: "gonzjenn@gmail.com",
+    presenterShortName: "JG",
+    startDate: "3/3/2026",
+    endDate: "3/31/2026",
+    season: "Fall"
+  });
+
+  assert.equal(preview.summary.totalRows, 2);
+  assert.equal(preview.summary.validRows, 2);
+  assert.equal(preview.summary.cohorts[0]?.participants, 2);
+  assert.equal(preview.mapping.purchaseOrderNumber, undefined);
+  assert.equal(preview.rows[0].normalized.cohortShortName, "JG-Fall-2025");
+  assert.equal(preview.rows[0].normalized.primaryContactName, "Donna Wilkinson");
+  assert.equal(preview.rows[0].normalized.primaryContactEmail, "dwilkinson@example.edu");
+  assert.equal(preview.rows[0].normalized.participantCount, 2);
+  assert.equal(preview.rows[0].normalized.participants.length, 2);
+  assert.equal(preview.rows[0].normalized.participants[0].email, "ccarsey@example.edu");
+  assert.equal(preview.rows[0].normalized.registrationDate, "2025-09-26T15:00:00.000Z");
+  assert.equal(preview.rows[0].normalized.notes, undefined);
+  assert.equal(preview.rows[1].normalized.primaryContactName, "Carolyn Lagaly");
+  assert.equal(preview.rows[1].normalized.paymentStatus, PaymentStatus.REFUNDED);
+  assert.equal(preview.rows[1].normalized.participantCount, 1);
+  assert.equal(preview.rows[1].normalized.participants.length, 0);
+  assert.equal(preview.rows[1].normalized.registrationDate, "2025-08-06T15:00:00.000Z");
+});
