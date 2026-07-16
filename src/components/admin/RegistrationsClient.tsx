@@ -7,6 +7,7 @@ import { CheckCircleOutline } from "@/components/ui/icons";
 import { DeleteOutline } from "@/components/ui/icons";
 import { EditOutlined } from "@/components/ui/icons";
 import { ExpandMoreOutlined } from "@/components/ui/icons";
+import { HelpOutline } from "@/components/ui/icons";
 import {
   Alert,
   Autocomplete,
@@ -19,10 +20,12 @@ import {
   DialogTitle,
   FormControlLabel,
   Grid,
+  IconButton,
   MenuItem,
   Stack,
   Switch,
   TextField,
+  Tooltip,
   Typography
 } from "@/components/ui/primitives";
 import { GridColDef, GridRowParams, GridRowSelectionModel } from "./common";
@@ -148,8 +151,8 @@ export function RegistrationEditor({
   const [organization, setOrganization] = useState<AdminRow | null>(null);
   const [organizationSearch, setOrganizationSearch] = useState("");
   const [lastAutoTotal, setLastAutoTotal] = useState<number | null>(null);
-  const [financeRefsOpen, setFinanceRefsOpen] = useState(false);
   const [attributionOpen, setAttributionOpen] = useState(false);
+  const [compedHelpOpen, setCompedHelpOpen] = useState(false);
   const [creatingOrganization, setCreatingOrganization] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -164,7 +167,6 @@ export function RegistrationEditor({
       setOrganization(organizations.find((item) => item.id === editing?.organizationId) ?? editing?.organization ?? null);
       setOrganizationSearch(editing?.organization?.name ?? "");
       setLastAutoTotal(registrationTotalForCohort(selectedCohort, nextValues.participantCount));
-      setFinanceRefsOpen(Boolean(editing?.quickBooksCustomerRef || editing?.quickBooksInvoiceRef || editing?.quickBooksRealmId));
       setAttributionOpen(Boolean(editing?.utmSource || editing?.utmMedium || editing?.utmCampaign || editing?.utmContent || editing?.utmTerm || editing?.landingPageUrl || editing?.referrerUrl));
       setError(null);
     }
@@ -178,6 +180,11 @@ export function RegistrationEditor({
   const sessionCount = sessionCountForPricing(cohort);
   const suggestedTotal = registrationTotalForCohort(cohort, values.participantCount);
   const isCompedRegistration = values.paymentMethod === "COMPED";
+  const organizationName = organizationSearch.trim();
+  const hasExactOrganizationMatch = organizations.some((item) => String(item.name ?? "").trim().toLowerCase() === organizationName.toLowerCase());
+  const organizationOptions = organizationName && !hasExactOrganizationMatch
+    ? [{ id: "__create_organization__", name: `Create "${organizationName}"`, __createOrganization: true }, ...organizations]
+    : organizations;
 
   useEffect(() => {
     if (!open || !cohort || isCompedRegistration) {
@@ -282,35 +289,33 @@ export function RegistrationEditor({
             />
           </Grid>
           <Grid size={{ xs: 12, md: 6 }}>
-            <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
-              <Autocomplete
-                sx={{ flex: 1 }}
-                options={organizations}
-                value={organization}
-                inputValue={organizationSearch}
-                onInputChange={(_event, value) => {
-                  setOrganizationSearch(value);
-                  if (organization && value !== (organization.name ?? "")) {
-                    setOrganization(null);
-                  }
-                }}
-                onChange={(_event, value) => setOrganization(value)}
-                getOptionLabel={(option) => option.name ?? ""}
-                renderInput={(params) => (
-                  <TextField
-                    {...params}
-                    label="Organization"
-                    required
-                    helperText="Select an existing organization or type a new name and create it."
-                  />
-                )}
-              />
-              {!organization && organizationSearch.trim() && (
-                <Button type="button" startIcon={<AddIcon />} onClick={createOrganizationInline} disabled={creatingOrganization}>
-                  {creatingOrganization ? "Creating" : "Create"}
-                </Button>
+            <Autocomplete
+              options={organizationOptions}
+              value={organization}
+              inputValue={organizationSearch}
+              onInputChange={(_event, value) => {
+                setOrganizationSearch(value);
+                if (organization && value !== (organization.name ?? "")) {
+                  setOrganization(null);
+                }
+              }}
+              onChange={(_event, value) => {
+                if (value?.__createOrganization) {
+                  void createOrganizationInline();
+                  return;
+                }
+                setOrganization(value);
+              }}
+              getOptionLabel={(option) => option.name ?? ""}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Organization"
+                  required
+                  helperText={creatingOrganization ? "Creating organization..." : "Search existing organizations, or choose Create when it is not listed."}
+                />
               )}
-            </Stack>
+            />
           </Grid>
           <Grid size={{ xs: 12, md: 4 }}>
             <TextField fullWidth label="Primary contact" value={values.primaryContactName ?? ""} onChange={(event) => setValue("primaryContactName", event.target.value)} required />
@@ -392,15 +397,17 @@ export function RegistrationEditor({
                 : "No cohort price is configured yet; enter the total manually."}
             />
           </Grid>
-          <Grid size={{ xs: 12, md: 6 }}>
-            <div className="registration-editor-subsection registration-comped-option">
+          <Grid size={{ xs: 12, md: 3 }}>
+            <div className="registration-comped-inline">
               <FormControlLabel
                 control={<Switch checked={isCompedRegistration} onChange={(event) => setCompedRegistration(event.target.checked)} />}
                 label="Free / comped participant"
               />
-              <Typography variant="body2" color="text.secondary">
-                Use this for thought-leader guests, internal tests, or invited attendees who should receive roster/calendar/email handling without billing.
-              </Typography>
+              <Tooltip title="What does this mean?">
+                <IconButton type="button" size="small" aria-label="Free / comped participant help" onClick={() => setCompedHelpOpen(true)}>
+                  <HelpOutline fontSize="small" />
+                </IconButton>
+              </Tooltip>
             </div>
           </Grid>
           <Grid size={{ xs: 12 }}>
@@ -408,30 +415,14 @@ export function RegistrationEditor({
               <Stack direction={{ xs: "column", md: "row" }} spacing={1} justifyContent="space-between" alignItems={{ xs: "stretch", md: "center" }}>
                 <div>
                   <Typography variant="subtitle2">Advanced fields</Typography>
-                  <Typography variant="body2" color="text.secondary">Optional repair fields for finance sync and source attribution.</Typography>
+                  <Typography variant="body2" color="text.secondary">Optional source attribution fields. QuickBooks links are handled through cohort projects and invoices.</Typography>
                 </div>
                 <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
-                  <Button type="button" variant="outlined" size="small" endIcon={<ExpandMoreOutlined />} onClick={() => setFinanceRefsOpen((current) => !current)}>
-                    {financeRefsOpen ? "Hide QuickBooks refs" : "QuickBooks refs"}
-                  </Button>
                   <Button type="button" variant="outlined" size="small" endIcon={<ExpandMoreOutlined />} onClick={() => setAttributionOpen((current) => !current)}>
                     {attributionOpen ? "Hide attribution" : "Attribution"}
                   </Button>
                 </Stack>
               </Stack>
-              <Collapse in={financeRefsOpen}>
-                <Grid container spacing={2}>
-                  <Grid size={{ xs: 12, md: 4 }}>
-                    <TextField fullWidth label="QuickBooks customer ref" value={values.quickBooksCustomerRef ?? ""} onChange={(event) => setValue("quickBooksCustomerRef", event.target.value)} helperText="Usually set by QuickBooks invoice/project sync." />
-                  </Grid>
-                  <Grid size={{ xs: 12, md: 4 }}>
-                    <TextField fullWidth label="QuickBooks invoice ref" value={values.quickBooksInvoiceRef ?? ""} onChange={(event) => setValue("quickBooksInvoiceRef", event.target.value)} helperText="Usually filled after creating the invoice in QuickBooks." />
-                  </Grid>
-                  <Grid size={{ xs: 12, md: 4 }}>
-                    <TextField fullWidth label="QuickBooks realm ID" value={values.quickBooksRealmId ?? ""} onChange={(event) => setValue("quickBooksRealmId", event.target.value)} helperText="Usually inherited from the connected QuickBooks account." />
-                  </Grid>
-                </Grid>
-              </Collapse>
               <Collapse in={attributionOpen}>
                 <Grid container spacing={2}>
                   <Grid size={{ xs: 12, md: 4 }}>
@@ -468,6 +459,17 @@ export function RegistrationEditor({
         <Button variant="outlined" onClick={onClose}>Cancel</Button>
         <Button onClick={save} disabled={saving}>{saving ? "Saving" : "Save"}</Button>
       </DialogActions>
+      <Dialog open={compedHelpOpen} onClose={() => setCompedHelpOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle>Free / comped participant</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary">
+            Use this for thought-leader guests, internal tests, or invited attendees who should receive roster, calendar, and email handling without billing. Mission Control sets the amount to $0 and does not expect invoice or payment collection.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setCompedHelpOpen(false)}>Got it</Button>
+        </DialogActions>
+      </Dialog>
     </Dialog>
   );
 }

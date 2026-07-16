@@ -787,10 +787,25 @@ export function Autocomplete<T>({
 }) {
   const labelElement = renderInput?.({});
   const label = isValidElement(labelElement) ? (labelElement.props as any).label : undefined;
+  const helperText = isValidElement(labelElement) ? (labelElement.props as any).helperText : undefined;
+  const required = isValidElement(labelElement) ? (labelElement.props as any).required : undefined;
   const labels = useMemo(() => options.map((option) => getOptionLabel?.(option) ?? String(option)), [getOptionLabel, options]);
   const currentIndex = value ? options.findIndex((option) => option === value || (getOptionLabel?.(option) ?? String(option)) === (getOptionLabel?.(value) ?? String(value))) : -1;
   const [open, setOpen] = useState(false);
+  const [internalInputValue, setInternalInputValue] = useState("");
   const ref = useRef<HTMLLabelElement>(null);
+  const isSearchable = typeof onInputChange === "function" || typeof _inputValue === "string";
+  const displayValue = _inputValue ?? internalInputValue;
+  const filteredIndexes = useMemo(() => {
+    const query = displayValue.trim().toLowerCase();
+    if (!query) {
+      return labels.map((_label, index) => index);
+    }
+    return labels
+      .map((optionLabel, index) => ({ optionLabel, index }))
+      .filter(({ optionLabel }) => optionLabel.toLowerCase().includes(query))
+      .map(({ index }) => index);
+  }, [displayValue, labels]);
 
   useEffect(() => {
     function close(event: MouseEvent) {
@@ -807,6 +822,7 @@ export function Autocomplete<T>({
     const nextValue = options[index] ?? null;
     onChange?.({ target: { value: String(index) } }, nextValue);
     onInputChange?.(null, nextValue ? labels[index] : "", "selectOption");
+    setInternalInputValue(nextValue ? labels[index] : "");
     setOpen(false);
   }
 
@@ -814,28 +830,53 @@ export function Autocomplete<T>({
     <label className="ui-field ui-field-full" ref={ref}>
       {label && <span className="ui-label">{label}</span>}
       <span className="ui-select">
-        <button type="button" className="ui-input ui-select-trigger" aria-expanded={open} disabled={disabled} onClick={() => setOpen((current) => !current)}>
-          <span>{currentIndex >= 0 ? labels[currentIndex] : "Select"}</span>
-          <span aria-hidden="true">⌄</span>
-        </button>
+        {isSearchable ? (
+          <span className="ui-autocomplete-input-wrap">
+            <input
+              className="ui-input ui-autocomplete-input"
+              value={displayValue}
+              required={required}
+              disabled={disabled}
+              aria-expanded={open}
+              placeholder="Search..."
+              onFocus={() => setOpen(true)}
+              onChange={(event) => {
+                const nextValue = event.currentTarget.value;
+                setInternalInputValue(nextValue);
+                onInputChange?.(event, nextValue, "input");
+                setOpen(true);
+              }}
+            />
+            <button type="button" className="ui-autocomplete-toggle" disabled={disabled} aria-label="Show options" onClick={() => setOpen((current) => !current)}>
+              ⌄
+            </button>
+          </span>
+        ) : (
+          <button type="button" className="ui-input ui-select-trigger" aria-expanded={open} disabled={disabled} onClick={() => setOpen((current) => !current)}>
+            <span>{currentIndex >= 0 ? labels[currentIndex] : "Select"}</span>
+            <span aria-hidden="true">⌄</span>
+          </button>
+        )}
         {open && (
           <span className="ui-select-menu">
             <button type="button" className={clsx("ui-select-option", currentIndex < 0 && "is-selected")} onClick={() => choose(-1)}>
               Select
             </button>
-            {labels.map((optionLabel, index) => (
+            {filteredIndexes.map((index) => (
               <button
                 type="button"
                 className={clsx("ui-select-option", currentIndex === index && "is-selected")}
-                key={`${optionLabel}-${index}`}
+                key={`${labels[index]}-${index}`}
                 onClick={() => choose(index)}
               >
-                {optionLabel}
+                {labels[index]}
               </button>
             ))}
+            {filteredIndexes.length === 0 && <span className="ui-select-empty">No matches</span>}
           </span>
         )}
       </span>
+      {helperText && <span className="ui-helper">{helperText}</span>}
     </label>
   );
 }
