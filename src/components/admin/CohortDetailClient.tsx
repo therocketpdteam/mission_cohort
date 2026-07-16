@@ -2977,7 +2977,7 @@ export function CohortDetailClient({ id }: { id: string }) {
               />
             </SectionCard>
             <SectionCard
-              title="POC Communication History"
+              title="POC Email Summary"
               action={registrationDetail.primaryContactEmail ? (
                 <Button href={`/communications?search=${encodeURIComponent(registrationDetail.primaryContactEmail)}`} variant="outlined" size="small">
                   Open in Communications
@@ -2994,6 +2994,7 @@ export function CohortDetailClient({ id }: { id: string }) {
         editing={editingRegistration}
         cohorts={cohort ? [cohort, ...allCohorts.filter((row) => row.id !== cohort.id)] : allCohorts}
         organizations={organizations}
+        registrations={registrations}
         defaultCohortId={id}
         lockCohort={!editingRegistration}
         onClose={() => {

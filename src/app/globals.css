@@ -994,6 +994,24 @@ h6,
   padding: 12px;
 }
 
+.registration-editor-subsection-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.registration-editor-subsection-heading > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.registration-editor-subsection-heading p {
+  margin: 0;
+}
+
 .registration-comped-option {
   height: 100%;
   align-content: center;
@@ -5191,6 +5209,56 @@ h6,
   min-width: 0;
 }
 
+.poc-history-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.poc-history-summary > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  border: 1px solid var(--color-slate-200);
+  border-radius: 10px;
+  background: var(--color-surface-container-lowest);
+  padding: 10px;
+}
+
+.poc-history-summary span,
+.poc-history-latest-label span,
+.poc-history-latest-label small {
+  color: var(--color-slate-500);
+  font-size: 0.72rem;
+  font-weight: 760;
+}
+
+.poc-history-summary strong {
+  color: var(--color-primary-900);
+  font-family: var(--font-heading);
+  font-size: 1.08rem;
+  font-weight: 860;
+  line-height: 1;
+}
+
+.poc-history-summary .is-alert {
+  border-color: rgba(220, 38, 38, 0.24);
+  background: var(--color-danger-100);
+}
+
+.poc-history-summary .is-alert strong {
+  color: var(--color-danger-600);
+}
+
+.poc-history-latest-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  padding: 2px 1px;
+}
+
 .poc-history-row {
   display: grid;
   gap: 8px;
@@ -5271,6 +5339,12 @@ h6,
   min-width: 220px;
   color: var(--color-slate-500);
   font-size: 0.76rem;
+}
+
+@media (max-width: 620px) {
+  .poc-history-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .registration-journey {
@@ -6153,6 +6227,7 @@ h6,
 .app-shell.is-night .quick-view-list-row,
 .app-shell.is-night .poc-history-row,
 .app-shell.is-night .poc-history-footer,
+.app-shell.is-night .poc-history-summary > div,
 .app-shell.is-night .registration-journey-stat,
 .app-shell.is-night .registration-journey-row,
 .app-shell.is-night .registration-journey-chips span,
@@ -6244,6 +6319,7 @@ h6,
 .app-shell.is-night .registration-preflight-notes,
 .app-shell.is-night .poc-history-row,
 .app-shell.is-night .poc-history-footer,
+.app-shell.is-night .poc-history-summary > div,
 .app-shell.is-night .registration-journey-stat,
 .app-shell.is-night .registration-journey-row,
 .app-shell.is-night .registration-journey-preview,

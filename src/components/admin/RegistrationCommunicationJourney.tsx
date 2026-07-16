@@ -10,10 +10,10 @@ type JourneyGroupKey = "needs_attention" | "scheduled" | "sent" | "skipped" | "p
 
 const journeyGroups: Array<{ key: JourneyGroupKey; title: string; description: string }> = [
   { key: "needs_attention", title: "Needs attention", description: "Failed, bounced, or blocked messages." },
-  { key: "scheduled", title: "Scheduled", description: "Messages queued for future delivery." },
+  { key: "scheduled", title: "Scheduled", description: "Next emails already queued for future delivery." },
   { key: "sent", title: "Sent", description: "Messages that already went out." },
   { key: "skipped", title: "Skipped", description: "Milestones intentionally not sent." },
-  { key: "planned", title: "Planned", description: "Draft or pending journey records." }
+  { key: "planned", title: "Planned", description: "Next emails that will be scheduled once the journey is ready." }
 ];
 
 function deliverySummary(communication: AdminRow) {
@@ -174,7 +174,7 @@ export function RegistrationCommunicationJourney({
   const scheduledCount = grouped.scheduled.length;
   const sentCount = grouped.sent.length;
   const issueCount = grouped.needs_attention.length;
-  const skippedCount = grouped.skipped.length;
+  const plannedCount = grouped.planned.length;
 
   return (
     <div className="registration-journey">
@@ -192,8 +192,8 @@ export function RegistrationCommunicationJourney({
           <strong>{issueCount}</strong>
         </div>
         <div className="registration-journey-stat">
-          <span>Skipped</span>
-          <strong>{skippedCount}</strong>
+          <span>Planned</span>
+          <strong>{plannedCount}</strong>
         </div>
       </div>
 

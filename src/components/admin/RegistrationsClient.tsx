@@ -113,6 +113,53 @@ function taskTemplateName(task: AdminRow) {
   return "Participant List Request";
 }
 
+function organizationProfileFromRow(organization?: AdminRow | null) {
+  return {
+    addressLine1: organization?.addressLine1 ?? "",
+    addressLine2: organization?.addressLine2 ?? "",
+    city: organization?.city ?? "",
+    state: organization?.state ?? "",
+    zip: organization?.zip ?? "",
+    phone: organization?.phone ?? "",
+    website: organization?.website ?? ""
+  };
+}
+
+function organizationProfilePayload(profile: AdminRow) {
+  return {
+    addressLine1: String(profile.addressLine1 ?? "").trim() || undefined,
+    addressLine2: String(profile.addressLine2 ?? "").trim() || undefined,
+    city: String(profile.city ?? "").trim() || undefined,
+    state: String(profile.state ?? "").trim().toUpperCase() || undefined,
+    zip: String(profile.zip ?? "").trim() || undefined,
+    phone: String(profile.phone ?? "").trim() || undefined,
+    website: String(profile.website ?? "").trim() || undefined
+  };
+}
+
+function organizationProfileChanged(organization: AdminRow | null, payload: AdminRow) {
+  if (!organization) return false;
+  return ["addressLine1", "addressLine2", "city", "state", "zip", "phone", "website"].some((key) =>
+    String(organization[key] ?? "").trim() !== String(payload[key] ?? "").trim()
+  );
+}
+
+function organizationAddressSummary(organization?: AdminRow | null) {
+  if (!organization) return "";
+  const cityStateZip = [
+    organization.city,
+    [organization.state, organization.zip].filter(Boolean).join(" ")
+  ].filter(Boolean).join(", ");
+  return [organization.addressLine1, organization.addressLine2, cityStateZip].filter(Boolean).join("\n");
+}
+
+function latestRegistrationForOrganization(registrations: AdminRow[], organizationId?: string | null) {
+  if (!organizationId) return null;
+  return registrations
+    .filter((registration) => registration.organizationId === organizationId && !registration.archivedAt)
+    .sort((a, b) => new Date(b.updatedAt ?? b.createdAt ?? 0).getTime() - new Date(a.updatedAt ?? a.createdAt ?? 0).getTime())[0] ?? null;
+}
+
 function emptyRegistration() {
   return {
     primaryContactName: "",
@@ -132,6 +179,7 @@ export function RegistrationEditor({
   editing,
   cohorts,
   organizations,
+  registrations = [],
   defaultCohortId,
   lockCohort = false,
   onClose,
@@ -141,6 +189,7 @@ export function RegistrationEditor({
   editing: AdminRow | null;
   cohorts: AdminRow[];
   organizations: AdminRow[];
+  registrations?: AdminRow[];
   defaultCohortId?: string;
   lockCohort?: boolean;
   onClose: () => void;
@@ -150,6 +199,7 @@ export function RegistrationEditor({
   const [cohort, setCohort] = useState<AdminRow | null>(null);
   const [organization, setOrganization] = useState<AdminRow | null>(null);
   const [organizationSearch, setOrganizationSearch] = useState("");
+  const [organizationProfile, setOrganizationProfile] = useState<AdminRow>({});
   const [lastAutoTotal, setLastAutoTotal] = useState<number | null>(null);
   const [attributionOpen, setAttributionOpen] = useState(false);
   const [compedHelpOpen, setCompedHelpOpen] = useState(false);
@@ -162,10 +212,12 @@ export function RegistrationEditor({
       const nextValues = editing ?? emptyRegistration();
       const selectedCohortId = editing?.cohortId ?? defaultCohortId;
       const selectedCohort = cohorts.find((item) => item.id === selectedCohortId) ?? editing?.cohort ?? null;
+      const selectedOrganization = organizations.find((item) => item.id === editing?.organizationId) ?? editing?.organization ?? null;
       setValues(nextValues);
       setCohort(selectedCohort);
-      setOrganization(organizations.find((item) => item.id === editing?.organizationId) ?? editing?.organization ?? null);
-      setOrganizationSearch(editing?.organization?.name ?? "");
+      setOrganization(selectedOrganization);
+      setOrganizationSearch(selectedOrganization?.name ?? "");
+      setOrganizationProfile(organizationProfileFromRow(selectedOrganization));
       setLastAutoTotal(registrationTotalForCohort(selectedCohort, nextValues.participantCount));
       setAttributionOpen(Boolean(editing?.utmSource || editing?.utmMedium || editing?.utmCampaign || editing?.utmContent || editing?.utmTerm || editing?.landingPageUrl || editing?.referrerUrl));
       setError(null);
@@ -185,6 +237,40 @@ export function RegistrationEditor({
   const organizationOptions = organizationName && !hasExactOrganizationMatch
     ? [{ id: "__create_organization__", name: `Create "${organizationName}"`, __createOrganization: true }, ...organizations]
     : organizations;
+
+  function setOrganizationProfileValue(name: string, value: unknown) {
+    setOrganizationProfile((current) => ({ ...current, [name]: value }));
+  }
+
+  function selectOrganization(nextOrganization: AdminRow | null) {
+    setOrganization(nextOrganization);
+    setOrganizationSearch(nextOrganization?.name ?? "");
+    setOrganizationProfile(organizationProfileFromRow(nextOrganization));
+
+    if (!editing && nextOrganization) {
+      const latest = latestRegistrationForOrganization(registrations, nextOrganization.id);
+      setValues((current) => {
+        const address = organizationAddressSummary(nextOrganization);
+        if (!latest) {
+          return {
+            ...current,
+            billingAddress: current.billingAddress || address
+          };
+        }
+
+        return {
+          ...current,
+          primaryContactName: current.primaryContactName || latest.primaryContactName || "",
+          primaryContactEmail: current.primaryContactEmail || latest.primaryContactEmail || "",
+          primaryContactPhone: current.primaryContactPhone || latest.primaryContactPhone || "",
+          primaryContactTitle: current.primaryContactTitle || latest.primaryContactTitle || "",
+          billingContactName: current.billingContactName || latest.billingContactName || latest.primaryContactName || "",
+          billingContactEmail: current.billingContactEmail || latest.billingContactEmail || latest.primaryContactEmail || "",
+          billingAddress: current.billingAddress || latest.billingAddress || address
+        };
+      });
+    }
+  }
 
   useEffect(() => {
     if (!open || !cohort || isCompedRegistration) {
@@ -231,10 +317,13 @@ export function RegistrationEditor({
     try {
       const created = await adminApi<AdminRow>("/api/organizations", {
         method: "POST",
-        body: { name: organizationSearch.trim(), type: "DISTRICT" }
+        body: {
+          ...organizationProfilePayload(organizationProfile),
+          name: organizationSearch.trim(),
+          type: "DISTRICT"
+        }
       });
-      setOrganization(created);
-      setOrganizationSearch(created.name ?? organizationSearch.trim());
+      selectOrganization(created);
     } catch (organizationError) {
       setError((organizationError as Error).message);
     } finally {
@@ -251,15 +340,27 @@ export function RegistrationEditor({
     setSaving(true);
     setError(null);
     try {
+      let savedOrganization = organization;
+      const organizationPayload = organizationProfilePayload(organizationProfile);
+      if (organizationProfileChanged(organization, organizationPayload)) {
+        savedOrganization = await adminApi<AdminRow>("/api/organizations", {
+          method: "PATCH",
+          body: { id: organization.id, ...organizationPayload }
+        });
+        setOrganization(savedOrganization);
+        setOrganizationProfile(organizationProfileFromRow(savedOrganization));
+      }
+
       await adminApi("/api/registrations", {
         method: editing ? "PATCH" : "POST",
         body: {
           ...values,
           id: editing?.id,
           cohortId: cohort.id,
-          organizationId: organization.id,
+          organizationId: savedOrganization?.id ?? organization.id,
           billingContactName: values.billingContactName || values.primaryContactName,
           billingContactEmail: values.billingContactEmail || values.primaryContactEmail,
+          billingAddress: values.billingAddress || organizationAddressSummary(savedOrganization ?? organization),
           deferNotifications: Boolean(editing && ["PUBLISHED", "ACTIVE"].includes(String(cohort.derivedStatus ?? cohort.status)))
         }
       });
@@ -297,6 +398,7 @@ export function RegistrationEditor({
                 setOrganizationSearch(value);
                 if (organization && value !== (organization.name ?? "")) {
                   setOrganization(null);
+                  setOrganizationProfile((current) => ({ ...current, name: value }));
                 }
               }}
               onChange={(_event, value) => {
@@ -304,7 +406,7 @@ export function RegistrationEditor({
                   void createOrganizationInline();
                   return;
                 }
-                setOrganization(value);
+                selectOrganization(value);
               }}
               getOptionLabel={(option) => option.name ?? ""}
               renderInput={(params) => (
@@ -316,6 +418,42 @@ export function RegistrationEditor({
                 />
               )}
             />
+          </Grid>
+          <Grid size={{ xs: 12 }}>
+            <div className="registration-editor-subsection registration-organization-profile">
+              <div className="registration-editor-subsection-heading">
+                <div>
+                  <Typography variant="subtitle2">Organization profile</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Selecting an existing organization fills these fields. Edits here update the organization for next time.
+                  </Typography>
+                </div>
+                {organization ? <StatusChip value="Autofilled" /> : <StatusChip value="New organization" />}
+              </div>
+              <Grid container spacing={1.25}>
+                <Grid size={{ xs: 12, md: 4 }}>
+                  <TextField fullWidth label="Address line 1" value={organizationProfile.addressLine1 ?? ""} onChange={(event) => setOrganizationProfileValue("addressLine1", event.target.value)} />
+                </Grid>
+                <Grid size={{ xs: 12, md: 4 }}>
+                  <TextField fullWidth label="Address line 2" value={organizationProfile.addressLine2 ?? ""} onChange={(event) => setOrganizationProfileValue("addressLine2", event.target.value)} />
+                </Grid>
+                <Grid size={{ xs: 12, md: 2 }}>
+                  <TextField fullWidth label="City" value={organizationProfile.city ?? ""} onChange={(event) => setOrganizationProfileValue("city", event.target.value)} />
+                </Grid>
+                <Grid size={{ xs: 6, md: 1 }}>
+                  <TextField fullWidth label="State" value={organizationProfile.state ?? ""} onChange={(event) => setOrganizationProfileValue("state", event.target.value.toUpperCase().slice(0, 2))} />
+                </Grid>
+                <Grid size={{ xs: 6, md: 1 }}>
+                  <TextField fullWidth label="ZIP" value={organizationProfile.zip ?? ""} onChange={(event) => setOrganizationProfileValue("zip", event.target.value)} />
+                </Grid>
+                <Grid size={{ xs: 12, md: 4 }}>
+                  <TextField fullWidth label="Organization phone" value={organizationProfile.phone ?? ""} onChange={(event) => setOrganizationProfileValue("phone", event.target.value)} />
+                </Grid>
+                <Grid size={{ xs: 12, md: 4 }}>
+                  <TextField fullWidth label="Website" value={organizationProfile.website ?? ""} onChange={(event) => setOrganizationProfileValue("website", event.target.value)} />
+                </Grid>
+              </Grid>
+            </div>
           </Grid>
           <Grid size={{ xs: 12, md: 4 }}>
             <TextField fullWidth label="Primary contact" value={values.primaryContactName ?? ""} onChange={(event) => setValue("primaryContactName", event.target.value)} required />
@@ -893,8 +1031,8 @@ function RegistrationDetailDialog({
           <section className="registration-detail-section">
             <div className="registration-section-heading">
               <div>
-                <h3>POC Communication History</h3>
-                <p>Outbound messages, attachments, and delivery signals.</p>
+                <h3>POC Email Summary</h3>
+                <p>Recent outbound activity for this contact, with full detail in Communications.</p>
               </div>
               {registration.primaryContactEmail ? (
                 <Button href={`/communications?search=${encodeURIComponent(registration.primaryContactEmail)}`} variant="outlined" size="small">
@@ -1414,6 +1552,7 @@ export function RegistrationsClient() {
         editing={editing}
         cohorts={cohorts}
         organizations={organizations}
+        registrations={rows}
         onClose={() => { setDialogOpen(false); setEditing(null); }}
         onSaved={async () => {
           const defer = Boolean(editing && ["PUBLISHED", "ACTIVE"].includes(String(editing.cohort?.derivedStatus ?? editing.cohort?.status)));
