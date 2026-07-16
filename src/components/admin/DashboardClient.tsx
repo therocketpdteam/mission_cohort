@@ -16,7 +16,9 @@ import {
   DialogContent,
   DialogTitle,
   Divider,
-  Grid
+  Grid,
+  MenuItem,
+  TextField
 } from "@/components/ui/primitives";
 import Link from "next/link";
 import type { Route } from "next";
@@ -49,6 +51,50 @@ const metrics: ReadonlyArray<MetricConfig> = [
   { key: "revenueCollected", label: "Revenue collected", href: "/registrations", helper: "Paid payment records", icon: <InsightsOutlined /> },
   { key: "outstanding", label: "Outstanding", href: "/registrations", helper: "Pending, invoiced, or past due", icon: <ArticleOutlined /> }
 ];
+
+const dashboardDateOptions = [
+  { value: "", label: "Any date" },
+  { value: "next30", label: "Next 30 days" },
+  { value: "next90", label: "Next 90 days" },
+  { value: "thisYear", label: "This year" },
+  { value: "custom", label: "Custom date" }
+];
+
+function isoDateBoundary(value: string, end = false) {
+  if (!value) {
+    return "";
+  }
+
+  const date = new Date(`${value}T00:00:00.000`);
+  if (end) {
+    date.setDate(date.getDate() + 1);
+  }
+  return date.toISOString();
+}
+
+function dashboardDateRange(datePreset: string, customStart: string, customEnd: string) {
+  const now = new Date();
+  const start = new Date(now);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+
+  if (datePreset === "next30") {
+    end.setDate(end.getDate() + 30);
+  } else if (datePreset === "next90") {
+    end.setDate(end.getDate() + 90);
+  } else if (datePreset === "thisYear") {
+    start.setMonth(0, 1);
+    end.setFullYear(start.getFullYear() + 1, 0, 1);
+  } else if (datePreset === "custom") {
+    const rangeStart = isoDateBoundary(customStart);
+    const rangeEnd = isoDateBoundary(customEnd, true);
+    return rangeStart && rangeEnd ? { rangeStart, rangeEnd } : null;
+  } else {
+    return null;
+  }
+
+  return { rangeStart: start.toISOString(), rangeEnd: end.toISOString() };
+}
 
 function taskTemplateName(task: AdminRow) {
   if (task.category === "PAYMENT_FOLLOW_UP") {
@@ -374,6 +420,14 @@ function RecentActivityPanel({ data, onOpenRegistration }: { data: AdminRow | nu
 export function DashboardClient() {
   const [data, setData] = useState<AdminRow | null>(null);
   const [templates, setTemplates] = useState<AdminRow[]>([]);
+  const [cohorts, setCohorts] = useState<AdminRow[]>([]);
+  const [presenters, setPresenters] = useState<AdminRow[]>([]);
+  const [cohortScope, setCohortScope] = useState("active");
+  const [cohortId, setCohortId] = useState("");
+  const [presenterId, setPresenterId] = useState("");
+  const [datePreset, setDatePreset] = useState("");
+  const [customStart, setCustomStart] = useState("");
+  const [customEnd, setCustomEnd] = useState("");
   const [loading, setLoading] = useState(true);
   const [readinessCohort, setReadinessCohort] = useState<AdminRow | null>(null);
   const [recentRegistration, setRecentRegistration] = useState<AdminRow | null>(null);
@@ -382,15 +436,32 @@ export function DashboardClient() {
 
   useEffect(() => {
     setLoading(true);
-    adminApi<AdminRow>("/api/admin-dashboard")
+    const params = new URLSearchParams();
+    if (cohortScope) params.set("cohortScope", cohortScope);
+    if (cohortId) params.set("cohortId", cohortId);
+    if (presenterId) params.set("presenterId", presenterId);
+    const range = dashboardDateRange(datePreset, customStart, customEnd);
+    if (range) {
+      params.set("rangeStart", range.rangeStart);
+      params.set("rangeEnd", range.rangeEnd);
+    }
+    adminApi<AdminRow>(`/api/admin-dashboard${params.size ? `?${params.toString()}` : ""}`)
       .then((dashboardData) => setData(dashboardData))
       .catch((error) => notifyError(error.message))
       .finally(() => setLoading(false));
-  }, [notifyError]);
+  }, [cohortId, cohortScope, customEnd, customStart, datePreset, notifyError, presenterId]);
 
   useEffect(() => {
-    adminApi<AdminRow[]>("/api/communications/templates")
-      .then((templateRows) => setTemplates(templateRows.filter((template) => template.active !== false)))
+    Promise.all([
+      adminApi<AdminRow[]>("/api/communications/templates").catch(() => []),
+      adminApi<AdminRow[]>("/api/cohorts").catch(() => []),
+      adminApi<AdminRow[]>("/api/presenters").catch(() => [])
+    ])
+      .then(([templateRows, cohortRows, presenterRows]) => {
+        setTemplates(templateRows.filter((template) => template.active !== false));
+        setCohorts(cohortRows);
+        setPresenters(presenterRows);
+      })
       .catch((error) => notifyError(error.message));
   }, [notifyError]);
 
@@ -499,6 +570,57 @@ export function DashboardClient() {
 
   return (
     <PageStack className="dashboard-page">
+      <section className="dashboard-filter-row" aria-label="Dashboard filters">
+        <TextField
+          select
+          label="Cohort view"
+          value={cohortScope}
+          onChange={(event) => {
+            setCohortScope(event.target.value);
+            if (event.target.value === "active") {
+              setCohortId("");
+            }
+          }}
+        >
+          <MenuItem value="active">Active cohorts</MenuItem>
+          <MenuItem value="">All cohorts</MenuItem>
+        </TextField>
+        <TextField
+          select
+          label="Selected cohort"
+          value={cohortId}
+          onChange={(event) => {
+            setCohortId(event.target.value);
+            if (event.target.value) {
+              setCohortScope("");
+            }
+          }}
+        >
+          <MenuItem value="">All selected view cohorts</MenuItem>
+          {cohorts.map((cohort) => (
+            <MenuItem value={cohort.id} key={cohort.id}>
+              {cohort.shortName ? `${cohort.shortName} · ` : ""}{cohort.title}
+            </MenuItem>
+          ))}
+        </TextField>
+        <TextField select label="Thought leader" value={presenterId} onChange={(event) => setPresenterId(event.target.value)}>
+          <MenuItem value="">All thought leaders</MenuItem>
+          {presenters.map((presenter) => (
+            <MenuItem value={presenter.id} key={presenter.id}>
+              {formatProperDisplay(`${presenter.firstName ?? ""} ${presenter.lastName ?? ""}`)}
+            </MenuItem>
+          ))}
+        </TextField>
+        <TextField select label="Date window" value={datePreset} onChange={(event) => setDatePreset(event.target.value)}>
+          {dashboardDateOptions.map((option) => <MenuItem value={option.value} key={option.value || "any"}>{option.label}</MenuItem>)}
+        </TextField>
+        {datePreset === "custom" && (
+          <>
+            <TextField label="Start" type="date" value={customStart} InputLabelProps={{ shrink: true }} onChange={(event) => setCustomStart(event.target.value)} />
+            <TextField label="End" type="date" value={customEnd} InputLabelProps={{ shrink: true }} onChange={(event) => setCustomEnd(event.target.value)} />
+          </>
+        )}
+      </section>
       <MetricGrid data={data} finance={financeSummary} />
       {loading && <LoadingState label="Loading dashboard" />}
 

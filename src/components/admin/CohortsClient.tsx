@@ -113,15 +113,7 @@ function cohortFinanceSummary(row: AdminRow) {
 }
 
 function isEndedCohort(row: AdminRow) {
-  if (row.status === "CANCELLED") {
-    return false;
-  }
-
-  if (row.status === "COMPLETED" || row.derivedStatus === "COMPLETED") {
-    return true;
-  }
-
-  return row.endDate ? new Date(row.endDate).getTime() < Date.now() : false;
+  return row.status === "COMPLETED";
 }
 
 function hasOutstandingCollection(row: AdminRow) {
@@ -131,6 +123,10 @@ function hasOutstandingCollection(row: AdminRow) {
 
 function money(value: unknown) {
   return `$${Number(value ?? 0).toLocaleString()}`;
+}
+
+function displayShortName(value?: string | null) {
+  return String(value ?? "").replace(/\b([A-Z]{1,4})-(Spring|Summer|Fall|Winter)-(\d{4})\b/g, "$1 $2 $3");
 }
 
 function statusCount(rows: AdminRow[], value: string) {
@@ -614,7 +610,7 @@ export function CohortsClient() {
           {params.row.thumbnailUrl && <img className="cohort-cell-thumb" src={params.row.thumbnailUrl} alt="" />}
           <Stack spacing={0.5} sx={{ minWidth: 0, flex: 1 }}>
             <Typography className="cohort-cell-title" fontWeight={850}>{params.row.title}</Typography>
-            {params.row.shortName && <span className="cohort-short-name-pill">{params.row.shortName}</span>}
+            {params.row.shortName && <span className="cohort-short-name-pill">{displayShortName(params.row.shortName)}</span>}
           </Stack>
         </div>
       )
