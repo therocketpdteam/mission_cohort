@@ -40,6 +40,25 @@ test("treats complete draft session plans as publish-ready before provider deliv
   assert.equal(readiness.sessionDetails[0]?.emails.total, 4);
 });
 
+test("treats draft session email plans as system-ready before concrete schedules exist", () => {
+  const readiness = getCohortReadiness({
+    status: CohortStatus.DRAFT,
+    sessions: [{
+      id: "session-1",
+      title: "Session 1",
+      startTime: sessionStart,
+      endTime: new Date(sessionStart.getTime() + 60 * 60 * 1000),
+      timezone: "America/New_York",
+      calendarInviteStatus: CalendarInviteStatus.NOT_CREATED,
+      communications: []
+    }]
+  });
+
+  assert.equal(readiness.ready, true);
+  assert.equal(readiness.items.find((item) => item.key === "communications")?.label, "Session email plan ready");
+  assert.equal(readiness.items.find((item) => item.key === "communications")?.detail, "1/1 session email plan ready");
+});
+
 test("keeps sent reminders satisfied and ignores optional material tasks", () => {
   const readiness = getCohortReadiness({
     status: CohortStatus.DRAFT,

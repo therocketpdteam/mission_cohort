@@ -4,7 +4,7 @@ import { dateInput, ensureEndAfterStart, positiveIntInput } from "@/lib/validato
 import { prisma } from "@/lib/prisma";
 import { cohortCreateSchema, cohortUpdateSchema } from "@/validators/cohort";
 import { logAuditEventAsync } from "./auditService";
-import { createDefaultSessionCommunications } from "./communicationService";
+import { createDefaultCohortSessionCommunications, createDefaultSessionCommunications } from "./communicationService";
 import { prepareCohortCalendarInvites } from "./calendarService";
 import { getCohortReadiness, withCohortLifecycle } from "./cohortLifecycle";
 import { activateCohortRegistrationJourneys } from "./registrationJourneyService";
@@ -150,6 +150,8 @@ export async function listCohorts() {
 }
 
 export async function publishCohort(id: string) {
+  await createDefaultCohortSessionCommunications(id);
+
   const cohort = await prisma.cohort.findUnique({
     where: { id },
     include: {

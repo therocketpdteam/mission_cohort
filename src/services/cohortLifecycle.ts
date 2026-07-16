@@ -224,7 +224,8 @@ export function getCohortReadiness(cohort: LifecycleCohort) {
     Boolean(session.title && validDate(session.startTime) && validDate(session.endTime) && session.timezone)
   );
   const calendarReady = sessions.length > 0 && (draftCalendarPlansReady || readyCalendarCount === sessions.length);
-  const communicationsReady = sessions.length > 0 && readyCommunicationCount === sessions.length;
+  const draftCommunicationPlansReady = cohort.status === CohortStatus.DRAFT && sessions.length > 0;
+  const communicationsReady = sessions.length > 0 && (draftCommunicationPlansReady || readyCommunicationCount === sessions.length);
   const manualTasksReady = openManualTasks === 0;
 
   const items: CohortReadinessItem[] = [
@@ -246,10 +247,12 @@ export function getCohortReadiness(cohort: LifecycleCohort) {
     },
     {
       key: "communications",
-      label: "Session emails ready",
+      label: cohort.status === CohortStatus.DRAFT ? "Session email plan ready" : "Session emails ready",
       ready: communicationsReady,
       detail: sessions.length > 0
-        ? `${readyCommunicationCount}/${sessions.length} session${sessions.length === 1 ? "" : "s"} have required emails`
+        ? draftCommunicationPlansReady
+          ? `${sessions.length}/${sessions.length} session email plan${sessions.length === 1 ? "" : "s"} ready`
+          : `${readyCommunicationCount}/${sessions.length} session${sessions.length === 1 ? "" : "s"} have required emails`
         : "Add sessions before scheduling emails"
     },
     {

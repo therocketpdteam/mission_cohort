@@ -115,9 +115,20 @@ function timeInputValue(value?: string | null, timezone = "America/New_York") {
   return `${hour}:${minute}`;
 }
 
-function uniqueDuplicateSlug(source: AdminRow) {
-  const base = slugify(String(source.slug || source.title || "cohort"));
-  return `${base}-copy-${Date.now().toString().slice(-5)}`;
+function yearFromDateInput(value?: string | null) {
+  if (!value) return null;
+  const year = Number(String(value).slice(0, 4));
+  return Number.isFinite(year) && year > 1900 ? year : null;
+}
+
+function nextDuplicateYear(source: AdminRow) {
+  const sourceDate = source.startDate ? new Date(source.startDate) : null;
+  const sourceYear = sourceDate && Number.isFinite(sourceDate.getTime()) ? sourceDate.getFullYear() : null;
+  return (sourceYear ?? new Date().getFullYear()) + 1;
+}
+
+function duplicateSlugForYear(title: string, year: number) {
+  return slugify(`${title || "cohort"} ${year}`);
 }
 
 function duplicatedSessions(source: AdminRow) {
@@ -214,9 +225,14 @@ function CreateCohortWizard({
 
   useEffect(() => {
     if (!slugTouched) {
-      setSlug(slugify(title));
+      if (duplicateSource) {
+        const firstSessionYear = yearFromDateInput(sessions[0]?.date);
+        setSlug(duplicateSlugForYear(title, firstSessionYear ?? nextDuplicateYear(duplicateSource)));
+      } else {
+        setSlug(slugify(title));
+      }
     }
-  }, [slugTouched, title]);
+  }, [duplicateSource, sessions, slugTouched, title]);
 
   useEffect(() => {
     if (!open) {
@@ -245,9 +261,9 @@ function CreateCohortWizard({
       setActiveStep(2);
       setTitle(duplicateSource.title ?? "");
       setShortName(displayShortName(duplicateSource.shortName));
-      setSlug(uniqueDuplicateSlug(duplicateSource));
+      setSlug(duplicateSlugForYear(duplicateSource.title ?? "cohort", nextDuplicateYear(duplicateSource)));
       setThumbnailUrl(duplicateSource.thumbnailUrl ?? "");
-      setSlugTouched(true);
+      setSlugTouched(false);
       setPresenter(sourcePresenter);
       setPresenterSearch(sourcePresenter ? `${sourcePresenter.firstName ?? ""} ${sourcePresenter.lastName ?? ""}`.trim() : "");
       setShowCreatePresenter(false);

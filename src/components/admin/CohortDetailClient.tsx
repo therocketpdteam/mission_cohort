@@ -970,6 +970,9 @@ export function CohortDetailClient({ id }: { id: string }) {
   const [registrationThreadLoading, setRegistrationThreadLoading] = useState(false);
   const [sendingRegistrationTaskId, setSendingRegistrationTaskId] = useState("");
   const [completingRegistrationTaskId, setCompletingRegistrationTaskId] = useState("");
+  const [editingRegistrationParticipantId, setEditingRegistrationParticipantId] = useState("");
+  const [registrationParticipantEdit, setRegistrationParticipantEdit] = useState({ firstName: "", lastName: "", email: "", title: "", phone: "" });
+  const [savingRegistrationParticipantId, setSavingRegistrationParticipantId] = useState("");
   const [participantDetail, setParticipantDetail] = useState<AdminRow | null>(null);
   const [participantSelection, setParticipantSelection] = useState<GridRowSelectionModel>({ type: "include", ids: new Set() });
   const [bulkParticipantStatus, setBulkParticipantStatus] = useState("REGISTERED");
@@ -1043,6 +1046,8 @@ export function CohortDetailClient({ id }: { id: string }) {
 
   async function openRegistrationDetail(row: AdminRow) {
     setRegistrationDetail(row);
+    setEditingRegistrationParticipantId("");
+    setRegistrationParticipantEdit({ firstName: "", lastName: "", email: "", title: "", phone: "" });
 
     try {
       setRegistrationDetail(await adminApi<AdminRow>(`/api/registrations?id=${row.id}`));
@@ -1187,6 +1192,54 @@ export function CohortDetailClient({ id }: { id: string }) {
       await load();
     } catch (error) {
       notifyError((error as Error).message);
+    }
+  }
+
+  function startRegistrationParticipantEdit(participant: AdminRow) {
+    setEditingRegistrationParticipantId(participant.id);
+    setRegistrationParticipantEdit({
+      firstName: String(participant.firstName ?? ""),
+      lastName: String(participant.lastName ?? ""),
+      email: String(participant.email ?? ""),
+      title: String(participant.title ?? ""),
+      phone: String(participant.phone ?? "")
+    });
+  }
+
+  async function saveRegistrationParticipantEdit(participant: AdminRow) {
+    if (!registrationDetail?.id) {
+      return;
+    }
+
+    if (!registrationParticipantEdit.firstName.trim() || !registrationParticipantEdit.lastName.trim() || !registrationParticipantEdit.email.trim()) {
+      notifyError("Participant first name, last name, and email are required.");
+      return;
+    }
+
+    setSavingRegistrationParticipantId(participant.id);
+
+    try {
+      await adminApi("/api/participants", {
+        method: "PATCH",
+        body: {
+          id: participant.id,
+          firstName: registrationParticipantEdit.firstName.trim(),
+          lastName: registrationParticipantEdit.lastName.trim(),
+          email: registrationParticipantEdit.email.trim(),
+          title: registrationParticipantEdit.title.trim(),
+          phone: registrationParticipantEdit.phone.trim(),
+          deferNotifications: ["PUBLISHED", "ACTIVE"].includes(String(cohort?.derivedStatus ?? cohort?.status))
+        }
+      });
+      setEditingRegistrationParticipantId("");
+      setRegistrationParticipantEdit({ firstName: "", lastName: "", email: "", title: "", phone: "" });
+      notifySuccess("Participant updated.");
+      await openRegistrationDetail(registrationDetail);
+      await load();
+    } catch (error) {
+      notifyError((error as Error).message);
+    } finally {
+      setSavingRegistrationParticipantId("");
     }
   }
 
@@ -2941,13 +2994,53 @@ export function CohortDetailClient({ id }: { id: string }) {
               })()}
             </SectionCard>
             <SectionCard title="Team Roster">
+              {(registrationDetail.participants ?? []).length > 0 ? (
+                <div className="quick-view-list" style={{ marginBottom: 12 }}>
+                  {(registrationDetail.participants ?? []).map((participant: AdminRow) => {
+                    const editing = editingRegistrationParticipantId === participant.id;
+
+                    return (
+                      <div className={`quick-view-list-row ${editing ? "is-editing-participant" : ""}`} key={participant.id}>
+                        {editing ? (
+                          <div className="participant-inline-editor">
+                            <TextField label="First name" value={registrationParticipantEdit.firstName} onChange={(event) => setRegistrationParticipantEdit((current) => ({ ...current, firstName: event.target.value }))} />
+                            <TextField label="Last name" value={registrationParticipantEdit.lastName} onChange={(event) => setRegistrationParticipantEdit((current) => ({ ...current, lastName: event.target.value }))} />
+                            <TextField label="Email" type="email" value={registrationParticipantEdit.email} onChange={(event) => setRegistrationParticipantEdit((current) => ({ ...current, email: event.target.value }))} />
+                            <TextField label="Title" value={registrationParticipantEdit.title} onChange={(event) => setRegistrationParticipantEdit((current) => ({ ...current, title: event.target.value }))} />
+                            <TextField label="Phone" value={registrationParticipantEdit.phone} onChange={(event) => setRegistrationParticipantEdit((current) => ({ ...current, phone: event.target.value }))} />
+                          </div>
+                        ) : (
+                          <div>
+                            <strong>{formatProperDisplay(`${participant.firstName ?? ""} ${participant.lastName ?? ""}`.trim())}</strong>
+                            <span>{[participant.email, participant.title].filter(Boolean).join(" · ") || "No contact details"}</span>
+                          </div>
+                        )}
+                        <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap justifyContent="flex-end">
+                          {editing ? (
+                            <>
+                              <Button size="small" variant="outlined" disabled={savingRegistrationParticipantId === participant.id} onClick={() => saveRegistrationParticipantEdit(participant)}>
+                                {savingRegistrationParticipantId === participant.id ? "Saving" : "Save"}
+                              </Button>
+                              <Button size="small" variant="text" disabled={savingRegistrationParticipantId === participant.id} onClick={() => setEditingRegistrationParticipantId("")}>Cancel</Button>
+                            </>
+                          ) : (
+                            <>
+                              <Button size="small" variant="outlined" startIcon={<EditOutlined />} onClick={() => startRegistrationParticipantEdit(participant)}>Edit</Button>
+                              <Button size="small" variant="text" color="error" startIcon={<DeleteOutline />} onClick={() => removeRegistrationParticipant(participant.id)}>Remove</Button>
+                            </>
+                          )}
+                        </Stack>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : null}
               <RosterWorkbench
                 registration={registrationDetail}
                 existingParticipants={registrationDetail.participants ?? []}
                 onImport={importRegistrationRoster}
                 onAddPrimaryContact={addRegistrationPocToRoster}
                 onRemoveParticipant={removeRegistrationParticipant}
-                showSavedParticipants
               />
             </SectionCard>
             <SectionCard title="Open Follow-Ups">
