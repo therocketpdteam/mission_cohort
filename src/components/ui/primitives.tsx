@@ -695,10 +695,10 @@ export function Divider({ sx, className, ...props }: BaseProps) {
   return <hr className={clsx("ui-divider", className)} style={sxToStyle(sx)} {...props} />;
 }
 
-export function Dialog({ open, children, onClose, maxWidth = "md", PaperProps }: { open: boolean; children: ReactNode; onClose?: () => void; fullWidth?: boolean; maxWidth?: "sm" | "md" | "lg" | string; PaperProps?: any }) {
+export function Dialog({ open, children, onClose, maxWidth = "md", PaperProps, BackdropProps }: { open: boolean; children: ReactNode; onClose?: () => void; fullWidth?: boolean; maxWidth?: "sm" | "md" | "lg" | string; PaperProps?: any; BackdropProps?: any }) {
   if (!open) return null;
   return (
-    <div className="ui-modal-backdrop" onMouseDown={onClose}>
+    <div className={clsx("ui-modal-backdrop", BackdropProps?.className)} style={{ ...sxToStyle(BackdropProps?.sx), ...(BackdropProps?.style ?? {}) }} onMouseDown={onClose}>
       <div
         className={clsx("ui-modal", `ui-modal-${maxWidth}`, PaperProps?.className)}
         style={{ ...sxToStyle(PaperProps?.sx), ...(PaperProps?.style ?? {}) }}

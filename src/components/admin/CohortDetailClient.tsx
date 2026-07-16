@@ -727,9 +727,16 @@ function InvoiceEditorDialog({
   }
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
+    <Dialog
+      open={open}
+      onClose={onClose}
+      maxWidth="xl"
+      fullWidth
+      BackdropProps={{ className: "invoice-modal-backdrop" }}
+      PaperProps={{ className: "invoice-editor-modal" }}
+    >
       <DialogTitle>{invoice ? "Edit Invoice Draft" : "Create Invoice"}</DialogTitle>
-      <DialogContent>
+      <DialogContent className="invoice-editor-body">
         <div className="invoice-editor-hero">
           <div>
             <span>{invoice ? "Existing draft" : "New draft"}</span>
@@ -802,7 +809,7 @@ function InvoiceEditorDialog({
           </Alert>
         )}
       </DialogContent>
-      <DialogActions>
+      <DialogActions className="invoice-editor-actions">
         <Button variant="outlined" onClick={onClose}>Cancel</Button>
         <Button onClick={save}>Save invoice</Button>
       </DialogActions>
@@ -2777,7 +2784,14 @@ export function CohortDetailClient({ id }: { id: string }) {
         }}
         onError={notifyError}
       />
-      <Dialog open={Boolean(invoicePreview)} onClose={() => setInvoicePreview(null)} maxWidth="xl" fullWidth PaperProps={{ className: "invoice-preview-modal" }}>
+      <Dialog
+        open={Boolean(invoicePreview)}
+        onClose={() => setInvoicePreview(null)}
+        maxWidth="xl"
+        fullWidth
+        BackdropProps={{ className: "invoice-modal-backdrop" }}
+        PaperProps={{ className: "invoice-preview-modal" }}
+      >
         <DialogTitle>{invoicePreview?.title ?? "Invoice PDF"}</DialogTitle>
         <DialogContent className="invoice-preview-body">
           {invoicePreview?.url ? (
@@ -2877,10 +2891,15 @@ export function CohortDetailClient({ id }: { id: string }) {
                         <div>
                           <strong>{invoice.invoiceNumber ?? invoice.id.slice(-8)}</strong>
                           <span>
-                            {[formatStatusLabel(invoice.status), money(invoice.totalAmount), invoice.pdfUrl ? "PDF ready" : "PDF needs generation"].join(" · ")}
+                            {[formatStatusLabel(invoice.status), invoice.pdfUrl ? "PDF ready" : "PDF needs generation"].join(" · ")}
                           </span>
                         </div>
-                        <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap justifyContent="flex-end">
+                        <div className="invoice-quick-metrics">
+                          <DetailField label="Total" value={money(invoice.totalAmount)} />
+                          <DetailField label="Paid" value={money(invoice.paidAmount)} />
+                          <DetailField label="Balance" value={money(Math.max(Number(invoice.totalAmount ?? 0) - Number(invoice.paidAmount ?? 0), 0))} />
+                        </div>
+                        <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap justifyContent="flex-end" className="invoice-quick-actions">
                           <StatusChip value={invoice.status} />
                           <RowActionMenu
                             actions={[
