@@ -1,4 +1,4 @@
-import { CohortStatus, CohortType } from "@prisma/client";
+import { CohortStatus } from "@prisma/client";
 import { z } from "zod";
 import { dateInput, ensureEndAfterStart, positiveIntInput } from "@/lib/validators";
 import { prisma } from "@/lib/prisma";
@@ -50,8 +50,6 @@ export async function createCohortWithSessions(input: z.input<typeof cohortWithS
     const createdCohort = await tx.cohort.create({
       data: {
         ...cohortInput,
-        cohortType: CohortType.LIVE_VIRTUAL,
-        pricePerParticipant: 0,
         startDate: firstSession.startTime,
         endDate: lastSession.endTime,
         defaultTimezone: firstSession.timezone

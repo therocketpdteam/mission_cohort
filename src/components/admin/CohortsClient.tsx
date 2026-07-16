@@ -98,6 +98,50 @@ function defaultSession(index: number, timezone = "America/New_York") {
   };
 }
 
+function timeInputValue(value?: string | null, timezone = "America/New_York") {
+  if (!value) {
+    return "09:00";
+  }
+
+  const parts = new Intl.DateTimeFormat("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+    timeZone: timezone
+  }).formatToParts(new Date(value));
+
+  const hour = parts.find((part) => part.type === "hour")?.value ?? "09";
+  const minute = parts.find((part) => part.type === "minute")?.value ?? "00";
+  return `${hour}:${minute}`;
+}
+
+function uniqueDuplicateSlug(source: AdminRow) {
+  const base = slugify(String(source.slug || source.title || "cohort"));
+  return `${base}-copy-${Date.now().toString().slice(-5)}`;
+}
+
+function duplicatedSessions(source: AdminRow) {
+  const sourceSessions: AdminRow[] = ((source.sessions ?? []) as AdminRow[]).length
+    ? [...(source.sessions as AdminRow[])]
+    : [defaultSession(0, source.defaultTimezone ?? "America/New_York") as AdminRow];
+
+  return sourceSessions
+    .sort((a, b) => Number(a.sessionNumber ?? 0) - Number(b.sessionNumber ?? 0))
+    .map((session, index) => {
+      const timezone = session.timezone ?? source.defaultTimezone ?? "America/New_York";
+      return {
+        title: session.title ?? `Session ${index + 1}`,
+        description: session.description ?? "",
+        date: "",
+        startTime: timeInputValue(session.startTime, timezone),
+        endTime: timeInputValue(session.endTime, timezone),
+        timezone,
+        meetingUrl: session.meetingUrl ?? "",
+        location: session.location ?? ""
+      };
+    });
+}
+
 function formatDate(value?: string) {
   return value ? new Date(value).toLocaleDateString("en-US") : "";
 }
@@ -136,12 +180,14 @@ function statusCount(rows: AdminRow[], value: string) {
 function CreateCohortWizard({
   open,
   presenters,
+  duplicateSource,
   onClose,
   onPresenterCreated,
   onCreated
 }: {
   open: boolean;
   presenters: AdminRow[];
+  duplicateSource?: AdminRow | null;
   onClose: () => void;
   onPresenterCreated: (presenter: AdminRow) => void;
   onCreated: () => Promise<void>;
@@ -190,8 +236,30 @@ function CreateCohortWizard({
       setSessions([defaultSession(0)]);
       setManuallyEditedSessionIndexes(new Set());
       setError(null);
+      return;
     }
-  }, [open]);
+
+    if (duplicateSource) {
+      const sourcePresenter = presenters.find((item) => item.id === duplicateSource.presenterId) ?? duplicateSource.presenter ?? null;
+      const nextSessions = duplicatedSessions(duplicateSource);
+      setActiveStep(2);
+      setTitle(duplicateSource.title ?? "");
+      setShortName(displayShortName(duplicateSource.shortName));
+      setSlug(uniqueDuplicateSlug(duplicateSource));
+      setThumbnailUrl(duplicateSource.thumbnailUrl ?? "");
+      setSlugTouched(true);
+      setPresenter(sourcePresenter);
+      setPresenterSearch(sourcePresenter ? `${sourcePresenter.firstName ?? ""} ${sourcePresenter.lastName ?? ""}`.trim() : "");
+      setShowCreatePresenter(false);
+      setNewPresenterFirstName("");
+      setNewPresenterLastName("");
+      setNewPresenterEmail("");
+      setSessionCount(nextSessions.length);
+      setSessions(nextSessions);
+      setManuallyEditedSessionIndexes(new Set());
+      setError(null);
+    }
+  }, [duplicateSource, open, presenters]);
 
   function syncSessionCount(count: number) {
     const safeCount = Math.max(1, Math.min(24, count || 1));
@@ -350,19 +418,26 @@ function CreateCohortWizard({
           title,
           shortName,
           slug,
+          description: duplicateSource?.description || undefined,
           presenterId: presenter?.id,
           startDate: combineDateTime(firstSession.date, firstSession.startTime, firstSession.timezone),
           endDate: combineDateTime(lastSession.date, lastSession.endTime, lastSession.timezone),
           defaultTimezone: firstSession.timezone,
-          pricePerParticipant: 0,
-          cohortType: "LIVE_VIRTUAL",
+          pricePerParticipant: Number(duplicateSource?.pricePerParticipant ?? 0),
+          cohortType: duplicateSource?.cohortType ?? "LIVE_VIRTUAL",
+          maxParticipants: duplicateSource?.maxParticipants ?? undefined,
+          minParticipants: duplicateSource?.minParticipants ?? undefined,
+          publicRegistrationEnabled: false,
           thumbnailUrl,
           sessions: sessions.map((session, index) => ({
             title: session.title,
+            description: session.description || undefined,
             sessionNumber: index + 1,
             startTime: combineDateTime(session.date, session.startTime, session.timezone),
             endTime: combineDateTime(session.date, session.endTime, session.timezone),
-            timezone: session.timezone
+            timezone: session.timezone,
+            meetingUrl: session.meetingUrl || undefined,
+            location: session.location || undefined
           }))
         }
       });
@@ -377,8 +452,13 @@ function CreateCohortWizard({
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="lg" PaperProps={{ className: "create-cohort-modal" }}>
-      <DialogTitle>Create Cohort</DialogTitle>
+      <DialogTitle>{duplicateSource ? "Duplicate Cohort" : "Create Cohort"}</DialogTitle>
       <DialogContent className="create-cohort-body">
+        {duplicateSource && (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            Duplicating {duplicateSource.title}. Registrations, payments, calendar events, and previous communications will not be copied. Update the session dates before creating the new Draft cohort.
+          </Alert>
+        )}
         <Stepper activeStep={activeStep} sx={{ mb: 3 }}>
           {["Basics", "Sessions", "Schedule"].map((label) => (
             <Step key={label}>
@@ -494,7 +574,9 @@ function CreateCohortWizard({
         {activeStep === 2 && (
           <Stack spacing={2}>
             <Alert severity="info">
-              Set the first session date, time, and timezone. Mission Control will draft the remaining sessions weekly with the same timing, and you can still fine-tune any row.
+              {duplicateSource
+                ? "Session titles, times, timezones, meeting links, and locations were copied. Add the new dates and adjust anything else before creating the Draft."
+                : "Set the first session date, time, and timezone. Mission Control will draft the remaining sessions weekly with the same timing, and you can still fine-tune any row."}
             </Alert>
             {sessions.map((session, index) => (
               <Grid container spacing={2} key={index} alignItems="center" className="create-cohort-session-row">
@@ -535,6 +617,7 @@ export function CohortsClient() {
   const [loading, setLoading] = useState(true);
   const [presenters, setPresenters] = useState<AdminRow[]>([]);
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [duplicateSource, setDuplicateSource] = useState<AdminRow | null>(null);
   const [editing, setEditing] = useState<AdminRow | null>(null);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("CURRENT");
@@ -663,6 +746,14 @@ export function CohortsClient() {
               { label: "View cohort", icon: <VisibilityOutlined fontSize="small" />, onClick: () => window.location.assign(`/cohorts/${params.row.id}`) },
               { label: "Edit cohort", icon: <EditOutlined fontSize="small" />, onClick: () => setEditing(params.row) },
               {
+                label: "Duplicate cohort",
+                icon: <AddIcon fontSize="small" />,
+                onClick: () => {
+                  setDuplicateSource(params.row);
+                  setWizardOpen(true);
+                }
+              },
+              {
                 label: params.row.status === "CANCELLED" ? "Restore cohort" : "Cancel cohort",
                 icon: <ArchiveOutlined fontSize="small" />,
                 color: "warning",
@@ -725,7 +816,10 @@ export function CohortsClient() {
           <h1>Cohorts</h1>
           <p>Create cohorts, sessions, presenters, and delivery timelines from one operations workspace.</p>
         </div>
-        <ToolbarButton onClick={() => setWizardOpen(true)}>Create Cohort</ToolbarButton>
+        <ToolbarButton onClick={() => {
+          setDuplicateSource(null);
+          setWizardOpen(true);
+        }}>Create Cohort</ToolbarButton>
       </header>
 
       <section className="cohort-console-filters" aria-label="Cohort filters">
@@ -784,13 +878,18 @@ export function CohortsClient() {
       <CreateCohortWizard
         open={wizardOpen}
         presenters={presenters}
-        onClose={() => setWizardOpen(false)}
+        duplicateSource={duplicateSource}
+        onClose={() => {
+          setWizardOpen(false);
+          setDuplicateSource(null);
+        }}
         onPresenterCreated={(created) => {
           setPresenters((current) => current.some((presenter) => presenter.id === created.id) ? current : [...current, created]);
           notifySuccess("Presenter saved");
         }}
         onCreated={async () => {
-          notifySuccess("Cohort and sessions created");
+          notifySuccess(duplicateSource ? "Cohort duplicated as a new Draft" : "Cohort and sessions created");
+          setDuplicateSource(null);
           await load();
         }}
       />
