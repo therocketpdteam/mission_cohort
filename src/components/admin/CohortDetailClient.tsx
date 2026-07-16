@@ -1264,6 +1264,7 @@ export function CohortDetailClient({ id }: { id: string }) {
   const compareCohort = allCohorts.find((item) => item.id === compareCohortId);
   const detailTabs = ["Overview", "Registrations", "Participants", "Communications", "Distribution"];
   const readinessItems = cohort?.readiness?.items ?? [];
+  const sessionEmailReadiness = readinessItems.find((item: AdminRow) => item.key === "communications");
   const pendingSessionChanges = (cohort?.readiness?.sessionDetails ?? []).filter((session: AdminRow) => session.calendar?.stale);
   const filteredRegistrations = useMemo(() => registrations.filter((registration) => {
     const paymentMatch = !registrationPaymentFilter || registration.paymentStatus === registrationPaymentFilter;
@@ -2178,11 +2179,27 @@ export function CohortDetailClient({ id }: { id: string }) {
                         <div>
                           <strong>{item.label}</strong>
                           <span>{item.detail}</span>
+                          {item.key === "communications" && !item.ready ? (
+                            <Button
+                              variant="outlined"
+                              size="small"
+                              startIcon={<SendOutlined />}
+                              disabled={creatingSessionEmails || sessions.length === 0}
+                              onClick={createAllMissingSessionEmailSchedules}
+                            >
+                              {creatingSessionEmails ? "Creating emails" : "Create missing emails"}
+                            </Button>
+                          ) : null}
                         </div>
                       </div>
                     );
                   })}
                 </div>
+                {sessionEmailReadiness && !sessionEmailReadiness.ready ? (
+                  <Alert severity="warning">
+                    {sessionEmailReadiness.detail}. Use Create missing emails to generate the required 24-hour and 1-hour session messages before publishing.
+                  </Alert>
+                ) : null}
                 <div className="readiness-action-grid readiness-action-rail">
                   <Button
                     variant="text"
@@ -2977,14 +2994,31 @@ export function CohortDetailClient({ id }: { id: string }) {
               />
             </SectionCard>
             <SectionCard
-              title="POC Email Summary"
+              title="POC Sent Emails"
               action={registrationDetail.primaryContactEmail ? (
                 <Button href={`/communications?search=${encodeURIComponent(registrationDetail.primaryContactEmail)}`} variant="outlined" size="small">
                   Open in Communications
                 </Button>
               ) : null}
             >
-              <PocCommunicationHistory loading={registrationThreadLoading} communications={registrationThread} pocEmail={registrationDetail.primaryContactEmail} />
+              <PocCommunicationHistory
+                loading={registrationThreadLoading}
+                communications={registrationThread}
+                pocEmail={registrationDetail.primaryContactEmail}
+                onChanged={async () => {
+                  if (registrationDetail?.primaryContactEmail) {
+                    setRegistrationThreadLoading(true);
+                    try {
+                      setRegistrationThread(await adminApi<AdminRow[]>(`/api/communications/thread?email=${encodeURIComponent(registrationDetail.primaryContactEmail)}`));
+                    } finally {
+                      setRegistrationThreadLoading(false);
+                    }
+                  }
+                  await load();
+                }}
+                onSuccess={notifySuccess}
+                onError={notifyError}
+              />
             </SectionCard>
           </>
         )}

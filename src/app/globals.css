@@ -5166,6 +5166,21 @@ h6,
   min-width: 0;
 }
 
+.quick-view-list-row.is-editing-participant {
+  align-items: flex-start;
+}
+
+.quick-view-list-row.is-editing-participant > div:first-child {
+  flex: 1;
+}
+
+.participant-inline-editor {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(120px, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
 .quick-view-list-row strong,
 .quick-view-list-row span {
   overflow: hidden;
@@ -5304,6 +5319,7 @@ h6,
 
 .poc-history-row-actions,
 .poc-history-chips,
+.poc-history-row-footer,
 .poc-history-footer {
   display: flex;
   flex-wrap: wrap;
@@ -5326,6 +5342,19 @@ h6,
   font-weight: 760;
 }
 
+.poc-history-row-footer {
+  justify-content: space-between;
+  border-top: 1px solid rgba(120, 118, 128, 0.16);
+  padding-top: 8px;
+}
+
+.poc-history-row-footer > span {
+  flex: 1;
+  min-width: 220px;
+  color: var(--color-slate-500);
+  font-size: 0.74rem;
+}
+
 .poc-history-footer {
   justify-content: space-between;
   border: 1px dashed rgba(120, 118, 128, 0.28);
@@ -5342,6 +5371,10 @@ h6,
 }
 
 @media (max-width: 620px) {
+  .participant-inline-editor {
+    grid-template-columns: 1fr;
+  }
+
   .poc-history-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -6226,6 +6259,7 @@ h6,
 .app-shell.is-night .distribution-ledger-row,
 .app-shell.is-night .quick-view-list-row,
 .app-shell.is-night .poc-history-row,
+.app-shell.is-night .poc-history-row-footer,
 .app-shell.is-night .poc-history-footer,
 .app-shell.is-night .poc-history-summary > div,
 .app-shell.is-night .registration-journey-stat,
@@ -6295,6 +6329,7 @@ h6,
 .app-shell.is-night .registration-change-impact ul,
 .app-shell.is-night .registration-preflight-notes span,
 .app-shell.is-night .poc-history-row span,
+.app-shell.is-night .poc-history-row-footer > span,
 .app-shell.is-night .poc-history-footer span,
 .app-shell.is-night .registration-journey-stat span,
 .app-shell.is-night .registration-journey-group-header p,

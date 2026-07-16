@@ -630,6 +630,9 @@ function RegistrationDetailDialog({
   onError: (message: string) => void;
 }) {
   const [participant, setParticipant] = useState({ firstName: "", lastName: "", email: "", title: "", phone: "" });
+  const [editingParticipantId, setEditingParticipantId] = useState("");
+  const [participantEdit, setParticipantEdit] = useState({ firstName: "", lastName: "", email: "", title: "", phone: "" });
+  const [savingParticipantId, setSavingParticipantId] = useState("");
   const [thread, setThread] = useState<AdminRow[]>([]);
   const [threadLoading, setThreadLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -640,9 +643,22 @@ function RegistrationDetailDialog({
   useEffect(() => {
     if (open) {
       setParticipant({ firstName: "", lastName: "", email: "", title: "", phone: "" });
+      setEditingParticipantId("");
+      setParticipantEdit({ firstName: "", lastName: "", email: "", title: "", phone: "" });
       setError(null);
     }
-  }, [open]);
+  }, [open, registration?.id]);
+
+  async function loadPocThread(email: string) {
+    setThreadLoading(true);
+    try {
+      setThread(await adminApi<AdminRow[]>(`/api/communications/thread?email=${encodeURIComponent(email)}`));
+    } catch (loadError) {
+      setError((loadError as Error).message);
+    } finally {
+      setThreadLoading(false);
+    }
+  }
 
   useEffect(() => {
     if (!open || !registration?.primaryContactEmail) {
@@ -650,11 +666,7 @@ function RegistrationDetailDialog({
       return;
     }
 
-    setThreadLoading(true);
-    adminApi<AdminRow[]>(`/api/communications/thread?email=${encodeURIComponent(registration.primaryContactEmail)}`)
-      .then(setThread)
-      .catch((loadError) => setError((loadError as Error).message))
-      .finally(() => setThreadLoading(false));
+    void loadPocThread(registration.primaryContactEmail);
   }, [open, registration?.primaryContactEmail]);
 
   async function addParticipant() {
@@ -728,6 +740,53 @@ function RegistrationDetailDialog({
       await onChanged();
     } catch (removeError) {
       setError((removeError as Error).message);
+    }
+  }
+
+  function startParticipantEdit(row: AdminRow) {
+    setEditingParticipantId(row.id);
+    setParticipantEdit({
+      firstName: String(row.firstName ?? ""),
+      lastName: String(row.lastName ?? ""),
+      email: String(row.email ?? ""),
+      title: String(row.title ?? ""),
+      phone: String(row.phone ?? "")
+    });
+    setError(null);
+  }
+
+  async function saveParticipantEdit(row: AdminRow) {
+    if (!participantEdit.firstName.trim() || !participantEdit.lastName.trim() || !participantEdit.email.trim()) {
+      setError("Participant first name, last name, and email are required.");
+      return;
+    }
+
+    setSavingParticipantId(row.id);
+    setError(null);
+
+    try {
+      await adminApi("/api/participants", {
+        method: "PATCH",
+        body: {
+          id: row.id,
+          firstName: participantEdit.firstName.trim(),
+          lastName: participantEdit.lastName.trim(),
+          email: participantEdit.email.trim(),
+          title: participantEdit.title.trim(),
+          phone: participantEdit.phone.trim(),
+          deferNotifications: ["PUBLISHED", "ACTIVE"].includes(String(registration?.cohort?.derivedStatus ?? registration?.cohort?.status))
+        }
+      });
+      setEditingParticipantId("");
+      setParticipantEdit({ firstName: "", lastName: "", email: "", title: "", phone: "" });
+      onSuccess("Participant updated.");
+      await onChanged();
+    } catch (saveError) {
+      const message = (saveError as Error).message;
+      setError(message);
+      onError(message);
+    } finally {
+      setSavingParticipantId("");
     }
   }
 
@@ -1000,15 +1059,43 @@ function RegistrationDetailDialog({
             </div>
             {(registration.participants ?? []).length > 0 ? (
               <div className="quick-view-list">
-                {(registration.participants ?? []).map((row: AdminRow) => (
-                  <div className="quick-view-list-row" key={row.id}>
-                    <div>
-                      <strong>{formatProperDisplay(`${row.firstName} ${row.lastName}`)}</strong>
-                      <span>{[row.email, row.title].filter(Boolean).join(" · ") || "No contact details"}</span>
+                {(registration.participants ?? []).map((row: AdminRow) => {
+                  const editing = editingParticipantId === row.id;
+
+                  return (
+                    <div className={`quick-view-list-row ${editing ? "is-editing-participant" : ""}`} key={row.id}>
+                      {editing ? (
+                        <div className="participant-inline-editor">
+                          <TextField label="First name" value={participantEdit.firstName} onChange={(event) => setParticipantEdit((current) => ({ ...current, firstName: event.target.value }))} />
+                          <TextField label="Last name" value={participantEdit.lastName} onChange={(event) => setParticipantEdit((current) => ({ ...current, lastName: event.target.value }))} />
+                          <TextField label="Email" type="email" value={participantEdit.email} onChange={(event) => setParticipantEdit((current) => ({ ...current, email: event.target.value }))} />
+                          <TextField label="Title" value={participantEdit.title} onChange={(event) => setParticipantEdit((current) => ({ ...current, title: event.target.value }))} />
+                          <TextField label="Phone" value={participantEdit.phone} onChange={(event) => setParticipantEdit((current) => ({ ...current, phone: event.target.value }))} />
+                        </div>
+                      ) : (
+                        <div>
+                          <strong>{formatProperDisplay(`${row.firstName} ${row.lastName}`)}</strong>
+                          <span>{[row.email, row.title].filter(Boolean).join(" · ") || "No contact details"}</span>
+                        </div>
+                      )}
+                      <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap justifyContent="flex-end">
+                        {editing ? (
+                          <>
+                            <Button size="small" variant="outlined" disabled={savingParticipantId === row.id} onClick={() => saveParticipantEdit(row)}>
+                              {savingParticipantId === row.id ? "Saving" : "Save"}
+                            </Button>
+                            <Button size="small" variant="text" disabled={savingParticipantId === row.id} onClick={() => setEditingParticipantId("")}>Cancel</Button>
+                          </>
+                        ) : (
+                          <>
+                            <Button size="small" variant="outlined" startIcon={<EditOutlined />} onClick={() => startParticipantEdit(row)}>Edit</Button>
+                            <Button size="small" variant="text" color="error" startIcon={<DeleteOutline />} onClick={() => removeParticipant(row.id)}>Remove</Button>
+                          </>
+                        )}
+                      </Stack>
                     </div>
-                    <Button size="small" variant="text" color="error" startIcon={<DeleteOutline />} onClick={() => removeParticipant(row.id)}>Remove</Button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <EmptyState title="No participant details yet" description="For one-person registrations, use the POC as the participant. For teams, add roster names when they arrive." />
@@ -1031,8 +1118,8 @@ function RegistrationDetailDialog({
           <section className="registration-detail-section">
             <div className="registration-section-heading">
               <div>
-                <h3>POC Email Summary</h3>
-                <p>Recent outbound activity for this contact, with full detail in Communications.</p>
+                <h3>POC Sent Emails</h3>
+                <p>Every outbound email this contact received, with delivery signals and quick resend.</p>
               </div>
               {registration.primaryContactEmail ? (
                 <Button href={`/communications?search=${encodeURIComponent(registration.primaryContactEmail)}`} variant="outlined" size="small">
@@ -1040,7 +1127,22 @@ function RegistrationDetailDialog({
                 </Button>
               ) : null}
             </div>
-            <PocCommunicationHistory loading={threadLoading} communications={thread} pocEmail={registration.primaryContactEmail} />
+            <PocCommunicationHistory
+              loading={threadLoading}
+              communications={thread}
+              pocEmail={registration.primaryContactEmail}
+              onChanged={async () => {
+                await onChanged();
+                if (registration.primaryContactEmail) {
+                  await loadPocThread(registration.primaryContactEmail);
+                }
+              }}
+              onSuccess={onSuccess}
+              onError={(message) => {
+                setError(message);
+                onError(message);
+              }}
+            />
           </section>
 
           <section className="registration-detail-section">

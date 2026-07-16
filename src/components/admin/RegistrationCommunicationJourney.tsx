@@ -13,7 +13,7 @@ const journeyGroups: Array<{ key: JourneyGroupKey; title: string; description: s
   { key: "scheduled", title: "Scheduled", description: "Next emails already queued for future delivery." },
   { key: "sent", title: "Sent", description: "Messages that already went out." },
   { key: "skipped", title: "Skipped", description: "Milestones intentionally not sent." },
-  { key: "planned", title: "Planned", description: "Next emails that will be scheduled once the journey is ready." }
+  { key: "planned", title: "Planned", description: "Next emails that will be scheduled once the cohort is published and the journey is ready." }
 ];
 
 function deliverySummary(communication: AdminRow) {

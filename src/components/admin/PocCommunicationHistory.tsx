@@ -1,6 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import { Button, Typography } from "@/components/ui/primitives";
+import { adminApi } from "@/lib/adminApi";
 import { formatStatusLabel } from "@/lib/formatting";
 import { AdminRow, DateBadge, EmptyState, StatusChip } from "./common";
 
@@ -51,28 +53,57 @@ function summarizeHistory(communications: AdminRow[]) {
 export function PocCommunicationHistory({
   loading,
   communications,
-  pocEmail
+  pocEmail,
+  onChanged,
+  onSuccess,
+  onError
 }: {
   loading: boolean;
   communications: AdminRow[];
   pocEmail?: string | null;
+  onChanged?: () => Promise<void> | void;
+  onSuccess?: (message: string) => void;
+  onError?: (message: string) => void;
 }) {
+  const [resendingId, setResendingId] = useState("");
+
+  async function resendToPoc(communication: AdminRow) {
+    if (!pocEmail || !communication.id) {
+      onError?.("POC email is required before resending.");
+      return;
+    }
+
+    setResendingId(communication.id);
+
+    try {
+      await adminApi("/api/communications", {
+        method: "PATCH",
+        body: { action: "sendToRecipient", communicationId: communication.id, recipientEmail: pocEmail }
+      });
+      onSuccess?.(`Message resent to ${pocEmail}.`);
+      await onChanged?.();
+    } catch (error) {
+      onError?.((error as Error).message);
+    } finally {
+      setResendingId("");
+    }
+  }
+
   if (loading) {
     return <Typography color="text.secondary">Loading communication history...</Typography>;
   }
 
   if (communications.length === 0) {
-    return <EmptyState title="No POC emails yet" description="Manual and automatic outbound emails to this POC will appear here with delivery and open signals." />;
+    return <EmptyState title="No sent POC emails yet" description="Manual and automatic outbound emails this POC receives will appear here with delivery, open, click, bounce, and failure signals." />;
   }
 
   const summary = summarizeHistory(communications);
-  const latestCommunications = [...communications]
-    .sort((a, b) => new Date(lastActivity(b) ?? 0).getTime() - new Date(lastActivity(a) ?? 0).getTime())
-    .slice(0, 4);
+  const sortedCommunications = [...communications]
+    .sort((a, b) => new Date(lastActivity(b) ?? 0).getTime() - new Date(lastActivity(a) ?? 0).getTime());
 
   return (
     <div className="poc-history-list">
-      <div className="poc-history-summary" aria-label="POC email summary">
+      <div className="poc-history-summary" aria-label="POC sent email delivery summary">
         <div>
           <span>Messages</span>
           <strong>{summary.messages}</strong>
@@ -91,10 +122,10 @@ export function PocCommunicationHistory({
         </div>
       </div>
       <div className="poc-history-latest-label">
-        <span>Latest messages</span>
-        {communications.length > latestCommunications.length ? <small>Showing {latestCommunications.length} of {communications.length}</small> : null}
+        <span>Sent email timeline</span>
+        <small>{communications.length} message{communications.length === 1 ? "" : "s"} received by this POC</small>
       </div>
-      {latestCommunications.map((communication) => {
+      {sortedCommunications.map((communication) => {
         const issue = communicationIssueLabel(communication);
         const lastEvent = communication.emailSummary?.lastEmailEvent ? formatStatusLabel(communication.emailSummary.lastEmailEvent) : "";
         const context = [communication.cohort?.title ?? communication.communication?.cohort?.title ?? "Mission Control", lastEvent].filter(Boolean).join(" · ");
@@ -114,12 +145,23 @@ export function PocCommunicationHistory({
             <div className="poc-history-chips">
               {summaryChips(communication).map((chip) => <span key={chip}>{chip}</span>)}
             </div>
+            <div className="poc-history-row-footer">
+              <span>Use this row when a POC asks whether a message was sent or opened.</span>
+              <Button
+                variant="outlined"
+                size="small"
+                disabled={!pocEmail || Boolean(resendingId)}
+                onClick={() => resendToPoc(communication)}
+              >
+                {resendingId === communication.id ? "Resending" : "Resend"}
+              </Button>
+            </div>
           </div>
         );
       })}
       {pocEmail ? (
         <div className="poc-history-footer">
-          <span>Open Communications for the full recipient timeline, event history, and review actions for {pocEmail}.</span>
+          <span>Open Communications for message body, recipient event history, issue review, and attachment detail for {pocEmail}.</span>
           <Button href={`/communications?search=${encodeURIComponent(pocEmail)}`} variant="outlined" size="small">Open Communications</Button>
         </div>
       ) : null}
