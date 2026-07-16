@@ -64,10 +64,12 @@
 
 html {
   min-height: 100%;
+  overflow-x: hidden;
   background: var(--color-surface);
 }
 
 body {
+  overflow-x: hidden;
   min-height: 100%;
   margin: 0;
   background: var(--color-surface);
@@ -278,7 +280,9 @@ h6,
 }
 
 .app-main {
+  width: 100%;
   min-width: 0;
+  overflow-x: clip;
 }
 
 .app-topbar {
@@ -323,6 +327,8 @@ h6,
 }
 
 .app-content {
+  min-width: 0;
+  overflow-x: clip;
   padding: 28px 24px 40px;
 }
 
@@ -413,6 +419,7 @@ h6,
   display: grid;
   gap: 20px;
   width: 100%;
+  min-width: 0;
   max-width: 1520px;
   margin: 0 auto;
 }
@@ -1170,11 +1177,13 @@ h6,
 
 .app-table-shell {
   width: 100%;
+  min-width: 0;
 }
 
 .app-table-scroll {
   width: 100%;
-  overflow-x: auto;
+  min-width: 0;
+  overflow-x: hidden;
 }
 
 .app-table {
@@ -1552,7 +1561,9 @@ h6,
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
   gap: 8px;
+  min-width: 0;
 }
 
 .table-pager > .ui-field {
@@ -1563,6 +1574,18 @@ h6,
 .table-pager > span {
   align-self: flex-end;
   margin-bottom: 0;
+}
+
+@media (max-width: 620px) {
+  .table-footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .table-pager {
+    width: 100%;
+    justify-content: flex-start;
+  }
 }
 
 .ui-spinner {
@@ -3435,9 +3458,9 @@ h6,
 .cohort-console-filter-pills {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   min-width: 0;
-  overflow-x: auto;
   padding: 2px 0;
 }
 
@@ -3558,7 +3581,7 @@ h6,
 }
 
 .cohort-console-table .app-table-scroll {
-  overflow-x: auto;
+  overflow-x: hidden;
 }
 
 .cohort-console-table .app-table th {
@@ -7815,10 +7838,10 @@ h6,
 .dashboard-readiness-head,
 .dashboard-readiness-row {
   display: grid;
-  grid-template-columns: minmax(160px, 1.35fr) minmax(120px, 0.8fr) minmax(120px, 0.8fr) minmax(120px, 0.8fr) 128px;
+  grid-template-columns: minmax(150px, 1.35fr) repeat(3, minmax(82px, 0.8fr)) minmax(86px, 128px);
   gap: 16px;
   align-items: center;
-  min-width: 760px;
+  min-width: 0;
   padding: 16px 24px;
 }
 
@@ -7964,6 +7987,15 @@ button.dashboard-activity-item {
   }
 
   .dashboard-readiness-table {
-    overflow-x: auto;
+    overflow-x: hidden;
+  }
+
+  .dashboard-readiness-head {
+    display: none;
+  }
+
+  .dashboard-readiness-row {
+    grid-template-columns: 1fr;
+    gap: 10px;
   }
 }

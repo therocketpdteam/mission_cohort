@@ -576,7 +576,8 @@ export function AppDataGrid<R extends AdminRow = AdminRow>({
   const [page, setPage] = useState(0);
   const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
   const visibleRows = rows.slice(page * pageSize, page * pageSize + pageSize);
-  const totalFlex = columns.reduce((sum, column) => sum + (column.width ? 0 : column.flex ?? 1), 0);
+  const columnWeights = columns.map((column) => column.width ?? column.minWidth ?? (column.flex ?? 1) * 160);
+  const totalColumnWeight = columnWeights.reduce((sum, width) => sum + width, 0);
 
   useEffect(() => {
     setPage(0);
@@ -604,16 +605,16 @@ export function AppDataGrid<R extends AdminRow = AdminRow>({
         <table className="app-table">
           <colgroup>
             {checkboxSelection && <col style={{ width: 44 }} />}
-            {columns.map((column) => {
-              const flexWidth = column.width ? undefined : `${((column.flex ?? 1) / Math.max(totalFlex, 1)) * 100}%`;
-              return <col key={column.field} style={{ width: column.width ?? flexWidth, minWidth: column.minWidth ?? undefined }} />;
+            {columns.map((column, index) => {
+              const width = `${(columnWeights[index] / Math.max(totalColumnWeight, 1)) * 100}%`;
+              return <col key={column.field} style={{ width }} />;
             })}
           </colgroup>
           <thead>
             <tr>
               {checkboxSelection && <th style={{ width: 44 }} />}
               {columns.map((column) => (
-                <th key={column.field} style={{ width: column.width ?? undefined, minWidth: column.minWidth ?? undefined }}>
+                <th key={column.field}>
                   {column.headerName ?? column.field}
                 </th>
               ))}

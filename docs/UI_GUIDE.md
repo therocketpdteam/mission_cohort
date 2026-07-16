@@ -13,13 +13,15 @@ Before making UI changes:
 3. Apply the matching tokens, spacing, and button hierarchy from this guide.
 4. Check desktop and wrapped/mobile layout.
 5. Verify no overlapping buttons, badges, text, filters, cards, or controls.
-6. Verify no more than one primary action per section.
-7. Reuse existing shared Mission Control components and app-native UI primitives where possible.
+6. Verify no page or primary table requires horizontal scrolling. Actions, filters, and pagination must remain reachable without moving sideways.
+7. Verify no more than one primary action per section.
+8. Reuse existing shared Mission Control components and app-native UI primitives where possible.
 
 When editing existing screens:
 
 - Do not only update colors. Also update spacing, button hierarchy, card structure, and responsive behavior.
 - If a screen has overlapping buttons, refactor the container layout instead of shrinking text or hiding buttons.
+- If a screen needs horizontal scrolling to reveal buttons, row actions, filters, or pagination, treat it as a layout bug. Wrap, stack, truncate, or move secondary details into a drawer instead.
 - Replace duplicate/custom button styles with the shared button variants.
 - Treat the app-native primitives as the underlying engine, not the visible design system. Admin pages should use Mission Control wrappers instead of raw primitives when a wrapper exists.
 - Do not add raw `DataGrid`, ad hoc status text, one-off chips, or custom row action groups to screens. Use `AppDataGrid`, `StatusChip`/`StatusBadge`, `RowActionMenu`, `PageHeader`, `SectionCard`, and shared formatting helpers.
