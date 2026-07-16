@@ -955,6 +955,23 @@ h6,
   padding: 12px;
 }
 
+.registration-comped-option {
+  height: 100%;
+  align-content: center;
+}
+
+.registration-comped-option .ui-check-row {
+  margin: 0;
+  color: var(--color-on-surface);
+  font-weight: 760;
+}
+
+.registration-comped-option p {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
 .invoice-preview-frame {
   display: block;
   width: 100%;
@@ -3384,6 +3401,7 @@ h6,
 .cohort-console-filters {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 12px;
   min-width: 0;
   padding: 0 0 14px;
@@ -3411,6 +3429,11 @@ h6,
   min-width: 0;
   overflow-x: auto;
   padding: 2px 0;
+}
+
+.cohort-console-view-filter {
+  width: 220px;
+  flex: 0 0 220px;
 }
 
 .cohort-filter-pill {
@@ -3463,17 +3486,20 @@ h6,
 }
 
 .cohort-console-more-filter .ui-field,
+.cohort-console-view-filter.ui-field,
 .cohort-console-search.ui-field {
   width: 100%;
   min-width: 0;
 }
 
 .cohort-console-more-filter .ui-label,
+.cohort-console-view-filter .ui-label,
 .cohort-console-search .ui-label {
   display: none;
 }
 
 .cohort-console-more-filter .ui-input,
+.cohort-console-view-filter .ui-input,
 .cohort-console-search .ui-input {
   min-height: 40px;
   border-color: var(--color-outline-variant);
@@ -3485,6 +3511,32 @@ h6,
   width: min(320px, 100%);
   flex: 0 0 min(320px, 100%);
   margin-left: auto;
+}
+
+.cohort-collection-section {
+  display: grid;
+  gap: 12px;
+}
+
+.cohort-collection-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.cohort-collection-header h2 {
+  margin: 0;
+  color: var(--color-on-surface);
+  font-size: 1.05rem;
+  font-weight: 760;
+}
+
+.cohort-collection-header p {
+  margin: 4px 0 0;
+  color: var(--color-on-surface-variant);
+  font-size: 0.86rem;
 }
 
 .cohort-console-table {
@@ -3586,6 +3638,7 @@ h6,
 
 .app-shell.is-night .cohort-console-table,
 .app-shell.is-night .cohort-console-filters .ui-input,
+.app-shell.is-night .cohort-console-view-filter .ui-input,
 .app-shell.is-night .cohort-filter-pill,
 .app-shell.is-night .cohort-console-table .table-footer {
   background: var(--color-surface-container-lowest);
@@ -3612,6 +3665,21 @@ h6,
   width: 36px;
   min-width: 36px;
   height: 36px;
+}
+
+@media (max-width: 860px) {
+  .cohort-console-view-filter,
+  .cohort-console-more-filter,
+  .cohort-console-search {
+    width: 100%;
+    flex-basis: 100%;
+    margin-left: 0;
+  }
+
+  .cohort-collection-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 }
 
 .reports-page {

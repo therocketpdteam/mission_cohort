@@ -1,6 +1,6 @@
 "use client";
 
-import { AddIcon, MoreHorizIcon } from "@/components/ui/icons";
+import { AddIcon } from "@/components/ui/icons";
 import { ArchiveOutlined, CalendarMonthOutlined, GroupsOutlined, InsightsOutlined } from "@/components/ui/icons";
 import { EditOutlined } from "@/components/ui/icons";
 import { VisibilityOutlined } from "@/components/ui/icons";
@@ -110,6 +110,23 @@ function cohortFinanceSummary(row: AdminRow) {
   const paidPercent = totalSales > 0 ? Math.round((paidAmount / totalSales) * 100) : 0;
 
   return { totalSales, paidAmount, paidPercent };
+}
+
+function isEndedCohort(row: AdminRow) {
+  if (row.status === "CANCELLED") {
+    return false;
+  }
+
+  if (row.status === "COMPLETED" || row.derivedStatus === "COMPLETED") {
+    return true;
+  }
+
+  return row.endDate ? new Date(row.endDate).getTime() < Date.now() : false;
+}
+
+function hasOutstandingCollection(row: AdminRow) {
+  const finance = cohortFinanceSummary(row);
+  return finance.totalSales > 0 && finance.paidAmount < finance.totalSales;
 }
 
 function money(value: unknown) {
@@ -560,10 +577,23 @@ export function CohortsClient() {
     [rows, search, status, presenterId]
   );
 
-  const filterPills = [
-    { label: "Current", value: "CURRENT", count: rows.filter((row) => currentStatuses.has(row.status)).length },
-    { label: "All", value: "", count: rows.length },
-    ...statusOptions.map((value) => ({ label: formatStatusLabel(value), value, count: statusCount(rows, value) }))
+  const collectionRows = useMemo(
+    () =>
+      rows.filter((row) => {
+        const matchesSearch = [row.title, row.shortName, row.presenter?.firstName, row.presenter?.lastName]
+          .join(" ")
+          .toLowerCase()
+          .includes(search.toLowerCase());
+        const matchesPresenter = presenterId ? row.presenterId === presenterId : true;
+        return matchesSearch && matchesPresenter && isEndedCohort(row) && hasOutstandingCollection(row);
+      }),
+    [presenterId, rows, search]
+  );
+
+  const filterOptions = [
+    { label: `Current (${rows.filter((row) => currentStatuses.has(row.status)).length})`, value: "CURRENT" },
+    { label: `All (${rows.length})`, value: "" },
+    ...statusOptions.map((value) => ({ label: `${formatStatusLabel(value)} (${statusCount(rows, value)})`, value }))
   ];
 
   const columns: GridColDef[] = [
@@ -703,23 +733,13 @@ export function CohortsClient() {
       </header>
 
       <section className="cohort-console-filters" aria-label="Cohort filters">
-        <div className="cohort-console-filter-label">
-          <MoreHorizIcon fontSize="small" />
-          <span>Filters</span>
-        </div>
-        <div className="cohort-console-filter-pills">
-          {filterPills.map((pill) => (
-            <button
-              type="button"
-              className={`cohort-filter-pill ${status === pill.value ? "is-active" : ""} ${pill.value === "CANCELLED" ? "is-danger" : ""}`}
-              key={pill.value || "all"}
-              onClick={() => setStatus(pill.value)}
-            >
-              <span>{pill.label}</span>
-              <strong>{pill.count}</strong>
-            </button>
+        <TextField className="cohort-console-view-filter" select label="View" value={status} onChange={(event) => setStatus(event.target.value)}>
+          {filterOptions.map((option) => (
+            <MenuItem value={option.value} key={option.value || "all"}>
+              {option.label}
+            </MenuItem>
           ))}
-        </div>
+        </TextField>
         <div className="cohort-console-more-filter">
           <TextField select label="Presenter" value={presenterId} onChange={(event) => setPresenterId(event.target.value)} sx={{ minWidth: 220 }}>
             <MenuItem value="">All presenters</MenuItem>
@@ -744,6 +764,27 @@ export function CohortsClient() {
         />
         {!loading && filteredRows.length === 0 && <EmptyState title="No cohorts found" description="Create a cohort or adjust the filters." />}
       </section>
+      {!loading && collectionRows.length > 0 && (
+        <section className="cohort-collection-section" aria-label="Ended cohorts with open collections">
+          <div className="cohort-collection-header">
+            <div>
+              <h2>Ended, Not Fully Collected</h2>
+              <p>Completed cohorts with remaining balances that still need follow-up.</p>
+            </div>
+            <StatusChip value={`${collectionRows.length} NEED ATTENTION`} />
+          </div>
+          <div className="cohort-console-table">
+            <AppDataGrid
+              rows={collectionRows}
+              columns={columns}
+              loading={false}
+              pageSizeOptions={[10, 25, 50]}
+              initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
+              onRowClick={(params) => router.push(`/cohorts/${params.id}`)}
+            />
+          </div>
+        </section>
+      )}
       <CreateCohortWizard
         open={wizardOpen}
         presenters={presenters}

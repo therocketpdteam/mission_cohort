@@ -177,9 +177,10 @@ export function RegistrationEditor({
   const pricePerParticipant = pricePerParticipantForCohort(cohort);
   const sessionCount = sessionCountForPricing(cohort);
   const suggestedTotal = registrationTotalForCohort(cohort, values.participantCount);
+  const isCompedRegistration = values.paymentMethod === "COMPED";
 
   useEffect(() => {
-    if (!open || !cohort) {
+    if (!open || !cohort || isCompedRegistration) {
       return;
     }
 
@@ -189,7 +190,28 @@ export function RegistrationEditor({
       setValues((current) => ({ ...current, totalAmount: suggestedTotal }));
       setLastAutoTotal(suggestedTotal);
     }
-  }, [cohort, editing, lastAutoTotal, open, suggestedTotal, values.totalAmount]);
+  }, [cohort, editing, isCompedRegistration, lastAutoTotal, open, suggestedTotal, values.totalAmount]);
+
+  function setCompedRegistration(checked: boolean) {
+    if (checked) {
+      setValues((current) => ({
+        ...current,
+        paymentMethod: "COMPED",
+        paymentStatus: "PAID",
+        totalAmount: 0
+      }));
+      setLastAutoTotal(null);
+      return;
+    }
+
+    setValues((current) => ({
+      ...current,
+      paymentMethod: "UNKNOWN",
+      paymentStatus: "PENDING",
+      totalAmount: suggestedTotal
+    }));
+    setLastAutoTotal(suggestedTotal);
+  }
 
   async function createOrganizationInline() {
     if (!organizationSearch.trim()) {
@@ -330,7 +352,20 @@ export function RegistrationEditor({
             <TextField fullWidth label="Roster status" value={formatStatusLabel(values.participantListStatus ?? "NEEDED")} disabled helperText="Calculated from saved participants" />
           </Grid>
           <Grid size={{ xs: 12, md: 3 }}>
-            <TextField fullWidth select label="Payment method" value={values.paymentMethod ?? "UNKNOWN"} onChange={(event) => setValue("paymentMethod", event.target.value)}>
+            <TextField
+              fullWidth
+              select
+              label="Payment method"
+              value={values.paymentMethod ?? "UNKNOWN"}
+              onChange={(event) => {
+                const nextMethod = event.target.value;
+                if (nextMethod === "COMPED") {
+                  setCompedRegistration(true);
+                } else {
+                  setValue("paymentMethod", nextMethod);
+                }
+              }}
+            >
               {paymentMethods.map((value) => <MenuItem value={value} key={value}>{formatStatusLabel(value)}</MenuItem>)}
             </TextField>
           </Grid>
@@ -348,11 +383,25 @@ export function RegistrationEditor({
               label="Total amount"
               type="number"
               value={values.totalAmount ?? 0}
+              disabled={isCompedRegistration}
               onChange={(event) => setValue("totalAmount", Number(event.target.value))}
-              helperText={pricePerParticipant > 0
+              helperText={isCompedRegistration
+                ? "Free / comped registration. No invoice or payment collection is expected."
+                : pricePerParticipant > 0
                 ? `${money(pricePerParticipant)} x ${Number(values.participantCount ?? 0)} participant${Number(values.participantCount ?? 0) === 1 ? "" : "s"}${Number(cohort?.pricePerParticipant ?? 0) > 0 ? "" : ` · fallback ${sessionCount || "unknown"}-session pricing`}`
                 : "No cohort price is configured yet; enter the total manually."}
             />
+          </Grid>
+          <Grid size={{ xs: 12, md: 6 }}>
+            <div className="registration-editor-subsection registration-comped-option">
+              <FormControlLabel
+                control={<Switch checked={isCompedRegistration} onChange={(event) => setCompedRegistration(event.target.checked)} />}
+                label="Free / comped participant"
+              />
+              <Typography variant="body2" color="text.secondary">
+                Use this for thought-leader guests, internal tests, or invited attendees who should receive roster/calendar/email handling without billing.
+              </Typography>
+            </div>
           </Grid>
           <Grid size={{ xs: 12 }}>
             <div className="registration-editor-subsection">
