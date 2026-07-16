@@ -993,7 +993,6 @@ export function CohortDetailClient({ id }: { id: string }) {
   const [quickBooksRefs, setQuickBooksRefs] = useState<{ vendors: AdminRow[]; accounts: AdminRow[]; environment?: string; realmId?: string }>({ vendors: [], accounts: [] });
   const [loadingQuickBooksRefs, setLoadingQuickBooksRefs] = useState(false);
   const [financeHealth, setFinanceHealth] = useState<FinanceHealth | null>(null);
-  const [preparingInvites, setPreparingInvites] = useState(false);
   const [creatingSessionEmails, setCreatingSessionEmails] = useState(false);
   const [publishingCohort, setPublishingCohort] = useState(false);
   const [applyingSessionChanges, setApplyingSessionChanges] = useState(false);
@@ -1400,36 +1399,6 @@ export function CohortDetailClient({ id }: { id: string }) {
       notifyError((error as Error).message);
     } finally {
       setCreatingSessionEmails(false);
-    }
-  }
-
-  async function prepareAllCalendarInvites() {
-    setPreparingInvites(true);
-    try {
-      const result = await adminApi<AdminRow>("/api/calendar", {
-        method: "POST",
-        body: {
-          action: "prepareCohortInvites",
-          cohortId: id,
-          mode: "auto",
-          fallbackToIcs: false
-        }
-      });
-      const fallbackCount = (result.results ?? []).filter((row: AdminRow) => row.fallbackReason).length;
-      if (Number(result.failed ?? 0) > 0) {
-        notifyError(`${result.failed} calendar sessions failed. No fallback was counted as a delivered invitation.`);
-      } else if (result.requestedProvider === "ics" || fallbackCount > 0) {
-        notifySuccess(`${result.created ?? 0}/${result.total ?? 0} ICS events prepared; participant invitations were not emailed.`);
-      } else if (Number(result.recipientCount ?? 0) === 0) {
-        notifyError("Calendar events were created, but no active participant email addresses were found.");
-      } else {
-        notifySuccess(`${result.invitationCount ?? 0} invitations sent across ${result.total ?? 0} sessions to ${result.recipientCount ?? 0} participants`);
-      }
-      await load();
-    } catch (error) {
-      notifyError((error as Error).message);
-    } finally {
-      setPreparingInvites(false);
     }
   }
 
@@ -2253,32 +2222,6 @@ export function CohortDetailClient({ id }: { id: string }) {
                     {sessionEmailReadiness.detail}. Use Create missing emails to generate the required 24-hour and 1-hour session messages before publishing.
                   </Alert>
                 ) : null}
-                <div className="readiness-action-grid readiness-action-rail">
-                  <Button
-                    variant="text"
-                    size="small"
-                    startIcon={<CalendarMonthOutlined />}
-                    disabled={preparingInvites || sessions.length === 0}
-                    onClick={prepareAllCalendarInvites}
-                  >
-                    {preparingInvites ? "Preparing" : "Prepare Invites"}
-                  </Button>
-                  <Button
-                    variant="text"
-                    size="small"
-                    startIcon={<SendOutlined />}
-                    disabled={creatingSessionEmails || sessions.length === 0}
-                    onClick={createAllMissingSessionEmailSchedules}
-                  >
-                    {creatingSessionEmails ? "Creating" : "Create Emails"}
-                  </Button>
-                  <Button variant="text" size="small" startIcon={<AddIcon />} onClick={() => openMaterialDialog()}>
-                    Add Material
-                  </Button>
-                  <Button variant="text" size="small" startIcon={<AddIcon />} onClick={() => setTaskDialogOpen(true)}>
-                    Add Task
-                  </Button>
-                </div>
               </div>
             </SectionCard>
           </div>

@@ -4816,32 +4816,6 @@ h6,
   padding-top: 10px;
 }
 
-.readiness-action-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
-  gap: 8px;
-}
-
-.readiness-action-rail {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 8px;
-  border: 1px solid color-mix(in srgb, var(--color-primary-fixed-dim) 54%, var(--color-outline-variant));
-  border-radius: 10px;
-  background: var(--color-surface-container-low);
-}
-
-.readiness-action-rail .ui-button {
-  color: var(--color-on-surface-variant);
-  font-weight: 800;
-}
-
-.readiness-action-grid .ui-button {
-  justify-content: center;
-  min-width: 0;
-}
-
 @media (max-width: 1180px) {
   .readiness-metric-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));

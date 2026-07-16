@@ -188,6 +188,7 @@ Button hierarchy rules:
 - Destructive actions should never appear directly beside the primary save/submit button unless clearly separated.
 - In cards and tables, use Ghost or Outline buttons unless the action is the central page action.
 - Table rows should not contain full-size primary buttons.
+- Publish/readiness panels should show the launch decision, system checks, and only contextual repair actions for real blockers. Do not add permanent system-owned prep buttons such as "prepare invites" or "create emails" when the app performs that work automatically.
 
 ## Button Layout / Overlap Prevention
 
