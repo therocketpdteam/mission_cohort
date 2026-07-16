@@ -994,6 +994,8 @@ export function CohortDetailClient({ id }: { id: string }) {
   const [loadingQuickBooksRefs, setLoadingQuickBooksRefs] = useState(false);
   const [financeHealth, setFinanceHealth] = useState<FinanceHealth | null>(null);
   const [creatingSessionEmails, setCreatingSessionEmails] = useState(false);
+  const [autoRepairingSessionEmails, setAutoRepairingSessionEmails] = useState(false);
+  const [sessionEmailRepairAttempted, setSessionEmailRepairAttempted] = useState(false);
   const [publishingCohort, setPublishingCohort] = useState(false);
   const [applyingSessionChanges, setApplyingSessionChanges] = useState(false);
   const { notifySuccess, notifyError, snackbar } = useNotifier();
@@ -1042,6 +1044,10 @@ export function CohortDetailClient({ id }: { id: string }) {
       setLoading(false);
     });
   }, [id, notifyError]);
+
+  useEffect(() => {
+    setSessionEmailRepairAttempted(false);
+  }, [id]);
 
   async function openRegistrationDetail(row: AdminRow) {
     setRegistrationDetail(row);
@@ -1317,7 +1323,48 @@ export function CohortDetailClient({ id }: { id: string }) {
   const detailTabs = ["Overview", "Registrations", "Participants", "Communications", "Distribution"];
   const readinessItems = cohort?.readiness?.items ?? [];
   const sessionEmailReadiness = readinessItems.find((item: AdminRow) => item.key === "communications");
+  const cohortStatus = String(cohort?.status ?? cohort?.derivedStatus ?? "");
+  const canAutoRepairSessionEmails = Boolean(
+    sessionEmailReadiness &&
+    !sessionEmailReadiness.ready &&
+    ["PUBLISHED", "ACTIVE"].includes(cohortStatus)
+  );
+  const showAutoRepairingSessionEmails = canAutoRepairSessionEmails && (autoRepairingSessionEmails || !sessionEmailRepairAttempted);
+  const showPublishAction = cohortStatus === "DRAFT";
+  const readinessSummaryText = showAutoRepairingSessionEmails
+    ? "Repairing session email schedules automatically."
+    : cohort?.readiness?.ready
+      ? cohortStatus === "DRAFT"
+        ? "All systems are ready for publication."
+        : "Delivery systems are ready."
+      : cohortStatus === "DRAFT"
+        ? "Complete these systems before this cohort can become Published."
+        : "Delivery systems need attention.";
   const pendingSessionChanges = (cohort?.readiness?.sessionDetails ?? []).filter((session: AdminRow) => session.calendar?.stale);
+
+  useEffect(() => {
+    if (!canAutoRepairSessionEmails || autoRepairingSessionEmails || sessionEmailRepairAttempted) {
+      return;
+    }
+
+    setAutoRepairingSessionEmails(true);
+    setSessionEmailRepairAttempted(true);
+    adminApi<AdminRow>("/api/communications", {
+      method: "PATCH",
+      body: { action: "createDefaultCohortSessionCommunications", cohortId: id }
+    })
+      .then(async (result) => {
+        if (Number(result.created ?? 0) > 0) {
+          notifySuccess("Session email plan repaired automatically.");
+        }
+        await load();
+      })
+      .catch((error) => {
+        notifyError((error as Error).message);
+      })
+      .finally(() => setAutoRepairingSessionEmails(false));
+  }, [autoRepairingSessionEmails, canAutoRepairSessionEmails, id, notifyError, notifySuccess, sessionEmailRepairAttempted]);
+
   const filteredRegistrations = useMemo(() => registrations.filter((registration) => {
     const paymentMatch = !registrationPaymentFilter || registration.paymentStatus === registrationPaymentFilter;
     const rosterMatch = !registrationRosterFilter || registration.participantListStatus === registrationRosterFilter;
@@ -2170,7 +2217,7 @@ export function CohortDetailClient({ id }: { id: string }) {
             </SectionCard>
             <SectionCard
               title="Publish Readiness"
-              action={
+              action={showPublishAction ? (
                 <Button
                   disabled={!cohort?.readiness?.ready || publishingCohort}
                   onClick={publishReadyCohort}
@@ -2178,15 +2225,17 @@ export function CohortDetailClient({ id }: { id: string }) {
                 >
                   {publishingCohort ? "Publishing" : "Publish Cohort"}
                 </Button>
-              }
+              ) : null}
             >
               <div className="readiness-command">
                 <div className="readiness-summary">
                   <StatusChip value={cohort?.status} />
-                  <span>{cohort?.readiness?.ready ? "All systems are ready for publication." : "Complete these systems before this cohort can become Published."}</span>
+                  <span>{readinessSummaryText}</span>
                 </div>
                 <div className="readiness-list readiness-metric-grid">
                   {readinessItems.map((item: AdminRow) => {
+                    const autoRepairingEmailItem = item.key === "communications" && showAutoRepairingSessionEmails;
+                    const itemReady = item.ready || autoRepairingEmailItem;
                     const icon =
                       item.key === "calendar" ? <CalendarMonthOutlined /> :
                           item.key === "communications" ? <EmailOutlined /> :
@@ -2194,14 +2243,14 @@ export function CohortDetailClient({ id }: { id: string }) {
                             <CheckCircleOutline />;
 
                     return (
-                      <div className={`readiness-row readiness-metric-card ${item.ready ? "is-ready" : "needs-work"}`} key={item.key}>
-                        <span className={`readiness-metric-icon ${item.ready ? "is-done" : "is-missing"}`}>
-                          {item.ready ? <CheckCircleOutline /> : icon}
+                      <div className={`readiness-row readiness-metric-card ${itemReady ? "is-ready" : "needs-work"}`} key={item.key}>
+                        <span className={`readiness-metric-icon ${itemReady ? "is-done" : "is-missing"}`}>
+                          {itemReady ? <CheckCircleOutline /> : icon}
                         </span>
                         <div>
-                          <strong>{item.label}</strong>
-                          <span>{item.detail}</span>
-                          {item.key === "communications" && !item.ready ? (
+                          <strong>{autoRepairingEmailItem ? "Session emails syncing" : item.label}</strong>
+                          <span>{autoRepairingEmailItem ? "Repairing missing system emails" : item.detail}</span>
+                          {item.key === "communications" && !item.ready && !showAutoRepairingSessionEmails ? (
                             <Button
                               variant="outlined"
                               size="small"
@@ -2217,7 +2266,11 @@ export function CohortDetailClient({ id }: { id: string }) {
                     );
                   })}
                 </div>
-                {sessionEmailReadiness && !sessionEmailReadiness.ready ? (
+                {showAutoRepairingSessionEmails ? (
+                  <Alert severity="info">
+                    Missing session emails are being repaired automatically. This should clear after the page refreshes.
+                  </Alert>
+                ) : sessionEmailReadiness && !sessionEmailReadiness.ready ? (
                   <Alert severity="warning">
                     {sessionEmailReadiness.detail}. Use Create missing emails to generate the required 24-hour and 1-hour session messages before publishing.
                   </Alert>
