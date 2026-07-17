@@ -5885,6 +5885,7 @@ h6,
 }
 
 .compose-message-context,
+.compose-distribution-panel,
 .compose-recipient-summary {
   display: grid;
   gap: 4px;
@@ -5896,6 +5897,7 @@ h6,
 }
 
 .compose-message-context span,
+.compose-distribution-panel > span,
 .compose-recipient-summary span {
   color: var(--color-slate-500);
   font-size: 0.72rem;
@@ -5904,6 +5906,7 @@ h6,
 }
 
 .compose-message-context strong,
+.compose-distribution-panel > strong,
 .compose-recipient-summary strong {
   min-width: 0;
   overflow: hidden;
@@ -5919,6 +5922,120 @@ h6,
   overflow: hidden;
   color: var(--color-slate-500);
   font-size: 0.78rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compose-distribution-panel {
+  border-color: rgba(124, 58, 237, 0.24);
+  background:
+    linear-gradient(135deg, rgba(124, 58, 237, 0.1), transparent 62%),
+    var(--color-white);
+}
+
+.compose-distribution-panel > strong {
+  font-size: 1.28rem;
+}
+
+.compose-distribution-panel > p {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--color-slate-600);
+  font-size: 0.78rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compose-distribution-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.compose-distribution-meta span {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  border: 1px solid rgba(124, 58, 237, 0.14);
+  border-radius: 999px;
+  background: rgba(237, 224, 255, 0.45);
+  padding: 2px 8px;
+  color: var(--color-primary-700);
+  font-size: 0.68rem;
+  font-weight: 780;
+}
+
+.compose-audience-picker {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.compose-audience-picker button {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  min-height: 74px;
+  align-content: start;
+  border: 1px solid var(--color-slate-200);
+  border-radius: 10px;
+  background: var(--color-white);
+  padding: 10px;
+  color: var(--color-slate-700);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.compose-audience-picker button:hover {
+  border-color: rgba(124, 58, 237, 0.28);
+  background: rgba(237, 224, 255, 0.22);
+}
+
+.compose-audience-picker button.is-selected {
+  border-color: rgba(124, 58, 237, 0.56);
+  background: rgba(237, 224, 255, 0.44);
+  box-shadow: inset 0 0 0 1px rgba(124, 58, 237, 0.2);
+}
+
+.compose-audience-picker strong {
+  overflow: hidden;
+  color: var(--color-primary-900);
+  font-size: 0.82rem;
+  font-weight: 830;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compose-audience-picker span {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--color-slate-500);
+  font-size: 0.72rem;
+  line-height: 1.28;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.compose-recipient-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 4px;
+}
+
+.compose-recipient-chips em {
+  max-width: 100%;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--color-slate-100);
+  padding: 3px 7px;
+  color: var(--color-slate-600);
+  font-size: 0.68rem;
+  font-style: normal;
+  font-weight: 730;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -6174,6 +6291,10 @@ h6,
     grid-template-columns: 1fr;
   }
 
+  .compose-audience-picker {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .comms-recipient-row {
     grid-template-columns: minmax(0, 1fr);
     align-items: stretch;
@@ -6184,7 +6305,8 @@ h6,
   .comms-summary-grid,
   .comms-detail-grid,
   .template-editor-grid,
-  .compose-message-grid {
+  .compose-message-grid,
+  .compose-audience-picker {
     grid-template-columns: 1fr;
   }
 
@@ -6253,7 +6375,10 @@ h6,
 .app-shell.is-night .template-format-hint code,
 .app-shell.is-night .compose-message-side,
 .app-shell.is-night .compose-message-context,
+.app-shell.is-night .compose-distribution-panel,
+.app-shell.is-night .compose-audience-picker button,
 .app-shell.is-night .compose-recipient-summary,
+.app-shell.is-night .compose-recipient-chips em,
 .app-shell.is-night .comms-material-row,
 .app-shell.is-night .comms-attachment-row,
 .app-shell.is-night .comms-recipient-row,
@@ -6368,6 +6493,8 @@ h6,
 .app-shell.is-night .comms-review-target strong,
 .app-shell.is-night .comms-detail-grid strong,
 .app-shell.is-night .comms-preview-block strong,
+.app-shell.is-night .compose-distribution-panel > strong,
+.app-shell.is-night .compose-audience-picker strong,
 .app-shell.is-night .compose-message-context strong,
 .app-shell.is-night .compose-recipient-summary strong,
 .app-shell.is-night .comms-material-row strong,
@@ -6385,6 +6512,9 @@ h6,
 .app-shell.is-night .comms-workspace-head > span,
 .app-shell.is-night .comms-detail-grid span,
 .app-shell.is-night .comms-preview-block > span,
+.app-shell.is-night .compose-distribution-panel > span,
+.app-shell.is-night .compose-distribution-panel > p,
+.app-shell.is-night .compose-audience-picker span,
 .app-shell.is-night .compose-message-context span,
 .app-shell.is-night .compose-message-context p,
 .app-shell.is-night .compose-recipient-summary span,

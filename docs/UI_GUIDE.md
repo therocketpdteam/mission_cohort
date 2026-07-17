@@ -326,6 +326,7 @@ List Console Pattern:
 - Merge fields insert at the current cursor or selected text position. Do not make admins copy/paste tokens manually.
 - Document links should not expose naked URLs in normal email copy. Use readable hyperlinks such as `[Here is your W-9 for your convenience]({{registration.w9Url}})` and `[Here is your invoice]({{registration.invoiceUrl}})`.
 - Template preview must render the same formatting that SendGrid receives, while raw HTML in the body input remains escaped.
+- Email distribution UI must answer "who will receive this?" before sending. Compose flows should show audience scope, estimated recipient count, custom-recipient parsing, and Draft-cohort delivery warnings beside the preview.
 
 ## Cohort Detail Pattern
 

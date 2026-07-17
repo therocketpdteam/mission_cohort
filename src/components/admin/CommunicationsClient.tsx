@@ -47,6 +47,25 @@ const templateTypes = [
 const tabs = ["Outbox", "Issues", "Templates"] as const;
 const communicationStatuses = ["DRAFT", "SCHEDULED", "SENDING", "SENT", "FAILED", "CANCELLED"];
 const recipientScopes = ["ALL_PARTICIPANTS", "PRIMARY_CONTACTS", "BILLING_CONTACTS", "CUSTOM"];
+const simpleEmailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const recipientScopeCopy: Record<string, { label: string; helper: string }> = {
+  ALL_PARTICIPANTS: {
+    label: "All participants",
+    helper: "Everyone saved on the cohort roster."
+  },
+  PRIMARY_CONTACTS: {
+    label: "Primary contacts",
+    helper: "POCs for active registrations."
+  },
+  BILLING_CONTACTS: {
+    label: "Billing contacts",
+    helper: "Billing email when available, otherwise the POC."
+  },
+  CUSTOM: {
+    label: "Custom list",
+    helper: "Only the email addresses entered below."
+  }
+};
 
 function templateText(template?: AdminRow | null) {
   return String(template?.bodyText || htmlToTemplateText(String(template?.bodyHtml ?? "")) || "");
@@ -101,6 +120,40 @@ function parseRecipientEmails(value: string) {
       .map((email) => email.trim().toLowerCase())
       .filter(Boolean)
   ));
+}
+
+function invalidRecipientEmails(value: string) {
+  return Array.from(new Set(
+    value
+      .split(/[\s,;]+/)
+      .map((email) => email.trim().toLowerCase())
+      .filter(Boolean)
+      .filter((email) => !simpleEmailPattern.test(email))
+  ));
+}
+
+function recipientScopeLabel(scope?: string | null) {
+  return recipientScopeCopy[String(scope ?? "")]?.label ?? formatStatusLabel(scope);
+}
+
+function recipientScopeHelper(scope?: string | null) {
+  return recipientScopeCopy[String(scope ?? "")]?.helper ?? "Selected recipient group.";
+}
+
+function estimateRecipientCount(cohort: AdminRow | undefined, scope: string, customEmails: string[]) {
+  if (scope === "CUSTOM") {
+    return customEmails.length;
+  }
+
+  if (scope === "ALL_PARTICIPANTS") {
+    return Number(cohort?._count?.participants ?? cohort?.participants?.length ?? 0);
+  }
+
+  if (scope === "PRIMARY_CONTACTS" || scope === "BILLING_CONTACTS") {
+    return Number(cohort?._count?.registrations ?? cohort?.registrations?.length ?? 0);
+  }
+
+  return 0;
 }
 
 function formatDate(value?: string | Date | null, empty = "Not scheduled") {
@@ -478,6 +531,13 @@ function ComposeMessageDialog({
   const renderedBody = renderMergeFields(bodyText, sampleMergeContext, true);
   const warnings = [...renderedSubject.warnings, ...renderedBody.warnings];
   const customEmails = parseRecipientEmails(String(values.recipientEmailsText ?? ""));
+  const invalidCustomEmails = invalidRecipientEmails(String(values.recipientEmailsText ?? ""));
+  const recipientScope = String(values.recipientScope ?? "ALL_PARTICIPANTS");
+  const estimatedRecipients = estimateRecipientCount(selectedCohort, recipientScope, customEmails);
+  const cohortStatus = String(selectedCohort?.status ?? selectedCohort?.derivedStatus ?? "");
+  const draftDeliveryWarning = selectedCohort && cohortStatus === "DRAFT"
+    ? "This cohort is in Draft. Saving or scheduling is fine, but live delivery is blocked until the cohort is Published."
+    : "";
 
   useEffect(() => {
     if (open) {
@@ -523,7 +583,7 @@ function ComposeMessageDialog({
     Boolean(values.cohortId) &&
     Boolean(String(values.subject ?? "").trim()) &&
     Boolean(bodyText.trim()) &&
-    (values.recipientScope !== "CUSTOM" || customEmails.length > 0);
+    (values.recipientScope !== "CUSTOM" || (customEmails.length > 0 && invalidCustomEmails.length === 0));
   const canSchedule = canSave && Boolean(values.scheduledFor);
 
   return (
@@ -545,20 +605,34 @@ function ComposeMessageDialog({
               </TextField>
             </div>
             <div className="compose-message-grid">
-              <TextField select label="Audience" value={values.recipientScope ?? "ALL_PARTICIPANTS"} onChange={(event) => setValue("recipientScope", event.target.value)}>
-                {recipientScopes.map((scope) => <MenuItem value={scope} key={scope}>{formatStatusLabel(scope)}</MenuItem>)}
+              <TextField select label="Audience" value={recipientScope} onChange={(event) => setValue("recipientScope", event.target.value)}>
+                {recipientScopes.map((scope) => <MenuItem value={scope} key={scope}>{recipientScopeLabel(scope)}</MenuItem>)}
               </TextField>
               <TextField select label="Template" value={values.templateId ?? ""} onChange={(event) => applyTemplate(event.target.value)}>
                 <MenuItem value="">No template</MenuItem>
                 {templates.filter((template) => template.active).map((template) => <MenuItem value={template.id} key={template.id}>{template.name}</MenuItem>)}
               </TextField>
             </div>
-            {values.recipientScope === "CUSTOM" && (
+            <div className="compose-audience-picker" aria-label="Email audience options">
+              {recipientScopes.map((scope) => (
+                <button
+                  type="button"
+                  className={recipientScope === scope ? "is-selected" : ""}
+                  onClick={() => setValue("recipientScope", scope)}
+                  key={scope}
+                >
+                  <strong>{recipientScopeLabel(scope)}</strong>
+                  <span>{recipientScopeHelper(scope)}</span>
+                </button>
+              ))}
+            </div>
+            {recipientScope === "CUSTOM" && (
               <TextField
                 label="Custom recipients"
                 value={values.recipientEmailsText ?? ""}
                 onChange={(event) => setValue("recipientEmailsText", event.target.value)}
                 helperText="Separate emails with commas, spaces, or new lines."
+                error={invalidCustomEmails.length > 0}
                 multiline
                 minRows={2}
                 required
@@ -584,11 +658,28 @@ function ComposeMessageDialog({
             />
           </div>
           <aside className="compose-message-side">
+            <div className="compose-distribution-panel">
+              <span>Distribution</span>
+              <strong>{estimatedRecipients.toLocaleString()} recipient{estimatedRecipients === 1 ? "" : "s"}</strong>
+              <p title={recipientScopeHelper(recipientScope)}>
+                {recipientScopeLabel(recipientScope)} · {selectedCohort?.title ?? "Choose a cohort"}
+              </p>
+              <div className="compose-distribution-meta">
+                <span>Participants: {Number(selectedCohort?._count?.participants ?? 0).toLocaleString()}</span>
+                <span>POCs: {Number(selectedCohort?._count?.registrations ?? 0).toLocaleString()}</span>
+                <span>{cohortStatus ? `Status: ${formatStatusLabel(cohortStatus)}` : "Status: -"}</span>
+              </div>
+            </div>
+            {draftDeliveryWarning && (
+              <Alert severity="warning">
+                {draftDeliveryWarning}
+              </Alert>
+            )}
             <div className="compose-message-context">
               <span>Context</span>
               <strong title={selectedCohort?.title ?? ""}>{selectedCohort?.title ?? "Choose a cohort"}</strong>
               <p title={selectedTemplate?.name ?? ""}>
-                {[selectedTemplate?.name, values.recipientScope ? formatStatusLabel(String(values.recipientScope)) : ""].filter(Boolean).join(" · ") || "Template and audience will appear here."}
+                {[selectedTemplate?.name, recipientScopeLabel(recipientScope)].filter(Boolean).join(" · ") || "Template and audience will appear here."}
               </p>
             </div>
             <div className="template-preview">
@@ -598,8 +689,17 @@ function ComposeMessageDialog({
             </div>
             {customEmails.length > 0 && (
               <div className="compose-recipient-summary">
-                <span>Custom recipients</span>
+                <span>{invalidCustomEmails.length ? "Check recipients" : "Custom recipients"}</span>
                 <strong>{customEmails.length}</strong>
+                <div className="compose-recipient-chips">
+                  {customEmails.slice(0, 8).map((email) => <em key={email} title={email}>{email}</em>)}
+                  {customEmails.length > 8 && <em>{customEmails.length - 8} more</em>}
+                </div>
+              </div>
+            )}
+            {invalidCustomEmails.length > 0 && (
+              <div className="template-editor-warnings">
+                <span>Fix invalid recipient email{invalidCustomEmails.length === 1 ? "" : "s"}: {invalidCustomEmails.join(", ")}</span>
               </div>
             )}
             {warnings.length > 0 && (
@@ -618,7 +718,7 @@ function ComposeMessageDialog({
         <Button variant="outlined" onClick={() => submit("schedule")} disabled={!canSchedule || Boolean(savingAction)}>
           {savingAction === "schedule" ? "Scheduling" : "Schedule"}
         </Button>
-        <Button onClick={() => submit("send")} disabled={!canSave || Boolean(savingAction)}>
+        <Button onClick={() => submit("send")} disabled={!canSave || Boolean(savingAction) || Boolean(draftDeliveryWarning)}>
           {savingAction === "send" ? "Sending" : "Send now"}
         </Button>
       </DialogActions>
