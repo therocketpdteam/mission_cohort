@@ -49,6 +49,37 @@ export function formatStatusLabel(value?: string | boolean | null) {
     .replace(/\bW 9\b/g, "W-9");
 }
 
+export function isCompedRegistration(input?: {
+  paymentMethod?: string | null;
+  paymentStatus?: string | null;
+  totalAmount?: number | string | null;
+  amount?: number | string | null;
+  participantCount?: number | string | null;
+  participants?: number | string | null;
+}) {
+  const method = String(input?.paymentMethod ?? "").toUpperCase();
+  const status = String(input?.paymentStatus ?? "").toUpperCase();
+  const totalAmount = Number(input?.totalAmount ?? input?.amount ?? 0);
+  const participantCount = Number(input?.participantCount ?? input?.participants ?? 0);
+
+  if (method === "COMPED") {
+    return true;
+  }
+
+  return participantCount > 0 && totalAmount <= 0 && !["CANCELLED", "REFUNDED"].includes(status);
+}
+
+export function formatRegistrationPaymentStatus(input?: {
+  paymentMethod?: string | null;
+  paymentStatus?: string | null;
+  totalAmount?: number | string | null;
+  amount?: number | string | null;
+  participantCount?: number | string | null;
+  participants?: number | string | null;
+}) {
+  return isCompedRegistration(input) ? "Comped" : formatStatusLabel(input?.paymentStatus);
+}
+
 export function formatHumanLabel(value: string) {
   return value
     .replace(/([a-z])([A-Z])/g, "$1 $2")

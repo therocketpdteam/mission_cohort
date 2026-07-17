@@ -25,7 +25,7 @@ import type { Route } from "next";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
-import { formatProperDisplay, formatStatusLabel } from "@/lib/formatting";
+import { formatProperDisplay, formatRegistrationPaymentStatus, formatStatusLabel } from "@/lib/formatting";
 import {
   AdminRow,
   DetailField,
@@ -687,7 +687,7 @@ export function DashboardClient() {
               <Grid size={{ xs: 12, sm: 6 }}><DetailField label="Organization" value={recentRegistration.organization?.name} proper /></Grid>
               <Grid size={{ xs: 12, sm: 6 }}><DetailField label="Cohort" value={recentRegistration.cohort?.title} /></Grid>
               <Grid size={{ xs: 12, sm: 6 }}><DetailField label="Participants" value={`${recentRegistration.participants?.length ?? 0} of ${recentRegistration.participantCount ?? 0}`} /></Grid>
-              <Grid size={{ xs: 12, sm: 6 }}><DetailField label="Payment" value={formatStatusLabel(recentRegistration.paymentStatus)} /></Grid>
+              <Grid size={{ xs: 12, sm: 6 }}><DetailField label="Payment" value={formatRegistrationPaymentStatus(recentRegistration)} /></Grid>
               <Grid size={{ xs: 12, sm: 6 }}><DetailField label="Source" value={recentRegistration.utmCampaign || recentRegistration.utmSource || recentRegistration.landingPageUrl || recentRegistration.source} /></Grid>
               <Grid size={{ xs: 12, sm: 6 }}><DetailField label="Amount" value={`$${Number(recentRegistration.totalAmount ?? 0).toLocaleString()}`} /></Grid>
             </Grid>

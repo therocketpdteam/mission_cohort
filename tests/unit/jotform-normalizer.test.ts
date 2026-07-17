@@ -188,6 +188,33 @@ test("previews unmapped forms as needing mapping while hiding noisy fields", () 
   assert.equal(preview.formId, "unmapped");
   assert.equal(preview.fieldOptions.some((option: any) => option.key === "paymentFieldsToSelectedProducts"), false);
   assert.equal(preview.fieldOptions.some((option: any) => option.key === "customParams"), false);
+  assert.equal(preview.fieldPreview.some((option: any) => option.key === "rawRequest"), false);
+});
+
+test("does not parse raw Jotform request blobs as participant rosters", () => {
+  const normalized = normalizeJotformRegistrationPayload(
+    {
+      formID: "12345",
+      submissionID: "sub-raw",
+      q7_name: { first: "Gerardo", last: "Grosso" },
+      q12_email: "info@rocketpd.com",
+      q15_nameOf: "Gerardo Grosso",
+      q20_howMany: "1",
+      q56_totalCost56: "$295.00",
+      q46_preferredMethod: "Invoice/PO",
+      q59_typeA59: "https://rocketpd.com/",
+      jsExecutionTracker: "build-date=>init-started=>validator-called",
+      rawRequest: JSON.stringify({
+        slug: "submit/250086304666659",
+        pretty: "\"q12_email\":\"info@rocketpd.com\" \"q15_nameOf\":\"Gerardo Grosso\" \"q56_totalCost56\":\"$295.00\""
+      })
+    },
+    [urlMapping]
+  );
+
+  assert.equal(normalized.participantParseErrors.length, 0);
+  assert.equal(normalized.participants.length, 1);
+  assert.equal(normalized.participants[0].email, "info@rocketpd.com");
 });
 
 test("parses participant titles and reports roster title warnings", () => {

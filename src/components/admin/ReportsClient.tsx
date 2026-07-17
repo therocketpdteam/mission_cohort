@@ -5,7 +5,7 @@ import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Grid, M
 import { GridColDef } from "./common";
 import { useEffect, useMemo, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
-import { formatProperDisplay, formatStatusLabel } from "@/lib/formatting";
+import { formatProperDisplay, formatRegistrationPaymentStatus, formatStatusLabel } from "@/lib/formatting";
 import { AdminRow, AppDataGrid, EmptyState, PageHeader, PageStack, RowActionMenu, SectionCard, StatusChip, TableShell, useNotifier } from "./common";
 
 const registrationStatuses = ["NEW", "CONFIRMED", "CANCELLED"];
@@ -78,7 +78,7 @@ function reportCell(row: AdminRow, column: string) {
     case "amount":
       return money(row.amount);
     case "paymentStatus":
-      return formatStatusLabel(row.paymentStatus);
+      return formatRegistrationPaymentStatus(row);
     case "paymentMethod":
       return formatStatusLabel(row.paymentMethod);
     case "rosterStatus":

@@ -73,9 +73,13 @@ export async function createDefaultRegistrationOperationsTasks(input: {
   actualParticipantCount: number;
   missingParticipantTitleCount?: number;
   paymentStatus: string;
+  paymentMethod?: string;
+  totalAmount?: number | string;
   hasSupportingDocs: boolean;
 }) {
   const tasks: Array<z.input<typeof operationsTaskCreateSchema>> = [];
+  const isComped = String(input.paymentMethod ?? "").toUpperCase() === "COMPED" ||
+    (input.participantCount > 0 && Number(input.totalAmount ?? 0) <= 0 && !["CANCELLED", "REFUNDED"].includes(String(input.paymentStatus).toUpperCase()));
 
   if (input.participantCount > input.actualParticipantCount || Number(input.missingParticipantTitleCount ?? 0) > 0) {
     const missingTitleCount = Number(input.missingParticipantTitleCount ?? 0);
@@ -91,7 +95,7 @@ export async function createDefaultRegistrationOperationsTasks(input: {
     });
   }
 
-  if (["PENDING", "INVOICED", "PARTIALLY_PAID"].includes(input.paymentStatus)) {
+  if (!isComped && ["PENDING", "INVOICED", "PARTIALLY_PAID"].includes(input.paymentStatus)) {
     tasks.push({
       cohortId: input.cohortId,
       registrationId: input.registrationId,

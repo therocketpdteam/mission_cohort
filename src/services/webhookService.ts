@@ -378,6 +378,8 @@ export async function processRegistrationWebhook(payload: Record<string, any>, o
           actualParticipantCount: participants.length,
           missingParticipantTitleCount,
           paymentStatus: registration.paymentStatus,
+          paymentMethod: registration.paymentMethod,
+          totalAmount: Number(registration.totalAmount ?? 0),
           hasSupportingDocs: Boolean(registration.w9Url || registration.invoiceUrl || registration.confirmationDocsSentAt)
         });
     void queueRegistrationCrmSync(registration.id, existingRegistration ? "registration.updated" : "registration.created").catch((crmError) => {

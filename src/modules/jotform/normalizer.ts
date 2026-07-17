@@ -742,6 +742,21 @@ function isNoisyJotformField(key: string, value: unknown): boolean {
   return normalizedKey.includes("summary") && stringValue.trim().startsWith("{");
 }
 
+function looksLikeParticipantRosterField(key: string, value: unknown) {
+  const normalizedKey = normalizeKey(key);
+  const stringValue = readString(value);
+
+  if (!stringValue || isNoisyJotformField(key, value)) {
+    return false;
+  }
+
+  if (normalizedKey.includes("participant") || normalizedKey.includes("roster") || normalizedKey.includes("namesemails")) {
+    return true;
+  }
+
+  return stringValue.length < 1200 && /[\n;]/.test(stringValue) && emailInTextPattern.test(stringValue);
+}
+
 function optionRank(key: string) {
   const normalizedKey = normalizeKey(key);
 
@@ -984,7 +999,7 @@ export function normalizeJotformRegistrationPayload(payload: UnknownRecord, mapp
     "NamesEmails",
     "Please enter the names and email addresses of all participants, one per line, in the following format: Full Name, Email",
     "Please enter the names, titles, and email addresses of all participants, one per line, in the following format: Full Name, Title, Email"
-  ]) ?? Object.values(flat).find((value) => readString(value).includes(",") && emailInTextPattern.test(readString(value)));
+  ]) ?? Object.entries(flat).find(([key, value]) => looksLikeParticipantRosterField(key, value))?.[1];
   const parsedParticipantText = parseParticipantCsvText(participantText);
   const participants = [
     ...normalizeParticipants(rawParticipants),
@@ -1150,7 +1165,7 @@ function buildSuggestedFieldMap(flat: UnknownRecord): FieldMap {
 export function previewJotformRegistrationPayload(payload: UnknownRecord, mappings: JotformFormMapping[] = []) {
   const flat = normalizeFlatPayload(payload);
   const fieldPreview = Object.entries(flat)
-    .filter(([, value]) => readString(value))
+    .filter(([key, value]) => readString(value) && !isNoisyJotformField(key, value))
     .slice(0, 30)
     .map(([key, value]) => ({
       key,

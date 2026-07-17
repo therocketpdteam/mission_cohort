@@ -32,7 +32,7 @@ import { GridColDef, GridRowParams, GridRowSelectionModel } from "./common";
 import { useEffect, useMemo, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
 import { pricePerParticipantForCohort, registrationTotalForCohort, sessionCountForPricing } from "@/config/cohortPricing";
-import { formatProperDisplay, formatRegistrationSource, formatStatusLabel } from "@/lib/formatting";
+import { formatProperDisplay, formatRegistrationPaymentStatus, formatRegistrationSource, formatStatusLabel } from "@/lib/formatting";
 import { RosterWorkbench } from "./RosterWorkbench";
 import { RegistrationPendingChangesPanel } from "./RegistrationPendingChangesPanel";
 import { RegistrationDeliveryPreflight } from "./RegistrationDeliveryPreflight";
@@ -970,7 +970,7 @@ function RegistrationDetailDialog({
               <p title={registration.cohort?.title ?? ""}>{registration.cohort?.title ?? "No cohort assigned"}</p>
             </div>
             <div className="registration-hero-status">
-              <StatusChip value={registration.paymentStatus} />
+              <StatusChip value={formatRegistrationPaymentStatus(registration)} />
               <StatusChip value={health?.label} />
             </div>
           </section>
@@ -992,7 +992,7 @@ function RegistrationDetailDialog({
           <div className="quick-view-grid">
             <DetailTile label="POC email" value={registration.primaryContactEmail} />
             <DetailTile label="POC phone" value={registration.primaryContactPhone ?? "-"} />
-            <DetailTile label="Payment" value={`${formatStatusLabel(registration.paymentStatus)} · ${money(registration.totalAmount)}`} />
+            <DetailTile label="Payment" value={`${formatRegistrationPaymentStatus(registration)} · ${money(registration.totalAmount)}`} />
             <DetailTile label="Roster" value={health?.helper ?? "-"} tone={health?.tone} />
             <DetailTile label="Invoice" value={registration.invoiceNumber ?? "No invoice"} />
             <DetailTile label="PO" value={registration.purchaseOrderNumber ?? "No PO"} />
@@ -1540,7 +1540,7 @@ export function RegistrationsClient() {
       width: 152,
       renderCell: (params) => (
         <div className="app-table-status-stack">
-          <StatusChip value={params.row.paymentStatus} />
+          <StatusChip value={formatRegistrationPaymentStatus(params.row)} />
           <span className="app-table-sub" title={money(params.row.totalAmount)}>{money(params.row.totalAmount)}</span>
         </div>
       )

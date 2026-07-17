@@ -78,6 +78,8 @@ export async function createRegistration(input: z.input<typeof registrationCreat
     actualParticipantCount: roster?.actualCount ?? 0,
     missingParticipantTitleCount: roster?.missingTitleCount ?? 0,
     paymentStatus: registration.paymentStatus,
+    paymentMethod: registration.paymentMethod,
+    totalAmount: Number(registration.totalAmount ?? 0),
     hasSupportingDocs: Boolean(registration.w9Url || registration.invoiceUrl || registration.confirmationDocsSentAt)
   });
   void queueRegistrationCrmSync(registration.id, "registration.created").catch(() => undefined);

@@ -21,7 +21,7 @@ import {
 import { GridColDef, GridRowParams, GridRowSelectionModel } from "./common";
 import { useEffect, useMemo, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
-import { formatProperDisplay, formatStatusLabel } from "@/lib/formatting";
+import { formatProperDisplay, formatRegistrationPaymentStatus, formatStatusLabel } from "@/lib/formatting";
 import {
   AdminRow,
   AppDataGrid,
@@ -244,7 +244,7 @@ function ParticipantDetailDialog({
             <ParticipantTile label="Title" value={participant.title ?? "-"} />
             <ParticipantTile label="Registration POC" value={formatProperDisplay(participant.registration?.primaryContactName ?? "-")} />
             <ParticipantTile label="POC email" value={participant.registration?.primaryContactEmail ?? "-"} />
-            <ParticipantTile label="Payment" value={formatStatusLabel(participant.registration?.paymentStatus ?? latestPayment?.status ?? "-")} />
+            <ParticipantTile label="Payment" value={participant.registration ? formatRegistrationPaymentStatus(participant.registration) : formatStatusLabel(latestPayment?.status ?? "-")} />
             <ParticipantTile label="Amount" value={`$${Number(participant.registration?.totalAmount ?? latestPayment?.amount ?? 0).toLocaleString()}`} />
             <ParticipantTile label="Last email" value={participant.emailSummary?.lastEmailEvent ? `${formatStatusLabel(participant.emailSummary.lastEmailEvent)} · ${participant.emailSummary.lastEmailEventAt ? new Date(participant.emailSummary.lastEmailEventAt).toLocaleDateString("en-US") : ""}` : "-"} />
           </div>

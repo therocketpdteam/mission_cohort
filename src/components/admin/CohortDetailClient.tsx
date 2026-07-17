@@ -29,7 +29,7 @@ import { GridColDef } from "./common";
 import type { CSSProperties } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { adminApi, uploadAdminFile } from "@/lib/adminApi";
-import { formatProperDisplay, formatRegistrationSource, formatStatusLabel } from "@/lib/formatting";
+import { formatProperDisplay, formatRegistrationPaymentStatus, formatRegistrationSource, formatStatusLabel, isCompedRegistration } from "@/lib/formatting";
 import { formatDateTimeInZone, formatTimeInZone } from "@/lib/timezones";
 import { RosterWorkbench } from "./RosterWorkbench";
 import { RegistrationPendingChangesPanel } from "./RegistrationPendingChangesPanel";
@@ -173,6 +173,10 @@ function registrationRelatedRows(registration: AdminRow, rows: AdminRow[] | unde
 }
 
 function registrationCollectedAmount(registration: AdminRow, paymentRows?: AdminRow[], invoiceRows?: AdminRow[]) {
+  if (isCompedRegistration(registration)) {
+    return 0;
+  }
+
   const paidFromRecords = registrationRelatedRows(registration, paymentRows, "paymentRecords")
     .filter((payment) => ["PAID", "PARTIALLY_PAID"].includes(String(payment.status ?? "").toUpperCase()))
     .reduce((sum, payment) => sum + moneyNumber(payment.amount), 0);
@@ -195,6 +199,10 @@ function registrationBillingStatus(registration: AdminRow, paymentRows?: AdminRo
 
   if (registration.archivedAt || registrationStatus === "CANCELLED") {
     return "Withdrawn";
+  }
+
+  if (isCompedRegistration(registration)) {
+    return "Comped";
   }
 
   if (total > 0 && collected >= total) {
@@ -3197,7 +3205,7 @@ export function CohortDetailClient({ id }: { id: string }) {
               <DetailField label="Certificate" value={participantDetail.certificateIssued ? "Issued" : "Not issued"} />
               <DetailField label="Organization" value={participantDetail.organization?.name} proper />
               <DetailField label="Registration POC" value={participantDetail.registration?.primaryContactName} proper />
-              <DetailField label="Payment" value={formatStatusLabel(participantDetail.registration?.paymentStatus)} />
+              <DetailField label="Payment" value={formatRegistrationPaymentStatus(participantDetail.registration)} />
               <DetailField label="Amount" value={money(participantDetail.registration?.totalAmount)} />
               <DetailField label="Last Email" value={participantDetail.emailSummary?.lastEmailEvent ?? "-"} />
               <DetailField label="Last Email Sent" value={participantDetail.emailSummary?.lastEmailEventAt ? new Date(participantDetail.emailSummary.lastEmailEventAt).toLocaleString("en-US") : "-"} />
