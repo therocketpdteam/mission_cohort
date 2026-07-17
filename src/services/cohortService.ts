@@ -1,4 +1,4 @@
-import { CohortStatus } from "@prisma/client";
+import { CohortStatus, CommunicationStatus } from "@prisma/client";
 import { z } from "zod";
 import { dateInput, ensureEndAfterStart, positiveIntInput } from "@/lib/validators";
 import { prisma } from "@/lib/prisma";
@@ -198,6 +198,56 @@ export async function publishCohort(id: string) {
       }
     };
   }
+}
+
+export async function moveCohortBackToDraft(id: string) {
+  const cohort = await prisma.cohort.findUnique({ where: { id }, select: { id: true, title: true, status: true } });
+
+  if (!cohort) {
+    throw Object.assign(new Error("Cohort not found"), { code: "NOT_FOUND", status: 404 });
+  }
+
+  const draftableStatuses: CohortStatus[] = [CohortStatus.PUBLISHED, CohortStatus.ACTIVE];
+
+  if (!draftableStatuses.includes(cohort.status)) {
+    throw Object.assign(new Error("Only Published or Active cohorts can be moved back to Draft."), { code: "BAD_REQUEST", status: 400 });
+  }
+
+  const pausableStatuses = [
+    CommunicationStatus.DRAFT,
+    CommunicationStatus.SCHEDULED,
+    CommunicationStatus.SENDING,
+    CommunicationStatus.FAILED
+  ];
+
+  const [updated, pausedCommunications] = await prisma.$transaction([
+    prisma.cohort.update({ where: { id }, data: { status: CohortStatus.DRAFT } }),
+    prisma.cohortCommunication.updateMany({
+      where: {
+        cohortId: id,
+        sentAt: null,
+        status: { in: pausableStatuses }
+      },
+      data: {
+        status: CommunicationStatus.DRAFT,
+        providerError: "Paused because cohort was moved back to Draft."
+      }
+    })
+  ]);
+
+  logAuditEventAsync({
+    entityType: "Cohort",
+    entityId: id,
+    action: "UPDATED",
+    description: "Cohort moved back to Draft and unsent communications paused",
+    metadata: { title: cohort.title, previousStatus: cohort.status, pausedCommunications: pausedCommunications.count }
+  });
+
+  void syncCohortTotalsToCrm(id, "cohort.moved_to_draft").catch((error) => {
+    console.error("CRM Mission Cohort cohort sync scheduling failed", { cohortId: id, error: error instanceof Error ? error.message : "Unknown error" });
+  });
+
+  return { ...updated, pausedCommunications: pausedCommunications.count };
 }
 
 export async function archiveCohort(id: string) {

@@ -1,5 +1,5 @@
 import { fail, handleApiError, ok } from "@/lib/api";
-import { getCohortById, publishCohort, updateCohort } from "@/services/cohortService";
+import { getCohortById, moveCohortBackToDraft, publishCohort, updateCohort } from "@/services/cohortService";
 import { syncCohortTotalsToCrm } from "@/services/crmRegistrationWebhookService";
 import { ensureCohortQuickBooksProject, reconcileCohortQuickBooksProject, syncQuickBooksInvoice } from "@/services/quickBooksService";
 
@@ -24,6 +24,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const body = await request.json();
     if (body.action === "publish") {
       return ok(await publishCohort(id));
+    }
+
+    if (body.action === "moveToDraft") {
+      return ok(await moveCohortBackToDraft(id));
     }
 
     if (body.action === "syncQuickBooksProject") {

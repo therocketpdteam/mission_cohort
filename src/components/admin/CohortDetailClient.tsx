@@ -997,6 +997,7 @@ export function CohortDetailClient({ id }: { id: string }) {
   const [autoRepairingSessionEmails, setAutoRepairingSessionEmails] = useState(false);
   const [sessionEmailRepairAttempted, setSessionEmailRepairAttempted] = useState(false);
   const [publishingCohort, setPublishingCohort] = useState(false);
+  const [movingCohortToDraft, setMovingCohortToDraft] = useState(false);
   const [applyingSessionChanges, setApplyingSessionChanges] = useState(false);
   const { notifySuccess, notifyError, snackbar } = useNotifier();
 
@@ -1331,6 +1332,7 @@ export function CohortDetailClient({ id }: { id: string }) {
   );
   const showAutoRepairingSessionEmails = canAutoRepairSessionEmails && (autoRepairingSessionEmails || !sessionEmailRepairAttempted);
   const showPublishAction = cohortStatus === "DRAFT";
+  const canMoveBackToDraft = ["PUBLISHED", "ACTIVE"].includes(cohortStatus);
   const readinessSummaryText = showAutoRepairingSessionEmails
     ? "Repairing session email schedules automatically."
     : cohort?.readiness?.ready
@@ -1507,6 +1509,23 @@ export function CohortDetailClient({ id }: { id: string }) {
       notifyError((error as Error).message);
     } finally {
       setPublishingCohort(false);
+    }
+  }
+
+  async function moveBackToDraft() {
+    setMovingCohortToDraft(true);
+
+    try {
+      const result = await adminApi<AdminRow>(`/api/cohorts/${id}`, { method: "PATCH", body: { action: "moveToDraft" } });
+      const pausedCount = Number(result.pausedCommunications ?? 0);
+      notifySuccess(
+        `Cohort moved back to Draft. ${pausedCount} unsent email${pausedCount === 1 ? "" : "s"} paused.`
+      );
+      await load();
+    } catch (error) {
+      notifyError((error as Error).message);
+    } finally {
+      setMovingCohortToDraft(false);
     }
   }
 
@@ -2224,6 +2243,15 @@ export function CohortDetailClient({ id }: { id: string }) {
                   startIcon={<SendOutlined />}
                 >
                   {publishingCohort ? "Publishing" : "Publish Cohort"}
+                </Button>
+              ) : canMoveBackToDraft ? (
+                <Button
+                  variant="outlined"
+                  color="warning"
+                  disabled={movingCohortToDraft}
+                  onClick={moveBackToDraft}
+                >
+                  {movingCohortToDraft ? "Moving" : "Move back to Draft"}
                 </Button>
               ) : null}
             >

@@ -1304,14 +1304,12 @@ export async function createDefaultSessionCommunications(sessionId: string) {
     },
     include: { template: true }
   });
-  const existingTypes = new Set(existing.map((communication) => communication.template?.type).filter(Boolean));
+  const existingByType = new Map(existing
+    .filter((communication) => communication.template?.type)
+    .map((communication) => [communication.template!.type, communication]));
   const records = [];
 
   for (const template of templates.filter((item) => sessionTemplateTypes.includes(item.type as (typeof sessionTemplateTypes)[number]))) {
-    if (existingTypes.has(template.type)) {
-      continue;
-    }
-
     const start = new Date(session.startTime);
     const scheduledFor =
       template.type === TemplateType.WEEK_BEFORE_REMINDER
@@ -1323,6 +1321,31 @@ export async function createDefaultSessionCommunications(sessionId: string) {
             : template.type === TemplateType.FOLLOW_UP
               ? new Date(start.getTime() + 24 * 60 * 60 * 1000)
               : undefined;
+    const existingCommunication = existingByType.get(template.type);
+
+    if (existingCommunication) {
+      if (
+        existingCommunication.status === CommunicationStatus.SENT ||
+        existingCommunication.status === CommunicationStatus.CANCELLED ||
+        existingCommunication.status === CommunicationStatus.SKIPPED
+      ) {
+        continue;
+      }
+
+      records.push(await prisma.cohortCommunication.update({
+        where: { id: existingCommunication.id },
+        data: {
+          subject: template.subject,
+          bodyHtml: template.bodyHtml,
+          bodyText: template.bodyText,
+          scheduledFor,
+          status: scheduledFor ? CommunicationStatus.SCHEDULED : CommunicationStatus.DRAFT,
+          providerError: null,
+          recipientScope: template.type === TemplateType.REGISTRATION_CONFIRMATION ? RecipientScope.PRIMARY_CONTACTS : RecipientScope.ALL_PARTICIPANTS
+        }
+      }));
+      continue;
+    }
 
     records.push(await prisma.cohortCommunication.create({
       data: {
