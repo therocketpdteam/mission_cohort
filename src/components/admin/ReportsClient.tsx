@@ -124,23 +124,6 @@ function SummaryTile({ label, value }: { label: string; value: string | number }
   );
 }
 
-function BreakdownList({ title, rows, valueLabel }: { title: string; rows: AdminRow[]; valueLabel: string }) {
-  return (
-    <div className="registration-report-breakdown">
-      <h4>{title}</h4>
-      <div>
-        {rows.slice(0, 6).map((row) => (
-          <p key={row.label}>
-            <span>{row.label}</span>
-            <strong>{row.registrations} {valueLabel} · {money(row.amount)}</strong>
-          </p>
-        ))}
-        {rows.length === 0 && <p><span>No data yet</span><strong>-</strong></p>}
-      </div>
-    </div>
-  );
-}
-
 function RegistrationReportPreview({ report, columns }: { report: AdminRow; columns: string[] }) {
   const filters = report.filters ?? {};
   const activeFilters = [
@@ -180,15 +163,6 @@ function RegistrationReportPreview({ report, columns }: { report: AdminRow; colu
         <SummaryTile label="Paid Amount" value={money(report.summary?.paidAmount)} />
         <SummaryTile label="Pending Amount" value={money(report.summary?.pendingAmount)} />
         <SummaryTile label="Geographic Matches" value={report.summary?.geographicMatches ?? 0} />
-      </section>
-
-      <section className="registration-report-insight">
-        <h2>Outreach Timing Insight</h2>
-        <p>{report.recommendedOutreachNote}</p>
-        <div className="registration-report-breakdowns">
-          <BreakdownList title="Registrations By Month" rows={report.monthlyBreakdown ?? []} valueLabel="registrations" />
-          <BreakdownList title="Registrations By Source" rows={report.sourceBreakdown ?? []} valueLabel="registrations" />
-        </div>
       </section>
 
       <section className="registration-report-table-wrap">
