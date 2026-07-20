@@ -3878,10 +3878,6 @@ h6,
   background: var(--color-surface-container-lowest);
 }
 
-.registration-report-print-root {
-  display: none;
-}
-
 .registration-report-print-header {
   display: flex;
   align-items: flex-start;
@@ -4099,34 +4095,102 @@ h6,
 }
 
 @media print {
+  @page {
+    margin: 0.45in;
+  }
+
+  html,
+  body {
+    width: auto !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    background: #ffffff !important;
+  }
+
   body * {
     visibility: hidden !important;
   }
 
-  .registration-report-print-root,
-  .registration-report-print-root * {
+  .app-shell:has(.registration-report-print-backdrop) {
+    display: block !important;
+    min-height: 0 !important;
+    background: #ffffff !important;
+  }
+
+  .app-shell:has(.registration-report-print-backdrop) .app-sidebar,
+  .app-shell:has(.registration-report-print-backdrop) .app-topbar,
+  .reports-page:has(.registration-report-print-backdrop) > :not(.registration-report-print-backdrop) {
+    display: none !important;
+  }
+
+  .app-shell:has(.registration-report-print-backdrop) .app-main,
+  .app-shell:has(.registration-report-print-backdrop) .app-content,
+  .reports-page:has(.registration-report-print-backdrop) {
+    display: block !important;
+    min-height: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    background: #ffffff !important;
+  }
+
+  .ui-modal-backdrop:has(.registration-report-modal),
+  .registration-report-print-backdrop,
+  .registration-report-modal,
+  .registration-report-modal .ui-modal-body,
+  .registration-report-print,
+  .registration-report-print * {
     visibility: visible !important;
   }
 
-  .registration-report-print-root {
-    position: absolute;
-    inset: 0;
+  .ui-modal-backdrop:has(.registration-report-modal),
+  .registration-report-print-backdrop {
+    position: static !important;
+    display: block !important;
+    min-height: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    background: #ffffff !important;
+  }
+
+  .registration-report-modal {
+    position: static !important;
     display: block !important;
     width: 100%;
+    max-width: none !important;
+    max-height: none !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    overflow: visible !important;
     background: #ffffff !important;
     color: #191c1e !important;
   }
 
-  .registration-report-print-root .registration-report-print {
-    display: block;
-    padding: 0;
+  .registration-report-modal .ui-modal-header,
+  .registration-report-modal .ui-modal-footer {
+    display: none !important;
   }
 
-  .registration-report-print-root .registration-report-print > * + * {
+  .registration-report-modal .ui-modal-body {
+    display: block !important;
+    max-height: none !important;
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+
+  .registration-report-print {
+    display: block;
+    padding: 0;
+    background: #ffffff !important;
+  }
+
+  .registration-report-print > * + * {
     margin-top: 18px;
   }
 
-  .registration-report-print-root .status-chip {
+  .registration-report-modal .status-chip {
     border: 1px solid #ccc3d8;
     background: #ffffff !important;
     color: #191c1e !important;

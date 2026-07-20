@@ -538,7 +538,14 @@ export function ReportsClient() {
         </Grid>
       </Grid>
 
-      <Dialog open={reportOpen} onClose={() => setReportOpen(false)} fullWidth maxWidth="xl">
+      <Dialog
+        open={reportOpen}
+        onClose={() => setReportOpen(false)}
+        fullWidth
+        maxWidth="xl"
+        PaperProps={{ className: "registration-report-modal" }}
+        BackdropProps={{ className: "registration-report-print-backdrop" }}
+      >
         <DialogTitle>Cohort Registration Report Preview</DialogTitle>
         <DialogContent>
           {reportData && <RegistrationReportPreview report={reportData} columns={safeSelectedColumns} />}
@@ -548,12 +555,6 @@ export function ReportsClient() {
           <Button onClick={() => window.print()}>Download PDF</Button>
         </DialogActions>
       </Dialog>
-
-      {reportData && (
-        <div className="registration-report-print-root" aria-hidden="true">
-          <RegistrationReportPreview report={reportData} columns={safeSelectedColumns} />
-        </div>
-      )}
 
       {snackbar}
     </PageStack>
