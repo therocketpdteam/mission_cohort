@@ -2,13 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { formatRegistrationPaymentStatus, isCompedRegistration } from "../../src/lib/formatting";
 
-test("labels comped registrations separately from invoice collection", () => {
+test("labels free registrations separately from invoice collection", () => {
   assert.equal(formatRegistrationPaymentStatus({
     paymentMethod: "COMPED",
     paymentStatus: "INVOICED",
     totalAmount: 0,
     participantCount: 1
-  }), "Comped");
+  }), "Free");
   assert.equal(isCompedRegistration({
     paymentMethod: "UNKNOWN",
     paymentStatus: "INVOICED",

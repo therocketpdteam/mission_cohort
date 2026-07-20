@@ -202,7 +202,7 @@ function registrationBillingStatus(registration: AdminRow, paymentRows?: AdminRo
   }
 
   if (isCompedRegistration(registration)) {
-    return "Comped";
+    return "Free";
   }
 
   if (total > 0 && collected >= total) {

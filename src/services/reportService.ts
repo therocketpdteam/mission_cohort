@@ -226,10 +226,10 @@ export async function getCohortReport(cohortId?: string) {
   });
 
   return cohorts.map((cohort) => {
-    const registrations = cohort.registrations;
+    const registrations = cohort.registrations.filter((registration) => !registration.archivedAt);
     const payments = registrations.flatMap((registration) => registration.paymentRecords);
     const participantCountByOrganization = registrations.reduce<Record<string, number>>((acc, registration) => {
-      acc[registration.organization.name] = (acc[registration.organization.name] ?? 0) + registration.participants.length;
+      acc[registration.organization.name] = (acc[registration.organization.name] ?? 0) + Number(registration.participantCount ?? registration.participants.length ?? 0);
       return acc;
     }, {});
     const paymentStatusSummary = payments.reduce<Record<string, number>>((acc, payment) => {
@@ -245,6 +245,7 @@ export async function getCohortReport(cohortId?: string) {
       cohort: {
         id: cohort.id,
         title: cohort.title,
+        shortName: cohort.shortName,
         slug: cohort.slug,
         status: cohort.status,
         startDate: cohort.startDate,
@@ -257,7 +258,7 @@ export async function getCohortReport(cohortId?: string) {
         openRosterItems: registrations.filter((registration) => openRosterStatuses.has(registration.participantListStatus)).length
       },
       participantSummary: {
-        total: cohort.participants.length,
+        total: registrations.reduce((sum, registration) => sum + Number(registration.participantCount ?? registration.participants.length ?? 0), 0),
         byOrganization: participantCountByOrganization
       },
       paymentSummary: {
@@ -414,6 +415,7 @@ export async function getCohortRegistrationReport(input: CohortRegistrationRepor
     cohort: {
       id: cohort.id,
       title: cohort.title,
+      shortName: cohort.shortName,
       slug: cohort.slug,
       status: cohort.status,
       startDate: cohort.startDate,

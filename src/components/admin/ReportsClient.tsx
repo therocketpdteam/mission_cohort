@@ -59,6 +59,17 @@ function columnLabel(key: string) {
   return columnOptions.find((option) => option.key === key)?.label ?? key;
 }
 
+function cohortShortLabel(cohort?: AdminRow | null) {
+  return String(cohort?.shortName ?? cohort?.title ?? "").trim();
+}
+
+function cohortMenuLabel(cohort: AdminRow) {
+  const shortName = cohortShortLabel(cohort);
+  const title = String(cohort.title ?? "").trim();
+
+  return shortName && shortName !== title ? `${shortName} · ${title}` : title || shortName;
+}
+
 function reportCell(row: AdminRow, column: string) {
   switch (column) {
     case "organization":
@@ -151,7 +162,7 @@ function RegistrationReportPreview({ report, columns }: { report: AdminRow; colu
       <header className="registration-report-print-header">
         <div>
           <p>Mission Cohort Report</p>
-          <h1>{report.cohort?.title ?? "Cohort Registration Report"}</h1>
+          <h1>{report.cohort ? cohortMenuLabel(report.cohort) : "Cohort Registration Report"}</h1>
           <span>Generated {shortDate(report.generatedAt)} · {report.audience === "internal" ? "Internal operations" : "Thought leader / public-safe"}</span>
         </div>
         <StatusChip value={report.cohort?.status} />
@@ -412,7 +423,16 @@ export function ReportsClient() {
               fullWidth
             >
               <MenuItem value="">Choose a cohort</MenuItem>
-              {cohorts.map((cohort) => <MenuItem value={cohort.id} key={cohort.id}>{cohort.title}</MenuItem>)}
+              {cohorts.map((cohort) => (
+                <MenuItem
+                  value={cohort.id}
+                  key={cohort.id}
+                  label={cohortShortLabel(cohort) || cohort.title}
+                  searchText={`${cohort.shortName ?? ""} ${cohort.title ?? ""}`}
+                >
+                  {cohortMenuLabel(cohort)}
+                </MenuItem>
+              ))}
             </TextField>
             <TextField select label="Audience" value={audience} onChange={(event) => setAudience(event.target.value)} fullWidth>
               {audienceOptions.map((option) => <MenuItem value={option.value} key={option.value}>{option.label}</MenuItem>)}

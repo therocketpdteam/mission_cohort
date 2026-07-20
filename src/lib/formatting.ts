@@ -77,7 +77,7 @@ export function formatRegistrationPaymentStatus(input?: {
   participantCount?: number | string | null;
   participants?: number | string | null;
 }) {
-  return isCompedRegistration(input) ? "Comped" : formatStatusLabel(input?.paymentStatus);
+  return isCompedRegistration(input) ? "Free" : formatStatusLabel(input?.paymentStatus);
 }
 
 export function formatHumanLabel(value: string) {
