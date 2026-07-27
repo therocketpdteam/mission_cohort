@@ -217,6 +217,34 @@ test("does not parse raw Jotform request blobs as participant rosters", () => {
   assert.equal(normalized.participants[0].email, "info@rocketpd.com");
 });
 
+test("does not autodetect raw Jotform pretty blobs as participant rosters without a field map", () => {
+  const normalized = normalizeJotformRegistrationPayload(
+    {
+      formID: "250086304666659",
+      submissionID: "sub-pretty-raw",
+      q7_name: { first: "Jesse", last: "Kabat" },
+      q12_email: "jekabat@gmail.com",
+      q15_nameOf: "Ilima Intermediate",
+      q20_howMany: "1",
+      q59_typeA59: "https://rocketpd.com/",
+      pretty: "{\"slug\":\"submit/250086304666659\", \"jsExecutionTracker\":\"build-date=>init-started\", \"q12_email\":\"jekabat@gmail.com\", \"q15_nameOf\":\"Ilima Intermediate\"}"
+    },
+    [{
+      ...urlMapping,
+      id: "mapping-raw",
+      formId: "250086304666659",
+      defaultCohortId: "cohort-1",
+      fieldMapJson: null
+    }]
+  );
+
+  assert.equal(normalized.participantParseErrors.length, 0);
+  assert.equal(normalized.participants.length, 1);
+  assert.equal(normalized.participants[0].firstName, "Jesse");
+  assert.equal(normalized.participants[0].lastName, "Kabat");
+  assert.equal(normalized.participants[0].email, "jekabat@gmail.com");
+});
+
 test("parses participant titles and reports roster title warnings", () => {
   const result = parseParticipantCsvText("Ada Lovelace, Math Coach, ada@example.com\nBroken Person\nGrace Hopper grace@example.com");
 

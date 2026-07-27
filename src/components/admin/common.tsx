@@ -584,6 +584,17 @@ export function AppDataGrid<R extends AdminRow = AdminRow>({
   }, [pageSize, rows.length]);
 
   const selectedIds = rowSelectionModel.ids;
+  const selectableIds = useMemo(() => rows.map((row, index) => row.id ?? index), [rows]);
+  const selectedSelectableCount = selectableIds.filter((id) => selectedIds.has(id)).length;
+  const allRowsSelected = selectableIds.length > 0 && selectedSelectableCount === selectableIds.length;
+  const someRowsSelected = selectedSelectableCount > 0 && !allRowsSelected;
+  const selectAllRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (selectAllRef.current) {
+      selectAllRef.current.indeterminate = someRowsSelected;
+    }
+  }, [someRowsSelected]);
 
   function toggleSelection(id: string | number) {
     const current = new Set(selectedIds);
@@ -593,6 +604,15 @@ export function AppDataGrid<R extends AdminRow = AdminRow>({
       current.add(id);
     }
     onRowSelectionModelChange?.({ type: "include", ids: current });
+  }
+
+  function toggleAllSelection() {
+    if (allRowsSelected) {
+      onRowSelectionModelChange?.({ type: "include", ids: new Set() });
+      return;
+    }
+
+    onRowSelectionModelChange?.({ type: "include", ids: new Set(selectableIds) });
   }
 
   if (loading) {
@@ -612,7 +632,18 @@ export function AppDataGrid<R extends AdminRow = AdminRow>({
           </colgroup>
           <thead>
             <tr>
-              {checkboxSelection && <th style={{ width: 44 }} />}
+              {checkboxSelection && (
+                <th style={{ width: 44 }}>
+                  <input
+                    ref={selectAllRef}
+                    type="checkbox"
+                    checked={allRowsSelected}
+                    disabled={rows.length === 0}
+                    onChange={toggleAllSelection}
+                    aria-label={allRowsSelected ? "Clear row selection" : "Select all rows"}
+                  />
+                </th>
+              )}
               {columns.map((column) => (
                 <th key={column.field}>
                   {column.headerName ?? column.field}

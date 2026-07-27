@@ -16,6 +16,7 @@ import {
   scheduleCommunicationPlaceholder,
   sendCommunicationToRecipient,
   sendCommunicationPlaceholder,
+  sendManualCustomEmail,
   sendTemplateToParticipant,
   sendTemplateToRegistrations
 } from "@/services/communicationService";
@@ -108,6 +109,21 @@ export async function PATCH(request: Request) {
       }
 
       return ok(await sendTemplateToRegistrations(body));
+    }
+
+    if (body.action === "sendManualCustomEmail") {
+      if (!Array.isArray(body.participantIds)) {
+        return fail("participantIds are required", "BAD_REQUEST", 400);
+      }
+      const user = await requireUser();
+
+      return ok(await sendManualCustomEmail({
+        participantIds: body.participantIds,
+        recipientMode: body.recipientMode,
+        subject: body.subject,
+        bodyText: body.bodyText,
+        createdById: user.id
+      }));
     }
 
     if (body.action === "send" || body.action === "resend") {

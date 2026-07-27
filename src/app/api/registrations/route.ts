@@ -1,6 +1,7 @@
 import { fail, handleApiError, ok } from "@/lib/api";
 import {
   archiveRegistration,
+  bulkMoveRegistrationsToCohort,
   bulkUpdateRegistrations,
   cancelRegistration,
   confirmRegistration,
@@ -43,6 +44,10 @@ export async function PATCH(request: Request) {
     const body = await request.json();
 
     if (!body.id) {
+      if (body.action === "bulkMoveCohort" && Array.isArray(body.ids)) {
+        return ok(await bulkMoveRegistrationsToCohort({ ids: body.ids, targetCohortId: body.targetCohortId }));
+      }
+
       if (body.action === "bulk" && Array.isArray(body.ids)) {
         return ok(await bulkUpdateRegistrations({ ...body, action: body.bulkAction }));
       }

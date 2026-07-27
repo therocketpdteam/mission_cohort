@@ -1,6 +1,7 @@
 "use client";
 
 import { DeleteOutline } from "@/components/ui/icons";
+import { ArticleOutlined } from "@/components/ui/icons";
 import { DoneAllOutlined } from "@/components/ui/icons";
 import { EditOutlined } from "@/components/ui/icons";
 import { SendOutlined } from "@/components/ui/icons";
@@ -309,15 +310,87 @@ function ParticipantTile({ label, value }: { label: string; value?: unknown }) {
   );
 }
 
+function csvCell(value: unknown) {
+  const normalized = value == null ? "" : String(value).replace(/\r?\n/g, " ").trim();
+  return `"${normalized.replace(/"/g, '""')}"`;
+}
+
+function csvDate(value: unknown) {
+  return value ? new Date(String(value)).toLocaleString("en-US") : "";
+}
+
+function exportParticipantsCsv(participants: AdminRow[]) {
+  const headers = [
+    "First Name",
+    "Last Name",
+    "Email",
+    "Phone",
+    "Title",
+    "Participant Status",
+    "Certificate Issued",
+    "Cohort",
+    "Organization",
+    "Registration POC",
+    "POC Email",
+    "Payment Status",
+    "Payment Method",
+    "Registration Total",
+    "Registration Seats",
+    "Registration Source",
+    "Participant Created",
+    "Participant Updated"
+  ];
+  const rows = participants.map((participant) => [
+    participant.firstName,
+    participant.lastName,
+    participant.email,
+    participant.phone,
+    participant.title,
+    formatStatusLabel(participant.status),
+    participant.certificateIssued ? "Yes" : "No",
+    participant.cohort?.title,
+    formatProperDisplay(participant.organization?.name ?? ""),
+    formatProperDisplay(participant.registration?.primaryContactName ?? ""),
+    participant.registration?.primaryContactEmail,
+    formatStatusLabel(participant.registration?.paymentStatus ?? ""),
+    formatStatusLabel(participant.registration?.paymentMethod ?? ""),
+    participant.registration?.totalAmount,
+    participant.registration?.participantCount,
+    participant.registration?.source,
+    csvDate(participant.createdAt),
+    csvDate(participant.updatedAt)
+  ]);
+  const csv = [headers, ...rows].map((row) => row.map(csvCell).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  const stamp = new Date().toISOString().slice(0, 10);
+  link.href = url;
+  link.download = `mission-control-participants-${stamp}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 export function ParticipantsClient() {
   const [rows, setRows] = useState<AdminRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [registrations, setRegistrations] = useState<AdminRow[]>([]);
+  const [allCohorts, setAllCohorts] = useState<AdminRow[]>([]);
   const [templates, setTemplates] = useState<AdminRow[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<AdminRow | null>(null);
   const [detail, setDetail] = useState<AdminRow | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [moveDialogOpen, setMoveDialogOpen] = useState(false);
+  const [moveTargetCohortId, setMoveTargetCohortId] = useState("");
+  const [movingRegistrations, setMovingRegistrations] = useState(false);
+  const [customEmailOpen, setCustomEmailOpen] = useState(false);
+  const [customRecipientMode, setCustomRecipientMode] = useState<"participants" | "pocs" | "participants_and_pocs">("participants_and_pocs");
+  const [customSubject, setCustomSubject] = useState("");
+  const [customBody, setCustomBody] = useState("");
+  const [sendingCustomEmail, setSendingCustomEmail] = useState(false);
   const [bulkStatus, setBulkStatus] = useState("");
   const [bulkCertificate, setBulkCertificate] = useState("");
   const [bulkTemplateId, setBulkTemplateId] = useState("");
@@ -330,14 +403,16 @@ export function ParticipantsClient() {
   const { notifySuccess, notifyError, snackbar } = useNotifier();
 
   async function load() {
-    const [participantRows, registrationRows, templateRows] = await Promise.all([
+    const [participantRows, registrationRows, templateRows, cohortRows] = await Promise.all([
       adminApi<AdminRow[]>("/api/participants"),
       adminApi<AdminRow[]>("/api/registrations"),
-      adminApi<AdminRow[]>("/api/communications/templates")
+      adminApi<AdminRow[]>("/api/communications/templates"),
+      adminApi<AdminRow[]>("/api/cohorts").catch(() => [])
     ]);
     setRows(participantRows);
     setRegistrations(registrationRows);
     setTemplates(templateRows);
+    setAllCohorts(cohortRows);
     setLoading(false);
   }
 
@@ -390,6 +465,39 @@ export function ParticipantsClient() {
     () => ({ type: "include", ids: new Set(selectedIds) }),
     [selectedIds]
   );
+  const selectedRows = useMemo(
+    () => rows.filter((row) => selectedIds.includes(String(row.id))),
+    [rows, selectedIds]
+  );
+  const selectedRegistrationIds = useMemo(
+    () => Array.from(new Set(selectedRows.map((row) => String(row.registrationId ?? "")).filter(Boolean))),
+    [selectedRows]
+  );
+  const selectedRegistrationRows = useMemo(
+    () => registrations.filter((registration) => selectedRegistrationIds.includes(String(registration.id))),
+    [registrations, selectedRegistrationIds]
+  );
+  const customRecipientEmails = useMemo(() => {
+    const emails = new Set<string>();
+
+    for (const row of selectedRows) {
+      if (customRecipientMode === "participants" || customRecipientMode === "participants_and_pocs") {
+        const email = String(row.email ?? "").trim().toLowerCase();
+        if (email) {
+          emails.add(email);
+        }
+      }
+
+      if (customRecipientMode === "pocs" || customRecipientMode === "participants_and_pocs") {
+        const email = String(row.registration?.primaryContactEmail ?? "").trim().toLowerCase();
+        if (email) {
+          emails.add(email);
+        }
+      }
+    }
+
+    return Array.from(emails).sort();
+  }, [customRecipientMode, selectedRows]);
   const participantHistory = useMemo(() => {
     if (!detail?.email) {
       return [];
@@ -469,6 +577,72 @@ export function ParticipantsClient() {
       await load();
     } catch (error) {
       notifyError((error as Error).message);
+    }
+  }
+
+  async function moveSelectedRegistrations() {
+    if (selectedRegistrationIds.length === 0 || !moveTargetCohortId) {
+      notifyError("Choose participants and a target cohort first");
+      return;
+    }
+
+    setMovingRegistrations(true);
+    try {
+      const result = await adminApi<AdminRow>("/api/registrations", {
+        method: "PATCH",
+        body: {
+          action: "bulkMoveCohort",
+          ids: selectedRegistrationIds,
+          targetCohortId: moveTargetCohortId
+        }
+      });
+      const moved = Number(result.count ?? result.summary?.movedCount ?? selectedRegistrationIds.length);
+      notifySuccess(`${moved} registration${moved === 1 ? "" : "s"} moved. Future journeys were replanned for the target cohort.`);
+      setMoveDialogOpen(false);
+      setMoveTargetCohortId("");
+      setSelectedIds([]);
+      await load();
+    } catch (error) {
+      notifyError((error as Error).message);
+    } finally {
+      setMovingRegistrations(false);
+    }
+  }
+
+  async function sendCustomEmail() {
+    if (selectedIds.length === 0 || customRecipientEmails.length === 0) {
+      notifyError("Choose at least one recipient");
+      return;
+    }
+
+    if (!customSubject.trim() || !customBody.trim()) {
+      notifyError("Subject and message are required");
+      return;
+    }
+
+    setSendingCustomEmail(true);
+    try {
+      const result = await adminApi<AdminRow>("/api/communications", {
+        method: "PATCH",
+        body: {
+          action: "sendManualCustomEmail",
+          participantIds: selectedIds,
+          recipientMode: customRecipientMode,
+          subject: customSubject.trim(),
+          bodyText: customBody.trim()
+        }
+      });
+      notifySuccess(`Manual email sent to ${Number(result.recipientCount ?? customRecipientEmails.length)} recipient${Number(result.recipientCount ?? customRecipientEmails.length) === 1 ? "" : "s"}.`);
+      setCustomEmailOpen(false);
+      setCustomSubject("");
+      setCustomBody("");
+      setCustomRecipientMode("participants_and_pocs");
+      setSelectedIds([]);
+      await load();
+    } catch (error) {
+      notifyError((error as Error).message);
+    } finally {
+      setSendingCustomEmail(false);
     }
   }
 
@@ -617,7 +791,14 @@ export function ParticipantsClient() {
           <MenuItem value="false">Not issued</MenuItem>
         </TextField>
       </CompactFilterBar>
-      <SectionCard title="Participant Roster">
+      <SectionCard
+        title="Participant Roster"
+        action={
+          <Button type="button" variant="outlined" startIcon={<ArticleOutlined />} disabled={filteredRows.length === 0} onClick={() => exportParticipantsCsv(filteredRows)}>
+            Export CSV
+          </Button>
+        }
+      >
         {selectedIds.length > 0 && (
           <div className="participant-bulk-bar">
             <span>{selectedIds.length} selected</span>
@@ -634,6 +815,8 @@ export function ParticipantsClient() {
               {templates.filter((template) => template.active).map((template) => <MenuItem value={template.id} key={template.id}>{template.name}</MenuItem>)}
             </TextField>
             <Button size="small" variant="outlined" startIcon={<SendOutlined />} onClick={() => runBulkAction("send")}>Send Message</Button>
+            <Button size="small" variant="outlined" onClick={() => setMoveDialogOpen(true)}>Move Registrations</Button>
+            <Button size="small" variant="outlined" startIcon={<SendOutlined />} onClick={() => setCustomEmailOpen(true)}>Custom Email</Button>
           </div>
         )}
         <TableShell>
@@ -650,6 +833,55 @@ export function ParticipantsClient() {
         </TableShell>
         {!loading && filteredRows.length === 0 && <EmptyState title="No participants found" description="Add participants or adjust roster filters." />}
       </SectionCard>
+      <Dialog open={moveDialogOpen} onClose={() => setMoveDialogOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle>Move Registrations</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 0.5 }}>
+            <Typography color="text.secondary">
+              This moves {selectedRegistrationIds.length} full registration{selectedRegistrationIds.length === 1 ? "" : "s"} from the selected participants. All participants, payments, invoice drafts, and registration tasks move with each registration.
+            </Typography>
+            {selectedRegistrationRows.some((registration) => registration.quickBooksInvoiceRef || registration.quickBooksCustomerRef || registration.quickBooksRealmId || (registration.invoiceDrafts ?? []).some((invoice: AdminRow) => invoice.quickBooksInvoiceRef || invoice.quickBooksCustomerRef || invoice.quickBooksRealmId)) ? (
+              <Typography color="warning.main">
+                One or more selected registrations has QuickBooks references. The move keeps those references for audit.
+              </Typography>
+            ) : null}
+            <TextField select fullWidth label="Target cohort" value={moveTargetCohortId} onChange={(event) => setMoveTargetCohortId(event.target.value)}>
+              {allCohorts.map((cohort) => (
+                <MenuItem value={cohort.id} key={cohort.id}>{cohort.title}</MenuItem>
+              ))}
+            </TextField>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button variant="outlined" onClick={() => setMoveDialogOpen(false)} disabled={movingRegistrations}>Cancel</Button>
+          <Button onClick={moveSelectedRegistrations} disabled={!moveTargetCohortId || movingRegistrations}>
+            {movingRegistrations ? "Moving" : "Move registrations"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+      <Dialog open={customEmailOpen} onClose={() => setCustomEmailOpen(false)} fullWidth maxWidth="md">
+        <DialogTitle>Custom Email</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 0.5 }}>
+            <TextField select fullWidth label="Recipients" value={customRecipientMode} onChange={(event) => setCustomRecipientMode(event.target.value as typeof customRecipientMode)}>
+              <MenuItem value="participants_and_pocs">Participants and POCs</MenuItem>
+              <MenuItem value="participants">Participants only</MenuItem>
+              <MenuItem value="pocs">POCs only</MenuItem>
+            </TextField>
+            <Typography color="text.secondary">
+              {customRecipientEmails.length} deduped recipient{customRecipientEmails.length === 1 ? "" : "s"}: {customRecipientEmails.slice(0, 8).join(", ")}{customRecipientEmails.length > 8 ? `, +${customRecipientEmails.length - 8} more` : ""}
+            </Typography>
+            <TextField fullWidth label="Subject" value={customSubject} onChange={(event) => setCustomSubject(event.target.value)} />
+            <TextField fullWidth multiline minRows={8} label="Message" value={customBody} onChange={(event) => setCustomBody(event.target.value)} />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button variant="outlined" onClick={() => setCustomEmailOpen(false)} disabled={sendingCustomEmail}>Cancel</Button>
+          <Button onClick={sendCustomEmail} disabled={customRecipientEmails.length === 0 || !customSubject.trim() || !customBody.trim() || sendingCustomEmail}>
+            {sendingCustomEmail ? "Sending" : "Send custom email"}
+          </Button>
+        </DialogActions>
+      </Dialog>
       <ParticipantEditor
         open={dialogOpen}
         editing={editing}

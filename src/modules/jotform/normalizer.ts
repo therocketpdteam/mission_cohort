@@ -731,7 +731,7 @@ function isNoisyJotformField(key: string, value: unknown): boolean {
   const normalizedKey = normalizeKey(key);
   const stringValue = readString(value);
 
-  if (["rawrequest", "jsexecutiontracker", "paymentfieldstoselectedproducts", "selectedproductslist", "builddate", "eventid", "eventobserver", "eventobserverpayment", "hiddenpaymentfield", "username", "submitdate", "submitsource", "uploadserverurl", "documentid", "customparams", "custombody", "customtitle"].includes(normalizedKey)) {
+  if (["rawrequest", "pretty", "jsexecutiontracker", "paymentfieldstoselectedproducts", "selectedproductslist", "builddate", "eventid", "eventobserver", "eventobserverpayment", "hiddenpaymentfield", "username", "submitdate", "submitsource", "uploadserverurl", "documentid", "customparams", "custombody", "customtitle"].includes(normalizedKey)) {
     return true;
   }
 
@@ -742,11 +742,24 @@ function isNoisyJotformField(key: string, value: unknown): boolean {
   return normalizedKey.includes("summary") && stringValue.trim().startsWith("{");
 }
 
+function looksLikeRawJotformBlob(value: string) {
+  const normalizedValue = value.toLowerCase();
+
+  return (
+    /[{,]\s*"?slug"?\s*:/.test(value) ||
+    normalizedValue.includes("jsexecutiontracker") ||
+    normalizedValue.includes("eventobserver") ||
+    normalizedValue.includes("submitdate") ||
+    normalizedValue.includes("validatednewrequiredfieldids") ||
+    /["\\]?q\d+_[a-z0-9]+["\\]?\s*:/.test(value)
+  );
+}
+
 function looksLikeParticipantRosterField(key: string, value: unknown) {
   const normalizedKey = normalizeKey(key);
   const stringValue = readString(value);
 
-  if (!stringValue || isNoisyJotformField(key, value)) {
+  if (!stringValue || isNoisyJotformField(key, value) || looksLikeRawJotformBlob(stringValue)) {
     return false;
   }
 

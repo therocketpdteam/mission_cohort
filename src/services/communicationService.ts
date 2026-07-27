@@ -22,6 +22,57 @@ type DefaultTemplate = {
   bodyText: string;
 };
 
+export type ManualCustomEmailRecipientMode = "participants" | "pocs" | "participants_and_pocs";
+
+type ManualCustomEmailParticipantInput = {
+  id: string;
+  cohortId: string;
+  email?: string | null;
+  registration?: {
+    id: string;
+    primaryContactEmail?: string | null;
+  } | null;
+};
+
+export function buildManualCustomEmailRecipientGroups(
+  participants: ManualCustomEmailParticipantInput[],
+  recipientMode: ManualCustomEmailRecipientMode
+) {
+  const seen = new Set<string>();
+  const groups = new Map<string, { cohortId: string; recipientEmails: string[]; participantIds: string[]; registrationIds: string[] }>();
+
+  function addRecipient(input: { cohortId: string; email?: string | null; participantId?: string; registrationId?: string }) {
+    const email = String(input.email ?? "").trim().toLowerCase();
+
+    if (!email || seen.has(email)) {
+      return;
+    }
+
+    seen.add(email);
+    const group = groups.get(input.cohortId) ?? { cohortId: input.cohortId, recipientEmails: [], participantIds: [], registrationIds: [] };
+    group.recipientEmails.push(email);
+    if (input.participantId && !group.participantIds.includes(input.participantId)) {
+      group.participantIds.push(input.participantId);
+    }
+    if (input.registrationId && !group.registrationIds.includes(input.registrationId)) {
+      group.registrationIds.push(input.registrationId);
+    }
+    groups.set(input.cohortId, group);
+  }
+
+  for (const participant of participants) {
+    if (recipientMode === "participants" || recipientMode === "participants_and_pocs") {
+      addRecipient({ cohortId: participant.cohortId, email: participant.email, participantId: participant.id, registrationId: participant.registration?.id });
+    }
+
+    if (recipientMode === "pocs" || recipientMode === "participants_and_pocs") {
+      addRecipient({ cohortId: participant.cohortId, email: participant.registration?.primaryContactEmail, registrationId: participant.registration?.id });
+    }
+  }
+
+  return Array.from(groups.values());
+}
+
 function defaultEmailTemplate(template: Omit<DefaultTemplate, "bodyHtml"> & { bodyHtml?: string }): DefaultTemplate {
   return {
     ...template,
@@ -1286,6 +1337,144 @@ export async function sendTemplateToRegistrations(input: { templateId: string; r
   }
 
   return results;
+}
+
+export async function sendManualCustomEmail(input: {
+  participantIds: string[];
+  recipientMode: ManualCustomEmailRecipientMode;
+  subject: string;
+  bodyText: string;
+  createdById: string;
+}) {
+  const participantIds = Array.from(new Set(input.participantIds.filter(Boolean)));
+  const subject = String(input.subject ?? "").trim();
+  const bodyText = String(input.bodyText ?? "").trim();
+  const recipientMode = input.recipientMode || "participants_and_pocs";
+
+  if (participantIds.length === 0) {
+    throw Object.assign(new Error("Select at least one participant."), { code: "BAD_REQUEST", status: 400 });
+  }
+
+  if (!subject || !bodyText) {
+    throw Object.assign(new Error("Subject and message body are required."), { code: "BAD_REQUEST", status: 400 });
+  }
+
+  if (!["participants", "pocs", "participants_and_pocs"].includes(recipientMode)) {
+    throw Object.assign(new Error("Unsupported recipient mode."), { code: "BAD_REQUEST", status: 400 });
+  }
+
+  const participants = await prisma.participant.findMany({
+    where: { id: { in: participantIds } },
+    include: {
+      cohort: { include: { presenter: true } },
+      organization: true,
+      registration: { include: { organization: true, invoiceDrafts: { orderBy: { updatedAt: "desc" } } } }
+    }
+  });
+
+  if (participants.length === 0) {
+    throw Object.assign(new Error("No selected participants were found."), { code: "NOT_FOUND", status: 404 });
+  }
+
+  const groups = buildManualCustomEmailRecipientGroups(participants, recipientMode);
+
+  if (groups.length === 0 || groups.every((group) => group.recipientEmails.length === 0)) {
+    throw Object.assign(new Error("No recipients were resolved for the selected mode."), { code: "BAD_REQUEST", status: 400 });
+  }
+
+  const bodyHtml = textToEmailHtml(bodyText);
+  const results = [];
+
+  for (const group of groups) {
+    const cohortParticipant = participants.find((participant) => participant.cohortId === group.cohortId);
+
+    if (!cohortParticipant) {
+      continue;
+    }
+
+    const communication = await prisma.cohortCommunication.create({
+      data: {
+        cohortId: group.cohortId,
+        subject,
+        bodyHtml,
+        bodyText,
+        recipientScope: RecipientScope.CUSTOM,
+        recipientEmails: group.recipientEmails,
+        createdById: input.createdById,
+        status: CommunicationStatus.SENDING
+      }
+    });
+
+    try {
+      const sendResult = await sendEmail({
+        to: group.recipientEmails,
+        subject,
+        bodyHtml,
+        bodyText,
+        context: {
+          cohort: {
+            ...cohortParticipant.cohort,
+            title: cohortParticipant.cohort.title,
+            description: cohortParticipant.cohort.description,
+            startDate: cohortParticipant.cohort.startDate,
+            presenterName: `${cohortParticipant.cohort.presenter.firstName} ${cohortParticipant.cohort.presenter.lastName}`,
+            presenterFirstName: cohortParticipant.cohort.presenter.firstName,
+            presenterLastName: cohortParticipant.cohort.presenter.lastName,
+            presenterEmail: cohortParticipant.cohort.presenter.email
+          }
+        }
+      });
+
+      await prisma.emailEvent.createMany({
+        data: group.recipientEmails.map((recipientEmail) => ({
+          communicationId: communication.id,
+          recipientEmail,
+          provider: "sendgrid",
+          providerMessageId: sendResult.providerMessageId,
+          eventType: EmailEventType.SENT
+        }))
+      });
+
+      const sent = await prisma.cohortCommunication.update({
+        where: { id: communication.id },
+        data: {
+          status: CommunicationStatus.SENT,
+          sentAt: new Date(),
+          providerMessageId: sendResult.providerMessageId,
+          providerError: null
+        }
+      });
+      results.push({ ...sent, recipientCount: group.recipientEmails.length });
+    } catch (error) {
+      const failed = await prisma.cohortCommunication.update({
+        where: { id: communication.id },
+        data: {
+          status: CommunicationStatus.FAILED,
+          providerError: error instanceof Error ? error.message : "Unknown SendGrid error"
+        }
+      });
+      results.push({ ...failed, recipientCount: group.recipientEmails.length, error: failed.providerError });
+    }
+  }
+
+  logAuditEventAsync({
+    entityType: "CohortCommunication",
+    entityId: results.map((result) => result.id).join(","),
+    action: "MANUAL_CUSTOM_SEND",
+    description: `Manual custom email sent to ${groups.reduce((sum, group) => sum + group.recipientEmails.length, 0)} recipient(s).`,
+    metadata: {
+      recipientMode,
+      participantIds,
+      cohortIds: groups.map((group) => group.cohortId),
+      communicationIds: results.map((result) => result.id)
+    }
+  });
+
+  return {
+    communications: results,
+    recipientCount: groups.reduce((sum, group) => sum + group.recipientEmails.length, 0),
+    cohortCount: groups.length
+  };
 }
 
 export async function createDefaultSessionCommunications(sessionId: string) {
