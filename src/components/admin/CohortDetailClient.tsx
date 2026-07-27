@@ -1,6 +1,7 @@
 "use client";
 
 import { AddIcon } from "@/components/ui/icons";
+import { ArrowRightLeftOutlined } from "@/components/ui/icons";
 import { ArticleOutlined } from "@/components/ui/icons";
 import { CalendarMonthOutlined, EmailOutlined, GroupsOutlined, InsightsOutlined } from "@/components/ui/icons";
 import { CancelOutlined, CheckCircleOutline, SendOutlined } from "@/components/ui/icons";
@@ -985,6 +986,9 @@ export function CohortDetailClient({ id }: { id: string }) {
   const [thumbnailUploading, setThumbnailUploading] = useState(false);
   const [registrationPaymentFilter, setRegistrationPaymentFilter] = useState("");
   const [registrationRosterFilter, setRegistrationRosterFilter] = useState("");
+  const [registrationSelection, setRegistrationSelection] = useState<GridRowSelectionModel>({ type: "include", ids: new Set() });
+  const [bulkRegistrationPaymentStatus, setBulkRegistrationPaymentStatus] = useState("");
+  const [updatingBulkRegistrations, setUpdatingBulkRegistrations] = useState(false);
   const [paymentDetail, setPaymentDetail] = useState<AdminRow | null>(null);
   const [registrationDetail, setRegistrationDetail] = useState<AdminRow | null>(null);
   const [registrationRemovalAction, setRegistrationRemovalAction] = useState<{ action: "archive" | "delete"; row: AdminRow } | null>(null);
@@ -1000,6 +1004,11 @@ export function CohortDetailClient({ id }: { id: string }) {
   const [participantDetail, setParticipantDetail] = useState<AdminRow | null>(null);
   const [participantSelection, setParticipantSelection] = useState<GridRowSelectionModel>({ type: "include", ids: new Set() });
   const [bulkParticipantStatus, setBulkParticipantStatus] = useState("REGISTERED");
+  const [moveDialogOpen, setMoveDialogOpen] = useState(false);
+  const [moveDialogSource, setMoveDialogSource] = useState<"registrations" | "participants">("registrations");
+  const [moveRegistrationIds, setMoveRegistrationIds] = useState<string[]>([]);
+  const [moveTargetCohortId, setMoveTargetCohortId] = useState("");
+  const [movingRegistrations, setMovingRegistrations] = useState(false);
   const [participantMessageOpen, setParticipantMessageOpen] = useState(false);
   const [participantMessageTargets, setParticipantMessageTargets] = useState<AdminRow[]>([]);
   const [participantMessageMode, setParticipantMessageMode] = useState<"template" | "custom">("template");
@@ -1452,6 +1461,26 @@ export function CohortDetailClient({ id }: { id: string }) {
     [participants, participantSelection]
   );
   const participantCsvRows = selectedParticipantRows.length > 0 ? selectedParticipantRows : participants;
+  const selectedRegistrationRows = useMemo(
+    () => registrations.filter((registration) => registrationSelection.ids.has(registration.id)),
+    [registrations, registrationSelection]
+  );
+  const selectedRegistrationIds = useMemo(
+    () => selectedRegistrationRows.map((registration) => String(registration.id)),
+    [selectedRegistrationRows]
+  );
+  const selectedParticipantRegistrationIds = useMemo(
+    () => Array.from(new Set(selectedParticipantRows.map((participant) => String(participant.registrationId ?? "")).filter(Boolean))),
+    [selectedParticipantRows]
+  );
+  const moveRegistrationRows = useMemo(
+    () => registrations.filter((registration) => moveRegistrationIds.includes(String(registration.id))),
+    [moveRegistrationIds, registrations]
+  );
+  const moveTargetOptions = useMemo(
+    () => allCohorts.filter((row) => row.id !== id),
+    [allCohorts, id]
+  );
 
   const participantHistory = useMemo(() => {
     if (!participantDetail?.email) {
@@ -1820,6 +1849,84 @@ export function CohortDetailClient({ id }: { id: string }) {
       await load();
     } catch (error) {
       notifyError((error as Error).message);
+    }
+  }
+
+  function openMoveRegistrationsDialog(registrationIds: string[], source: "registrations" | "participants") {
+    const ids = Array.from(new Set(registrationIds.filter(Boolean)));
+
+    if (ids.length === 0) {
+      notifyError(source === "participants" ? "Select participants first." : "Select registrations first.");
+      return;
+    }
+
+    setMoveRegistrationIds(ids);
+    setMoveDialogSource(source);
+    setMoveTargetCohortId("");
+    setMoveDialogOpen(true);
+  }
+
+  async function moveSelectedRegistrationsToCohort() {
+    if (moveRegistrationIds.length === 0 || !moveTargetCohortId) {
+      notifyError("Choose registrations and a target cohort first.");
+      return;
+    }
+
+    setMovingRegistrations(true);
+    try {
+      const result = await adminApi<AdminRow>("/api/registrations", {
+        method: "PATCH",
+        body: {
+          action: "bulkMoveCohort",
+          ids: moveRegistrationIds,
+          targetCohortId: moveTargetCohortId
+        }
+      });
+      const moved = Number(result.count ?? result.summary?.movedCount ?? moveRegistrationIds.length);
+      notifySuccess(`${moved} registration${moved === 1 ? "" : "s"} moved to ${result.targetCohort?.title ?? "the target cohort"}.`);
+      setMoveDialogOpen(false);
+      setMoveRegistrationIds([]);
+      setMoveTargetCohortId("");
+      setRegistrationSelection({ type: "include", ids: new Set() });
+      setParticipantSelection({ type: "include", ids: new Set() });
+      await load();
+    } catch (error) {
+      notifyError((error as Error).message);
+    } finally {
+      setMovingRegistrations(false);
+    }
+  }
+
+  async function bulkUpdateSelectedRegistrations(input: { bulkAction?: "confirm" | "cancel" | "archive" | "restore"; paymentStatus?: string }) {
+    if (selectedRegistrationIds.length === 0) {
+      notifyError("Select registrations first.");
+      return;
+    }
+
+    if (input.paymentStatus === "") {
+      notifyError("Choose a payment status first.");
+      return;
+    }
+
+    setUpdatingBulkRegistrations(true);
+    try {
+      const result = await adminApi<AdminRow>("/api/registrations", {
+        method: "PATCH",
+        body: {
+          action: "bulk",
+          ids: selectedRegistrationIds,
+          ...(input.bulkAction ? { bulkAction: input.bulkAction } : {}),
+          ...(input.paymentStatus ? { paymentStatus: input.paymentStatus } : {})
+        }
+      });
+      notifySuccess(`${Number(result.count ?? selectedRegistrationIds.length)} registration${Number(result.count ?? selectedRegistrationIds.length) === 1 ? "" : "s"} updated.`);
+      setRegistrationSelection({ type: "include", ids: new Set() });
+      setBulkRegistrationPaymentStatus("");
+      await load();
+    } catch (error) {
+      notifyError((error as Error).message);
+    } finally {
+      setUpdatingBulkRegistrations(false);
     }
   }
 
@@ -2715,7 +2822,23 @@ export function CohortDetailClient({ id }: { id: string }) {
       )}
 
       {tab === 1 && (
-        <SectionCard title="Registrations" action={<Button type="button" startIcon={<AddIcon />} onClick={() => openRegistrationEditor(null)}>Add Registration</Button>}>
+        <SectionCard
+          title="Registrations"
+          action={
+            <div className="action-group">
+              <Button
+                type="button"
+                variant="outlined"
+                startIcon={<ArrowRightLeftOutlined />}
+                disabled={selectedRegistrationIds.length === 0}
+                onClick={() => openMoveRegistrationsDialog(selectedRegistrationIds, "registrations")}
+              >
+                Move to Cohort
+              </Button>
+              <Button type="button" startIcon={<AddIcon />} onClick={() => openRegistrationEditor(null)}>Add Registration</Button>
+            </div>
+          }
+        >
           <CompactFilterBar resultCount={filteredRegistrations.length}>
             <TextField select label="Payment" value={registrationPaymentFilter} onChange={(event) => setRegistrationPaymentFilter(event.target.value)}>
               <MenuItem value="">All payments</MenuItem>
@@ -2726,11 +2849,42 @@ export function CohortDetailClient({ id }: { id: string }) {
               {rosterStatuses.map((value) => <MenuItem value={value} key={value}>{formatStatusLabel(value)}</MenuItem>)}
             </TextField>
           </CompactFilterBar>
+          {selectedRegistrationIds.length > 0 && (
+            <div className="participant-bulk-bar">
+              <span>{selectedRegistrationIds.length} selected</span>
+              <TextField select size="small" label="Payment status" value={bulkRegistrationPaymentStatus} onChange={(event) => setBulkRegistrationPaymentStatus(event.target.value)}>
+                {paymentStatuses.map((value) => <MenuItem value={value} key={value}>{formatStatusLabel(value)}</MenuItem>)}
+              </TextField>
+              <Button
+                size="small"
+                variant="outlined"
+                disabled={!bulkRegistrationPaymentStatus || updatingBulkRegistrations}
+                onClick={() => bulkUpdateSelectedRegistrations({ paymentStatus: bulkRegistrationPaymentStatus })}
+              >
+                Apply Payment
+              </Button>
+              <Button size="small" variant="outlined" disabled={updatingBulkRegistrations} onClick={() => bulkUpdateSelectedRegistrations({ bulkAction: "confirm" })}>Confirm</Button>
+              <Button size="small" variant="outlined" color="warning" disabled={updatingBulkRegistrations} onClick={() => bulkUpdateSelectedRegistrations({ bulkAction: "cancel" })}>Cancel</Button>
+              <Button size="small" variant="outlined" color="error" disabled={updatingBulkRegistrations} onClick={() => bulkUpdateSelectedRegistrations({ bulkAction: "archive" })}>Archive</Button>
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<ArrowRightLeftOutlined />}
+                disabled={updatingBulkRegistrations}
+                onClick={() => openMoveRegistrationsDialog(selectedRegistrationIds, "registrations")}
+              >
+                Move to Cohort
+              </Button>
+            </div>
+          )}
           <TableShell>
             <AppDataGrid
               rows={filteredRegistrations}
               columns={registrationColumns}
               loading={loading}
+              checkboxSelection
+              rowSelectionModel={registrationSelection}
+              onRowSelectionModelChange={setRegistrationSelection}
               pageSizeOptions={[10, 25]}
               initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
               onRowClick={(params) => void openRegistrationDetail(params.row)}
@@ -2745,6 +2899,15 @@ export function CohortDetailClient({ id }: { id: string }) {
           title="Participants"
           action={
             <div className="action-group">
+              <Button
+                type="button"
+                variant="outlined"
+                startIcon={<ArrowRightLeftOutlined />}
+                disabled={selectedParticipantRegistrationIds.length === 0}
+                onClick={() => openMoveRegistrationsDialog(selectedParticipantRegistrationIds, "participants")}
+              >
+                Move to Cohort
+              </Button>
               <Button
                 type="button"
                 variant="outlined"
@@ -2772,6 +2935,15 @@ export function CohortDetailClient({ id }: { id: string }) {
               onClick={() => openParticipantMessageDialog(participants.filter((participant) => participantSelection.ids.has(participant.id)))}
             >
               Message Selected
+            </Button>
+            <Button
+              type="button"
+              variant="outlined"
+              startIcon={<ArrowRightLeftOutlined />}
+              disabled={selectedParticipantRegistrationIds.length === 0}
+              onClick={() => openMoveRegistrationsDialog(selectedParticipantRegistrationIds, "participants")}
+            >
+              Move to Cohort
             </Button>
           </div>
           <TableShell>
@@ -2989,6 +3161,36 @@ export function CohortDetailClient({ id }: { id: string }) {
           </SectionCard>
         </Stack>
       )}
+
+      <Dialog open={moveDialogOpen} onClose={() => !movingRegistrations && setMoveDialogOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle>Move Registrations to Cohort</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 0.5 }}>
+            <Typography color="text.secondary">
+              {moveDialogSource === "participants"
+                ? `This moves ${moveRegistrationIds.length} full registration${moveRegistrationIds.length === 1 ? "" : "s"} from the selected participants. All participants in each selected registration move together.`
+                : `This moves ${moveRegistrationIds.length} selected registration${moveRegistrationIds.length === 1 ? "" : "s"}.`}
+              {" "}Payments, invoice drafts, and registration tasks move with each registration.
+            </Typography>
+            {moveRegistrationRows.some((registration) => registration.quickBooksInvoiceRef || registration.quickBooksCustomerRef || registration.quickBooksRealmId) ? (
+              <Typography color="warning.main">
+                One or more selected registrations has QuickBooks references. The move keeps those references for audit.
+              </Typography>
+            ) : null}
+            <TextField select fullWidth label="Target cohort" value={moveTargetCohortId} onChange={(event) => setMoveTargetCohortId(event.target.value)}>
+              {moveTargetOptions.map((targetCohort) => (
+                <MenuItem value={targetCohort.id} key={targetCohort.id}>{targetCohort.title}</MenuItem>
+              ))}
+            </TextField>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button variant="outlined" onClick={() => setMoveDialogOpen(false)} disabled={movingRegistrations}>Cancel</Button>
+          <Button onClick={moveSelectedRegistrationsToCohort} disabled={!moveTargetCohortId || movingRegistrations || moveRegistrationIds.length === 0}>
+            {movingRegistrations ? "Moving" : "Move registrations"}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <MutationDialog
         title={editingSession ? "Edit Session" : "Add Session"}
