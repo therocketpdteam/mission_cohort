@@ -34,6 +34,36 @@ export function normalizeSendGridApiKey(value?: string | null) {
   return cleaned || undefined;
 }
 
+function normalizeRecipients(to: string | string[]) {
+  const values = Array.isArray(to) ? to : [to];
+  const seen = new Set<string>();
+  const recipients: string[] = [];
+
+  for (const value of values) {
+    const email = String(value ?? "").trim().toLowerCase();
+    if (email && !seen.has(email)) {
+      seen.add(email);
+      recipients.push(email);
+    }
+  }
+
+  return recipients;
+}
+
+export function buildSendGridMailPayload(input: SendEmailInput, config: { fromEmail: string; fromName?: string }) {
+  const recipients = normalizeRecipients(input.to);
+
+  return {
+    personalizations: recipients.map((email) => ({ to: [{ email }] })),
+    from: { email: input.from ?? config.fromEmail, ...(config.fromName ? { name: config.fromName } : {}) },
+    subject: input.subject,
+    content: [
+      { type: "text/plain", value: input.text ?? input.html.replace(/<[^>]+>/g, " ") },
+      { type: "text/html", value: input.html }
+    ]
+  };
+}
+
 async function sendGridErrorMessage(response: Response) {
   const fallback = `SendGrid request failed with status ${response.status}`;
   const text = await response.text().catch(() => "");
@@ -75,22 +105,14 @@ export async function sendWithSendGrid(input: SendEmailInput) {
     });
   }
 
-  const recipients = Array.isArray(input.to) ? input.to : [input.to];
+  const recipients = normalizeRecipients(input.to);
   const response = await fetch("https://api.sendgrid.com/v3/mail/send", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${config.apiKey}`,
       "Content-Type": "application/json"
     },
-    body: JSON.stringify({
-      personalizations: [{ to: recipients.map((email) => ({ email })) }],
-      from: { email: input.from ?? config.fromEmail, ...(config.fromName ? { name: config.fromName } : {}) },
-      subject: input.subject,
-      content: [
-        { type: "text/plain", value: input.text ?? input.html.replace(/<[^>]+>/g, " ") },
-        { type: "text/html", value: input.html }
-      ]
-    })
+    body: JSON.stringify(buildSendGridMailPayload(input, config))
   });
 
   if (!response.ok) {

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { renderMergeFields, sampleMergeContext, textToEmailHtml } from "../../src/modules/email";
-import { normalizeSendGridApiKey } from "../../src/modules/email/sendgridProvider";
+import { buildSendGridMailPayload, normalizeSendGridApiKey } from "../../src/modules/email/sendgridProvider";
 import { defaultTemplates } from "../../src/services/communicationService";
 
 test("renders email body formatting into safe HTML", () => {
@@ -31,6 +31,24 @@ test("normalizes pasted SendGrid API keys", () => {
   assert.equal(normalizeSendGridApiKey("Bearer SG.test-key"), "SG.test-key");
   assert.equal(normalizeSendGridApiKey("\"SG.quoted-key\""), "SG.quoted-key");
   assert.equal(normalizeSendGridApiKey("   "), undefined);
+});
+
+test("builds private SendGrid personalizations for multiple recipients", () => {
+  const payload = buildSendGridMailPayload({
+    to: ["Gerardo@RocketPD.com", "ggrosso85@hotmail.com"],
+    subject: "Test",
+    html: "<p>Hello</p>",
+    text: "Hello"
+  }, {
+    fromEmail: "info@rocketpd.com",
+    fromName: "The RocketPD Team"
+  });
+
+  assert.equal(payload.personalizations.length, 2);
+  assert.deepEqual(payload.personalizations.map((personalization) => personalization.to), [
+    [{ email: "gerardo@rocketpd.com" }],
+    [{ email: "ggrosso85@hotmail.com" }]
+  ]);
 });
 
 test("default communication templates only use registered merge fields", () => {
