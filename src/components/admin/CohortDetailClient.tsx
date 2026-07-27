@@ -984,6 +984,13 @@ export function CohortDetailClient({ id }: { id: string }) {
   const [participantDetail, setParticipantDetail] = useState<AdminRow | null>(null);
   const [participantSelection, setParticipantSelection] = useState<GridRowSelectionModel>({ type: "include", ids: new Set() });
   const [bulkParticipantStatus, setBulkParticipantStatus] = useState("REGISTERED");
+  const [participantMessageOpen, setParticipantMessageOpen] = useState(false);
+  const [participantMessageTargets, setParticipantMessageTargets] = useState<AdminRow[]>([]);
+  const [participantMessageMode, setParticipantMessageMode] = useState<"template" | "custom">("template");
+  const [participantMessageTemplateId, setParticipantMessageTemplateId] = useState("");
+  const [participantMessageSubject, setParticipantMessageSubject] = useState("");
+  const [participantMessageBody, setParticipantMessageBody] = useState("");
+  const [sendingParticipantMessage, setSendingParticipantMessage] = useState(false);
   const [invoiceDialogOpen, setInvoiceDialogOpen] = useState(false);
   const [editingInvoice, setEditingInvoice] = useState<AdminRow | null>(null);
   const [invoiceSeedRegistration, setInvoiceSeedRegistration] = useState<AdminRow | null>(null);
@@ -1579,23 +1586,76 @@ export function CohortDetailClient({ id }: { id: string }) {
     setResourceDialogOpen(true);
   }
 
-  async function sendParticipantMessage(participant: AdminRow) {
-    const template = templates.find((item) => item.active && item.type === "FOLLOW_UP") ?? templates.find((item) => item.active);
+  function participantMessageRecipients() {
+    return Array.from(new Set(participantMessageTargets.map((participant) => String(participant.email ?? "").trim().toLowerCase()).filter(Boolean)));
+  }
 
-    if (!template) {
-      notifyError("No active communication template is available.");
+  function openParticipantMessageDialog(targets: AdminRow[]) {
+    const cleanedTargets = targets.filter((target) => target?.id);
+
+    if (cleanedTargets.length === 0) {
+      notifyError("Select participants first.");
       return;
     }
 
+    setParticipantMessageTargets(cleanedTargets);
+    setParticipantMessageMode("template");
+    setParticipantMessageTemplateId("");
+    setParticipantMessageSubject("");
+    setParticipantMessageBody("");
+    setParticipantMessageOpen(true);
+  }
+
+  async function sendSelectedParticipantMessage() {
+    const recipients = participantMessageRecipients();
+
+    if (participantMessageTargets.length === 0 || recipients.length === 0) {
+      notifyError("No participant email recipients were found.");
+      return;
+    }
+
+    if (participantMessageMode === "template" && !participantMessageTemplateId) {
+      notifyError("Choose an email template first.");
+      return;
+    }
+
+    if (participantMessageMode === "custom" && (!participantMessageSubject.trim() || !participantMessageBody.trim())) {
+      notifyError("Subject and message are required.");
+      return;
+    }
+
+    setSendingParticipantMessage(true);
     try {
-      await adminApi("/api/communications", {
-        method: "PATCH",
-        body: { action: "sendTemplateToParticipant", participantId: participant.id, templateId: template.id }
-      });
-      notifySuccess(`Message sent to ${formatProperDisplay(`${participant.firstName} ${participant.lastName}`)}`);
+      if (participantMessageMode === "template") {
+        await Promise.all(participantMessageTargets.map((participant) => adminApi("/api/communications", {
+          method: "PATCH",
+          body: { action: "sendTemplateToParticipant", participantId: participant.id, templateId: participantMessageTemplateId }
+        })));
+      } else {
+        await adminApi("/api/communications", {
+          method: "PATCH",
+          body: {
+            action: "sendManualCustomEmail",
+            participantIds: participantMessageTargets.map((participant) => participant.id),
+            recipientMode: "participants",
+            subject: participantMessageSubject.trim(),
+            bodyText: participantMessageBody.trim()
+          }
+        });
+      }
+
+      notifySuccess(`Message sent to ${recipients.length} participant${recipients.length === 1 ? "" : "s"}.`);
+      setParticipantMessageOpen(false);
+      setParticipantMessageTargets([]);
+      setParticipantMessageTemplateId("");
+      setParticipantMessageSubject("");
+      setParticipantMessageBody("");
+      setParticipantSelection({ type: "include", ids: new Set() });
       await load();
     } catch (error) {
       notifyError((error as Error).message);
+    } finally {
+      setSendingParticipantMessage(false);
     }
   }
 
@@ -2032,7 +2092,7 @@ export function CohortDetailClient({ id }: { id: string }) {
       width: 118,
       sortable: false,
       renderCell: (params) => (
-        <Button size="small" variant="outlined" startIcon={<SendOutlined />} onClick={(event) => { event.stopPropagation(); void sendParticipantMessage(params.row); }}>
+        <Button size="small" variant="outlined" startIcon={<SendOutlined />} onClick={(event) => { event.stopPropagation(); openParticipantMessageDialog([params.row]); }}>
           Send
         </Button>
       )
@@ -2049,7 +2109,7 @@ export function CohortDetailClient({ id }: { id: string }) {
               { label: "Quick view", onClick: () => setParticipantDetail(params.row) },
               { label: "Edit participant", icon: <EditOutlined fontSize="small" />, onClick: () => { setParticipantDetail(params.row); startRegistrationParticipantEdit(params.row); } },
               { label: "Use registration POC", onClick: () => { setParticipantDetail(params.row); startParticipantPocRepair(params.row); } },
-              { label: "Send message", icon: <SendOutlined fontSize="small" />, onClick: () => void sendParticipantMessage(params.row) }
+              { label: "Send message", icon: <SendOutlined fontSize="small" />, onClick: () => openParticipantMessageDialog([params.row]) }
             ]}
           />
         </Box>
@@ -2556,10 +2616,7 @@ export function CohortDetailClient({ id }: { id: string }) {
               variant="outlined"
               startIcon={<SendOutlined />}
               disabled={participantSelection.ids.size === 0}
-              onClick={() => {
-                const selected = participants.filter((participant) => participantSelection.ids.has(participant.id));
-                void Promise.all(selected.map((participant) => sendParticipantMessage(participant)));
-              }}
+              onClick={() => openParticipantMessageDialog(participants.filter((participant) => participantSelection.ids.has(participant.id)))}
             >
               Message Selected
             </Button>
@@ -3217,6 +3274,51 @@ export function CohortDetailClient({ id }: { id: string }) {
         onSuccess={notifySuccess}
         onError={notifyError}
       />
+      <Dialog open={participantMessageOpen} onClose={() => setParticipantMessageOpen(false)} fullWidth maxWidth="md">
+        <DialogTitle>Send Participant Message</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 0.5 }}>
+            <Typography color="text.secondary">
+              {participantMessageRecipients().length} deduped recipient{participantMessageRecipients().length === 1 ? "" : "s"}: {participantMessageRecipients().slice(0, 8).join(", ")}{participantMessageRecipients().length > 8 ? `, +${participantMessageRecipients().length - 8} more` : ""}
+            </Typography>
+            <TextField select fullWidth label="Message type" value={participantMessageMode} onChange={(event) => setParticipantMessageMode(event.target.value as "template" | "custom")}>
+              <MenuItem value="template">Saved template</MenuItem>
+              <MenuItem value="custom">Custom email</MenuItem>
+            </TextField>
+            {participantMessageMode === "template" ? (
+              <TextField select fullWidth label="Email template" value={participantMessageTemplateId} onChange={(event) => setParticipantMessageTemplateId(event.target.value)}>
+                {templates.filter((template) => template.active).map((template) => (
+                  <MenuItem value={template.id} key={template.id}>
+                    {template.name} · {formatStatusLabel(template.type)}
+                  </MenuItem>
+                ))}
+              </TextField>
+            ) : (
+              <>
+                <TextField fullWidth label="Subject" value={participantMessageSubject} onChange={(event) => setParticipantMessageSubject(event.target.value)} />
+                <TextField fullWidth multiline minRows={8} label="Message" value={participantMessageBody} onChange={(event) => setParticipantMessageBody(event.target.value)} />
+              </>
+            )}
+            {participantMessageMode === "template" && templates.filter((template) => template.active).length === 0 ? (
+              <Typography color="error">No active templates are available.</Typography>
+            ) : null}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button variant="outlined" onClick={() => setParticipantMessageOpen(false)} disabled={sendingParticipantMessage}>Cancel</Button>
+          <Button
+            startIcon={<SendOutlined />}
+            onClick={sendSelectedParticipantMessage}
+            disabled={
+              sendingParticipantMessage ||
+              participantMessageRecipients().length === 0 ||
+              (participantMessageMode === "template" ? !participantMessageTemplateId : !participantMessageSubject.trim() || !participantMessageBody.trim())
+            }
+          >
+            {sendingParticipantMessage ? "Sending" : "Send message"}
+          </Button>
+        </DialogActions>
+      </Dialog>
       <QuickViewDrawer
         title="Participant Detail"
         open={Boolean(participantDetail)}
@@ -3234,7 +3336,7 @@ export function CohortDetailClient({ id }: { id: string }) {
               <>
                 <Button variant="outlined" startIcon={<EditOutlined />} onClick={() => startRegistrationParticipantEdit(participantDetail)}>Edit</Button>
                 <Button variant="outlined" onClick={() => startParticipantPocRepair(participantDetail)}>Use POC Details</Button>
-                <Button startIcon={<SendOutlined />} onClick={() => void sendParticipantMessage(participantDetail)}>Send Message</Button>
+                <Button startIcon={<SendOutlined />} onClick={() => openParticipantMessageDialog([participantDetail])}>Send Message</Button>
               </>
             )}
           </Stack>
