@@ -18,10 +18,51 @@ async function getSendGridConfig() {
   const metadata = (connection?.metadata && typeof connection.metadata === "object" ? connection.metadata : {}) as Record<string, unknown>;
 
   return {
-    apiKey: decryptSecret(connection?.accessToken) ?? env.SENDGRID_API_KEY,
+    apiKey: normalizeSendGridApiKey(decryptSecret(connection?.accessToken) ?? env.SENDGRID_API_KEY),
     fromEmail: String(metadata.fromEmail ?? env.SENDGRID_FROM_EMAIL ?? ""),
     fromName: String(metadata.fromName ?? connection?.accountName ?? "")
   };
+}
+
+export function normalizeSendGridApiKey(value?: string | null) {
+  const cleaned = String(value ?? "")
+    .trim()
+    .replace(/^["']|["']$/g, "")
+    .replace(/^Bearer\s+/i, "")
+    .trim();
+
+  return cleaned || undefined;
+}
+
+async function sendGridErrorMessage(response: Response) {
+  const fallback = `SendGrid request failed with status ${response.status}`;
+  const text = await response.text().catch(() => "");
+
+  if (!text) {
+    return response.status === 401
+      ? "SendGrid rejected the saved API key with status 401. Save a valid SendGrid API key with Mail Send access."
+      : fallback;
+  }
+
+  try {
+    const payload = JSON.parse(text) as { errors?: Array<{ message?: string; field?: string; help?: string }> };
+    const details = (payload.errors ?? [])
+      .map((error) => [error.message, error.field ? `field: ${error.field}` : "", error.help].filter(Boolean).join(" "))
+      .filter(Boolean)
+      .join(" ");
+
+    if (details) {
+      return response.status === 401
+        ? `SendGrid rejected the saved API key with status 401. ${details}`
+        : `SendGrid request failed with status ${response.status}. ${details}`;
+    }
+  } catch {
+    // Fall through to the concise provider status message.
+  }
+
+  return response.status === 401
+    ? "SendGrid rejected the saved API key with status 401. Save a valid SendGrid API key with Mail Send access."
+    : fallback;
 }
 
 export async function sendWithSendGrid(input: SendEmailInput) {
@@ -53,7 +94,7 @@ export async function sendWithSendGrid(input: SendEmailInput) {
   });
 
   if (!response.ok) {
-    throw Object.assign(new Error(`SendGrid request failed with status ${response.status}`), {
+    throw Object.assign(new Error(await sendGridErrorMessage(response)), {
       code: "BAD_REQUEST",
       status: 400
     });

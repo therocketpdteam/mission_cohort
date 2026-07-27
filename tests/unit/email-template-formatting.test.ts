@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { renderMergeFields, sampleMergeContext, textToEmailHtml } from "../../src/modules/email";
+import { normalizeSendGridApiKey } from "../../src/modules/email/sendgridProvider";
 import { defaultTemplates } from "../../src/services/communicationService";
 
 test("renders email body formatting into safe HTML", () => {
@@ -24,6 +25,12 @@ test("escapes raw HTML while preserving supported formatting", () => {
   assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
   assert.match(html, /<strong>safe<\/strong>/);
   assert.match(html, /href="#"/);
+});
+
+test("normalizes pasted SendGrid API keys", () => {
+  assert.equal(normalizeSendGridApiKey("Bearer SG.test-key"), "SG.test-key");
+  assert.equal(normalizeSendGridApiKey("\"SG.quoted-key\""), "SG.quoted-key");
+  assert.equal(normalizeSendGridApiKey("   "), undefined);
 });
 
 test("default communication templates only use registered merge fields", () => {

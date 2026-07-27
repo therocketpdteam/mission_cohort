@@ -2,6 +2,7 @@ import { IntegrationConnectionStatus, IntegrationProvider } from "@prisma/client
 import { Prisma } from "@prisma/client";
 import { decryptSecret } from "@/lib/integrationCrypto";
 import { prisma } from "@/lib/prisma";
+import { normalizeSendGridApiKey } from "@/modules/email/sendgridProvider";
 import { upsertIntegrationConnection } from "@/services/integrationService";
 
 type IntegrationSetupProvider = "SENDGRID" | "GOOGLE_CALENDAR" | "QUICKBOOKS";
@@ -129,7 +130,7 @@ export async function saveIntegrationSetup(provider: IntegrationSetupProvider, i
   if (provider === "SENDGRID") {
     const existing = await getConnection(IntegrationProvider.SENDGRID);
     const existingMetadata = metadata(existing?.metadata);
-    const apiKey = cleanString(input.apiKey);
+    const apiKey = normalizeSendGridApiKey(cleanString(input.apiKey));
     const fromEmail = cleanString(input.fromEmail) || String(existingMetadata.fromEmail ?? "");
     const fromName = cleanString(input.fromName);
     const webhookPublicKey = cleanString(input.webhookPublicKey) || String(existingMetadata.webhookPublicKey ?? "");
