@@ -92,18 +92,153 @@ export async function createCohortWithSessions(input: z.input<typeof cohortWithS
 
 export async function updateCohort(id: string, input: z.input<typeof cohortUpdateSchema>) {
   const data = cohortUpdateSchema.parse(input);
-  const cohort = await prisma.cohort.update({ where: { id }, data });
+  const existing = await prisma.cohort.findUnique({ where: { id }, select: { status: true } });
+
+  if (!existing) {
+    throw Object.assign(new Error("Cohort not found"), { code: "NOT_FOUND", status: 404 });
+  }
+
+  const pausableStatuses = [
+    CommunicationStatus.DRAFT,
+    CommunicationStatus.SCHEDULED,
+    CommunicationStatus.SENDING,
+    CommunicationStatus.FAILED
+  ];
+  const nextStatus = data.status;
+  const shouldCancelUnsentCommunications = nextStatus === CohortStatus.CANCELLED && existing.status !== CohortStatus.CANCELLED;
+  const transaction = await prisma.$transaction(async (tx) => {
+    const cohort = await tx.cohort.update({ where: { id }, data });
+    const cancelledCommunications = shouldCancelUnsentCommunications
+      ? await tx.cohortCommunication.updateMany({
+        where: {
+          cohortId: id,
+          sentAt: null,
+          status: { in: pausableStatuses }
+        },
+        data: {
+          status: CommunicationStatus.CANCELLED,
+          providerError: "Cancelled because cohort status changed to Cancelled."
+        }
+      })
+      : { count: 0 };
+
+    return { cohort, cancelledCommunications };
+  });
+  const { cohort, cancelledCommunications } = transaction;
+
   logAuditEventAsync({
     entityType: "Cohort",
     entityId: cohort.id,
     action: "UPDATED",
     description: "Cohort updated",
-    metadata: { title: cohort.title, status: cohort.status }
+    metadata: {
+      title: cohort.title,
+      status: cohort.status,
+      previousStatus: existing.status,
+      cancelledCommunications: cancelledCommunications.count
+    }
   });
   void syncCohortTotalsToCrm(cohort.id, "cohort.updated").catch((error) => {
     console.error("CRM Mission Cohort cohort sync scheduling failed", { cohortId: cohort.id, error: error instanceof Error ? error.message : "Unknown error" });
   });
   return cohort;
+}
+
+export async function getCohortStatusChangePreview(id: string, nextStatus: CohortStatus) {
+  const cohort = await prisma.cohort.findUnique({
+    where: { id },
+    include: {
+      sessions: {
+        orderBy: { sessionNumber: "asc" },
+        include: { calendarEvents: true }
+      },
+      _count: { select: { registrations: true, participants: true } }
+    }
+  });
+
+  if (!cohort) {
+    throw Object.assign(new Error("Cohort not found"), { code: "NOT_FOUND", status: 404 });
+  }
+
+  const unsentStatuses = [
+    CommunicationStatus.DRAFT,
+    CommunicationStatus.SCHEDULED,
+    CommunicationStatus.SENDING,
+    CommunicationStatus.FAILED
+  ];
+  const [unsentCommunications, recentSentCommunications] = await Promise.all([
+    prisma.cohortCommunication.findMany({
+      where: {
+        cohortId: id,
+        sentAt: null,
+        status: { in: unsentStatuses }
+      },
+      orderBy: [{ scheduledFor: "asc" }, { createdAt: "desc" }],
+      take: 25,
+      include: { template: true, session: true }
+    }),
+    prisma.cohortCommunication.findMany({
+      where: {
+        cohortId: id,
+        status: CommunicationStatus.SENT,
+        sentAt: { not: null }
+      },
+      orderBy: { sentAt: "desc" },
+      take: 10,
+      include: { template: true, session: true }
+    })
+  ]);
+  const linkedCalendarEvents = cohort.sessions.flatMap((session) =>
+    session.calendarEvents
+      .filter((event) => event.providerEventId && event.status !== "FAILED")
+      .map((event) => ({
+        id: event.id,
+        sessionId: session.id,
+        sessionTitle: session.title,
+        provider: event.provider,
+        status: event.status,
+        startTime: session.startTime
+      }))
+  );
+
+  return {
+    cohort: {
+      id: cohort.id,
+      title: cohort.title,
+      currentStatus: cohort.status,
+      nextStatus,
+      participantCount: cohort._count.participants,
+      registrationCount: cohort._count.registrations
+    },
+    automaticEmails: [],
+    unsentCommunications: unsentCommunications.map((communication) => ({
+      id: communication.id,
+      subject: communication.subject,
+      status: communication.status,
+      scheduledFor: communication.scheduledFor,
+      templateName: communication.template?.name ?? null,
+      templateType: communication.template?.type ?? null,
+      sessionTitle: communication.session?.title ?? null,
+      action: nextStatus === CohortStatus.CANCELLED ? "will_be_cancelled" : "no_change"
+    })),
+    recentSentCommunications: recentSentCommunications.map((communication) => ({
+      id: communication.id,
+      subject: communication.subject,
+      sentAt: communication.sentAt,
+      templateName: communication.template?.name ?? null,
+      templateType: communication.template?.type ?? null,
+      sessionTitle: communication.session?.title ?? null,
+      recipientEmails: communication.recipientEmails
+    })),
+    linkedCalendarEvents,
+    warnings: nextStatus === CohortStatus.CANCELLED
+      ? [
+        "Changing the cohort status to Cancelled will not send email automatically.",
+        "Unsent draft, scheduled, failed, or sending communications will be cancelled so they do not send later.",
+        "Linked Google Calendar events are not removed by this status change. Use calendar cancellation separately only if you want Google to notify invitees."
+      ]
+      : []
+  };
 }
 
 export async function getCohortById(id: string) {

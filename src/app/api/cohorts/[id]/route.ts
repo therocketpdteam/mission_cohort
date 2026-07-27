@@ -1,11 +1,24 @@
 import { fail, handleApiError, ok } from "@/lib/api";
-import { getCohortById, moveCohortBackToDraft, publishCohort, updateCohort } from "@/services/cohortService";
+import { CohortStatus } from "@prisma/client";
+import { getCohortById, getCohortStatusChangePreview, moveCohortBackToDraft, publishCohort, updateCohort } from "@/services/cohortService";
 import { syncCohortTotalsToCrm } from "@/services/crmRegistrationWebhookService";
 import { ensureCohortQuickBooksProject, reconcileCohortQuickBooksProject, syncQuickBooksInvoice } from "@/services/quickBooksService";
 
-export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
+    const searchParams = new URL(request.url).searchParams;
+
+    if (searchParams.get("action") === "statusChangePreview") {
+      const nextStatus = searchParams.get("nextStatus");
+
+      if (!nextStatus || !(nextStatus in CohortStatus)) {
+        return fail("A valid nextStatus is required", "BAD_REQUEST", 400);
+      }
+
+      return ok(await getCohortStatusChangePreview(id, nextStatus as CohortStatus));
+    }
+
     const cohort = await getCohortById(id);
 
     if (!cohort) {

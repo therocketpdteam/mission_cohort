@@ -3468,6 +3468,67 @@ h6,
   background: linear-gradient(90deg, var(--color-blue-600), var(--color-cyan-500));
 }
 
+.stage-review-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.stage-review-summary > div,
+.stage-review-panel {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  border: 1px solid var(--color-slate-200);
+  border-radius: 10px;
+  background: var(--color-slate-50);
+  padding: 12px;
+}
+
+.stage-review-summary span,
+.stage-review-panel > span {
+  color: var(--color-slate-500);
+  font-size: 0.72rem;
+  font-weight: 820;
+  text-transform: uppercase;
+}
+
+.stage-review-summary strong {
+  color: var(--color-primary-900);
+  font-size: 1.4rem;
+  line-height: 1;
+}
+
+.stage-review-summary small,
+.stage-review-row small {
+  color: var(--color-slate-500);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.stage-review-row {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  border-top: 1px solid var(--color-slate-200);
+  padding-top: 8px;
+}
+
+.stage-review-row:first-of-type {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.stage-review-row strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-slate-900);
+  font-size: 0.88rem;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .cohort-console-page {
   max-width: 1440px;
   gap: 22px;
@@ -6433,6 +6494,7 @@ h6,
   .comms-summary-grid,
   .comms-detail-grid,
   .template-editor-grid,
+  .stage-review-summary,
   .participant-message-grid,
   .participant-message-link-row,
   .compose-message-grid,
