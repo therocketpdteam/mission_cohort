@@ -1,6 +1,7 @@
 "use client";
 
 import { AddIcon } from "@/components/ui/icons";
+import { ArticleOutlined } from "@/components/ui/icons";
 import { CalendarMonthOutlined, EmailOutlined, GroupsOutlined, InsightsOutlined } from "@/components/ui/icons";
 import { CancelOutlined, CheckCircleOutline, SendOutlined } from "@/components/ui/icons";
 import { ArchiveOutlined, DeleteOutline } from "@/components/ui/icons";
@@ -33,6 +34,7 @@ import { formatProperDisplay, formatRegistrationPaymentStatus, formatRegistratio
 import { formatDateTimeInZone, formatTimeInZone } from "@/lib/timezones";
 import { mergeFields, renderMergeFields, sampleMergeContext } from "@/modules/email/mergeFields";
 import { textToEmailHtml } from "@/modules/email/templateFormatting";
+import { exportParticipantsCsv } from "@/lib/participantCsv";
 import { RosterWorkbench } from "./RosterWorkbench";
 import { RegistrationPendingChangesPanel } from "./RegistrationPendingChangesPanel";
 import { RegistrationDeliveryPreflight } from "./RegistrationDeliveryPreflight";
@@ -1445,6 +1447,12 @@ export function CohortDetailClient({ id }: { id: string }) {
     return String(a.primaryContactName ?? a.organization?.name ?? "").localeCompare(String(b.primaryContactName ?? b.organization?.name ?? ""));
   }), [registrationPaymentFilter, registrationRosterFilter, registrations]);
 
+  const selectedParticipantRows = useMemo(
+    () => participants.filter((participant) => participantSelection.ids.has(participant.id)),
+    [participants, participantSelection]
+  );
+  const participantCsvRows = selectedParticipantRows.length > 0 ? selectedParticipantRows : participants;
+
   const participantHistory = useMemo(() => {
     if (!participantDetail?.email) {
       return [];
@@ -2733,7 +2741,23 @@ export function CohortDetailClient({ id }: { id: string }) {
       )}
 
       {tab === 2 && (
-        <SectionCard title="Participants" action={<Button href="/participants" startIcon={<AddIcon />}>Add/Edit Participant</Button>}>
+        <SectionCard
+          title="Participants"
+          action={
+            <div className="action-group">
+              <Button
+                type="button"
+                variant="outlined"
+                startIcon={<ArticleOutlined />}
+                disabled={participantCsvRows.length === 0}
+                onClick={() => exportParticipantsCsv(participantCsvRows)}
+              >
+                {selectedParticipantRows.length > 0 ? "Export Selected CSV" : "Export CSV"}
+              </Button>
+              <Button href="/participants" startIcon={<AddIcon />}>Add/Edit Participant</Button>
+            </div>
+          }
+        >
           <div className="participant-bulk-bar">
             <span>{participantSelection.ids.size} selected</span>
             <TextField select label="Bulk status" value={bulkParticipantStatus} onChange={(event) => setBulkParticipantStatus(event.target.value)}>
