@@ -275,8 +275,11 @@ export async function listCohorts() {
         }
       },
       operationsTasks: { select: { category: true, registrationId: true, sessionId: true, status: true } },
-      registrations: { select: { totalAmount: true } },
-      paymentRecords: { select: { amount: true, status: true } },
+      registrations: { where: { archivedAt: null }, select: { totalAmount: true } },
+      paymentRecords: {
+        where: { registration: { is: { archivedAt: null } } },
+        select: { amount: true, status: true }
+      },
       _count: { select: { registrations: true, participants: true, sessions: true } }
     }
   });
