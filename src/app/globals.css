@@ -6114,8 +6114,25 @@ h6,
   font-size: 0.72rem;
 }
 
+.participant-message-modal {
+  width: min(calc(100vw - 24px), 1320px);
+  max-height: calc(100dvh - 24px);
+}
+
 .participant-message-modal .ui-modal-body {
+  overflow: auto;
+  padding: 20px 24px;
+}
+
+.participant-message-modal .ui-select-menu {
+  z-index: 180;
+  max-height: min(420px, 48vh);
+}
+
+.participant-message-modal .ui-select-option {
+  min-height: 42px;
   overflow: visible;
+  white-space: normal;
 }
 
 .participant-message-composer {
@@ -6165,6 +6182,40 @@ h6,
   grid-template-columns: minmax(190px, 0.42fr) minmax(0, 1fr);
   gap: 12px;
   align-items: start;
+}
+
+.participant-message-mode-control {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  align-self: end;
+  border: 1px solid var(--color-slate-200);
+  border-radius: 10px;
+  background: var(--color-slate-100);
+  padding: 4px;
+}
+
+.participant-message-mode-control button {
+  min-height: 42px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-slate-600);
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 820;
+  cursor: pointer;
+}
+
+.participant-message-mode-control button:hover {
+  color: var(--color-primary-700);
+}
+
+.participant-message-mode-control button.is-selected {
+  border-color: rgba(99, 14, 212, 0.28);
+  background: var(--color-white);
+  color: var(--color-primary-700);
+  box-shadow: var(--shadow-soft);
 }
 
 .participant-message-toolbar {

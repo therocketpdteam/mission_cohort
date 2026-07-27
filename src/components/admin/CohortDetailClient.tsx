@@ -3413,10 +3413,24 @@ export function CohortDetailClient({ id }: { id: string }) {
                 <strong>{participantMessageRecipients().slice(0, 8).join(", ")}{participantMessageRecipients().length > 8 ? `, +${participantMessageRecipients().length - 8} more` : ""}</strong>
               </div>
               <div className="participant-message-grid">
-                <TextField select fullWidth label="Message type" value={participantMessageMode} onChange={(event) => setParticipantMessageMode(event.target.value as "template" | "custom")}>
-                  <MenuItem value="template">Saved template</MenuItem>
-                  <MenuItem value="custom">Custom email</MenuItem>
-                </TextField>
+                <div className="participant-message-mode-control" role="group" aria-label="Message type">
+                  <button
+                    type="button"
+                    className={participantMessageMode === "template" ? "is-selected" : ""}
+                    aria-pressed={participantMessageMode === "template"}
+                    onClick={() => setParticipantMessageMode("template")}
+                  >
+                    Saved template
+                  </button>
+                  <button
+                    type="button"
+                    className={participantMessageMode === "custom" ? "is-selected" : ""}
+                    aria-pressed={participantMessageMode === "custom"}
+                    onClick={() => setParticipantMessageMode("custom")}
+                  >
+                    Custom email
+                  </button>
+                </div>
                 {participantMessageMode === "template" ? (
                   <TextField select fullWidth label="Email template" value={participantMessageTemplateId} onChange={(event) => setParticipantMessageTemplateId(event.target.value)}>
                     {templates.filter((template) => template.active).map((template) => (
