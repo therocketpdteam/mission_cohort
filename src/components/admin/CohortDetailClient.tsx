@@ -1221,10 +1221,6 @@ export function CohortDetailClient({ id }: { id: string }) {
   }
 
   async function saveRegistrationParticipantEdit(participant: AdminRow) {
-    if (!registrationDetail?.id) {
-      return;
-    }
-
     if (!registrationParticipantEdit.firstName.trim() || !registrationParticipantEdit.lastName.trim() || !registrationParticipantEdit.email.trim()) {
       notifyError("Participant first name, last name, and email are required.");
       return;
@@ -1248,13 +1244,44 @@ export function CohortDetailClient({ id }: { id: string }) {
       setEditingRegistrationParticipantId("");
       setRegistrationParticipantEdit({ firstName: "", lastName: "", email: "", title: "", phone: "" });
       notifySuccess("Participant updated.");
-      await openRegistrationDetail(registrationDetail);
+      if (registrationDetail?.id) {
+        await openRegistrationDetail(registrationDetail);
+      }
+      if (participantDetail?.id === participant.id) {
+        setParticipantDetail((current) => current ? {
+          ...current,
+          firstName: registrationParticipantEdit.firstName.trim(),
+          lastName: registrationParticipantEdit.lastName.trim(),
+          email: registrationParticipantEdit.email.trim(),
+          title: registrationParticipantEdit.title.trim(),
+          phone: registrationParticipantEdit.phone.trim()
+        } : current);
+      }
       await load();
     } catch (error) {
       notifyError((error as Error).message);
     } finally {
       setSavingRegistrationParticipantId("");
     }
+  }
+
+  function startParticipantPocRepair(participant: AdminRow) {
+    const registration = participant.registration;
+
+    if (!registration?.primaryContactEmail) {
+      notifyError("This participant does not have registration POC details available.");
+      return;
+    }
+
+    const name = splitContactName(registration.primaryContactName ?? "");
+    setEditingRegistrationParticipantId(participant.id);
+    setRegistrationParticipantEdit({
+      firstName: name.firstName,
+      lastName: name.lastName,
+      email: String(registration.primaryContactEmail ?? ""),
+      title: String(registration.primaryContactTitle ?? ""),
+      phone: String(registration.primaryContactPhone ?? "")
+    });
   }
 
   useEffect(() => {
@@ -2020,6 +2047,8 @@ export function CohortDetailClient({ id }: { id: string }) {
           <RowActionMenu
             actions={[
               { label: "Quick view", onClick: () => setParticipantDetail(params.row) },
+              { label: "Edit participant", icon: <EditOutlined fontSize="small" />, onClick: () => { setParticipantDetail(params.row); startRegistrationParticipantEdit(params.row); } },
+              { label: "Use registration POC", onClick: () => { setParticipantDetail(params.row); startParticipantPocRepair(params.row); } },
               { label: "Send message", icon: <SendOutlined fontSize="small" />, onClick: () => void sendParticipantMessage(params.row) }
             ]}
           />
@@ -3192,24 +3221,51 @@ export function CohortDetailClient({ id }: { id: string }) {
         title="Participant Detail"
         open={Boolean(participantDetail)}
         onClose={() => setParticipantDetail(null)}
-        actions={participantDetail && <Button startIcon={<SendOutlined />} onClick={() => void sendParticipantMessage(participantDetail)}>Send Message</Button>}
+        actions={participantDetail && (
+          <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap justifyContent="flex-end">
+            {editingRegistrationParticipantId === participantDetail.id ? (
+              <>
+                <Button variant="outlined" disabled={savingRegistrationParticipantId === participantDetail.id} onClick={() => saveRegistrationParticipantEdit(participantDetail)}>
+                  {savingRegistrationParticipantId === participantDetail.id ? "Saving" : "Save"}
+                </Button>
+                <Button variant="text" disabled={savingRegistrationParticipantId === participantDetail.id} onClick={() => setEditingRegistrationParticipantId("")}>Cancel</Button>
+              </>
+            ) : (
+              <>
+                <Button variant="outlined" startIcon={<EditOutlined />} onClick={() => startRegistrationParticipantEdit(participantDetail)}>Edit</Button>
+                <Button variant="outlined" onClick={() => startParticipantPocRepair(participantDetail)}>Use POC Details</Button>
+                <Button startIcon={<SendOutlined />} onClick={() => void sendParticipantMessage(participantDetail)}>Send Message</Button>
+              </>
+            )}
+          </Stack>
+        )}
       >
         {participantDetail && (
           <>
-            <div className="quick-view-grid">
-              <DetailField label="Participant" value={`${participantDetail.firstName ?? ""} ${participantDetail.lastName ?? ""}`} proper />
-              <DetailField label="Email" value={participantDetail.email} />
-              <DetailField label="Phone" value={participantDetail.phone} />
-              <DetailField label="Title" value={participantDetail.title} />
-              <DetailField label="Status" value={formatStatusLabel(participantDetail.status)} />
-              <DetailField label="Certificate" value={participantDetail.certificateIssued ? "Issued" : "Not issued"} />
-              <DetailField label="Organization" value={participantDetail.organization?.name} proper />
-              <DetailField label="Registration POC" value={participantDetail.registration?.primaryContactName} proper />
-              <DetailField label="Payment" value={formatRegistrationPaymentStatus(participantDetail.registration)} />
-              <DetailField label="Amount" value={money(participantDetail.registration?.totalAmount)} />
-              <DetailField label="Last Email" value={participantDetail.emailSummary?.lastEmailEvent ?? "-"} />
-              <DetailField label="Last Email Sent" value={participantDetail.emailSummary?.lastEmailEventAt ? new Date(participantDetail.emailSummary.lastEmailEventAt).toLocaleString("en-US") : "-"} />
-            </div>
+            {editingRegistrationParticipantId === participantDetail.id ? (
+              <div className="participant-inline-editor">
+                <TextField label="First name" value={registrationParticipantEdit.firstName} onChange={(event) => setRegistrationParticipantEdit((current) => ({ ...current, firstName: event.target.value }))} />
+                <TextField label="Last name" value={registrationParticipantEdit.lastName} onChange={(event) => setRegistrationParticipantEdit((current) => ({ ...current, lastName: event.target.value }))} />
+                <TextField label="Email" type="email" value={registrationParticipantEdit.email} onChange={(event) => setRegistrationParticipantEdit((current) => ({ ...current, email: event.target.value }))} />
+                <TextField label="Title" value={registrationParticipantEdit.title} onChange={(event) => setRegistrationParticipantEdit((current) => ({ ...current, title: event.target.value }))} />
+                <TextField label="Phone" value={registrationParticipantEdit.phone} onChange={(event) => setRegistrationParticipantEdit((current) => ({ ...current, phone: event.target.value }))} />
+              </div>
+            ) : (
+              <div className="quick-view-grid">
+                <DetailField label="Participant" value={`${participantDetail.firstName ?? ""} ${participantDetail.lastName ?? ""}`} proper />
+                <DetailField label="Email" value={participantDetail.email} />
+                <DetailField label="Phone" value={participantDetail.phone} />
+                <DetailField label="Title" value={participantDetail.title} />
+                <DetailField label="Status" value={formatStatusLabel(participantDetail.status)} />
+                <DetailField label="Certificate" value={participantDetail.certificateIssued ? "Issued" : "Not issued"} />
+                <DetailField label="Organization" value={participantDetail.organization?.name} proper />
+                <DetailField label="Registration POC" value={participantDetail.registration?.primaryContactName} proper />
+                <DetailField label="Payment" value={formatRegistrationPaymentStatus(participantDetail.registration)} />
+                <DetailField label="Amount" value={money(participantDetail.registration?.totalAmount)} />
+                <DetailField label="Last Email" value={participantDetail.emailSummary?.lastEmailEvent ?? "-"} />
+                <DetailField label="Last Email Sent" value={participantDetail.emailSummary?.lastEmailEventAt ? new Date(participantDetail.emailSummary.lastEmailEventAt).toLocaleString("en-US") : "-"} />
+              </div>
+            )}
             <SectionCard title="Participation History">
               {participantHistory.length > 0 ? (
                 <div className="quick-view-list">
