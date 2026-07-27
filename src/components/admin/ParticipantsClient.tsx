@@ -186,7 +186,7 @@ function ParticipantDetailDialog({
     try {
       await adminApi("/api/communications", {
         method: "PATCH",
-        body: { action: "sendTemplateToParticipant", participantId: participant.id, templateId }
+        body: { action: "sendManualTemplateToParticipants", participantIds: [participant.id], templateId }
       });
       await onSent();
     } catch (error) {
@@ -566,10 +566,10 @@ export function ParticipantsClient() {
           return;
         }
 
-        await Promise.all(selectedIds.map((participantId) => adminApi("/api/communications", {
+        await adminApi("/api/communications", {
           method: "PATCH",
-          body: { action: "sendTemplateToParticipant", participantId, templateId: bulkTemplateId }
-        })));
+          body: { action: "sendManualTemplateToParticipants", participantIds: selectedIds, templateId: bulkTemplateId }
+        });
         notifySuccess("Participant messages sent");
       }
 

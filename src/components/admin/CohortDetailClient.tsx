@@ -26,11 +26,13 @@ import {
   Typography
 } from "@/components/ui/primitives";
 import { GridColDef } from "./common";
-import type { CSSProperties } from "react";
-import { useEffect, useMemo, useState } from "react";
+import type { CSSProperties, SyntheticEvent } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { adminApi, uploadAdminFile } from "@/lib/adminApi";
 import { formatProperDisplay, formatRegistrationPaymentStatus, formatRegistrationSource, formatStatusLabel, isCompedRegistration } from "@/lib/formatting";
 import { formatDateTimeInZone, formatTimeInZone } from "@/lib/timezones";
+import { mergeFields, renderMergeFields, sampleMergeContext } from "@/modules/email/mergeFields";
+import { textToEmailHtml } from "@/modules/email/templateFormatting";
 import { RosterWorkbench } from "./RosterWorkbench";
 import { RegistrationPendingChangesPanel } from "./RegistrationPendingChangesPanel";
 import { RegistrationDeliveryPreflight } from "./RegistrationDeliveryPreflight";
@@ -79,6 +81,18 @@ const sessionFields: FieldConfig[] = [
   },
   { name: "location", label: "Location (optional)", placeholder: "Online, room name, or physical address" }
 ];
+
+const participantMessageMergeFields = mergeFields.filter((field) => (
+  field.startsWith("participant.") ||
+  field.startsWith("registration.") ||
+  field.startsWith("organization.") ||
+  ["cohort.title", "cohort.shortName", "cohort.presenterName", "cohort.presenterEmail"].includes(field)
+));
+
+type ParticipantMessageSendResponse = {
+  communications?: Array<{ status?: string; providerError?: string | null }>;
+  recipientCount?: number;
+};
 
 const taskFields: FieldConfig[] = [
   { name: "title", label: "Task title", required: true },
@@ -990,6 +1004,13 @@ export function CohortDetailClient({ id }: { id: string }) {
   const [participantMessageTemplateId, setParticipantMessageTemplateId] = useState("");
   const [participantMessageSubject, setParticipantMessageSubject] = useState("");
   const [participantMessageBody, setParticipantMessageBody] = useState("");
+  const [participantMessageLinkText, setParticipantMessageLinkText] = useState("");
+  const [participantMessageLinkUrl, setParticipantMessageLinkUrl] = useState("");
+  const [participantMessageActiveField, setParticipantMessageActiveField] = useState<"subject" | "bodyText">("bodyText");
+  const participantMessageSelectionRef = useRef<Record<"subject" | "bodyText", { start: number; end: number }>>({
+    subject: { start: 0, end: 0 },
+    bodyText: { start: 0, end: 0 }
+  });
   const [sendingParticipantMessage, setSendingParticipantMessage] = useState(false);
   const [invoiceDialogOpen, setInvoiceDialogOpen] = useState(false);
   const [editingInvoice, setEditingInvoice] = useState<AdminRow | null>(null);
@@ -1590,6 +1611,104 @@ export function CohortDetailClient({ id }: { id: string }) {
     return Array.from(new Set(participantMessageTargets.map((participant) => String(participant.email ?? "").trim().toLowerCase()).filter(Boolean)));
   }
 
+  function rememberParticipantMessageSelection(field: "subject" | "bodyText", event: SyntheticEvent<HTMLInputElement | HTMLTextAreaElement>) {
+    const element = event.currentTarget;
+    participantMessageSelectionRef.current[field] = {
+      start: element.selectionStart ?? element.value.length,
+      end: element.selectionEnd ?? element.value.length
+    };
+    setParticipantMessageActiveField(field);
+  }
+
+  function replaceParticipantMessageSelection(field: "subject" | "bodyText", replacement: string) {
+    const currentValue = field === "subject" ? participantMessageSubject : participantMessageBody;
+    const selection = participantMessageSelectionRef.current[field] ?? { start: currentValue.length, end: currentValue.length };
+    const start = Math.min(selection.start, currentValue.length);
+    const end = Math.min(selection.end, currentValue.length);
+    const nextValue = `${currentValue.slice(0, start)}${replacement}${currentValue.slice(end)}`;
+
+    if (field === "subject") {
+      setParticipantMessageSubject(nextValue);
+    } else {
+      setParticipantMessageBody(nextValue);
+    }
+
+    participantMessageSelectionRef.current[field] = { start: start + replacement.length, end: start + replacement.length };
+  }
+
+  function insertParticipantMessageMergeField(field: string) {
+    const token = `{{${field}}}`;
+    const targetField = participantMessageActiveField;
+    const currentValue = targetField === "subject" ? participantMessageSubject : participantMessageBody;
+    const selection = participantMessageSelectionRef.current[targetField] ?? { start: currentValue.length, end: currentValue.length };
+    const start = Math.min(selection.start, currentValue.length);
+    const end = Math.min(selection.end, currentValue.length);
+    const before = currentValue.slice(0, start);
+    const after = currentValue.slice(end);
+    const leadingSpace = before && !/\s$/.test(before) ? " " : "";
+    const trailingSpace = after && !/^\s/.test(after) ? " " : "";
+
+    replaceParticipantMessageSelection(targetField, `${leadingSpace}${token}${trailingSpace}`);
+  }
+
+  function formatParticipantMessageBody(style: "bold" | "italic" | "bullet" | "purple" | "green" | "amber" | "red") {
+    const currentValue = participantMessageBody;
+    const selection = participantMessageSelectionRef.current.bodyText ?? { start: currentValue.length, end: currentValue.length };
+    const start = Math.min(selection.start, currentValue.length);
+    const end = Math.min(selection.end, currentValue.length);
+    const selected = currentValue.slice(start, end);
+
+    if (style === "bullet") {
+      const bulletText = selected
+        ? selected.split("\n").map((line) => line.trim() ? `- ${line.replace(/^[-*]\s+/, "")}` : line).join("\n")
+        : "- Bullet item";
+      replaceParticipantMessageSelection("bodyText", bulletText);
+      return;
+    }
+
+    const wrappers = {
+      bold: ["**", "**"],
+      italic: ["*", "*"],
+      purple: ["{purple:", "}"],
+      green: ["{green:", "}"],
+      amber: ["{amber:", "}"],
+      red: ["{red:", "}"]
+    } as const;
+    const [before, after] = wrappers[style];
+    replaceParticipantMessageSelection("bodyText", `${before}${selected || "text"}${after}`);
+  }
+
+  function insertParticipantMessageLink() {
+    const url = participantMessageLinkUrl.trim();
+
+    if (!url) {
+      notifyError("Add a link URL first.");
+      return;
+    }
+
+    const currentValue = participantMessageBody;
+    const selection = participantMessageSelectionRef.current.bodyText ?? { start: currentValue.length, end: currentValue.length };
+    const selected = currentValue.slice(Math.min(selection.start, currentValue.length), Math.min(selection.end, currentValue.length));
+    const label = participantMessageLinkText.trim() || selected || "Link text";
+    replaceParticipantMessageSelection("bodyText", `[${label}](${url})`);
+    setParticipantMessageLinkText("");
+    setParticipantMessageLinkUrl("");
+  }
+
+  function summarizeParticipantMessageSend(result: ParticipantMessageSendResponse | undefined, fallbackRecipientCount: number) {
+    const communications = result?.communications ?? [];
+    const failed = communications.filter((communication) => communication.status === "FAILED");
+    const sentCount = Math.max(0, (result?.recipientCount ?? fallbackRecipientCount) - failed.length);
+
+    if (failed.length > 0) {
+      const firstError = failed.find((communication) => communication.providerError)?.providerError;
+      notifyError(`${sentCount} sent, ${failed.length} failed.${firstError ? ` ${firstError}` : ""}`);
+      return;
+    }
+
+    notifySuccess(`Message sent to ${result?.recipientCount ?? fallbackRecipientCount} participant${(result?.recipientCount ?? fallbackRecipientCount) === 1 ? "" : "s"}.`);
+  }
+
   function openParticipantMessageDialog(targets: AdminRow[]) {
     const cleanedTargets = targets.filter((target) => target?.id);
 
@@ -1603,6 +1722,9 @@ export function CohortDetailClient({ id }: { id: string }) {
     setParticipantMessageTemplateId("");
     setParticipantMessageSubject("");
     setParticipantMessageBody("");
+    setParticipantMessageLinkText("");
+    setParticipantMessageLinkUrl("");
+    setParticipantMessageActiveField("bodyText");
     setParticipantMessageOpen(true);
   }
 
@@ -1627,12 +1749,17 @@ export function CohortDetailClient({ id }: { id: string }) {
     setSendingParticipantMessage(true);
     try {
       if (participantMessageMode === "template") {
-        await Promise.all(participantMessageTargets.map((participant) => adminApi("/api/communications", {
+        const result = await adminApi<ParticipantMessageSendResponse>("/api/communications", {
           method: "PATCH",
-          body: { action: "sendTemplateToParticipant", participantId: participant.id, templateId: participantMessageTemplateId }
-        })));
+          body: {
+            action: "sendManualTemplateToParticipants",
+            participantIds: participantMessageTargets.map((participant) => participant.id),
+            templateId: participantMessageTemplateId
+          }
+        });
+        summarizeParticipantMessageSend(result, recipients.length);
       } else {
-        await adminApi("/api/communications", {
+        const result = await adminApi<ParticipantMessageSendResponse>("/api/communications", {
           method: "PATCH",
           body: {
             action: "sendManualCustomEmail",
@@ -1642,14 +1769,16 @@ export function CohortDetailClient({ id }: { id: string }) {
             bodyText: participantMessageBody.trim()
           }
         });
+        summarizeParticipantMessageSend(result, recipients.length);
       }
 
-      notifySuccess(`Message sent to ${recipients.length} participant${recipients.length === 1 ? "" : "s"}.`);
       setParticipantMessageOpen(false);
       setParticipantMessageTargets([]);
       setParticipantMessageTemplateId("");
       setParticipantMessageSubject("");
       setParticipantMessageBody("");
+      setParticipantMessageLinkText("");
+      setParticipantMessageLinkUrl("");
       setParticipantSelection({ type: "include", ids: new Set() });
       await load();
     } catch (error) {
@@ -3274,35 +3403,95 @@ export function CohortDetailClient({ id }: { id: string }) {
         onSuccess={notifySuccess}
         onError={notifyError}
       />
-      <Dialog open={participantMessageOpen} onClose={() => setParticipantMessageOpen(false)} fullWidth maxWidth="md">
+      <Dialog open={participantMessageOpen} onClose={() => setParticipantMessageOpen(false)} fullWidth maxWidth="xl" PaperProps={{ className: "participant-message-modal" }}>
         <DialogTitle>Send Participant Message</DialogTitle>
         <DialogContent>
-          <Stack spacing={2} sx={{ mt: 0.5 }}>
-            <Typography color="text.secondary">
-              {participantMessageRecipients().length} deduped recipient{participantMessageRecipients().length === 1 ? "" : "s"}: {participantMessageRecipients().slice(0, 8).join(", ")}{participantMessageRecipients().length > 8 ? `, +${participantMessageRecipients().length - 8} more` : ""}
-            </Typography>
-            <TextField select fullWidth label="Message type" value={participantMessageMode} onChange={(event) => setParticipantMessageMode(event.target.value as "template" | "custom")}>
-              <MenuItem value="template">Saved template</MenuItem>
-              <MenuItem value="custom">Custom email</MenuItem>
-            </TextField>
-            {participantMessageMode === "template" ? (
-              <TextField select fullWidth label="Email template" value={participantMessageTemplateId} onChange={(event) => setParticipantMessageTemplateId(event.target.value)}>
-                {templates.filter((template) => template.active).map((template) => (
-                  <MenuItem value={template.id} key={template.id}>
-                    {template.name} · {formatStatusLabel(template.type)}
-                  </MenuItem>
-                ))}
-              </TextField>
-            ) : (
-              <>
-                <TextField fullWidth label="Subject" value={participantMessageSubject} onChange={(event) => setParticipantMessageSubject(event.target.value)} />
-                <TextField fullWidth multiline minRows={8} label="Message" value={participantMessageBody} onChange={(event) => setParticipantMessageBody(event.target.value)} />
-              </>
-            )}
-            {participantMessageMode === "template" && templates.filter((template) => template.active).length === 0 ? (
-              <Typography color="error">No active templates are available.</Typography>
+          <div className="participant-message-composer">
+            <div className="participant-message-form">
+              <div className="participant-message-recipients">
+                <span>{participantMessageRecipients().length} deduped recipient{participantMessageRecipients().length === 1 ? "" : "s"}</span>
+                <strong>{participantMessageRecipients().slice(0, 8).join(", ")}{participantMessageRecipients().length > 8 ? `, +${participantMessageRecipients().length - 8} more` : ""}</strong>
+              </div>
+              <div className="participant-message-grid">
+                <TextField select fullWidth label="Message type" value={participantMessageMode} onChange={(event) => setParticipantMessageMode(event.target.value as "template" | "custom")}>
+                  <MenuItem value="template">Saved template</MenuItem>
+                  <MenuItem value="custom">Custom email</MenuItem>
+                </TextField>
+                {participantMessageMode === "template" ? (
+                  <TextField select fullWidth label="Email template" value={participantMessageTemplateId} onChange={(event) => setParticipantMessageTemplateId(event.target.value)}>
+                    {templates.filter((template) => template.active).map((template) => (
+                      <MenuItem value={template.id} key={template.id} searchText={`${template.name} ${template.type} ${template.subject ?? ""}`}>
+                        {template.name} · {formatStatusLabel(template.type)}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                ) : (
+                  <TextField
+                    fullWidth
+                    label="Subject"
+                    value={participantMessageSubject}
+                    onClick={(event: SyntheticEvent<HTMLInputElement | HTMLTextAreaElement>) => rememberParticipantMessageSelection("subject", event)}
+                    onFocus={(event: SyntheticEvent<HTMLInputElement | HTMLTextAreaElement>) => rememberParticipantMessageSelection("subject", event)}
+                    onKeyUp={(event: SyntheticEvent<HTMLInputElement | HTMLTextAreaElement>) => rememberParticipantMessageSelection("subject", event)}
+                    onSelect={(event: SyntheticEvent<HTMLInputElement | HTMLTextAreaElement>) => rememberParticipantMessageSelection("subject", event)}
+                    onChange={(event) => setParticipantMessageSubject(event.target.value)}
+                  />
+                )}
+              </div>
+              {participantMessageMode === "custom" ? (
+                <>
+                  <TextField
+                    fullWidth
+                    multiline
+                    minRows={12}
+                    label="Message"
+                    value={participantMessageBody}
+                    onClick={(event: SyntheticEvent<HTMLInputElement | HTMLTextAreaElement>) => rememberParticipantMessageSelection("bodyText", event)}
+                    onFocus={(event: SyntheticEvent<HTMLInputElement | HTMLTextAreaElement>) => rememberParticipantMessageSelection("bodyText", event)}
+                    onKeyUp={(event: SyntheticEvent<HTMLInputElement | HTMLTextAreaElement>) => rememberParticipantMessageSelection("bodyText", event)}
+                    onSelect={(event: SyntheticEvent<HTMLInputElement | HTMLTextAreaElement>) => rememberParticipantMessageSelection("bodyText", event)}
+                    onChange={(event) => setParticipantMessageBody(event.target.value)}
+                  />
+                  <div className="template-format-toolbar participant-message-toolbar" aria-label="Email body formatting tools">
+                    <button type="button" onClick={() => formatParticipantMessageBody("bold")} title="Bold selected text"><strong>B</strong></button>
+                    <button type="button" onClick={() => formatParticipantMessageBody("italic")} title="Italic selected text"><em>I</em></button>
+                    <button type="button" onClick={() => formatParticipantMessageBody("bullet")} title="Add bullet points">List</button>
+                    <button type="button" onClick={() => formatParticipantMessageBody("purple")} title="Purple emphasis" data-color="purple">Purple</button>
+                    <button type="button" onClick={() => formatParticipantMessageBody("green")} title="Green emphasis" data-color="green">Green</button>
+                    <button type="button" onClick={() => formatParticipantMessageBody("amber")} title="Amber emphasis" data-color="amber">Amber</button>
+                    <button type="button" onClick={() => formatParticipantMessageBody("red")} title="Red emphasis" data-color="red">Red</button>
+                  </div>
+                  <div className="participant-message-link-row">
+                    <TextField fullWidth label="Link text" value={participantMessageLinkText} onChange={(event) => setParticipantMessageLinkText(event.target.value)} />
+                    <TextField fullWidth label="Link URL" value={participantMessageLinkUrl} onChange={(event) => setParticipantMessageLinkUrl(event.target.value)} />
+                    <Button variant="outlined" onClick={insertParticipantMessageLink}>Insert link</Button>
+                  </div>
+                </>
+              ) : null}
+              {participantMessageMode === "template" && templates.filter((template) => template.active).length === 0 ? (
+                <Typography color="error">No active templates are available.</Typography>
+              ) : null}
+            </div>
+            {participantMessageMode === "custom" ? (
+              <aside className="participant-message-side">
+                <div className="participant-message-merge">
+                  <span>Merge fields</span>
+                  <div className="comms-field-cloud">
+                    {participantMessageMergeFields.map((field) => (
+                      <button className="template-merge-token" type="button" key={field} onClick={() => insertParticipantMessageMergeField(field)}>
+                        {`{{${field}}}`}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="template-preview participant-message-preview">
+                  <span>Preview</span>
+                  <strong>{renderMergeFields(participantMessageSubject, sampleMergeContext, true).output || "Subject preview"}</strong>
+                  <div className="comms-preview-frame comms-message-body-frame" dangerouslySetInnerHTML={{ __html: textToEmailHtml(renderMergeFields(participantMessageBody, sampleMergeContext, true).output || "Email body preview") }} />
+                </div>
+              </aside>
             ) : null}
-          </Stack>
+          </div>
         </DialogContent>
         <DialogActions>
           <Button variant="outlined" onClick={() => setParticipantMessageOpen(false)} disabled={sendingParticipantMessage}>Cancel</Button>

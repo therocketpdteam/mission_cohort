@@ -6114,6 +6114,91 @@ h6,
   font-size: 0.72rem;
 }
 
+.participant-message-modal .ui-modal-body {
+  overflow: visible;
+}
+
+.participant-message-composer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 340px);
+  gap: 16px;
+  align-items: start;
+}
+
+.participant-message-form,
+.participant-message-side,
+.participant-message-merge {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.participant-message-recipients {
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--color-slate-200);
+  border-radius: 10px;
+  background: var(--color-slate-50);
+  padding: 10px 12px;
+}
+
+.participant-message-recipients span,
+.participant-message-merge > span {
+  color: var(--color-slate-500);
+  font-size: 0.72rem;
+  font-weight: 820;
+  text-transform: uppercase;
+}
+
+.participant-message-recipients strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-slate-900);
+  font-size: 0.86rem;
+  font-weight: 760;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.participant-message-grid {
+  display: grid;
+  grid-template-columns: minmax(190px, 0.42fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.participant-message-toolbar {
+  margin-top: -2px;
+}
+
+.participant-message-link-row {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.participant-message-link-row .ui-button {
+  min-height: 42px;
+  white-space: nowrap;
+}
+
+.participant-message-side {
+  border: 1px solid var(--color-slate-200);
+  border-radius: 12px;
+  background: var(--color-slate-50);
+  padding: 14px;
+}
+
+.participant-message-preview {
+  border-top: 1px solid var(--color-slate-200);
+  padding-top: 12px;
+}
+
+.participant-message-preview .comms-preview-frame {
+  max-height: 280px;
+}
+
 .template-editor-side {
   border: 1px solid var(--color-slate-200);
   border-radius: 14px;
@@ -6275,6 +6360,10 @@ h6,
     grid-template-columns: 1fr;
   }
 
+  .participant-message-composer {
+    grid-template-columns: 1fr;
+  }
+
   .compose-message-editor {
     grid-template-columns: 1fr;
   }
@@ -6293,6 +6382,8 @@ h6,
   .comms-summary-grid,
   .comms-detail-grid,
   .template-editor-grid,
+  .participant-message-grid,
+  .participant-message-link-row,
   .compose-message-grid,
   .compose-audience-picker {
     grid-template-columns: 1fr;
