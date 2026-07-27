@@ -2,6 +2,7 @@
 
 import {
   Archive,
+  ArrowRightLeft,
   Ban,
   Calendar,
   CheckCircle,
@@ -49,6 +50,7 @@ export const AccountCircle = icon(UserCircle);
 export const AddIcon = icon(Plus);
 export const AddLinkOutlined = icon(Plus);
 export const ArchiveOutlined = icon(Archive);
+export const ArrowRightLeftOutlined = icon(ArrowRightLeft);
 export const ArticleOutlined = icon(FileText);
 export const BlockOutlined = icon(Ban);
 export const CalendarMonthOutlined = icon(Calendar);

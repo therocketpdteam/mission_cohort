@@ -1,6 +1,7 @@
 "use client";
 
 import { DeleteOutline } from "@/components/ui/icons";
+import { ArrowRightLeftOutlined } from "@/components/ui/icons";
 import { ArticleOutlined } from "@/components/ui/icons";
 import { DoneAllOutlined } from "@/components/ui/icons";
 import { EditOutlined } from "@/components/ui/icons";
@@ -733,9 +734,20 @@ export function ParticipantsClient() {
       <SectionCard
         title="Participant Roster"
         action={
-          <Button type="button" variant="outlined" startIcon={<ArticleOutlined />} disabled={csvExportRows.length === 0} onClick={() => exportParticipantsCsv(csvExportRows)}>
-            {selectedRows.length > 0 ? "Export Selected CSV" : "Export CSV"}
-          </Button>
+          <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" justifyContent="flex-end">
+            <Button
+              type="button"
+              variant="outlined"
+              startIcon={<ArrowRightLeftOutlined />}
+              disabled={selectedRegistrationIds.length === 0}
+              onClick={() => setMoveDialogOpen(true)}
+            >
+              Move to Cohort
+            </Button>
+            <Button type="button" variant="outlined" startIcon={<ArticleOutlined />} disabled={csvExportRows.length === 0} onClick={() => exportParticipantsCsv(csvExportRows)}>
+              {selectedRows.length > 0 ? "Export Selected CSV" : "Export CSV"}
+            </Button>
+          </Stack>
         }
       >
         {selectedIds.length > 0 && (
@@ -754,7 +766,6 @@ export function ParticipantsClient() {
               {templates.filter((template) => template.active).map((template) => <MenuItem value={template.id} key={template.id}>{template.name}</MenuItem>)}
             </TextField>
             <Button size="small" variant="outlined" startIcon={<SendOutlined />} onClick={() => runBulkAction("send")}>Send Message</Button>
-            <Button size="small" variant="outlined" onClick={() => setMoveDialogOpen(true)}>Move Registrations</Button>
             <Button size="small" variant="outlined" startIcon={<SendOutlined />} onClick={() => setCustomEmailOpen(true)}>Custom Email</Button>
           </div>
         )}
