@@ -4576,7 +4576,8 @@ h6,
 
 .cohort-overview-resource-card strong,
 .cohort-overview-resource-card span,
-.cohort-overview-resource-card a {
+.cohort-overview-resource-card a,
+.cohort-overview-resource-card em {
   display: block;
   margin-top: 3px;
   color: var(--color-slate-800);
@@ -4601,9 +4602,16 @@ h6,
   font-weight: 650;
 }
 
+.cohort-overview-resource-card em {
+  color: var(--color-slate-500);
+  font-size: 0.78rem;
+  font-style: normal;
+  font-weight: 650;
+}
+
 .cohort-overview-link-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 12px;
   min-width: 0;
 }

@@ -21,6 +21,7 @@ const cohortBaseSchema = z.object({
   guideTopic: optionalString,
   guideUrl: optionalString,
   podcastUrl: optionalString,
+  prepResourcesOptional: z.boolean().default(false),
   presenterId: z.string().min(1),
   status: z.nativeEnum(CohortStatus).optional(),
   startDate: dateInput,

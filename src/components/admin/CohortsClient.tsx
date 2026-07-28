@@ -58,6 +58,7 @@ const editFields = (presenters: AdminRow[]): FieldConfig[] => [
   { name: "guideTopic", label: "Guide topic" },
   { name: "guideUrl", label: "Guide download URL" },
   { name: "podcastUrl", label: "Podcast YouTube URL" },
+  { name: "prepResourcesOptional", label: "Prep resources not required for this cohort", type: "checkbox" },
   { name: "thumbnailUrl", label: "Cohort thumbnail", type: "image" },
   {
     name: "presenterId",

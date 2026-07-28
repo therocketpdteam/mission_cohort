@@ -386,6 +386,7 @@ model Cohort {
   guideTopic                String?
   guideUrl                  String?
   podcastUrl                String?
+  prepResourcesOptional     Boolean                @default(false)
   presenterId               String
   status                    CohortStatus           @default(DRAFT)
   startDate                 DateTime

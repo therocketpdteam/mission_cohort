@@ -44,6 +44,11 @@ type LifecycleSession = {
 
 type LifecycleCohort = {
   status?: CohortStatus | string | null;
+  description?: string | null;
+  guideTopic?: string | null;
+  guideUrl?: string | null;
+  podcastUrl?: string | null;
+  prepResourcesOptional?: boolean | null;
   sessions?: LifecycleSession[];
   operationsTasks?: Array<{
     category?: OperationsTaskCategory | string | null;
@@ -71,6 +76,10 @@ const requiredSessionTemplateLabels: Record<string, string> = {
 function validDate(value?: Date | string | null) {
   const date = value ? new Date(value) : null;
   return date && Number.isFinite(date.getTime()) ? date : null;
+}
+
+function hasText(value?: string | null) {
+  return Boolean(String(value ?? "").trim());
 }
 
 function datesDiffer(first?: Date | string | null, second?: Date | string | null, toleranceMs = 5 * 60 * 1000) {
@@ -178,6 +187,15 @@ function getSessionCalendarReadiness(session: LifecycleSession) {
 
 export function getCohortReadiness(cohort: LifecycleCohort) {
   const sessions = cohort.sessions ?? [];
+  const missingPrepResources = [
+    !hasText(cohort.description) ? "description" : null,
+    !hasText(cohort.guideTopic) ? "guide topic" : null,
+    !hasText(cohort.guideUrl) ? "guide download" : null,
+    !hasText(cohort.podcastUrl) ? "podcast link" : null
+  ].filter((item): item is string => Boolean(item));
+  const prepResourcesReady = Boolean(cohort.prepResourcesOptional) || missingPrepResources.length === 0;
+  const sessionsMissingMeetingUrl = sessions.filter((session) => !hasText(session.meetingUrl));
+  const meetingLinksReady = sessions.length > 0 && sessionsMissingMeetingUrl.length === 0;
   const openTaskStatuses: Array<OperationsTaskStatus | string> = [OperationsTaskStatus.OPEN, OperationsTaskStatus.IN_PROGRESS];
   const publishReadinessTaskCategories: Array<OperationsTaskCategory | string> = [
     OperationsTaskCategory.CALENDAR_INVITE,
@@ -242,6 +260,26 @@ export function getCohortReadiness(cohort: LifecycleCohort) {
       label: "Sessions created",
       ready: sessions.length > 0,
       detail: sessions.length > 0 ? `${sessions.length} session${sessions.length === 1 ? "" : "s"} scheduled` : "Add at least one session"
+    },
+    {
+      key: "prep-resources",
+      label: "Prep resources ready",
+      ready: prepResourcesReady,
+      detail: prepResourcesReady
+        ? cohort.prepResourcesOptional
+          ? "Skipped by cohort override"
+          : "Description, guide, and podcast links ready"
+        : `Missing ${missingPrepResources.join(", ")}`
+    },
+    {
+      key: "meeting-links",
+      label: "Zoom links ready",
+      ready: meetingLinksReady,
+      detail: sessions.length > 0
+        ? meetingLinksReady
+          ? `${sessions.length}/${sessions.length} session Zoom link${sessions.length === 1 ? "" : "s"} ready`
+          : `${sessions.length - sessionsMissingMeetingUrl.length}/${sessions.length} session Zoom link${sessions.length === 1 ? "" : "s"} ready`
+        : "Add sessions before adding Zoom links"
     },
     {
       key: "calendar",

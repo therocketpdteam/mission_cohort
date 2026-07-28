@@ -11,6 +11,12 @@ import {
 import { deriveCohortStatus, getCohortReadiness } from "../../src/services/cohortLifecycle";
 
 const sessionStart = new Date("2026-07-10T14:00:00.000Z");
+const readyPrepResources = {
+  description: "A cohort description.",
+  guideTopic: "Instructional design",
+  guideUrl: "https://rocketpd.com/guide",
+  podcastUrl: "https://youtu.be/example"
+};
 
 function communication(type: TemplateType, scheduledFor: Date, status: CommunicationStatus = CommunicationStatus.SCHEDULED) {
   return { template: { type }, scheduledFor, status };
@@ -19,12 +25,14 @@ function communication(type: TemplateType, scheduledFor: Date, status: Communica
 test("treats complete draft session plans as publish-ready before provider delivery", () => {
   const readiness = getCohortReadiness({
     status: CohortStatus.DRAFT,
+    ...readyPrepResources,
     sessions: [{
       id: "session-1",
       title: "Session 1",
       startTime: sessionStart,
       endTime: new Date(sessionStart.getTime() + 60 * 60 * 1000),
       timezone: "America/New_York",
+      meetingUrl: "https://zoom.us/j/123456789",
       calendarInviteStatus: CalendarInviteStatus.NOT_CREATED,
       communications: [
         communication(TemplateType.WEEK_BEFORE_REMINDER, new Date(sessionStart.getTime() - 7 * 24 * 60 * 60 * 1000)),
@@ -37,18 +45,22 @@ test("treats complete draft session plans as publish-ready before provider deliv
 
   assert.equal(readiness.ready, true);
   assert.equal(readiness.items.find((item) => item.key === "calendar")?.label, "Calendar plans ready");
+  assert.equal(readiness.items.find((item) => item.key === "prep-resources")?.ready, true);
+  assert.equal(readiness.items.find((item) => item.key === "meeting-links")?.ready, true);
   assert.equal(readiness.sessionDetails[0]?.emails.total, 4);
 });
 
 test("treats draft session email plans as system-ready before concrete schedules exist", () => {
   const readiness = getCohortReadiness({
     status: CohortStatus.DRAFT,
+    ...readyPrepResources,
     sessions: [{
       id: "session-1",
       title: "Session 1",
       startTime: sessionStart,
       endTime: new Date(sessionStart.getTime() + 60 * 60 * 1000),
       timezone: "America/New_York",
+      meetingUrl: "https://zoom.us/j/123456789",
       calendarInviteStatus: CalendarInviteStatus.NOT_CREATED,
       communications: []
     }]
@@ -62,6 +74,7 @@ test("treats draft session email plans as system-ready before concrete schedules
 test("does not require one-week session reminders after the first session", () => {
   const readiness = getCohortReadiness({
     status: CohortStatus.PUBLISHED,
+    ...readyPrepResources,
     sessions: [{
       id: "session-2",
       sessionNumber: 2,
@@ -69,12 +82,14 @@ test("does not require one-week session reminders after the first session", () =
       startTime: sessionStart,
       endTime: new Date(sessionStart.getTime() + 60 * 60 * 1000),
       timezone: "America/New_York",
+      meetingUrl: "https://zoom.us/j/123456789",
       calendarInviteStatus: CalendarInviteStatus.CREATED,
       calendarEvents: [{
         title: "Session 2",
         startTime: sessionStart,
         endTime: new Date(sessionStart.getTime() + 60 * 60 * 1000),
-        timezone: "America/New_York"
+        timezone: "America/New_York",
+        inviteUrl: "https://zoom.us/j/123456789"
       }],
       communications: [
         communication(TemplateType.DAY_BEFORE_REMINDER, new Date(sessionStart.getTime() - 24 * 60 * 60 * 1000)),
@@ -92,18 +107,21 @@ test("does not require one-week session reminders after the first session", () =
 test("keeps sent reminders satisfied and ignores optional material tasks", () => {
   const readiness = getCohortReadiness({
     status: CohortStatus.DRAFT,
+    ...readyPrepResources,
     sessions: [{
       id: "session-1",
       title: "Session 1",
       startTime: sessionStart,
       endTime: new Date(sessionStart.getTime() + 60 * 60 * 1000),
       timezone: "America/New_York",
+      meetingUrl: "https://zoom.us/j/123456789",
       calendarInviteStatus: CalendarInviteStatus.CREATED,
       calendarEvents: [{
         title: "Session 1",
         startTime: sessionStart,
         endTime: new Date(sessionStart.getTime() + 60 * 60 * 1000),
-        timezone: "America/New_York"
+        timezone: "America/New_York",
+        inviteUrl: "https://zoom.us/j/123456789"
       }],
       communications: [
         communication(TemplateType.WEEK_BEFORE_REMINDER, new Date("2026-07-03T13:00:00.000Z"), CommunicationStatus.SENT),
@@ -123,6 +141,50 @@ test("keeps sent reminders satisfied and ignores optional material tasks", () =>
   assert.deepEqual(readiness.sessionDetails[0]?.emails.stale, []);
   assert.equal(readiness.sessionDetails[0]?.materials.detail, "Optional");
   assert.equal(readiness.items.find((item) => item.key === "manual-tasks")?.ready, true);
+});
+
+test("blocks publishing when prep resources are missing unless overridden", () => {
+  const base = {
+    status: CohortStatus.DRAFT,
+    sessions: [{
+      id: "session-1",
+      title: "Session 1",
+      startTime: sessionStart,
+      endTime: new Date(sessionStart.getTime() + 60 * 60 * 1000),
+      timezone: "America/New_York",
+      meetingUrl: "https://zoom.us/j/123456789",
+      calendarInviteStatus: CalendarInviteStatus.NOT_CREATED,
+      communications: []
+    }]
+  };
+
+  const blocked = getCohortReadiness(base);
+  assert.equal(blocked.ready, false);
+  assert.equal(blocked.items.find((item) => item.key === "prep-resources")?.detail, "Missing description, guide topic, guide download, podcast link");
+
+  const overridden = getCohortReadiness({ ...base, prepResourcesOptional: true });
+  assert.equal(overridden.ready, true);
+  assert.equal(overridden.items.find((item) => item.key === "prep-resources")?.detail, "Skipped by cohort override");
+});
+
+test("blocks publishing when any session is missing a Zoom link", () => {
+  const readiness = getCohortReadiness({
+    status: CohortStatus.DRAFT,
+    ...readyPrepResources,
+    sessions: [{
+      id: "session-1",
+      title: "Session 1",
+      startTime: sessionStart,
+      endTime: new Date(sessionStart.getTime() + 60 * 60 * 1000),
+      timezone: "America/New_York",
+      calendarInviteStatus: CalendarInviteStatus.NOT_CREATED,
+      communications: []
+    }]
+  });
+
+  assert.equal(readiness.ready, false);
+  assert.equal(readiness.items.find((item) => item.key === "meeting-links")?.ready, false);
+  assert.equal(readiness.items.find((item) => item.key === "meeting-links")?.detail, "0/1 session Zoom link ready");
 });
 
 test("keeps a ready cohort in Draft until publication is explicitly authorized", () => {

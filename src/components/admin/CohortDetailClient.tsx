@@ -116,19 +116,39 @@ function formatScheduleDateRange(sessions: AdminRow[], cohort?: AdminRow | null)
   return start || end ? `${start || "-"} - ${end || "-"}` : "-";
 }
 
+function zoomLinkOverview(sessions: AdminRow[]) {
+  const total = sessions.length;
+  const linked = sessions.filter((session) => String(session.meetingUrl ?? "").trim());
+  const firstLink = linked[0]?.meetingUrl ? String(linked[0].meetingUrl) : "";
+
+  if (total === 0) {
+    return { value: "No sessions", helper: "Add sessions before Zoom links", href: "" };
+  }
+
+  return {
+    value: `${linked.length}/${total} session link${total === 1 ? "" : "s"} ready`,
+    helper: linked.length === total ? "Used in calendar invites, 24-hour emails, and 60-minute emails" : "Add Zoom links to each session",
+    href: firstLink
+  };
+}
+
 function OverviewResourceCard({
   label,
   value,
   icon,
-  linkLabel
+  linkLabel,
+  helper,
+  href
 }: {
   label: string;
   value?: unknown;
   icon: ReactNode;
   linkLabel?: string;
+  helper?: string;
+  href?: string;
 }) {
   const text = String(value ?? "").trim();
-  const isUrl = /^https?:\/\//i.test(text);
+  const linkHref = href || (/^https?:\/\//i.test(text) ? text : "");
 
   return (
     <div className="cohort-overview-resource-card">
@@ -136,13 +156,14 @@ function OverviewResourceCard({
       <div>
         <small>{label}</small>
         {text ? (
-          isUrl ? (
+          linkHref ? (
             <>
-              <a href={text} target="_blank" rel="noreferrer">{linkLabel ?? "Open link"}</a>
+              <a href={linkHref} target="_blank" rel="noreferrer">{linkLabel ?? "Open link"}</a>
               <span>{text}</span>
             </>
           ) : <strong>{text}</strong>
         ) : <span>-</span>}
+        {helper ? <em>{helper}</em> : null}
       </div>
     </div>
   );
@@ -1579,6 +1600,8 @@ export function CohortDetailClient({ id }: { id: string }) {
     return [...incoming, ...payouts].sort((a, b) => new Date(b.date ?? 0).getTime() - new Date(a.date ?? 0).getTime());
   }, [distribution, payments]);
   const cohortLevelMaterials = useMemo(() => resources.filter((resource) => !resource.sessionId), [resources]);
+  const zoomOverview = useMemo(() => zoomLinkOverview(sessions), [sessions]);
+  const prepResourceReadiness = readinessItems.find((item: AdminRow) => item.key === "prep-resources");
 
   function sessionEmailStatus(sessionId: string, type: string) {
     const communication = communications.find((item) => item.sessionId === sessionId && item.template?.type === type);
@@ -2642,9 +2665,23 @@ export function CohortDetailClient({ id }: { id: string }) {
                 <div className="cohort-overview-details">
                   <OverviewResourceCard label="Description" value={cohort?.description} icon={<ArticleOutlined />} />
                   <div className="cohort-overview-link-grid">
+                    <OverviewResourceCard
+                      label="Prep Assets"
+                      value={cohort?.prepResourcesOptional ? "Optional for this cohort" : prepResourceReadiness?.ready ? "Ready" : "Needs assets"}
+                      icon={prepResourceReadiness?.ready ? <CheckCircleOutline /> : <CancelOutlined />}
+                      helper={prepResourceReadiness?.detail}
+                    />
                     <OverviewResourceCard label="Guide Topic" value={cohort?.guideTopic} icon={<ArticleOutlined />} />
                     <OverviewResourceCard label="Guide Download" value={cohort?.guideUrl} icon={<VisibilityOutlined />} linkLabel="Open guide" />
                     <OverviewResourceCard label="Podcast YouTube" value={cohort?.podcastUrl} icon={<SendOutlined />} linkLabel="Open podcast" />
+                    <OverviewResourceCard
+                      label="Zoom Links"
+                      value={zoomOverview.value}
+                      icon={<CalendarMonthOutlined />}
+                      href={zoomOverview.href}
+                      linkLabel="Open first Zoom"
+                      helper={zoomOverview.helper}
+                    />
                   </div>
                 </div>
                 <div className="action-group" style={{ justifyContent: "flex-start" }}>
@@ -2688,6 +2725,8 @@ export function CohortDetailClient({ id }: { id: string }) {
                     const icon =
                       item.key === "calendar" ? <CalendarMonthOutlined /> :
                           item.key === "communications" ? <EmailOutlined /> :
+                          item.key === "prep-resources" ? <ArticleOutlined /> :
+                          item.key === "meeting-links" ? <CalendarMonthOutlined /> :
                           item.key === "manual-tasks" ? <CheckCircleOutline /> :
                             <CheckCircleOutline />;
 

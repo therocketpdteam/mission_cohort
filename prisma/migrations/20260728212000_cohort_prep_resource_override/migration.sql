@@ -1,0 +1,1 @@
+ALTER TABLE "Cohort" ADD COLUMN IF NOT EXISTS "prepResourcesOptional" BOOLEAN NOT NULL DEFAULT false;

@@ -318,6 +318,7 @@ const patches = [
       ALTER TABLE "Cohort" ADD COLUMN IF NOT EXISTS "guideTopic" TEXT;
       ALTER TABLE "Cohort" ADD COLUMN IF NOT EXISTS "guideUrl" TEXT;
       ALTER TABLE "Cohort" ADD COLUMN IF NOT EXISTS "podcastUrl" TEXT;
+      ALTER TABLE "Cohort" ADD COLUMN IF NOT EXISTS "prepResourcesOptional" BOOLEAN NOT NULL DEFAULT false;
     `
   },
   {
