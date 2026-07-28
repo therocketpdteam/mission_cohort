@@ -32,6 +32,8 @@ type LifecycleSession = {
   updatedAt?: Date | string | null;
   calendarInviteStatus?: CalendarInviteStatus | string | null;
   calendarEvents?: Array<{
+    provider?: string | null;
+    providerEventId?: string | null;
     startTime?: Date | string | null;
     endTime?: Date | string | null;
     timezone?: string | null;
@@ -156,12 +158,16 @@ function getSessionEmailReadiness(session: LifecycleSession) {
   };
 }
 
-function getSessionCalendarReadiness(session: LifecycleSession) {
+function getSessionCalendarReadiness(session: LifecycleSession, options: { requireGoogleInvite?: boolean } = {}) {
   const readyCalendarStatuses: Array<CalendarInviteStatus | string> = [CalendarInviteStatus.CREATED, CalendarInviteStatus.UPDATED];
   const ready = readyCalendarStatuses.includes(session.calendarInviteStatus ?? "");
-  const latestEvent = [...(session.calendarEvents ?? [])]
+  const relevantEvents = options.requireGoogleInvite
+    ? (session.calendarEvents ?? []).filter((event) => event.provider === "google" && event.providerEventId)
+    : (session.calendarEvents ?? []);
+  const latestEvent = [...relevantEvents]
     .sort((a, b) => (validDate(b.updatedAt)?.getTime() ?? 0) - (validDate(a.updatedAt)?.getTime() ?? 0))[0];
   const pendingUpdate = Boolean(latestEvent && session.calendarInviteStatus === CalendarInviteStatus.NOT_CREATED);
+  const missingRequiredGoogleInvite = Boolean(options.requireGoogleInvite && !latestEvent);
   const stale = Boolean(
     latestEvent &&
     (
@@ -175,9 +181,11 @@ function getSessionCalendarReadiness(session: LifecycleSession) {
   );
 
   return {
-    ready: ready && !stale,
+    ready: ready && !stale && !missingRequiredGoogleInvite,
     stale,
-    detail: !ready
+    detail: missingRequiredGoogleInvite
+      ? "Google invite missing"
+      : !ready
       ? pendingUpdate ? "Changes pending" : "Invite missing"
       : stale
         ? "Session changed; update invite"
@@ -187,6 +195,9 @@ function getSessionCalendarReadiness(session: LifecycleSession) {
 
 export function getCohortReadiness(cohort: LifecycleCohort) {
   const sessions = cohort.sessions ?? [];
+  const requireGoogleInvites = cohort.status !== CohortStatus.DRAFT && sessions.some((session) =>
+    (session.calendarEvents ?? []).some((event) => event.provider === "google" && event.providerEventId)
+  );
   const missingPrepResources = [
     !hasText(cohort.description) ? "description" : null,
     !hasText(cohort.guideTopic) ? "guide topic" : null,
@@ -207,7 +218,7 @@ export function getCohortReadiness(cohort: LifecycleCohort) {
     publishReadinessTaskCategories.includes(task.category ?? "")
   );
   const sessionDetails = sessions.map((session) => {
-    const calendar = getSessionCalendarReadiness(session);
+    const calendar = getSessionCalendarReadiness(session, { requireGoogleInvite: requireGoogleInvites });
     const emails = getSessionEmailReadiness(session);
     const sessionTasks = openReadinessTasks.filter((task) => task.sessionId === session.id);
     const blockers = [

@@ -12,6 +12,7 @@ import { voidRegistrationQuickBooksInvoice } from "./quickBooksService";
 import { cancelRegistrationJourneys, planRegistrationJourneys } from "./registrationJourneyService";
 import { syncRegistrationParticipantListStatus } from "./participantService";
 import { shouldDeferRegistrationDelivery, stageParticipantAddition, stageRegistrationFieldChanges } from "./registrationChangeService";
+import { syncFutureLinkedGoogleCalendarInvitesForCohort } from "./calendarService";
 
 type BulkMoveRegistrationSummaryInput = Array<{
   id: string;
@@ -459,6 +460,11 @@ export async function bulkMoveRegistrationsToCohort(input: { ids: string[]; targ
 
   const moveConfirmationBatchKey = randomUUID();
   const journeyResults = [];
+  const departingCalendarSync = [];
+
+  for (const sourceCohortId of summary.sourceCohortIds) {
+    departingCalendarSync.push(await syncFutureLinkedGoogleCalendarInvitesForCohort(sourceCohortId));
+  }
 
   for (const registration of registrations.filter((row) => moveIds.includes(row.id))) {
     logAuditEventAsync({
@@ -496,6 +502,7 @@ export async function bulkMoveRegistrationsToCohort(input: { ids: string[]; targ
     targetCohort,
     summary,
     cancelledCommunications: transactionResult.cancelledCommunications,
+    departingCalendarSync,
     confirmationsSent: journeyResults.reduce((total, result) => total + Number(result.sent ?? 0), 0),
     confirmationFailures: journeyResults.reduce((total, result) => total + Number(result.failed ?? 0), 0)
   };

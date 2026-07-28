@@ -262,6 +262,45 @@ export async function createCalendarInvitePlaceholder(sessionId?: string, mode: 
   }
 }
 
+export async function syncFutureLinkedGoogleCalendarInvitesForCohort(cohortId: string) {
+  const sessions = await prisma.cohortSession.findMany({
+    where: {
+      cohortId,
+      startTime: { gt: new Date() },
+      calendarEvents: { some: { provider: "google", providerEventId: { not: null } } }
+    },
+    orderBy: { sessionNumber: "asc" },
+    select: { id: true, title: true }
+  });
+  const updated = [];
+  const failed = [];
+
+  for (const session of sessions) {
+    try {
+      const result = await createCalendarInvitePlaceholder(session.id, "google");
+      updated.push({
+        sessionId: session.id,
+        title: session.title,
+        attendeeCount: result.attendeeCount ?? 0
+      });
+    } catch (error) {
+      failed.push({
+        sessionId: session.id,
+        title: session.title,
+        error: error instanceof Error ? error.message : "Google Calendar update failed"
+      });
+    }
+  }
+
+  return {
+    cohortId,
+    scanned: sessions.length,
+    updated: updated.length,
+    failed: failed.length,
+    details: { updated, failed }
+  };
+}
+
 function calendarRecordDiffers(session: {
   title: string;
   startTime: Date;
