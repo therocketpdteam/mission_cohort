@@ -17,6 +17,9 @@ export type GoogleCalendarEventInput = {
     responseStatus?: string;
   }>;
   sendUpdates?: boolean;
+  guestsCanInviteOthers?: boolean;
+  guestsCanModify?: boolean;
+  guestsCanSeeOtherGuests?: boolean;
 };
 
 export type GoogleCalendarOAuthConfig = {
@@ -148,8 +151,11 @@ export async function upsertGoogleCalendarEvent(input: GoogleCalendarEventInput)
   const calendarId = encodeURIComponent(calendarIdValue);
   const body = {
     summary: input.title,
-    description: [input.description, input.meetingUrl ? `Meeting URL: ${input.meetingUrl}` : ""].filter(Boolean).join("\n\n"),
+    description: input.description ?? "",
     location: input.location ?? input.meetingUrl ?? undefined,
+    guestsCanInviteOthers: input.guestsCanInviteOthers ?? false,
+    guestsCanModify: input.guestsCanModify ?? false,
+    guestsCanSeeOtherGuests: input.guestsCanSeeOtherGuests ?? false,
     start: {
       dateTime: new Date(input.startTime).toISOString(),
       timeZone: input.timezone

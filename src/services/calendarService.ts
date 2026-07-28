@@ -1,6 +1,6 @@
 import { CalendarInviteStatus, IntegrationConnectionStatus, IntegrationProvider, OperationsTaskCategory, OperationsTaskStatus, ParticipantStatus, RegistrationStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { deleteGoogleCalendarEvent, exchangeGoogleCalendarCode, generateSessionIcs, getGoogleCalendarConnectUrl, getGoogleCalendarEvent, listGoogleCalendars, refreshGoogleCalendarToken, uniqueCalendarAttendees, upsertGoogleCalendarEvent } from "@/modules/calendar";
+import { buildSessionCalendarDescription, deleteGoogleCalendarEvent, exchangeGoogleCalendarCode, generateSessionIcs, getGoogleCalendarConnectUrl, getGoogleCalendarEvent, listGoogleCalendars, refreshGoogleCalendarToken, uniqueCalendarAttendees, upsertGoogleCalendarEvent } from "@/modules/calendar";
 import { getDecryptedIntegrationConnection, upsertIntegrationConnection } from "@/services/integrationService";
 import { assertCohortDeliveryAllowed, assertOutboundRecipientsAllowed, resolveGoogleCalendarSetup } from "@/services/integrationSetupService";
 
@@ -113,7 +113,7 @@ export async function createCalendarInvitePlaceholder(sessionId?: string, mode: 
 
   const session = await prisma.cohortSession.findUnique({
     where: { id: sessionId },
-    include: { cohort: true }
+    include: { cohort: { include: { presenter: true } } }
   });
 
   if (!session) {
@@ -142,7 +142,14 @@ export async function createCalendarInvitePlaceholder(sessionId?: string, mode: 
       );
       const result = await upsertGoogleCalendarEvent({
         title: session.title,
-        description: session.description ?? undefined,
+        description: buildSessionCalendarDescription({
+          session,
+          cohort: {
+            title: session.cohort.title,
+            description: session.cohort.description,
+            presenterName: [session.cohort.presenter.firstName, session.cohort.presenter.lastName].filter(Boolean).join(" ")
+          }
+        }),
         startTime: session.startTime,
         endTime: session.endTime,
         timezone: session.timezone,
@@ -205,7 +212,14 @@ export async function createCalendarInvitePlaceholder(sessionId?: string, mode: 
       return { provider: "google", status: "created", attendeeCount: attendees.length, event: calendarEvent };
     }
 
-    const ics = generateSessionIcs(session);
+    const ics = generateSessionIcs({
+      ...session,
+      cohort: {
+        title: session.cohort.title,
+        description: session.cohort.description,
+        presenterName: [session.cohort.presenter.firstName, session.cohort.presenter.lastName].filter(Boolean).join(" ")
+      }
+    });
     await prisma.calendarEvent.create({
       data: {
         cohortId: session.cohortId,

@@ -33,6 +33,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { adminApi, uploadAdminFile } from "@/lib/adminApi";
 import { formatProperDisplay, formatRegistrationPaymentStatus, formatRegistrationSource, formatStatusLabel, isCompedRegistration } from "@/lib/formatting";
 import { formatDateInZone, formatDateTimeInZone, formatTimeInZone } from "@/lib/timezones";
+import { buildSessionCalendarDescription } from "@/modules/calendar/description";
 import { mergeFields, renderMergeFields, sampleMergeContext } from "@/modules/email/mergeFields";
 import { textToEmailHtml } from "@/modules/email/templateFormatting";
 import { exportParticipantsCsv } from "@/lib/participantCsv";
@@ -139,6 +140,10 @@ function zoomLinkOverview(sessions: AdminRow[]) {
     helper: linked.length === total ? "Used in calendar invites, 24-hour emails, and 60-minute emails" : "Add Zoom links to each session",
     href: firstLink
   };
+}
+
+function cohortPresenterName(cohort?: AdminRow | null) {
+  return [cohort?.presenter?.firstName, cohort?.presenter?.lastName].filter(Boolean).join(" ");
 }
 
 function OverviewResourceCard({
@@ -3364,7 +3369,20 @@ export function CohortDetailClient({ id }: { id: string }) {
               </div>
               <div>
                 <span>Description</span>
-                <p>{calendarPreviewSession.description || "No calendar invite description."}</p>
+                <p>
+                  {buildSessionCalendarDescription({
+                    session: calendarPreviewSession,
+                    cohort: {
+                      title: cohort?.title,
+                      description: cohort?.description,
+                      presenterName: cohortPresenterName(cohort)
+                    }
+                  }) || "No calendar invite description."}
+                </p>
+              </div>
+              <div>
+                <span>Guest privacy</span>
+                <p>Guests cannot see the guest list, invite others, or edit the event.</p>
               </div>
               <div>
                 <span>Zoom / meeting link</span>

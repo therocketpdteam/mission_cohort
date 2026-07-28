@@ -1,3 +1,5 @@
+import { buildSessionCalendarDescription } from "./description";
+
 function formatIcsDate(value: Date | string) {
   const date = value instanceof Date ? value : new Date(value);
   return date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
@@ -16,12 +18,18 @@ export type IcsSessionInput = {
   timezone: string;
   meetingUrl?: string | null;
   location?: string | null;
+  cohort?: {
+    title?: string | null;
+    description?: string | null;
+    presenterName?: string | null;
+  } | null;
 };
 
 export function generateSessionIcs(session: IcsSessionInput) {
-  const description = [session.description, session.meetingUrl ? `Meeting URL: ${session.meetingUrl}` : null]
-    .filter(Boolean)
-    .join("\n");
+  const description = buildSessionCalendarDescription({
+    session,
+    cohort: session.cohort
+  });
 
   return [
     "BEGIN:VCALENDAR",
