@@ -4547,11 +4547,12 @@ h6,
 
 .cohort-overview-resource-card {
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr);
+  grid-template-columns: 36px minmax(0, 1fr);
   gap: 10px;
-  align-items: start;
+  align-items: center;
   min-width: 0;
-  padding: 12px;
+  min-height: 96px;
+  padding: 12px 10px;
   border: 1px solid var(--color-slate-200);
   border-radius: 10px;
   background: linear-gradient(180deg, #ffffff 0%, #fbfcff 100%);
@@ -4559,12 +4560,18 @@ h6,
 
 .cohort-overview-resource-icon {
   display: inline-grid;
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
   place-items: center;
+  align-self: center;
+  justify-self: center;
   border-radius: 9px;
   background: var(--color-blue-100);
   color: var(--color-primary-700);
+}
+
+.cohort-overview-resource-icon svg {
+  display: block;
 }
 
 .cohort-overview-resource-card small {
@@ -4611,7 +4618,7 @@ h6,
 
 .cohort-overview-link-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
   min-width: 0;
 }

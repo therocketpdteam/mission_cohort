@@ -2669,7 +2669,7 @@ export function CohortDetailClient({ id }: { id: string }) {
                   <DetailField label="Session Dates" value={formatScheduleDateRange(sessions, cohort)} />
                   <DetailField label="Timezone" value={cohort?.defaultTimezone ?? "-"} />
                   <DetailField label="Slug" value={cohort?.slug ?? "-"} />
-                  <DetailField label="Public Registration" value={cohort?.publicRegistrationEnabled ? "Enabled" : "Off"} />
+                  <DetailField label="Public Form" value={cohort?.publicRegistrationEnabled ? "Open" : "Closed"} />
                 </div>
                 <div className="cohort-overview-details">
                   <OverviewResourceCard label="Description" value={cohort?.description} icon={<ArticleOutlined />} />
