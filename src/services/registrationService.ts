@@ -454,7 +454,6 @@ export async function bulkMoveRegistrationsToCohort(input: { ids: string[]; targ
     }
     journeyResults.push(await planRegistrationJourneys(registration.id, {
       sendPocConfirmation: false,
-      planMilestones: false,
       retryFailed: true,
       participantConfirmationCohortScoped: true,
       participantConfirmationBatchKey: moveConfirmationBatchKey,
