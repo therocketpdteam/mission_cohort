@@ -10,7 +10,7 @@ import {
 } from "@/validators/communication";
 import { logAuditEventAsync } from "./auditService";
 import { generateSessionReminderSchedule, textToEmailHtml } from "@/modules/email";
-import { sendEmail } from "@/services/emailService";
+import { renderTemplate, sendEmail } from "@/services/emailService";
 import { deletePrivateAppFile } from "@/services/storageService";
 import { assertCohortDeliveryAllowed, assertOutboundRecipientsAllowed, getSendGridSetup } from "@/services/integrationSetupService";
 import { getOrganizationInvoiceProfile } from "./appSettingsService";
@@ -1887,6 +1887,208 @@ export async function sendManualCustomEmail(input: {
     communications: results,
     recipientCount: targets.length,
     cohortCount: new Set(targets.map((target) => target.cohortId)).size
+  };
+}
+
+function publishExperienceTestContext(input: {
+  cohort: Record<string, any>;
+  session?: Record<string, any>;
+  recipientEmail: string;
+}) {
+  return {
+    cohort: cohortMergeContext(input.cohort),
+    session: input.session,
+    participant: {
+      firstName: "Gerardo",
+      lastName: "Grosso",
+      fullName: "Gerardo Grosso",
+      email: input.recipientEmail
+    },
+    registration: {
+      primaryContactName: "Gerardo Grosso",
+      primaryContactEmail: input.recipientEmail,
+      participantCount: 1,
+      paymentStatus: "Test",
+      invoiceNumber: "TEST",
+      totalAmount: "$0"
+    },
+    organization: {
+      name: "RocketPD"
+    }
+  };
+}
+
+export async function sendCohortPublishExperienceTest(input: { cohortId: string; recipientEmail: string; createdById: string }) {
+  const cohortId = String(input.cohortId ?? "").trim();
+  const recipientEmail = normalizeEmail(String(input.recipientEmail ?? ""));
+
+  if (!cohortId || !recipientEmail) {
+    throw Object.assign(new Error("cohortId and recipientEmail are required."), { code: "BAD_REQUEST", status: 400 });
+  }
+
+  await assertOutboundRecipientsAllowed("SENDGRID", [recipientEmail]);
+
+  const [cohort, templates] = await Promise.all([
+    prisma.cohort.findUnique({
+      where: { id: cohortId },
+      include: {
+        presenter: true,
+        sessions: { orderBy: { sessionNumber: "asc" } }
+      }
+    }),
+    ensureDefaultCommunicationTemplates()
+  ]);
+
+  if (!cohort) {
+    throw Object.assign(new Error("Cohort not found"), { code: "NOT_FOUND", status: 404 });
+  }
+
+  const templatesByType = new Map(templates.map((template) => [template.type, template]));
+  const templatesByName = new Map(templates.map((template) => [template.name, template]));
+  const firstSession = cohort.sessions[0];
+  type PublishExperienceTestSession = { id: string; sessionNumber: number } & Record<string, any>;
+  const messages: Array<{ template: typeof templates[number]; session?: PublishExperienceTestSession; label: string }> = [];
+
+  function addNamedTemplate(name: string, label: string, session?: PublishExperienceTestSession) {
+    const template = templatesByName.get(name);
+    if (template?.active) {
+      messages.push({ template, session, label });
+    }
+  }
+
+  addNamedTemplate("Participant Registration Confirmation", "Participant registration confirmation");
+  addNamedTemplate("Three Weeks Before Cohort", "Three weeks before cohort", firstSession);
+  addNamedTemplate("One Week Before Cohort", "One week before cohort", firstSession);
+
+  for (const session of cohort.sessions) {
+    for (const templateType of sessionTemplateTypesForSession(session.sessionNumber)) {
+      const template = templatesByType.get(templateType);
+      if (template?.active) {
+        messages.push({
+          template,
+          session,
+          label: `Session ${session.sessionNumber} ${template.name}`
+        });
+      }
+    }
+  }
+
+  if (messages.length === 0) {
+    throw Object.assign(new Error("No active participant-facing templates were found for this cohort."), {
+      code: "BAD_REQUEST",
+      status: 400
+    });
+  }
+
+  const results = [];
+
+  for (const message of messages) {
+    const context = publishExperienceTestContext({ cohort, session: message.session, recipientEmail });
+    const communication = await prisma.cohortCommunication.create({
+      data: {
+        cohortId: cohort.id,
+        sessionId: message.session?.id,
+        templateId: message.template.id,
+        subject: message.template.subject,
+        bodyHtml: message.template.bodyHtml,
+        bodyText: message.template.bodyText,
+        recipientScope: RecipientScope.CUSTOM,
+        recipientEmails: [recipientEmail],
+        createdById: input.createdById,
+        status: CommunicationStatus.SENDING,
+        providerError: "Publish experience test send."
+      }
+    });
+
+    try {
+      const sendResult = await sendEmail({
+        to: recipientEmail,
+        subject: message.template.subject,
+        bodyHtml: message.template.bodyHtml,
+        bodyText: message.template.bodyText ?? undefined,
+        context
+      });
+
+      await prisma.emailEvent.create({
+        data: {
+          communicationId: communication.id,
+          recipientEmail,
+          provider: "sendgrid",
+          providerMessageId: sendResult.providerMessageId,
+          eventType: EmailEventType.SENT,
+          eventPayload: {
+            testSend: "publish_experience",
+            label: message.label
+          }
+        }
+      });
+
+      const sent = await prisma.cohortCommunication.update({
+        where: { id: communication.id },
+        data: {
+          status: CommunicationStatus.SENT,
+          sentAt: new Date(),
+          providerMessageId: sendResult.providerMessageId,
+          providerError: null
+        }
+      });
+
+      results.push({
+        id: sent.id,
+        label: message.label,
+        templateName: message.template.name,
+        templateType: message.template.type,
+        sessionNumber: message.session?.sessionNumber ?? null,
+        status: sent.status,
+        subject: renderTemplate(message.template.subject, context).output,
+        providerMessageId: sendResult.providerMessageId,
+        providerError: null
+      });
+    } catch (error) {
+      await recordFailedEmailEvents(communication.id, [recipientEmail], error);
+      const failed = await prisma.cohortCommunication.update({
+        where: { id: communication.id },
+        data: {
+          status: CommunicationStatus.FAILED,
+          providerError: error instanceof Error ? error.message : "Unknown SendGrid error"
+        }
+      });
+
+      results.push({
+        id: failed.id,
+        label: message.label,
+        templateName: message.template.name,
+        templateType: message.template.type,
+        sessionNumber: message.session?.sessionNumber ?? null,
+        status: failed.status,
+        subject: renderTemplate(message.template.subject, context).output,
+        providerMessageId: null,
+        providerError: failed.providerError
+      });
+    }
+  }
+
+  logAuditEventAsync({
+    entityType: "CohortCommunication",
+    entityId: results.map((result) => result.id).join(","),
+    action: "PUBLISH_EXPERIENCE_TEST_SEND",
+    description: `Publish experience test sent to ${recipientEmail} for ${cohort.title}.`,
+    metadata: {
+      cohortId: cohort.id,
+      recipientEmail,
+      communicationIds: results.map((result) => result.id),
+      messageCount: results.length
+    }
+  });
+
+  return {
+    cohortId: cohort.id,
+    cohortTitle: cohort.title,
+    recipientEmail,
+    messageCount: results.length,
+    sentCount: results.filter((result) => result.status === CommunicationStatus.SENT).length,
+    failedCount: results.filter((result) => result.status === CommunicationStatus.FAILED).length,
+    messages: results
   };
 }
 

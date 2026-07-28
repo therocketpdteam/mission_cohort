@@ -16,6 +16,7 @@ import {
   scheduleCommunicationPlaceholder,
   sendCommunicationToRecipient,
   sendCommunicationPlaceholder,
+  sendCohortPublishExperienceTest,
   sendManualCustomEmail,
   sendManualTemplateToParticipants,
   sendTemplateToParticipant,
@@ -149,6 +150,19 @@ export async function PATCH(request: Request) {
         recipientMode: body.recipientMode,
         subject: body.subject,
         bodyText: body.bodyText,
+        createdById: user.id
+      }));
+    }
+
+    if (body.action === "sendCohortPublishExperienceTest") {
+      if (!body.cohortId || !body.recipientEmail) {
+        return fail("cohortId and recipientEmail are required", "BAD_REQUEST", 400);
+      }
+      const user = await requireUser();
+
+      return ok(await sendCohortPublishExperienceTest({
+        cohortId: body.cohortId,
+        recipientEmail: body.recipientEmail,
         createdById: user.id
       }));
     }
