@@ -416,8 +416,7 @@ Registration summary:
 
 Available documents:
 
-- [Here is your W-9 for your convenience]({{registration.w9Url}})
-- [Here is your invoice]({{registration.invoiceUrl}})
+Your invoice and RocketPD W-9 are attached to this email for your convenience.
 
 If you registered a team and already shared participant information, we are reviewing it and will let you know if we have questions.
 
@@ -609,15 +608,19 @@ export async function ensureDefaultCommunicationTemplates() {
   for (const template of defaultTemplates) {
     const existing = await prisma.communicationTemplate.findFirst({ where: { type: template.type, name: template.name } });
     const shouldRefreshLegacyDefault = Boolean(existing && legacyDefaultBodyTextByName[template.name]?.trim() === existing.bodyText?.trim());
+    const shouldRefreshPocAttachmentCopy = Boolean(
+      existing?.name === "POC Registration Confirmation" &&
+      (existing.bodyText?.includes("{{registration.w9Url}}") || existing.bodyText?.includes("{{registration.invoiceUrl}}"))
+    );
     templates.push(
       existing
         ? await prisma.communicationTemplate.update({
             where: { id: existing.id },
             data: {
               active: existing.active,
-              subject: shouldRefreshLegacyDefault || !existing.subject ? template.subject : existing.subject,
-              bodyHtml: shouldRefreshLegacyDefault || !existing.bodyHtml ? template.bodyHtml : existing.bodyHtml,
-              bodyText: shouldRefreshLegacyDefault || !existing.bodyText ? template.bodyText : existing.bodyText
+              subject: shouldRefreshLegacyDefault || shouldRefreshPocAttachmentCopy || !existing.subject ? template.subject : existing.subject,
+              bodyHtml: shouldRefreshLegacyDefault || shouldRefreshPocAttachmentCopy || !existing.bodyHtml ? template.bodyHtml : existing.bodyHtml,
+              bodyText: shouldRefreshLegacyDefault || shouldRefreshPocAttachmentCopy || !existing.bodyText ? template.bodyText : existing.bodyText
             }
           })
         : await prisma.communicationTemplate.create({ data: { ...template, active: true } })
