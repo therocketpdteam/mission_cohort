@@ -4545,31 +4545,66 @@ h6,
   min-width: 0;
 }
 
-.cohort-overview-details small,
-.cohort-overview-link-field small {
+.cohort-overview-resource-card {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--color-slate-200);
+  border-radius: 10px;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfcff 100%);
+}
+
+.cohort-overview-resource-icon {
+  display: inline-grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--color-blue-100);
+  color: var(--color-primary-700);
+}
+
+.cohort-overview-resource-card small {
+  display: block;
   color: var(--color-slate-500);
   font-size: 0.78rem;
   font-weight: 800;
 }
 
-.cohort-overview-details p,
-.cohort-overview-link-field span,
-.cohort-overview-link-field a {
-  margin: 2px 0 0;
+.cohort-overview-resource-card strong,
+.cohort-overview-resource-card span,
+.cohort-overview-resource-card a {
+  display: block;
+  margin-top: 3px;
   color: var(--color-slate-800);
   font-weight: 700;
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
 
+.cohort-overview-resource-card a {
+  color: var(--color-primary-700);
+  font-weight: 850;
+  text-decoration: none;
+}
+
+.cohort-overview-resource-card a:hover {
+  text-decoration: underline;
+}
+
+.cohort-overview-resource-card a + span {
+  color: var(--color-slate-500);
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+
 .cohort-overview-link-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
-  min-width: 0;
-}
-
-.cohort-overview-link-field {
   min-width: 0;
 }
 

@@ -28,7 +28,7 @@ import {
   Typography
 } from "@/components/ui/primitives";
 import { GridColDef } from "./common";
-import type { CSSProperties, SyntheticEvent } from "react";
+import type { CSSProperties, ReactNode, SyntheticEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { adminApi, uploadAdminFile } from "@/lib/adminApi";
 import { formatProperDisplay, formatRegistrationPaymentStatus, formatRegistrationSource, formatStatusLabel, isCompedRegistration } from "@/lib/formatting";
@@ -116,16 +116,34 @@ function formatScheduleDateRange(sessions: AdminRow[], cohort?: AdminRow | null)
   return start || end ? `${start || "-"} - ${end || "-"}` : "-";
 }
 
-function OverviewLinkField({ label, value }: { label: string; value?: unknown }) {
+function OverviewResourceCard({
+  label,
+  value,
+  icon,
+  linkLabel
+}: {
+  label: string;
+  value?: unknown;
+  icon: ReactNode;
+  linkLabel?: string;
+}) {
   const text = String(value ?? "").trim();
   const isUrl = /^https?:\/\//i.test(text);
 
   return (
-    <div className="cohort-overview-link-field">
-      <small>{label}</small>
-      {text ? (
-        isUrl ? <a href={text} target="_blank" rel="noreferrer">{text}</a> : <span>{text}</span>
-      ) : <span>-</span>}
+    <div className="cohort-overview-resource-card">
+      <span className="cohort-overview-resource-icon">{icon}</span>
+      <div>
+        <small>{label}</small>
+        {text ? (
+          isUrl ? (
+            <>
+              <a href={text} target="_blank" rel="noreferrer">{linkLabel ?? "Open link"}</a>
+              <span>{text}</span>
+            </>
+          ) : <strong>{text}</strong>
+        ) : <span>-</span>}
+      </div>
     </div>
   );
 }
@@ -2622,14 +2640,11 @@ export function CohortDetailClient({ id }: { id: string }) {
                   <DetailField label="Public Registration" value={cohort?.publicRegistrationEnabled ? "Enabled" : "Off"} />
                 </div>
                 <div className="cohort-overview-details">
-                  <div>
-                    <small>Description</small>
-                    <p>{cohort?.description || "-"}</p>
-                  </div>
+                  <OverviewResourceCard label="Description" value={cohort?.description} icon={<ArticleOutlined />} />
                   <div className="cohort-overview-link-grid">
-                    <OverviewLinkField label="Guide Topic" value={cohort?.guideTopic} />
-                    <OverviewLinkField label="Guide Download" value={cohort?.guideUrl} />
-                    <OverviewLinkField label="Podcast YouTube" value={cohort?.podcastUrl} />
+                    <OverviewResourceCard label="Guide Topic" value={cohort?.guideTopic} icon={<ArticleOutlined />} />
+                    <OverviewResourceCard label="Guide Download" value={cohort?.guideUrl} icon={<VisibilityOutlined />} linkLabel="Open guide" />
+                    <OverviewResourceCard label="Podcast YouTube" value={cohort?.podcastUrl} icon={<SendOutlined />} linkLabel="Open podcast" />
                   </div>
                 </div>
                 <div className="action-group" style={{ justifyContent: "flex-start" }}>
