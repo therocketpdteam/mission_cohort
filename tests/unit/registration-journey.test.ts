@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { registrationConfirmationDocumentReadiness } from "../../src/services/registrationDocumentReadiness";
-import { buildRegistrationMilestones, participantConfirmationJourneyKey } from "../../src/services/registrationJourneyService";
+import { buildRegistrationMilestones, participantConfirmationJourneyKey, shouldAutoPrepareRegistrationInvoice } from "../../src/services/registrationJourneyService";
 
 const cohortStart = new Date("2026-08-15T14:00:00.000Z");
 
@@ -85,4 +85,25 @@ test("does not require an invoice for comped registrations", () => {
 
   assert.equal(readiness.ready, true);
   assert.equal(readiness.requiresInvoice, false);
+});
+
+test("auto-prepares invoice PDFs only for paid registrations missing invoice documents", () => {
+  assert.equal(shouldAutoPrepareRegistrationInvoice({
+    paymentMethod: "INVOICE",
+    totalAmount: 1590,
+    invoiceUrl: null,
+    invoiceDrafts: []
+  }), true);
+  assert.equal(shouldAutoPrepareRegistrationInvoice({
+    paymentMethod: "PURCHASE_ORDER",
+    totalAmount: 795,
+    invoiceUrl: null,
+    invoiceDrafts: [{ pdfUrl: "https://example.com/invoice.pdf" }]
+  }), false);
+  assert.equal(shouldAutoPrepareRegistrationInvoice({
+    paymentMethod: "COMPED",
+    totalAmount: 0,
+    invoiceUrl: null,
+    invoiceDrafts: []
+  }), false);
 });

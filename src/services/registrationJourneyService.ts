@@ -1,6 +1,7 @@
 import {
   CohortStatus,
   CommunicationStatus,
+  InvoiceDraftStatus,
   ParticipantStatus,
   RecipientScope,
   RegistrationStatus,
@@ -11,6 +12,7 @@ import { createCalendarInvitePlaceholder } from "./calendarService";
 import { ensureDefaultCommunicationTemplates, getSystemUserId, sendCommunication } from "./communicationService";
 import { getOrganizationInvoiceProfile } from "./appSettingsService";
 import { registrationConfirmationDocumentReadiness } from "./registrationDocumentReadiness";
+import { createInvoiceDraft, generateInvoicePdf } from "./invoiceService";
 
 const journeyTemplateNames = {
   pocConfirmation: "POC Registration Confirmation",
@@ -20,6 +22,22 @@ const journeyTemplateNames = {
 } as const;
 
 type JourneyTemplateName = (typeof journeyTemplateNames)[keyof typeof journeyTemplateNames];
+type RegistrationForPocDocuments = {
+  id: string;
+  cohortId: string;
+  organizationId: string;
+  paymentMethod: string;
+  totalAmount: unknown;
+  w9Url: string | null;
+  invoiceUrl: string | null;
+  invoiceDrafts: Array<{
+    id: string;
+    status?: InvoiceDraftStatus | string | null;
+    invoiceNumber: string | null;
+    pdfFileKey: string | null;
+    pdfUrl: string | null;
+  }>;
+};
 
 export type RegistrationMilestone = {
   key: "three-weeks-before" | "week-before";
@@ -57,6 +75,16 @@ export function participantConfirmationJourneyKey(input: {
   const batchSegment = input.batchKey ? `:batch:${input.batchKey}` : "";
 
   return `${base}${cohortSegment}${batchSegment}`;
+}
+
+export function shouldAutoPrepareRegistrationInvoice(registration: {
+  paymentMethod?: string | null;
+  totalAmount?: unknown;
+  invoiceUrl?: string | null;
+  invoiceDrafts?: Array<{ pdfUrl?: string | null }>;
+}) {
+  const readiness = registrationConfirmationDocumentReadiness(registration);
+  return readiness.requiresInvoice && !readiness.invoiceUrl;
 }
 
 const cancellableJourneyStatuses = [
@@ -200,6 +228,71 @@ async function attachRegistrationDocuments(communicationId: string, registration
   return documents.length;
 }
 
+async function prepareRegistrationConfirmationDocuments(registration: RegistrationForPocDocuments, fallbackW9Url?: string | null) {
+  let readiness = registrationConfirmationDocumentReadiness(registration, fallbackW9Url);
+  if (!shouldAutoPrepareRegistrationInvoice(registration)) {
+    return { registration, readiness };
+  }
+
+  try {
+    const existingInvoice = registration.invoiceDrafts.find((invoice) =>
+      invoice.status !== InvoiceDraftStatus.VOIDED && invoice.status !== InvoiceDraftStatus.CANCELLED
+    );
+    const invoice = existingInvoice ?? await createInvoiceDraft({
+      cohortId: registration.cohortId,
+      registrationId: registration.id,
+      organizationId: registration.organizationId
+    });
+    const generatedInvoice = invoice.pdfFileKey && invoice.pdfUrl ? invoice : await generateInvoicePdf(invoice.id, false);
+    const invoiceDrafts = [
+      {
+        id: generatedInvoice.id,
+        status: generatedInvoice.status,
+        invoiceNumber: generatedInvoice.invoiceNumber,
+        pdfFileKey: generatedInvoice.pdfFileKey,
+        pdfUrl: generatedInvoice.pdfUrl
+      },
+      ...registration.invoiceDrafts.filter((item) => item.id !== generatedInvoice.id)
+    ];
+    const updatedRegistration = {
+      ...registration,
+      invoiceUrl: registration.invoiceUrl || generatedInvoice.pdfUrl || null,
+      w9Url: registration.w9Url || fallbackW9Url || null,
+      invoiceDrafts
+    };
+    readiness = registrationConfirmationDocumentReadiness(updatedRegistration, fallbackW9Url);
+
+    const updateData: {
+      invoiceUrl?: string;
+      w9Url?: string;
+      supportingDocumentStatus?: SupportingDocumentStatus;
+    } = {};
+    if (!registration.invoiceUrl && generatedInvoice.pdfUrl) {
+      updateData.invoiceUrl = generatedInvoice.pdfUrl;
+    }
+    if (!registration.w9Url && fallbackW9Url) {
+      updateData.w9Url = fallbackW9Url;
+    }
+    if (readiness.ready) {
+      updateData.supportingDocumentStatus = SupportingDocumentStatus.READY;
+    }
+    if (Object.keys(updateData).length > 0) {
+      await prisma.registration.update({ where: { id: registration.id }, data: updateData });
+    }
+
+    return { registration: updatedRegistration, readiness };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return {
+      registration,
+      readiness: {
+        ...readiness,
+        reason: `${readiness.reason ?? "POC confirmation held."} Auto invoice PDF generation failed: ${message}`
+      }
+    };
+  }
+}
+
 async function syncFutureCalendarInvites(registration: {
   cohort: { status: CohortStatus; sessions: Array<{ id: string; startTime: Date; calendarEvents: Array<{ provider: string; providerEventId: string | null }> }> };
 }) {
@@ -267,7 +360,10 @@ export async function planRegistrationJourneys(
   const planned = [];
   const immediate = [];
   const pocEmail = normalizeEmail(registration.primaryContactEmail);
-  const pocDocumentReadiness = registrationConfirmationDocumentReadiness(registration, invoiceProfile.w9Url);
+  const {
+    registration: registrationForDocuments,
+    readiness: pocDocumentReadiness
+  } = await prepareRegistrationConfirmationDocuments(registration, invoiceProfile.w9Url);
   const poc = await upsertJourneyCommunication({
     journeyKey: `registration:${registration.id}:poc:${pocEmail}:confirmation`,
     cohortId: registration.cohortId,
@@ -278,15 +374,15 @@ export async function planRegistrationJourneys(
     skippedReason: pocDocumentReadiness.reason ?? undefined,
     retryFailed: options.retryFailed
   });
-  const attachmentCount = await attachRegistrationDocuments(poc.id, registration, invoiceProfile.w9Url);
+  const attachmentCount = await attachRegistrationDocuments(poc.id, registrationForDocuments, invoiceProfile.w9Url);
   planned.push(poc);
   if (options.sendPocConfirmation !== false && pocDocumentReadiness.ready) {
-    if ((!registration.w9Url && pocDocumentReadiness.w9Url) || (!registration.invoiceUrl && pocDocumentReadiness.invoiceUrl)) {
+    if ((!registrationForDocuments.w9Url && pocDocumentReadiness.w9Url) || (!registrationForDocuments.invoiceUrl && pocDocumentReadiness.invoiceUrl)) {
       await prisma.registration.update({
         where: { id: registration.id },
         data: {
-          w9Url: registration.w9Url || pocDocumentReadiness.w9Url || undefined,
-          invoiceUrl: registration.invoiceUrl || pocDocumentReadiness.invoiceUrl || undefined,
+          w9Url: registrationForDocuments.w9Url || pocDocumentReadiness.w9Url || undefined,
+          invoiceUrl: registrationForDocuments.invoiceUrl || pocDocumentReadiness.invoiceUrl || undefined,
           supportingDocumentStatus: SupportingDocumentStatus.READY
         }
       });
