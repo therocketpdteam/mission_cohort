@@ -1154,6 +1154,27 @@ h6,
   background: var(--color-surface-container-lowest);
 }
 
+.mutation-dialog {
+  max-height: calc(100dvh - 40px);
+}
+
+.mutation-dialog-form {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.mutation-dialog-form .ui-modal-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.mutation-dialog-form .ui-modal-footer {
+  flex-shrink: 0;
+}
+
 .ui-chip,
 .status-chip,
 .metadata-pill {

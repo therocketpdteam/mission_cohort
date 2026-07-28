@@ -773,14 +773,14 @@ export function MutationDialog({
   }
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="md">
+    <Dialog open={open} onClose={onClose} maxWidth="md" PaperProps={{ className: "mutation-dialog" }}>
       <DialogTitle>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
           <span>{title}</span>
           <IconButton type="button" onClick={onClose} aria-label="Close dialog"><CloseIcon /></IconButton>
         </div>
       </DialogTitle>
-      <form onSubmit={submit}>
+      <form className="mutation-dialog-form" onSubmit={submit}>
         <DialogContent>
           {submitError && <Alert severity="error">{submitError}</Alert>}
           <div className="ui-grid" style={{ gap: 14, marginTop: 12 }}>
