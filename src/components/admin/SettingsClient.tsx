@@ -96,6 +96,7 @@ const defaultOrganizationInvoiceProfile: AdminRow = {
   taxId: "",
   logoUrl: "",
   logoFileKey: "",
+  w9Url: "",
   paymentInstructions: "Please include the invoice number with payment.",
   footerNote: "In Demand Group, LLC"
 };
@@ -2798,6 +2799,15 @@ export function SettingsClient() {
               </Grid>
               <Grid size={{ xs: 12, md: 8 }}>
                 <TextField fullWidth label="Invoice footer note" value={organizationInvoiceProfile.footerNote ?? ""} onChange={(event) => updateOrganizationInvoiceProfile("footerNote", event.target.value)} />
+              </Grid>
+              <Grid size={{ xs: 12 }}>
+                <TextField
+                  fullWidth
+                  label="RocketPD W-9 URL"
+                  value={organizationInvoiceProfile.w9Url ?? ""}
+                  onChange={(event) => updateOrganizationInvoiceProfile("w9Url", event.target.value)}
+                  helperText="Used as the default W-9 attachment for registration confirmations and invoice packages."
+                />
               </Grid>
               <Grid size={{ xs: 12 }}>
                 <TextField

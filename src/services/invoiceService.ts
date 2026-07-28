@@ -1,4 +1,4 @@
-import { CommunicationStatus, InvoiceDraftStatus, RecipientScope, SyncStatus } from "@prisma/client";
+import { CommunicationStatus, InvoiceDraftStatus, RecipientScope, SupportingDocumentStatus, SyncStatus } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { dateInput, moneyInput, positiveIntInput } from "@/lib/validators";
@@ -477,7 +477,8 @@ export async function sendInvoiceDocument(id: string, receipt = false) {
   const fileName = `${receipt ? "Receipt" : "Invoice"} ${invoice.invoiceNumber ?? invoice.id}.pdf`;
   const fileKey = receipt ? invoice.receiptFileKey : invoice.pdfFileKey;
   const url = receipt ? invoice.receiptUrl : invoice.pdfUrl;
-  const w9Url = receipt ? null : invoice.registration?.w9Url;
+  const invoiceProfile = receipt ? null : await getOrganizationInvoiceProfile();
+  const w9Url = receipt ? null : invoice.registration?.w9Url || invoiceProfile?.w9Url || null;
 
   if (!fileKey || !url) {
     throw Object.assign(new Error(`Generate the ${documentLabel} PDF before sending.`), { code: "BAD_REQUEST", status: 400 });
@@ -546,6 +547,18 @@ export async function sendInvoiceDocument(id: string, receipt = false) {
     include: invoiceInclude()
   });
 
+  if (!receipt && invoice.registrationId) {
+    await prisma.registration.update({
+      where: { id: invoice.registrationId },
+      data: {
+        invoiceUrl: url,
+        w9Url: w9Url || undefined,
+        supportingDocumentStatus: w9Url ? SupportingDocumentStatus.SENT : SupportingDocumentStatus.READY,
+        confirmationDocsSentAt: new Date()
+      }
+    });
+  }
+
   return { invoice: updatedInvoice, communication: sent, recipients };
 }
 
@@ -565,6 +578,15 @@ export async function prepareAndSendRegistrationInvoicePackage(input: { registra
 
   if (registration.archivedAt) {
     throw Object.assign(new Error("Archived registrations cannot receive invoice packages."), { code: "BAD_REQUEST", status: 400 });
+  }
+
+  const invoiceProfile = await getOrganizationInvoiceProfile();
+
+  if (!registration.w9Url && !invoiceProfile.w9Url) {
+    throw Object.assign(new Error("Add the RocketPD W-9 URL in Organization Settings before sending registration invoice packages."), {
+      code: "BAD_REQUEST",
+      status: 400
+    });
   }
 
   let invoice = input.invoiceId
@@ -604,7 +626,7 @@ export async function prepareAndSendRegistrationInvoicePackage(input: { registra
     recipients: sent.recipients,
     documents: {
       invoicePdfUrl: sent.invoice.pdfUrl,
-      w9Attached: Boolean(registration.w9Url)
+      w9Attached: Boolean(registration.w9Url || invoiceProfile.w9Url)
     }
   };
 }

@@ -13,6 +13,8 @@ import { generateSessionReminderSchedule, textToEmailHtml } from "@/modules/emai
 import { sendEmail } from "@/services/emailService";
 import { deletePrivateAppFile } from "@/services/storageService";
 import { assertCohortDeliveryAllowed, getSendGridSetup } from "@/services/integrationSetupService";
+import { getOrganizationInvoiceProfile } from "./appSettingsService";
+import { registrationConfirmationDocumentReadiness } from "./registrationDocumentReadiness";
 
 type DefaultTemplate = {
   type: TemplateType;
@@ -1089,6 +1091,49 @@ async function resolveParticipantCommunicationTargets(cohortId: string) {
   return targets;
 }
 
+async function preflightPocRegistrationConfirmation(communication: {
+  id: string;
+  template: { name: string } | null;
+  registration: any;
+}) {
+  if (communication.template?.name !== "POC Registration Confirmation" || !communication.registration) {
+    return null;
+  }
+
+  const invoiceProfile = await getOrganizationInvoiceProfile();
+  const readiness = registrationConfirmationDocumentReadiness(communication.registration, invoiceProfile.w9Url);
+
+  if (!readiness.ready) {
+    await prisma.cohortCommunication.update({
+      where: { id: communication.id },
+      data: {
+        status: CommunicationStatus.DRAFT,
+        providerError: readiness.reason
+      }
+    });
+    throw Object.assign(new Error(readiness.reason ?? "POC confirmation documents are not ready."), {
+      code: "BAD_REQUEST",
+      status: 400
+    });
+  }
+
+  if ((!communication.registration.w9Url && readiness.w9Url) || (!communication.registration.invoiceUrl && readiness.invoiceUrl)) {
+    await prisma.registration.update({
+      where: { id: communication.registration.id },
+      data: {
+        w9Url: communication.registration.w9Url || readiness.w9Url || undefined,
+        invoiceUrl: communication.registration.invoiceUrl || readiness.invoiceUrl || undefined
+      }
+    });
+  }
+
+  return {
+    ...communication.registration,
+    w9Url: communication.registration.w9Url || readiness.w9Url,
+    invoiceUrl: communication.registration.invoiceUrl || readiness.invoiceUrl
+  };
+}
+
 export async function sendCommunication(id: string, options?: { recipients?: string[]; context?: Parameters<typeof sendEmail>[0]["context"] }) {
   const communication = await prisma.cohortCommunication.findUnique({
     where: { id },
@@ -1106,6 +1151,8 @@ export async function sendCommunication(id: string, options?: { recipients?: str
   if (!communication) {
     throw Object.assign(new Error("Communication not found"), { code: "NOT_FOUND", status: 404 });
   }
+
+  const registrationContext = await preflightPocRegistrationConfirmation(communication);
 
   await prisma.cohortCommunication.update({
     where: { id },
@@ -1136,8 +1183,8 @@ export async function sendCommunication(id: string, options?: { recipients?: str
       },
       session: communication.session ?? undefined,
       participant: communication.participant ?? undefined,
-      registration: communication.registration ?? undefined,
-      organization: communication.registration?.organization ?? undefined
+      registration: registrationContext ?? communication.registration ?? undefined,
+      organization: registrationContext?.organization ?? communication.registration?.organization ?? undefined
     };
 
     if (!options?.recipients && !options?.context && communication.recipientScope === RecipientScope.ALL_PARTICIPANTS) {

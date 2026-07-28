@@ -3,11 +3,14 @@ import {
   CommunicationStatus,
   ParticipantStatus,
   RecipientScope,
-  RegistrationStatus
+  RegistrationStatus,
+  SupportingDocumentStatus
 } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { createCalendarInvitePlaceholder } from "./calendarService";
 import { ensureDefaultCommunicationTemplates, getSystemUserId, sendCommunication } from "./communicationService";
+import { getOrganizationInvoiceProfile } from "./appSettingsService";
+import { registrationConfirmationDocumentReadiness } from "./registrationDocumentReadiness";
 
 const journeyTemplateNames = {
   pocConfirmation: "POC Registration Confirmation",
@@ -144,11 +147,12 @@ async function attachRegistrationDocuments(communicationId: string, registration
     pdfFileKey: string | null;
     pdfUrl: string | null;
   }>;
-}) {
+}, fallbackW9Url?: string | null) {
   const invoice = registration.invoiceDrafts.find((item) => item.pdfFileKey && item.pdfUrl);
+  const w9Url = registration.w9Url || fallbackW9Url || null;
   const documents = [
-    registration.w9Url
-      ? { fileName: "RocketPD W-9", fileKey: `registration/${registration.id}/w9`, url: registration.w9Url, provider: "external" }
+    w9Url
+      ? { fileName: "RocketPD W-9.pdf", fileKey: `registration/${registration.id}/w9`, url: w9Url, provider: "external" }
       : null,
     invoice
       ? {
@@ -229,6 +233,7 @@ export async function planRegistrationJourneys(
   }
 
   const templates = await ensureDefaultCommunicationTemplates();
+  const invoiceProfile = await getOrganizationInvoiceProfile();
   const byName = new Map(templates.map((template) => [template.name, template]));
   const template = (name: JourneyTemplateName) => {
     const found = byName.get(name);
@@ -240,6 +245,7 @@ export async function planRegistrationJourneys(
   const planned = [];
   const immediate = [];
   const pocEmail = normalizeEmail(registration.primaryContactEmail);
+  const pocDocumentReadiness = registrationConfirmationDocumentReadiness(registration, invoiceProfile.w9Url);
   const poc = await upsertJourneyCommunication({
     journeyKey: `registration:${registration.id}:poc:${pocEmail}:confirmation`,
     cohortId: registration.cohortId,
@@ -247,11 +253,22 @@ export async function planRegistrationJourneys(
     template: template(journeyTemplateNames.pocConfirmation),
     recipientEmail: pocEmail,
     status: CommunicationStatus.DRAFT,
+    skippedReason: pocDocumentReadiness.reason ?? undefined,
     retryFailed: options.retryFailed
   });
-  const attachmentCount = await attachRegistrationDocuments(poc.id, registration);
+  const attachmentCount = await attachRegistrationDocuments(poc.id, registration, invoiceProfile.w9Url);
   planned.push(poc);
-  if (options.sendPocConfirmation !== false) {
+  if (options.sendPocConfirmation !== false && pocDocumentReadiness.ready) {
+    if ((!registration.w9Url && pocDocumentReadiness.w9Url) || (!registration.invoiceUrl && pocDocumentReadiness.invoiceUrl)) {
+      await prisma.registration.update({
+        where: { id: registration.id },
+        data: {
+          w9Url: registration.w9Url || pocDocumentReadiness.w9Url || undefined,
+          invoiceUrl: registration.invoiceUrl || pocDocumentReadiness.invoiceUrl || undefined,
+          supportingDocumentStatus: SupportingDocumentStatus.READY
+        }
+      });
+    }
     immediate.push(poc);
   }
 
@@ -312,7 +329,13 @@ export async function planRegistrationJourneys(
   }
 
   if (sent.some((communication) => communication.id === poc.id) && attachmentCount > 0) {
-    await prisma.registration.update({ where: { id: registration.id }, data: { confirmationDocsSentAt: new Date() } });
+    await prisma.registration.update({
+      where: { id: registration.id },
+      data: {
+        confirmationDocsSentAt: new Date(),
+        supportingDocumentStatus: SupportingDocumentStatus.SENT
+      }
+    });
   }
 
   let calendar: Awaited<ReturnType<typeof syncFutureCalendarInvites>> = {

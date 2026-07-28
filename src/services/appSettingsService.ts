@@ -18,6 +18,7 @@ export const organizationInvoiceProfileSchema = z.object({
   taxId: z.string().trim().optional().default(""),
   logoUrl: z.string().trim().optional().default(""),
   logoFileKey: z.string().trim().optional().default(""),
+  w9Url: z.string().trim().optional().default(""),
   paymentInstructions: z.string().trim().optional().default("Please include the invoice number with payment."),
   footerNote: z.string().trim().optional().default("In Demand Group, LLC")
 });
