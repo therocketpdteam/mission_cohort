@@ -211,12 +211,12 @@ The RocketPD Team`
   defaultEmailTemplate({
     type: TemplateType.WEEK_BEFORE_REMINDER,
     name: "1 Week Before Session",
-    subject: "One week reminder: {{session.title}}",
+    subject: "One week reminder: {{cohort.title}}",
     bodyText: `Hello {{participant.firstName}},
 
-You’re receiving this because you are registered for **{{session.title}}** in RocketPD’s **{{cohort.title}}** cohort with {{cohort.presenterName}}.
+You’re receiving this because you are registered for RocketPD’s **{{cohort.title}}** cohort with {{cohort.presenterName}}.
 
-The session is coming up on {{session.startTime}}.
+Your next live session is **{{session.title}}**, and it is coming up on {{session.startTime}}.
 
 [Join the session]({{session.meetingUrl}})
 
@@ -237,7 +237,9 @@ The RocketPD Team`
     subject: "Reminder: {{cohort.title}} session is live tomorrow",
     bodyText: `Hello {{participant.firstName}},
 
-This is a quick reminder that **{{session.title}}** for **{{cohort.title}}**, with {{cohort.presenterName}}, is tomorrow at {{session.startTime}}.
+This is a quick reminder that tomorrow’s **{{cohort.title}}** cohort session with {{cohort.presenterName}} is **{{session.title}}**.
+
+The session begins at {{session.startTime}}.
 
 Please see your calendar invitation or use the link below to sign in. The meeting room will be open 10 minutes before the session begins.
 
@@ -578,6 +580,13 @@ const legacyDefaultBodyTextByName: Record<string, string> = {
   "Registration Changes Summary": "Hello {{registration.primaryContactName}}, the requested registration updates have been applied for {{cohort.title}}."
 };
 
+const defaultCopyRefreshMatchers: Record<string, (bodyText: string) => boolean> = {
+  "1 Week Before Session": (bodyText) =>
+    bodyText.includes("You’re receiving this because you are registered for **{{session.title}}** in RocketPD’s **{{cohort.title}}** cohort"),
+  "24 Hours Before Session": (bodyText) =>
+    bodyText.includes("This is a quick reminder that **{{session.title}}** for **{{cohort.title}}**, with {{cohort.presenterName}}, is tomorrow")
+};
+
 const sessionTemplateTypes = [
   TemplateType.WEEK_BEFORE_REMINDER,
   TemplateType.DAY_BEFORE_REMINDER,
@@ -614,23 +623,46 @@ export async function ensureDefaultCommunicationTemplates() {
   for (const template of defaultTemplates) {
     const existing = await prisma.communicationTemplate.findFirst({ where: { type: template.type, name: template.name } });
     const shouldRefreshLegacyDefault = Boolean(existing && legacyDefaultBodyTextByName[template.name]?.trim() === existing.bodyText?.trim());
+    const shouldRefreshDefaultCopy = Boolean(existing && defaultCopyRefreshMatchers[template.name]?.(existing.bodyText?.trim() ?? ""));
     const shouldRefreshPocAttachmentCopy = Boolean(
       existing?.name === "POC Registration Confirmation" &&
       (existing.bodyText?.includes("{{registration.w9Url}}") || existing.bodyText?.includes("{{registration.invoiceUrl}}"))
     );
-    templates.push(
-      existing
-        ? await prisma.communicationTemplate.update({
-            where: { id: existing.id },
-            data: {
-              active: existing.active,
-              subject: shouldRefreshLegacyDefault || shouldRefreshPocAttachmentCopy || !existing.subject ? template.subject : existing.subject,
-              bodyHtml: shouldRefreshLegacyDefault || shouldRefreshPocAttachmentCopy || !existing.bodyHtml ? template.bodyHtml : existing.bodyHtml,
-              bodyText: shouldRefreshLegacyDefault || shouldRefreshPocAttachmentCopy || !existing.bodyText ? template.bodyText : existing.bodyText
-            }
-          })
-        : await prisma.communicationTemplate.create({ data: { ...template, active: true } })
-    );
+    const shouldRefreshExisting = shouldRefreshLegacyDefault || shouldRefreshDefaultCopy || shouldRefreshPocAttachmentCopy;
+
+    if (existing) {
+      const updated = await prisma.communicationTemplate.update({
+        where: { id: existing.id },
+        data: {
+          active: existing.active,
+          subject: shouldRefreshExisting || !existing.subject ? template.subject : existing.subject,
+          bodyHtml: shouldRefreshExisting || !existing.bodyHtml ? template.bodyHtml : existing.bodyHtml,
+          bodyText: shouldRefreshExisting || !existing.bodyText ? template.bodyText : existing.bodyText
+        }
+      });
+
+      if (shouldRefreshExisting && existing.bodyText) {
+        await prisma.cohortCommunication.updateMany({
+          where: {
+            templateId: existing.id,
+            sentAt: null,
+            status: { in: [CommunicationStatus.DRAFT, CommunicationStatus.SCHEDULED, CommunicationStatus.FAILED] },
+            bodyText: existing.bodyText
+          },
+          data: {
+            subject: template.subject,
+            bodyHtml: template.bodyHtml,
+            bodyText: template.bodyText,
+            providerError: null
+          }
+        });
+      }
+
+      templates.push(updated);
+      continue;
+    }
+
+    templates.push(await prisma.communicationTemplate.create({ data: { ...template, active: true } }));
   }
 
   return templates;
