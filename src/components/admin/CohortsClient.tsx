@@ -54,6 +54,7 @@ const editFields = (presenters: AdminRow[]): FieldConfig[] => [
   { name: "title", label: "Cohort title", required: true },
   { name: "shortName", label: "Short name" },
   { name: "slug", label: "Slug", required: true },
+  { name: "description", label: "Cohort invoice/public description", type: "textarea" },
   { name: "thumbnailUrl", label: "Cohort thumbnail", type: "image" },
   {
     name: "presenterId",
@@ -227,6 +228,7 @@ function CreateCohortWizard({
   const [title, setTitle] = useState("");
   const [shortName, setShortName] = useState("");
   const [slug, setSlug] = useState("");
+  const [description, setDescription] = useState("");
   const [thumbnailUrl, setThumbnailUrl] = useState("");
   const [slugTouched, setSlugTouched] = useState(false);
   const [presenter, setPresenter] = useState<AdminRow | null>(null);
@@ -260,6 +262,7 @@ function CreateCohortWizard({
       setTitle("");
       setShortName("");
       setSlug("");
+      setDescription("");
       setThumbnailUrl("");
       setSlugTouched(false);
       setPresenter(null);
@@ -282,6 +285,7 @@ function CreateCohortWizard({
       setTitle(duplicateSource.title ?? "");
       setShortName(displayShortName(duplicateSource.shortName));
       setSlug(duplicateSlugForYear(duplicateSource.title ?? "cohort", nextDuplicateYear(duplicateSource)));
+      setDescription(duplicateSource.description ?? "");
       setThumbnailUrl(duplicateSource.thumbnailUrl ?? "");
       setSlugTouched(false);
       setPresenter(sourcePresenter);
@@ -454,7 +458,7 @@ function CreateCohortWizard({
           title,
           shortName,
           slug,
-          description: duplicateSource?.description || undefined,
+          description: description.trim() || undefined,
           presenterId: presenter?.id,
           startDate: combineDateTime(firstSession.date, firstSession.startTime, firstSession.timezone),
           endDate: combineDateTime(lastSession.date, lastSession.endTime, lastSession.timezone),
@@ -519,6 +523,17 @@ function CreateCohortWizard({
                 value={slug}
                 onChange={(event) => { setSlugTouched(true); setSlug(slugify(event.target.value)); }}
                 required
+              />
+            </Grid>
+            <Grid size={{ xs: 12 }}>
+              <TextField
+                fullWidth
+                multiline
+                minRows={3}
+                label="Cohort invoice/public description"
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+                helperText="This prints under the cohort name on generated invoices."
               />
             </Grid>
             <Grid size={{ xs: 12 }}>

@@ -71,10 +71,47 @@ function wrapText(text: string, maxCharacters: number) {
   return lines.length ? lines : [""];
 }
 
-function invoiceDescriptionParts(description: string) {
-  const [title, ...rest] = description.split(" - ");
+export function invoiceDescriptionParts(description: string, cohortTitle?: string | null, cohortDescription?: string | null) {
+  const cleanDescription = description.trim();
+  const cleanCohortTitle = String(cohortTitle ?? "").trim();
+  const cleanCohortDescription = String(cohortDescription ?? "").trim();
+  const genericSeatDescriptions = new Set([
+    "cohort registration seats",
+    "rocketpd cohort seats",
+    "rocketpd cohort registration seats"
+  ]);
+
+  if (cleanCohortTitle && genericSeatDescriptions.has(cleanDescription.toLowerCase())) {
+    return {
+      title: cleanCohortTitle,
+      detail: cleanCohortDescription
+    };
+  }
+
+  if (cleanCohortTitle && cleanDescription === cleanCohortTitle) {
+    return {
+      title: cleanCohortTitle,
+      detail: cleanCohortDescription
+    };
+  }
+
+  if (cleanCohortTitle && cleanDescription.startsWith(`${cleanCohortTitle} - `)) {
+    return {
+      title: cleanCohortTitle,
+      detail: cleanCohortDescription || cleanDescription.slice(cleanCohortTitle.length + 3).trim()
+    };
+  }
+
+  if (cleanCohortDescription && cleanDescription.endsWith(` - ${cleanCohortDescription}`)) {
+    return {
+      title: cleanDescription.slice(0, -cleanCohortDescription.length - 3).trim(),
+      detail: cleanCohortDescription
+    };
+  }
+
+  const [title, ...rest] = cleanDescription.split(" - ");
   return {
-    title: title?.trim() || description,
+    title: title?.trim() || cleanDescription,
     detail: rest.join(" - ").trim()
   };
 }
@@ -389,13 +426,18 @@ export function buildInvoicePdf(input: InvoicePdfInput) {
 
   let y = 388;
   input.lineItems.slice(0, 8).forEach((item, index) => {
-    const { title: itemTitle, detail } = invoiceDescriptionParts(item.description);
-    const detailLines = wrapText(detail || input.cohortDescription || "", 48).slice(0, 5);
+    const { title: itemTitle, detail } = invoiceDescriptionParts(item.description, input.cohortTitle, input.cohortDescription);
+    const titleLines = wrapText(itemTitle, 48).slice(0, 3);
+    const detailLines = wrapText(detail, 54).slice(0, 5);
+    const detailStartY = y - titleLines.length * 15 - 9;
+    const rowHeight = Math.max(104, titleLines.length * 15 + (detailLines.length ? 13 + detailLines.length * 14 : 0) + 28);
 
     content.push(pdfText(`ITEM ${index + 1}`, 44, y, { size: 9, color: ink }));
-    content.push(pdfText(wrapText(itemTitle, 45)[0] ?? itemTitle, 112, y, { size: 10, font: "F2", color: ink }));
+    titleLines.forEach((line, lineIndex) => {
+      content.push(pdfText(line, 112, y - lineIndex * 15, { size: 10, font: "F2", color: ink }));
+    });
     detailLines.forEach((line, lineIndex) => {
-      content.push(pdfText(line, 112, y - 21 - lineIndex * 15, { size: 9, color: muted }));
+      content.push(pdfText(line, 112, detailStartY - lineIndex * 14, { size: 9, color: muted }));
     });
     content.push(pdfText(String(item.quantity), quantityX, y, { size: 10, color: ink, align: "right" }));
     content.push(pdfText(item.unitAmount, priceX, y, { size: 10, color: ink, align: "right" }));
@@ -403,9 +445,9 @@ export function buildInvoicePdf(input: InvoicePdfInput) {
     content.push(pdfText(item.totalAmount, amountX, y, { size: 10, font: "F2", color: ink, align: "right" }));
 
     if (index < input.lineItems.length - 1) {
-      content.push(strokeLine(44, y - 90, 568, y - 90, [226, 232, 240]));
+      content.push(strokeLine(44, y - rowHeight + 14, 568, y - rowHeight + 14, [226, 232, 240]));
     }
-    y -= 104;
+    y -= rowHeight;
   });
 
   if (isReceipt) {

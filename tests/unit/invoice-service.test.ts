@@ -7,6 +7,7 @@ import {
   presenterInvoiceCode,
   shouldInvalidateInvoiceDocuments
 } from "../../src/services/invoiceService";
+import { invoiceDescriptionParts } from "../../src/services/pdfService";
 
 test("printable invoice edits invalidate generated documents", () => {
   assert.equal(shouldInvalidateInvoiceDocuments({ lineItems: [{ description: "Seat", quantity: 1, unitAmount: 795 }] }), true);
@@ -32,4 +33,24 @@ test("formats invoice numbers with presenter code session year and running seque
   assert.equal(nextInvoiceSequence([]), 355);
   assert.equal(nextInvoiceSequence(["KM-2026-355", "PL-2026-356", "legacy-100"]), 357);
   assert.equal(formatInvoiceNumber({ presenterCode: "KM", year: 2026, sequence: 355 }), "KM-2026-355");
+});
+
+test("prints cohort title and description as separate invoice line text", () => {
+  assert.deepEqual(invoiceDescriptionParts(
+    "RocketPD cohort seats",
+    "Learning Cohort - Truly Effective Teacher Supervision, Coaching, and Evaluation",
+    "Join Kim Marshall for a year of structured learning."
+  ), {
+    title: "Learning Cohort - Truly Effective Teacher Supervision, Coaching, and Evaluation",
+    detail: "Join Kim Marshall for a year of structured learning."
+  });
+
+  assert.deepEqual(invoiceDescriptionParts(
+    "Learning Cohort - Truly Effective Teacher Supervision, Coaching, and Evaluation - Older copy",
+    "Learning Cohort - Truly Effective Teacher Supervision, Coaching, and Evaluation",
+    "Updated cohort copy."
+  ), {
+    title: "Learning Cohort - Truly Effective Teacher Supervision, Coaching, and Evaluation",
+    detail: "Updated cohort copy."
+  });
 });
