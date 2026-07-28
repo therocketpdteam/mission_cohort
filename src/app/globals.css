@@ -4902,12 +4902,12 @@ h6,
 
 .readiness-metric-grid {
   grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 12px;
+  gap: 10px;
 }
 
 .readiness-metric-card {
-  min-height: 112px;
-  padding: 10px;
+  min-height: 104px;
+  padding: 10px 8px;
   border-color: color-mix(in srgb, var(--color-primary-fixed-dim) 54%, var(--color-outline-variant));
   border-radius: 12px;
 }
@@ -4924,8 +4924,8 @@ h6,
   display: grid;
   place-items: center;
   flex: 0 0 auto;
-  width: 36px;
-  height: 36px;
+  width: 34px;
+  height: 34px;
   border-radius: 10px;
 }
 
@@ -4949,8 +4949,9 @@ h6,
 
 .readiness-metric-card span {
   color: var(--color-on-surface);
-  font-size: 0.95rem;
+  font-size: 0.86rem;
   font-weight: 800;
+  line-height: 1.22;
 }
 
 .readiness-row > div,
@@ -4976,12 +4977,6 @@ h6,
   justify-content: space-between;
   border-top: 1px solid var(--color-slate-200);
   padding-top: 10px;
-}
-
-@media (max-width: 1500px) {
-  .readiness-metric-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
 }
 
 @media (max-width: 1180px) {
