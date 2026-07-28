@@ -15,14 +15,14 @@ import { registrationConfirmationDocumentReadiness } from "./registrationDocumen
 const journeyTemplateNames = {
   pocConfirmation: "POC Registration Confirmation",
   participantConfirmation: "Participant Registration Confirmation",
-  monthBefore: "One Month Before Cohort",
+  threeWeeksBefore: "Three Weeks Before Cohort",
   weekBefore: "One Week Before Cohort"
 } as const;
 
 type JourneyTemplateName = (typeof journeyTemplateNames)[keyof typeof journeyTemplateNames];
 
 export type RegistrationMilestone = {
-  key: "month-before" | "week-before";
+  key: "three-weeks-before" | "week-before";
   templateName: JourneyTemplateName;
   scheduledFor: Date;
   eligible: boolean;
@@ -32,9 +32,9 @@ export function buildRegistrationMilestones(firstSessionStart: Date | string, no
   const start = new Date(firstSessionStart);
   const rows = [
     {
-      key: "month-before" as const,
-      templateName: journeyTemplateNames.monthBefore,
-      scheduledFor: new Date(start.getTime() - 30 * 24 * 60 * 60 * 1000)
+      key: "three-weeks-before" as const,
+      templateName: journeyTemplateNames.threeWeeksBefore,
+      scheduledFor: new Date(start.getTime() - 21 * 24 * 60 * 60 * 1000)
     },
     {
       key: "week-before" as const,
@@ -299,6 +299,20 @@ export async function planRegistrationJourneys(
   const targetParticipantEmails = options.participantEmails
     ? new Set(options.participantEmails.map(normalizeEmail))
     : null;
+
+  if (milestones.length > 0) {
+    await prisma.cohortCommunication.updateMany({
+      where: {
+        registrationId: registration.id,
+        journeyKey: { endsWith: ":month-before" },
+        status: { in: cancellableJourneyStatuses }
+      },
+      data: {
+        status: CommunicationStatus.CANCELLED,
+        providerError: "Cancelled because the cohort prep journey now uses the three-week milestone."
+      }
+    });
+  }
 
   for (const participant of registration.participants) {
     const email = normalizeEmail(participant.email);

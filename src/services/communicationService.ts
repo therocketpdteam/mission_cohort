@@ -93,6 +93,9 @@ function cohortMergeContext(cohort: Record<string, any> | undefined) {
     ...cohort,
     title: cohort?.title,
     description: cohort?.description,
+    guideTopic: cohort?.guideTopic,
+    guideUrl: cohort?.guideUrl,
+    podcastUrl: cohort?.podcastUrl,
     startDate: cohort?.startDate,
     presenterName: [presenter.firstName, presenter.lastName].filter(Boolean).join(" "),
     presenterFirstName: presenter.firstName,
@@ -453,7 +456,7 @@ The RocketPD Team`
   }),
   defaultEmailTemplate({
     type: TemplateType.CUSTOM,
-    name: "One Month Before Cohort",
+    name: "Three Weeks Before Cohort",
     subject: "Getting ready for {{cohort.title}} with {{cohort.presenterName}}",
     bodyText: `Hello {{participant.firstName}},
 
@@ -461,17 +464,19 @@ Thank you again for registering for **{{cohort.title}}** with {{cohort.presenter
 
 As a reminder, your first session starts on {{session.startTime}}.
 
-You will receive calendar invitations with links to access each session, along with reminder emails before each session.
+You will receive a calendar invitation with a link to access the session and reminder email at least one week prior to the event. You will receive additional calendar invitations and reminder emails for each subsequent session.
 
-Want to start your learning early? Here are three simple steps:
+Want to start your learning early?
 
-- Review the cohort description and goals.
-- Watch for any RocketPD resources shared before kickoff.
-- Make sure the calendar invitations are visible on your calendar.
+Here are three steps you can take to prepare for your cohort experience:
 
-Expect more information and resources from us one week before the first live cohort session.
+1. [Download our free guide on {{cohort.guideTopic}}]({{cohort.guideUrl}}).
+2. [{{cohort.presenterName}} on The RocketPD Podcast]({{cohort.podcastUrl}}).
+3. Set up your profile on the RocketPD Learning Portal - this is where you’ll access related recordings and resources during the cohort.
 
-If you have questions about registration, billing, the schedule, content, or the learning experience, contact us at info@rocketpd.com.
+Expect more information and resources from us one week prior to the first live cohort session.
+
+In the meantime, should you have any questions about your registration, billing, the schedule, or anything else regarding the content, or your learning experience, don’t hesitate to reach us at info@rocketpd.com.
 
 The RocketPD Team`
   }),
@@ -567,6 +572,7 @@ const legacyDefaultBodyTextByName: Record<string, string> = {
   "Session Updated": "{{session.title}} for {{cohort.title}} has been updated. The session is now scheduled for {{session.startTime}}. Your Google Calendar invitation has also been updated. Please contact the RocketPD team if you have any questions.",
   "POC Registration Confirmation": "Hello {{registration.primaryContactName}}, we received the registration for {{organization.name}} in {{cohort.title}}. Available registration documents are attached below.",
   "Participant Registration Confirmation": "Hello {{participant.firstName}}, you are registered for {{cohort.title}}. You will receive calendar invitations and future session reminders at this email address.",
+  "Three Weeks Before Cohort": "Hello {{participant.firstName}}, {{cohort.title}} begins in about three weeks. Prepare with {{cohort.guideTopic}}, {{cohort.guideUrl}}, and {{cohort.podcastUrl}}.",
   "One Month Before Cohort": "Hello {{participant.firstName}}, {{cohort.title}} begins in about one month. Your calendar invitations contain the latest session details.",
   "One Week Before Cohort": "Hello {{participant.firstName}}, {{cohort.title}} begins in one week. Please review your calendar invitations for the latest session details.",
   "Registration Changes Summary": "Hello {{registration.primaryContactName}}, the requested registration updates have been applied for {{cohort.title}}."

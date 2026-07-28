@@ -383,6 +383,9 @@ model Cohort {
   shortName                 String?
   slug                      String                 @unique
   description               String?
+  guideTopic                String?
+  guideUrl                  String?
+  podcastUrl                String?
   presenterId               String
   status                    CohortStatus           @default(DRAFT)
   startDate                 DateTime

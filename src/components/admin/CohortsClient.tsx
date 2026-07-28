@@ -55,6 +55,9 @@ const editFields = (presenters: AdminRow[]): FieldConfig[] => [
   { name: "shortName", label: "Short name" },
   { name: "slug", label: "Slug", required: true },
   { name: "description", label: "Cohort invoice/public description", type: "textarea" },
+  { name: "guideTopic", label: "Guide topic" },
+  { name: "guideUrl", label: "Guide download URL" },
+  { name: "podcastUrl", label: "Podcast YouTube URL" },
   { name: "thumbnailUrl", label: "Cohort thumbnail", type: "image" },
   {
     name: "presenterId",
@@ -229,6 +232,9 @@ function CreateCohortWizard({
   const [shortName, setShortName] = useState("");
   const [slug, setSlug] = useState("");
   const [description, setDescription] = useState("");
+  const [guideTopic, setGuideTopic] = useState("");
+  const [guideUrl, setGuideUrl] = useState("");
+  const [podcastUrl, setPodcastUrl] = useState("");
   const [thumbnailUrl, setThumbnailUrl] = useState("");
   const [slugTouched, setSlugTouched] = useState(false);
   const [presenter, setPresenter] = useState<AdminRow | null>(null);
@@ -263,6 +269,9 @@ function CreateCohortWizard({
       setShortName("");
       setSlug("");
       setDescription("");
+      setGuideTopic("");
+      setGuideUrl("");
+      setPodcastUrl("");
       setThumbnailUrl("");
       setSlugTouched(false);
       setPresenter(null);
@@ -286,6 +295,9 @@ function CreateCohortWizard({
       setShortName(displayShortName(duplicateSource.shortName));
       setSlug(duplicateSlugForYear(duplicateSource.title ?? "cohort", nextDuplicateYear(duplicateSource)));
       setDescription(duplicateSource.description ?? "");
+      setGuideTopic(duplicateSource.guideTopic ?? "");
+      setGuideUrl(duplicateSource.guideUrl ?? "");
+      setPodcastUrl(duplicateSource.podcastUrl ?? "");
       setThumbnailUrl(duplicateSource.thumbnailUrl ?? "");
       setSlugTouched(false);
       setPresenter(sourcePresenter);
@@ -459,6 +471,9 @@ function CreateCohortWizard({
           shortName,
           slug,
           description: description.trim() || undefined,
+          guideTopic: guideTopic.trim() || undefined,
+          guideUrl: guideUrl.trim() || undefined,
+          podcastUrl: podcastUrl.trim() || undefined,
           presenterId: presenter?.id,
           startDate: combineDateTime(firstSession.date, firstSession.startTime, firstSession.timezone),
           endDate: combineDateTime(lastSession.date, lastSession.endTime, lastSession.timezone),
@@ -534,6 +549,31 @@ function CreateCohortWizard({
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
                 helperText="This prints under the cohort name on generated invoices."
+              />
+            </Grid>
+            <Grid size={{ xs: 12, md: 4 }}>
+              <TextField
+                fullWidth
+                label="Guide topic"
+                value={guideTopic}
+                onChange={(event) => setGuideTopic(event.target.value)}
+                placeholder="Building thinking classrooms"
+              />
+            </Grid>
+            <Grid size={{ xs: 12, md: 4 }}>
+              <TextField
+                fullWidth
+                label="Guide download URL"
+                value={guideUrl}
+                onChange={(event) => setGuideUrl(event.target.value)}
+              />
+            </Grid>
+            <Grid size={{ xs: 12, md: 4 }}>
+              <TextField
+                fullWidth
+                label="Podcast YouTube URL"
+                value={podcastUrl}
+                onChange={(event) => setPodcastUrl(event.target.value)}
               />
             </Grid>
             <Grid size={{ xs: 12 }}>

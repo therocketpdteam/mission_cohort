@@ -313,6 +313,14 @@ const patches = [
     `
   },
   {
+    name: "cohort resource links",
+    sql: `
+      ALTER TABLE "Cohort" ADD COLUMN IF NOT EXISTS "guideTopic" TEXT;
+      ALTER TABLE "Cohort" ADD COLUMN IF NOT EXISTS "guideUrl" TEXT;
+      ALTER TABLE "Cohort" ADD COLUMN IF NOT EXISTS "podcastUrl" TEXT;
+    `
+  },
+  {
     name: "quickbooks payout bills",
     sql: `
       ALTER TABLE "CohortDistribution" ADD COLUMN IF NOT EXISTS "quickBooksVendorRef" TEXT;
