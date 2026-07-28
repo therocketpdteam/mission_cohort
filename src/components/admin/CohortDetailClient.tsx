@@ -116,6 +116,15 @@ function formatScheduleDateRange(sessions: AdminRow[], cohort?: AdminRow | null)
   return start || end ? `${start || "-"} - ${end || "-"}` : "-";
 }
 
+function cohortMoveLabel(cohort: AdminRow) {
+  const code = String(cohort.slug || cohort.shortName || cohort.title || "")
+    .trim()
+    .replace(/\s+/g, "-");
+  const title = String(cohort.title ?? "").trim();
+
+  return title && title !== code ? `${code} - ${title}` : code || "Untitled cohort";
+}
+
 function zoomLinkOverview(sessions: AdminRow[]) {
   const total = sessions.length;
   const linked = sessions.filter((session) => String(session.meetingUrl ?? "").trim());
@@ -3298,7 +3307,7 @@ export function CohortDetailClient({ id }: { id: string }) {
             ) : null}
             <TextField select fullWidth label="Target cohort" value={moveTargetCohortId} onChange={(event) => setMoveTargetCohortId(event.target.value)}>
               {moveTargetOptions.map((targetCohort) => (
-                <MenuItem value={targetCohort.id} key={targetCohort.id}>{targetCohort.title}</MenuItem>
+                <MenuItem value={targetCohort.id} key={targetCohort.id}>{cohortMoveLabel(targetCohort)}</MenuItem>
               ))}
             </TextField>
           </Stack>

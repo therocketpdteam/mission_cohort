@@ -312,6 +312,15 @@ function ParticipantTile({ label, value }: { label: string; value?: unknown }) {
   );
 }
 
+function cohortMoveLabel(cohort: AdminRow) {
+  const code = String(cohort.slug || cohort.shortName || cohort.title || "")
+    .trim()
+    .replace(/\s+/g, "-");
+  const title = String(cohort.title ?? "").trim();
+
+  return title && title !== code ? `${code} - ${title}` : code || "Untitled cohort";
+}
+
 export function ParticipantsClient() {
   const [rows, setRows] = useState<AdminRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -801,7 +810,7 @@ export function ParticipantsClient() {
             ) : null}
             <TextField select fullWidth label="Target cohort" value={moveTargetCohortId} onChange={(event) => setMoveTargetCohortId(event.target.value)}>
               {allCohorts.map((cohort) => (
-                <MenuItem value={cohort.id} key={cohort.id}>{cohort.title}</MenuItem>
+                <MenuItem value={cohort.id} key={cohort.id}>{cohortMoveLabel(cohort)}</MenuItem>
               ))}
             </TextField>
           </Stack>
