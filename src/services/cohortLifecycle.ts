@@ -7,6 +7,13 @@ const requiredSessionTemplateTypes = [
   TemplateType.FOLLOW_UP
 ] as const;
 
+function requiredSessionTemplateTypesForSession(sessionNumber?: number | null) {
+  const normalizedSessionNumber = Number(sessionNumber ?? 1);
+  return normalizedSessionNumber <= 1
+    ? [...requiredSessionTemplateTypes]
+    : requiredSessionTemplateTypes.filter((type) => type !== TemplateType.WEEK_BEFORE_REMINDER);
+}
+
 type LifecycleCommunication = {
   scheduledFor?: Date | string | null;
   status?: CommunicationStatus | string | null;
@@ -115,8 +122,9 @@ function getCommunicationForType(session: LifecycleSession, type: TemplateType) 
 function getSessionEmailReadiness(session: LifecycleSession) {
   const missing: string[] = [];
   const stale: string[] = [];
+  const requiredTypes = requiredSessionTemplateTypesForSession(session.sessionNumber);
 
-  for (const type of requiredSessionTemplateTypes) {
+  for (const type of requiredTypes) {
     const communication = getCommunicationForType(session, type);
 
     if (!communication) {
@@ -134,8 +142,8 @@ function getSessionEmailReadiness(session: LifecycleSession) {
     ready: missing.length === 0 && stale.length === 0,
     missing,
     stale,
-    scheduled: requiredSessionTemplateTypes.length - missing.length,
-    total: requiredSessionTemplateTypes.length
+    scheduled: requiredTypes.length - missing.length,
+    total: requiredTypes.length
   };
 }
 

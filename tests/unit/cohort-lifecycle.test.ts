@@ -59,6 +59,36 @@ test("treats draft session email plans as system-ready before concrete schedules
   assert.equal(readiness.items.find((item) => item.key === "communications")?.detail, "1/1 session email plan ready");
 });
 
+test("does not require one-week session reminders after the first session", () => {
+  const readiness = getCohortReadiness({
+    status: CohortStatus.PUBLISHED,
+    sessions: [{
+      id: "session-2",
+      sessionNumber: 2,
+      title: "Session 2",
+      startTime: sessionStart,
+      endTime: new Date(sessionStart.getTime() + 60 * 60 * 1000),
+      timezone: "America/New_York",
+      calendarInviteStatus: CalendarInviteStatus.CREATED,
+      calendarEvents: [{
+        title: "Session 2",
+        startTime: sessionStart,
+        endTime: new Date(sessionStart.getTime() + 60 * 60 * 1000),
+        timezone: "America/New_York"
+      }],
+      communications: [
+        communication(TemplateType.DAY_BEFORE_REMINDER, new Date(sessionStart.getTime() - 24 * 60 * 60 * 1000)),
+        communication(TemplateType.HOUR_BEFORE_REMINDER, new Date(sessionStart.getTime() - 60 * 60 * 1000)),
+        communication(TemplateType.FOLLOW_UP, new Date(sessionStart.getTime() + 24 * 60 * 60 * 1000))
+      ]
+    }]
+  });
+
+  assert.equal(readiness.ready, true);
+  assert.equal(readiness.sessionDetails[0]?.emails.total, 3);
+  assert.deepEqual(readiness.sessionDetails[0]?.emails.missing, []);
+});
+
 test("keeps sent reminders satisfied and ignores optional material tasks", () => {
   const readiness = getCohortReadiness({
     status: CohortStatus.DRAFT,

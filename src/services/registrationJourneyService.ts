@@ -97,7 +97,12 @@ async function upsertJourneyCommunication(input: {
 }) {
   const existing = await prisma.cohortCommunication.findUnique({ where: { journeyKey: input.journeyKey } });
 
-  if (existing?.status === CommunicationStatus.SENT || (existing?.status === CommunicationStatus.FAILED && !input.retryFailed)) {
+  if (
+    existing?.status === CommunicationStatus.SENT ||
+    existing?.status === CommunicationStatus.SKIPPED ||
+    existing?.status === CommunicationStatus.CANCELLED ||
+    (existing?.status === CommunicationStatus.FAILED && !input.retryFailed)
+  ) {
     return existing;
   }
 
@@ -345,4 +350,55 @@ export async function activateCohortRegistrationJourneys(cohortId: string) {
   }
 
   return { cohortId, registrations: results.length, results };
+}
+
+export async function skipPocRegistrationConfirmationsForCohort(cohortId: string, reason: string) {
+  const registrations = await prisma.registration.findMany({
+    where: { cohortId, archivedAt: null, status: { not: RegistrationStatus.CANCELLED } },
+    include: { cohort: true }
+  });
+  const templates = await ensureDefaultCommunicationTemplates();
+  const template = templates.find((row) => row.name === journeyTemplateNames.pocConfirmation);
+
+  if (!template) {
+    throw Object.assign(new Error(`${journeyTemplateNames.pocConfirmation} template is unavailable.`), { code: "NOT_FOUND", status: 404 });
+  }
+
+  const createdById = await getSystemUserId();
+  const results = [];
+
+  for (const registration of registrations) {
+    const recipientEmail = normalizeEmail(registration.primaryContactEmail);
+    const journeyKey = `registration:${registration.id}:poc:${recipientEmail}:confirmation`;
+    const data = {
+      cohortId: registration.cohortId,
+      registrationId: registration.id,
+      templateId: template.id,
+      subject: template.subject,
+      bodyHtml: template.bodyHtml,
+      bodyText: template.bodyText,
+      scheduledFor: null,
+      status: CommunicationStatus.SKIPPED,
+      recipientScope: RecipientScope.CUSTOM,
+      recipientEmails: [recipientEmail],
+      providerError: reason
+    };
+    const existing = await prisma.cohortCommunication.findUnique({ where: { journeyKey } });
+
+    if (existing?.status === CommunicationStatus.SENT) {
+      results.push(existing);
+      continue;
+    }
+
+    results.push(existing
+      ? await prisma.cohortCommunication.update({ where: { id: existing.id }, data })
+      : await prisma.cohortCommunication.create({ data: { ...data, journeyKey, createdById } }));
+  }
+
+  return {
+    cohortId,
+    skipped: results.filter((result) => result.status === CommunicationStatus.SKIPPED).length,
+    alreadySent: results.filter((result) => result.status === CommunicationStatus.SENT).length,
+    registrationCount: registrations.length
+  };
 }

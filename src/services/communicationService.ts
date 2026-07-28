@@ -578,6 +578,13 @@ const sessionTemplateTypes = [
   TemplateType.FOLLOW_UP
 ] as const;
 
+export function sessionTemplateTypesForSession(sessionNumber?: number | null) {
+  const normalizedSessionNumber = Number(sessionNumber ?? 1);
+  return normalizedSessionNumber <= 1
+    ? [...sessionTemplateTypes]
+    : sessionTemplateTypes.filter((type) => type !== TemplateType.WEEK_BEFORE_REMINDER);
+}
+
 export async function getSystemUserId() {
   const user = await prisma.user.upsert({
     where: { email: "system@mission-control.local" },
@@ -1049,6 +1056,39 @@ async function resolveCommunicationRecipients(communication: {
   return emailValues(cohort.participants.map((participant) => participant.email));
 }
 
+async function resolveParticipantCommunicationTargets(cohortId: string) {
+  const participants = await prisma.participant.findMany({
+    where: {
+      status: ParticipantStatus.REGISTERED,
+      registration: { archivedAt: null, status: { not: RegistrationStatus.CANCELLED } },
+      cohortId
+    },
+    include: {
+      organization: true,
+      registration: {
+        include: {
+          organization: true,
+          invoiceDrafts: { orderBy: { updatedAt: "desc" } }
+        }
+      }
+    }
+  });
+  const seen = new Set<string>();
+  const targets = [];
+
+  for (const participant of participants) {
+    const recipientEmail = String(participant.email ?? "").trim().toLowerCase();
+    if (!recipientEmail || seen.has(recipientEmail)) {
+      continue;
+    }
+
+    seen.add(recipientEmail);
+    targets.push({ recipientEmail, participant });
+  }
+
+  return targets;
+}
+
 export async function sendCommunication(id: string, options?: { recipients?: string[]; context?: Parameters<typeof sendEmail>[0]["context"] }) {
   const communication = await prisma.cohortCommunication.findUnique({
     where: { id },
@@ -1083,6 +1123,75 @@ export async function sendCommunication(id: string, options?: { recipients?: str
     }
 
     await assertCohortDeliveryAllowed("SENDGRID", communication.cohort.status, recipients);
+    const baseContext = {
+      cohort: {
+        ...communication.cohort,
+        title: communication.cohort.title,
+        description: communication.cohort.description,
+        startDate: communication.cohort.startDate,
+        presenterName: `${communication.cohort.presenter.firstName} ${communication.cohort.presenter.lastName}`,
+        presenterFirstName: communication.cohort.presenter.firstName,
+        presenterLastName: communication.cohort.presenter.lastName,
+        presenterEmail: communication.cohort.presenter.email
+      },
+      session: communication.session ?? undefined,
+      participant: communication.participant ?? undefined,
+      registration: communication.registration ?? undefined,
+      organization: communication.registration?.organization ?? undefined
+    };
+
+    if (!options?.recipients && !options?.context && communication.recipientScope === RecipientScope.ALL_PARTICIPANTS) {
+      const targets = await resolveParticipantCommunicationTargets(communication.cohortId);
+      const targetRecipients = targets.map((target) => target.recipientEmail);
+
+      if (targetRecipients.length === 0) {
+        throw Object.assign(new Error("No participant recipients were resolved for this communication."), {
+          code: "BAD_REQUEST",
+          status: 400
+        });
+      }
+
+      await assertCohortDeliveryAllowed("SENDGRID", communication.cohort.status, targetRecipients);
+      const providerMessageIds: string[] = [];
+
+      for (const target of targets) {
+        const result = await sendEmail({
+          to: target.recipientEmail,
+          subject: communication.subject,
+          bodyHtml: communication.bodyHtml,
+          bodyText: communication.bodyText ?? undefined,
+          attachments: communication.attachments,
+          context: {
+            ...baseContext,
+            participant: participantMergeContext(target.participant),
+            registration: target.participant.registration,
+            organization: target.participant.organization ?? target.participant.registration?.organization ?? undefined
+          }
+        });
+        if (result.providerMessageId) {
+          providerMessageIds.push(result.providerMessageId);
+        }
+        await prisma.emailEvent.create({
+          data: {
+            communicationId: id,
+            recipientEmail: target.recipientEmail,
+            provider: "sendgrid",
+            providerMessageId: result.providerMessageId,
+            eventType: EmailEventType.SENT
+          }
+        });
+      }
+
+      return prisma.cohortCommunication.update({
+        where: { id },
+        data: {
+          status: CommunicationStatus.SENT,
+          sentAt: new Date(),
+          providerMessageId: providerMessageIds[0] ?? undefined,
+          providerError: null
+        }
+      });
+    }
 
     const result = await sendEmail({
       to: recipients,
@@ -1090,22 +1199,7 @@ export async function sendCommunication(id: string, options?: { recipients?: str
       bodyHtml: communication.bodyHtml,
       bodyText: communication.bodyText ?? undefined,
       attachments: communication.attachments,
-      context: options?.context ?? {
-        cohort: {
-          ...communication.cohort,
-          title: communication.cohort.title,
-          description: communication.cohort.description,
-          startDate: communication.cohort.startDate,
-          presenterName: `${communication.cohort.presenter.firstName} ${communication.cohort.presenter.lastName}`,
-          presenterFirstName: communication.cohort.presenter.firstName,
-          presenterLastName: communication.cohort.presenter.lastName,
-          presenterEmail: communication.cohort.presenter.email
-        },
-        session: communication.session ?? undefined,
-        participant: communication.participant ?? undefined,
-        registration: communication.registration ?? undefined,
-        organization: communication.registration?.organization ?? undefined
-      }
+      context: options?.context ?? baseContext
     });
 
     await prisma.emailEvent.createMany({
@@ -1690,8 +1784,27 @@ export async function createDefaultSessionCommunications(sessionId: string) {
     .filter((communication) => communication.template?.type)
     .map((communication) => [communication.template!.type, communication]));
   const records = [];
+  const activeTemplateTypes = sessionTemplateTypesForSession(session.sessionNumber);
+  const disabledWeekBefore = activeTemplateTypes.includes(TemplateType.WEEK_BEFORE_REMINDER)
+    ? null
+    : existingByType.get(TemplateType.WEEK_BEFORE_REMINDER);
+  const settledStatuses: CommunicationStatus[] = [
+    CommunicationStatus.SENT,
+    CommunicationStatus.CANCELLED,
+    CommunicationStatus.SKIPPED
+  ];
 
-  for (const template of templates.filter((item) => sessionTemplateTypes.includes(item.type as (typeof sessionTemplateTypes)[number]))) {
+  if (disabledWeekBefore && !settledStatuses.includes(disabledWeekBefore.status)) {
+    records.push(await prisma.cohortCommunication.update({
+      where: { id: disabledWeekBefore.id },
+      data: {
+        status: CommunicationStatus.SKIPPED,
+        providerError: "Skipped because one-week session reminders are only sent before Session 1."
+      }
+    }));
+  }
+
+  for (const template of templates.filter((item) => activeTemplateTypes.includes(item.type as (typeof sessionTemplateTypes)[number]))) {
     const start = new Date(session.startTime);
     const scheduledFor =
       template.type === TemplateType.WEEK_BEFORE_REMINDER

@@ -163,6 +163,13 @@ const sessionEmailTypes = [
   { type: "FOLLOW_UP", label: "24h Post" }
 ];
 
+function sessionEmailTypesForSession(sessionNumber?: number | null) {
+  const normalizedSessionNumber = Number(sessionNumber ?? 1);
+  return normalizedSessionNumber <= 1
+    ? sessionEmailTypes
+    : sessionEmailTypes.filter((template) => template.type !== "WEEK_BEFORE_REMINDER");
+}
+
 const paymentStatuses = ["PENDING", "INVOICED", "PARTIALLY_PAID", "PAID", "REFUNDED", "CANCELLED"];
 const participantStatuses = ["REGISTERED", "CANCELLED", "COMPLETED", "NO_SHOW"];
 const rosterStatuses = ["NOT_REQUESTED", "NEEDED", "PARTIAL", "COMPLETE"];
@@ -1629,13 +1636,14 @@ export function CohortDetailClient({ id }: { id: string }) {
     }
   }
 
-  function sessionEmailSummary(sessionId: string) {
-    const scheduled = sessionEmailTypes.filter((template) => sessionEmailStatus(sessionId, template.type) !== "NOT_SCHEDULED");
+  function sessionEmailSummary(session: AdminRow) {
+    const expectedEmailTypes = sessionEmailTypesForSession(Number(session.sessionNumber ?? 0));
+    const scheduled = expectedEmailTypes.filter((template) => sessionEmailStatus(session.id, template.type) !== "NOT_SCHEDULED");
     return {
       scheduled: scheduled.length,
-      total: sessionEmailTypes.length,
-      ready: scheduled.length === sessionEmailTypes.length,
-      label: `${scheduled.length}/${sessionEmailTypes.length} emails`
+      total: expectedEmailTypes.length,
+      ready: scheduled.length === expectedEmailTypes.length,
+      label: `${scheduled.length}/${expectedEmailTypes.length} emails`
     };
   }
 
@@ -2148,8 +2156,12 @@ export function CohortDetailClient({ id }: { id: string }) {
     }
   }
 
-  function renderSessionEmailCell(type: string, sessionId: string) {
-    const communication = communications.find((item) => item.sessionId === sessionId && item.template?.type === type);
+  function renderSessionEmailCell(type: string, session: AdminRow) {
+    if (!sessionEmailTypesForSession(Number(session.sessionNumber ?? 1)).some((template) => template.type === type)) {
+      return <Typography variant="caption" color="text.secondary">Not used</Typography>;
+    }
+
+    const communication = communications.find((item) => item.sessionId === session.id && item.template?.type === type);
     const scheduled = Boolean(communication);
     return (
       <button
@@ -2157,7 +2169,7 @@ export function CohortDetailClient({ id }: { id: string }) {
         className={`session-check ${scheduled ? "is-done" : "is-missing"}`}
         onClick={(event) => {
           event.stopPropagation();
-          if (!scheduled) void createSessionEmailSchedule(sessionId);
+          if (!scheduled) void createSessionEmailSchedule(session.id);
         }}
       title={scheduled ? formatStatusLabel(communication?.status) : "Create scheduled communication"}
     >
@@ -2196,7 +2208,7 @@ export function CohortDetailClient({ id }: { id: string }) {
       width: 190,
       sortable: false,
       valueGetter: (_value: unknown, row: AdminRow) => sessionEmailStatus(row.id, template.type),
-      renderCell: (params: { row: AdminRow }) => renderSessionEmailCell(template.type, params.row.id)
+      renderCell: (params: { row: AdminRow }) => renderSessionEmailCell(template.type, params.row)
     })),
     {
       field: "actions",
@@ -2717,7 +2729,7 @@ export function CohortDetailClient({ id }: { id: string }) {
               </div>
               {sessions.map((session) => {
                 const sessionMaterials = resources.filter((resource) => resource.sessionId === session.id);
-                const emailSummary = sessionEmailSummary(session.id);
+                const emailSummary = sessionEmailSummary(session);
                 const sessionReadiness = (cohort?.readiness?.sessionDetails ?? []).find((item: AdminRow) => item.id === session.id);
 
                 return (

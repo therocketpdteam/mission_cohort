@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { EmailEventType } from "@prisma/client";
-import { buildManualCustomEmailRecipientGroups, buildRecipientDeliveryRows, emailEventSummary } from "../../src/services/communicationService";
+import { buildManualCustomEmailRecipientGroups, buildRecipientDeliveryRows, emailEventSummary, sessionTemplateTypesForSession } from "../../src/services/communicationService";
 
 test("summarizes unreviewed failed and bounced email events", () => {
   const summary = emailEventSummary([
@@ -71,4 +71,18 @@ test("manual custom email recipient grouping does not filter by cohort lifecycle
 
   assert.deepEqual(groups.map((group) => group.cohortId), ["draft-cohort", "completed-cohort", "active-cohort"]);
   assert.deepEqual(groups.flatMap((group) => group.recipientEmails), ["draft@example.com", "completed@example.com", "active@example.com"]);
+});
+
+test("uses the one-week session reminder only for the first session", () => {
+  assert.deepEqual(sessionTemplateTypesForSession(1).map(String), [
+    "WEEK_BEFORE_REMINDER",
+    "DAY_BEFORE_REMINDER",
+    "HOUR_BEFORE_REMINDER",
+    "FOLLOW_UP"
+  ]);
+  assert.deepEqual(sessionTemplateTypesForSession(2).map(String), [
+    "DAY_BEFORE_REMINDER",
+    "HOUR_BEFORE_REMINDER",
+    "FOLLOW_UP"
+  ]);
 });
