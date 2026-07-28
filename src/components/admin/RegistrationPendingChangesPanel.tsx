@@ -159,7 +159,14 @@ export function RegistrationPendingChangesPanel({
         method: "PATCH",
         body: { id: registration.id, action: "applyChanges" }
       });
-      await onApplied(result.status === "applied" ? "Registration changes applied and notifications sent." : "Pending registration changes cleared.");
+      const calendarIssueCount = Array.isArray(result.calendarIssues) ? result.calendarIssues.length : 0;
+      await onApplied(
+        result.status === "applied"
+          ? calendarIssueCount
+            ? `Registration changes applied and notifications sent. ${calendarIssueCount} calendar update${calendarIssueCount === 1 ? "" : "s"} need attention.`
+            : "Registration changes applied and notifications sent."
+          : "Pending registration changes cleared."
+      );
     } catch (error) {
       onError((error as Error).message);
     } finally {

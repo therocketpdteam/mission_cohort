@@ -625,7 +625,7 @@ h6,
   border: 1px solid transparent;
   border-radius: var(--radius-md);
   background: var(--color-blue-600);
-  color: var(--color-primary-900);
+  color: var(--color-white);
   cursor: pointer;
   font-family: var(--font-heading);
   font-weight: 800;
@@ -657,6 +657,7 @@ h6,
 
 .ui-button:hover {
   background: #f9bd22;
+  color: var(--color-primary-900);
 }
 
 .ui-button-outlined {
@@ -669,6 +670,7 @@ h6,
 .ui-button-text:hover,
 .ui-icon-button:hover {
   background: var(--color-surface-container);
+  color: var(--color-primary-900);
 }
 
 .ui-button-text {
@@ -5411,7 +5413,7 @@ h6,
 
 .registration-journey-summary {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 8px;
 }
 

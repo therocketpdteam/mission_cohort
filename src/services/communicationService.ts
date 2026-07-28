@@ -650,6 +650,26 @@ function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
 }
 
+async function recordFailedEmailEvents(communicationId: string, recipients: string[], error: unknown) {
+  const recipientEmails = Array.from(new Set(recipients.map((email) => normalizeEmail(email)).filter(Boolean)));
+
+  if (recipientEmails.length === 0) {
+    return;
+  }
+
+  await prisma.emailEvent.createMany({
+    data: recipientEmails.map((recipientEmail) => ({
+      communicationId,
+      recipientEmail,
+      provider: "sendgrid",
+      eventType: EmailEventType.FAILED,
+      eventPayload: {
+        error: error instanceof Error ? error.message : "Unknown SendGrid error"
+      }
+    }))
+  });
+}
+
 export function emailEventSummary(events: EventSummaryInput[]) {
   const counts = events.reduce<Record<string, number>>((acc, event) => {
     acc[event.eventType] = (acc[event.eventType] ?? 0) + 1;
@@ -1159,8 +1179,11 @@ export async function sendCommunication(id: string, options?: { recipients?: str
     data: { status: CommunicationStatus.SENDING, providerError: null }
   });
 
+  let attemptedRecipients: string[] = [];
+
   try {
     const recipients = options?.recipients ?? await resolveCommunicationRecipients(communication);
+    attemptedRecipients = recipients;
 
     if (recipients.length === 0) {
       throw Object.assign(new Error("No recipients were resolved for this communication."), {
@@ -1200,8 +1223,10 @@ export async function sendCommunication(id: string, options?: { recipients?: str
 
       await assertCohortDeliveryAllowed("SENDGRID", communication.cohort.status, targetRecipients);
       const providerMessageIds: string[] = [];
+      attemptedRecipients = targetRecipients;
 
       for (const target of targets) {
+        attemptedRecipients = [target.recipientEmail];
         const result = await sendEmail({
           to: target.recipientEmail,
           subject: communication.subject,
@@ -1269,6 +1294,7 @@ export async function sendCommunication(id: string, options?: { recipients?: str
       }
     });
   } catch (error) {
+    await recordFailedEmailEvents(id, attemptedRecipients, error);
     await prisma.cohortCommunication.update({
       where: { id },
       data: {
@@ -1457,6 +1483,40 @@ export async function reviewRecipientIssue(input: { communicationId: string; rec
       }
     });
 
+    if (updated.count === 0) {
+      const existingIssue = await prisma.emailEvent.findFirst({
+        where: {
+          communicationId: input.communicationId,
+          recipientEmail: { equals: recipientEmail, mode: "insensitive" },
+          eventType: { in: [EmailEventType.BOUNCED, EmailEventType.FAILED] }
+        }
+      });
+      const communication = await prisma.cohortCommunication.findUnique({
+        where: { id: input.communicationId },
+        select: { id: true, status: true, providerError: true }
+      });
+      const hasProviderIssue = Boolean(communication?.providerError) || communication?.status === CommunicationStatus.FAILED;
+
+      if (!existingIssue && hasProviderIssue) {
+        await prisma.emailEvent.create({
+          data: {
+            communicationId: input.communicationId,
+            recipientEmail,
+            provider: "mission-control",
+            eventType: EmailEventType.FAILED,
+            eventPayload: {
+              error: communication?.providerError ?? "Communication failed before a provider event was recorded."
+            },
+            reviewedAt: new Date(),
+            reviewedById: input.reviewedById,
+            reviewNote: input.reviewNote
+          }
+        });
+
+        return { reviewed: 1 };
+      }
+    }
+
     return { reviewed: updated.count };
   } catch (error) {
     if (!isMissingEmailReviewColumn(error)) {
@@ -1622,6 +1682,7 @@ export async function sendManualTemplateToParticipants(input: { templateId: stri
       });
       results.push({ ...sent, recipientCount: 1 });
     } catch (error) {
+      await recordFailedEmailEvents(communication.id, [target.recipientEmail], error);
       const failed = await prisma.cohortCommunication.update({
         where: { id: communication.id },
         data: {
@@ -1780,6 +1841,7 @@ export async function sendManualCustomEmail(input: {
       });
       results.push({ ...sent, recipientCount: 1 });
     } catch (error) {
+      await recordFailedEmailEvents(communication.id, [target.recipientEmail], error);
       const failed = await prisma.cohortCommunication.update({
         where: { id: communication.id },
         data: {

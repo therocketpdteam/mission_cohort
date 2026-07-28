@@ -6,12 +6,13 @@ import { adminApi } from "@/lib/adminApi";
 import { formatProperDisplay, formatStatusLabel } from "@/lib/formatting";
 import { AdminRow, DateBadge, EmptyState, StatusChip, useNotifier } from "./common";
 
-type JourneyGroupKey = "needs_attention" | "scheduled" | "sent" | "skipped" | "planned";
+type JourneyGroupKey = "needs_attention" | "scheduled" | "sent" | "reviewed" | "skipped" | "planned";
 
 const journeyGroups: Array<{ key: JourneyGroupKey; title: string; description: string }> = [
   { key: "needs_attention", title: "Needs attention", description: "Failed, bounced, or blocked messages." },
   { key: "scheduled", title: "Scheduled", description: "Next emails already queued for future delivery." },
   { key: "sent", title: "Sent", description: "Messages that already went out." },
+  { key: "reviewed", title: "Reviewed", description: "Delivery issues that were checked and kept for history." },
   { key: "skipped", title: "Skipped", description: "Milestones intentionally not sent." },
   { key: "planned", title: "Planned", description: "Next emails that will be scheduled once the cohort is published and the journey is ready." }
 ];
@@ -54,14 +55,17 @@ function plainPreview(communication: AdminRow) {
 
 function journeyGroupFor(communication: AdminRow): JourneyGroupKey {
   const status = String(communication.status ?? "").toUpperCase();
-  const hasIssue = Boolean(communication.providerError) || ((communication.emailEvents ?? []) as AdminRow[]).some((event) => {
+  const issueEvents = ((communication.emailEvents ?? []) as AdminRow[]).filter((event) => {
     const eventType = String(event.eventType ?? "").toUpperCase();
     return eventType === "FAILED" || eventType === "BOUNCED";
   });
+  const unreviewedIssueEvents = issueEvents.filter((event) => !event.reviewedAt);
+  const providerIssue = Boolean(communication.providerError) || status === "FAILED";
 
-  if (hasIssue || status === "FAILED") return "needs_attention";
+  if (unreviewedIssueEvents.length > 0 || (providerIssue && issueEvents.length === 0)) return "needs_attention";
   if (status === "SCHEDULED" || status === "SENDING") return "scheduled";
   if (status === "SENT") return "sent";
+  if (providerIssue && issueEvents.length > 0) return "reviewed";
   if (status === "SKIPPED" || status === "CANCELLED") return "skipped";
   return "planned";
 }
@@ -167,6 +171,7 @@ export function RegistrationCommunicationJourney({
     needs_attention: [],
     scheduled: [],
     sent: [],
+    reviewed: [],
     skipped: [],
     planned: []
   });
@@ -174,6 +179,7 @@ export function RegistrationCommunicationJourney({
   const scheduledCount = grouped.scheduled.length;
   const sentCount = grouped.sent.length;
   const issueCount = grouped.needs_attention.length;
+  const reviewedCount = grouped.reviewed.length;
   const plannedCount = grouped.planned.length;
 
   return (
@@ -186,6 +192,10 @@ export function RegistrationCommunicationJourney({
         <div className="registration-journey-stat">
           <span>Sent</span>
           <strong>{sentCount}</strong>
+        </div>
+        <div className="registration-journey-stat">
+          <span>Reviewed</span>
+          <strong>{reviewedCount}</strong>
         </div>
         <div className={`registration-journey-stat ${issueCount ? "is-alert" : ""}`}>
           <span>Needs attention</span>

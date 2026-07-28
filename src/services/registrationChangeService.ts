@@ -287,6 +287,7 @@ export async function applyRegistrationChanges(registrationId: string) {
 
   const invoiceRelevant = ["participantCount", "totalAmount", "purchaseOrderNumber", "invoiceNumber"].some((field) => pending?.fields[field]);
   const attendeeChanges = pending.participantAdditions.length > 0 || pending.participantRemovals.length > 0;
+  const calendarIssues: Array<{ sessionId: string; title: string; error: string }> = [];
   let invoice = null;
   if (!pending.invoiceAppliedAt) {
     invoice = invoiceRelevant ? await refreshSimpleInvoice(registration, pending) : null;
@@ -316,7 +317,15 @@ export async function applyRegistrationChanges(registrationId: string) {
   if (!pending.calendarAppliedAt) {
     if (attendeeChanges) {
       for (const session of registration.cohort.sessions.filter((row) => row.startTime.getTime() > Date.now() && row.calendarEvents.some((event) => event.providerEventId))) {
-        await createCalendarInvitePlaceholder(session.id, "google");
+        try {
+          await createCalendarInvitePlaceholder(session.id, "google");
+        } catch (error) {
+          calendarIssues.push({
+            sessionId: session.id,
+            title: session.title,
+            error: error instanceof Error ? error.message : "Google Calendar update failed"
+          });
+        }
       }
     }
     pending.calendarAppliedAt = new Date().toISOString();
@@ -333,7 +342,9 @@ export async function applyRegistrationChanges(registrationId: string) {
   }
   const rows = changeSummaryRows(pending);
   const deliveryNote = attendeeChanges
-    ? "Calendar invitations and participant communications now reflect these updates."
+    ? calendarIssues.length
+      ? "Participant communications now reflect these updates. Calendar attendee updates need attention in Mission Control."
+      : "Calendar invitations and participant communications now reflect these updates."
     : "Mission Control now reflects these registration updates.";
   const summaryHtml = `<ul>${rows.map((row) => `<li>${escapeHtml(row)}</li>`).join("")}</ul><p>${deliveryNote}</p>`;
   const summaryText = `${rows.map((row) => `- ${row}`).join("\n")}\n\n${deliveryNote}`;
@@ -399,6 +410,7 @@ export async function applyRegistrationChanges(registrationId: string) {
     calendarSessions: attendeeChanges
       ? registration.cohort.sessions.filter((row) => row.startTime.getTime() > Date.now() && row.calendarEvents.some((event) => event.providerEventId)).length
       : 0,
+    calendarIssues,
     communicationId: communication.id,
     invoiceId: invoice?.id ?? null
   };

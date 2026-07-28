@@ -35,6 +35,17 @@ test("builds recipient delivery rows and prioritizes recipients needing review",
   assert.equal(rows[1].needsReview, false);
 });
 
+test("reviewed failed recipient events do not remain active review items", () => {
+  const rows = buildRecipientDeliveryRows([
+    { id: "1", recipientEmail: "reviewed@example.com", eventType: EmailEventType.FAILED, createdAt: new Date("2026-01-01T09:01:00Z"), reviewedAt: new Date("2026-01-01T10:01:00Z") }
+  ]);
+
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].needsReview, false);
+  assert.equal(rows[0].unreviewedIssueEvents.length, 0);
+  assert.equal(rows[0].emailSummary.reviewedIssueCount, 1);
+});
+
 test("dedupes manual custom email recipients across participants and POCs", () => {
   const groups = buildManualCustomEmailRecipientGroups([
     {
