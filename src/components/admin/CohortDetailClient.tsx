@@ -1107,6 +1107,9 @@ export function CohortDetailClient({ id }: { id: string }) {
   const [moveRegistrationIds, setMoveRegistrationIds] = useState<string[]>([]);
   const [moveTargetCohortId, setMoveTargetCohortId] = useState("");
   const [movingRegistrations, setMovingRegistrations] = useState(false);
+  const [moveParticipantsDialogOpen, setMoveParticipantsDialogOpen] = useState(false);
+  const [moveParticipantsTargetCohortId, setMoveParticipantsTargetCohortId] = useState("");
+  const [movingParticipantsToCohort, setMovingParticipantsToCohort] = useState(false);
   const [participantMessageOpen, setParticipantMessageOpen] = useState(false);
   const [participantMessageTargets, setParticipantMessageTargets] = useState<AdminRow[]>([]);
   const [participantMessageMode, setParticipantMessageMode] = useState<"template" | "custom">("template");
@@ -1999,6 +2002,40 @@ export function CohortDetailClient({ id }: { id: string }) {
       notifyError((error as Error).message);
     } finally {
       setMovingRegistrations(false);
+    }
+  }
+
+  async function moveSelectedParticipantsToCohort() {
+    const participantIds = selectedParticipantRows.map((participant) => String(participant.id)).filter(Boolean);
+    if (participantIds.length === 0 || !moveParticipantsTargetCohortId) {
+      notifyError("Choose participants and a target cohort first.");
+      return;
+    }
+
+    setMovingParticipantsToCohort(true);
+    try {
+      const result = await adminApi<AdminRow>("/api/participants", {
+        method: "PATCH",
+        body: {
+          action: "bulkMoveParticipants",
+          ids: participantIds,
+          targetCohortId: moveParticipantsTargetCohortId
+        }
+      });
+      const moved = Number(result.count ?? result.summary?.movedCount ?? participantIds.length);
+      const confirmationsSent = Number(result.confirmationsSent ?? 0);
+      const confirmationFailures = Number(result.confirmationFailures ?? 0);
+      notifySuccess(
+        `${moved} participant${moved === 1 ? "" : "s"} moved to ${result.targetCohort?.title ?? "the target cohort"}. ${confirmationsSent} participant confirmation${confirmationsSent === 1 ? "" : "s"} sent${confirmationFailures ? `; ${confirmationFailures} need attention` : ""}.`
+      );
+      setMoveParticipantsDialogOpen(false);
+      setMoveParticipantsTargetCohortId("");
+      setParticipantSelection({ type: "include", ids: new Set() });
+      await load();
+    } catch (error) {
+      notifyError((error as Error).message);
+    } finally {
+      setMovingParticipantsToCohort(false);
     }
   }
 
@@ -3038,11 +3075,23 @@ export function CohortDetailClient({ id }: { id: string }) {
                 startIcon={<ArrowRightLeftOutlined />}
                 disabled={selectedParticipantRegistrationIds.length === 0}
                 onClick={() => openMoveRegistrationsDialog(selectedParticipantRegistrationIds, "participants")}
-              >
-                Move to Cohort
-              </Button>
-              <Button
-                type="button"
+            >
+              Move Registrations
+            </Button>
+            <Button
+              type="button"
+              variant="outlined"
+              startIcon={<ArrowRightLeftOutlined />}
+              disabled={selectedParticipantRows.length === 0}
+              onClick={() => {
+                setMoveParticipantsTargetCohortId("");
+                setMoveParticipantsDialogOpen(true);
+              }}
+            >
+              Move Participants
+            </Button>
+            <Button
+              type="button"
                 variant="outlined"
                 startIcon={<ArticleOutlined />}
                 disabled={participantCsvRows.length === 0}
@@ -3076,7 +3125,19 @@ export function CohortDetailClient({ id }: { id: string }) {
               disabled={selectedParticipantRegistrationIds.length === 0}
               onClick={() => openMoveRegistrationsDialog(selectedParticipantRegistrationIds, "participants")}
             >
-              Move to Cohort
+              Move Registrations
+            </Button>
+            <Button
+              type="button"
+              variant="outlined"
+              startIcon={<ArrowRightLeftOutlined />}
+              disabled={selectedParticipantRows.length === 0}
+              onClick={() => {
+                setMoveParticipantsTargetCohortId("");
+                setMoveParticipantsDialogOpen(true);
+              }}
+            >
+              Move Participants
             </Button>
           </div>
           <TableShell>
@@ -3294,6 +3355,31 @@ export function CohortDetailClient({ id }: { id: string }) {
           </SectionCard>
         </Stack>
       )}
+
+      <Dialog open={moveParticipantsDialogOpen} onClose={() => !movingParticipantsToCohort && setMoveParticipantsDialogOpen(false)} fullWidth maxWidth="md" PaperProps={{ className: "move-registration-modal" }}>
+        <DialogTitle>Move Selected Participants</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 0.5 }}>
+            <Typography color="text.secondary">
+              This moves {selectedParticipantRows.length} individual participant{selectedParticipantRows.length === 1 ? "" : "s"} into a new comped registration in the target cohort. The original team registration stays in place with its payment, invoice, and QuickBooks history.
+            </Typography>
+            <Typography color="warning.main">
+              Use Move Registrations when the whole team/order should move. Use this action only when specific people are changing cohorts.
+            </Typography>
+            <TextField select fullWidth label="Target cohort" value={moveParticipantsTargetCohortId} onChange={(event) => setMoveParticipantsTargetCohortId(event.target.value)}>
+              {moveTargetOptions.map((targetCohort) => (
+                <MenuItem value={targetCohort.id} key={targetCohort.id}>{cohortMoveLabel(targetCohort)}</MenuItem>
+              ))}
+            </TextField>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button variant="outlined" onClick={() => setMoveParticipantsDialogOpen(false)} disabled={movingParticipantsToCohort}>Cancel</Button>
+          <Button onClick={moveSelectedParticipantsToCohort} disabled={!moveParticipantsTargetCohortId || movingParticipantsToCohort || selectedParticipantRows.length === 0}>
+            {movingParticipantsToCohort ? "Moving" : "Move participants"}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Dialog open={moveDialogOpen} onClose={() => !movingRegistrations && setMoveDialogOpen(false)} fullWidth maxWidth="md" PaperProps={{ className: "move-registration-modal" }}>
         <DialogTitle>Move Registrations to Cohort</DialogTitle>

@@ -1,16 +1,40 @@
-import { OperationsTaskCategory, OperationsTaskStatus, ParticipantListStatus, ParticipantStatus } from "@prisma/client";
+import { randomUUID } from "node:crypto";
+import { OperationsTaskCategory, OperationsTaskStatus, ParticipantListStatus, ParticipantStatus, PaymentMethod, PaymentStatus, RegistrationStatus, SupportingDocumentStatus } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { countParticipantsMissingTitles, deriveParticipantListStatus } from "@/lib/rosterStatus";
 import { participantCreateSchema, participantUpdateSchema } from "@/validators/participant";
 import { logAuditEventAsync } from "./auditService";
-import { queueParticipantCrmSync } from "./crmSyncService";
+import { queueParticipantCrmSync, queueRegistrationCrmSync } from "./crmSyncService";
 import { syncRegistrationToCrm, syncRemovedParticipantToCrm } from "./crmRegistrationWebhookService";
 import { getRecipientCommunicationSummary } from "./communicationService";
 import { cancelParticipantJourneys, planRegistrationJourneys } from "./registrationJourneyService";
 import { shouldDeferRegistrationDelivery, stageParticipantAddition, stageParticipantRemoval } from "./registrationChangeService";
+import { syncFutureLinkedGoogleCalendarInvitesForCohort } from "./calendarService";
 
 type ParticipantMutationOptions = { deferNotifications?: boolean };
+type BulkMoveParticipantSummaryInput = Array<{
+  id: string;
+  cohortId: string;
+  registrationId: string;
+  organizationId: string;
+  email: string;
+  status?: ParticipantStatus | string | null;
+}>;
+
+export function summarizeBulkParticipantMove(participants: BulkMoveParticipantSummaryInput, targetCohortId: string) {
+  const moving = participants.filter((participant) => participant.cohortId !== targetCohortId);
+
+  return {
+    requestedCount: participants.length,
+    movedCount: moving.length,
+    skippedAlreadyInTargetCount: participants.length - moving.length,
+    sourceRegistrationIds: Array.from(new Set(moving.map((participant) => participant.registrationId))).sort(),
+    sourceCohortIds: Array.from(new Set(moving.map((participant) => participant.cohortId))).sort(),
+    organizationIds: Array.from(new Set(moving.map((participant) => participant.organizationId))).sort(),
+    nonRegisteredCount: moving.filter((participant) => participant.status && participant.status !== ParticipantStatus.REGISTERED).length
+  };
+}
 
 function participantChangeRow(participant: { id: string; firstName: string; lastName: string; email: string }) {
   return {
@@ -151,6 +175,196 @@ export async function removeParticipant(id: string, options: ParticipantMutation
     await stageParticipantRemoval(participant.registrationId, participantChangeRow(existing));
   }
   return participant;
+}
+
+export async function bulkMoveParticipantsToCohort(input: { ids: string[]; targetCohortId: string }) {
+  const ids = Array.from(new Set(input.ids.filter(Boolean)));
+  const targetCohortId = String(input.targetCohortId ?? "").trim();
+
+  if (ids.length === 0) {
+    return { count: 0, summary: summarizeBulkParticipantMove([], targetCohortId), targetCohort: null };
+  }
+
+  if (!targetCohortId) {
+    throw Object.assign(new Error("targetCohortId is required"), { code: "BAD_REQUEST", status: 400 });
+  }
+
+  const [targetCohort, participants] = await Promise.all([
+    prisma.cohort.findUnique({ where: { id: targetCohortId }, select: { id: true, title: true } }),
+    prisma.participant.findMany({
+      where: { id: { in: ids } },
+      include: {
+        registration: { include: { cohort: true } },
+        organization: true
+      }
+    })
+  ]);
+
+  if (!targetCohort) {
+    throw Object.assign(new Error("Target cohort not found"), { code: "NOT_FOUND", status: 404 });
+  }
+
+  if (participants.length !== ids.length) {
+    const found = new Set(participants.map((participant) => participant.id));
+    const missing = ids.filter((id) => !found.has(id));
+    throw Object.assign(new Error(`Participant${missing.length === 1 ? "" : "s"} not found: ${missing.join(", ")}`), {
+      code: "NOT_FOUND",
+      status: 404
+    });
+  }
+
+  const summary = summarizeBulkParticipantMove(participants, targetCohortId);
+  const movingParticipants = participants.filter((participant) => participant.cohortId !== targetCohortId);
+  const nonRegistered = movingParticipants.filter((participant) => participant.status !== ParticipantStatus.REGISTERED);
+
+  if (nonRegistered.length > 0) {
+    throw Object.assign(new Error("Only registered participants can be moved between cohorts."), { code: "BAD_REQUEST", status: 400 });
+  }
+
+  if (movingParticipants.length === 0) {
+    return { count: 0, summary, targetCohort, targetRegistrations: [], confirmationsSent: 0, confirmationFailures: 0 };
+  }
+
+  const movingEmails = Array.from(new Set(movingParticipants.map((participant) => participant.email.trim().toLowerCase()).filter(Boolean)));
+  const existingTargetEmails = movingEmails.length
+    ? await prisma.participant.findMany({
+        where: {
+          cohortId: targetCohortId,
+          status: ParticipantStatus.REGISTERED,
+          id: { notIn: movingParticipants.map((participant) => participant.id) },
+          OR: movingEmails.map((email) => ({ email: { equals: email, mode: "insensitive" as const } }))
+        },
+        select: { email: true }
+      })
+    : [];
+
+  if (existingTargetEmails.length > 0) {
+    const emails = Array.from(new Set(existingTargetEmails.map((participant) => participant.email.toLowerCase()))).sort();
+    throw Object.assign(new Error(`Target cohort already has registered participant${emails.length === 1 ? "" : "s"} with: ${emails.join(", ")}`), {
+      code: "CONFLICT",
+      status: 409
+    });
+  }
+
+  await cancelParticipantJourneys(movingParticipants.map((participant) => participant.id), `Participant moved to ${targetCohort.title}.`);
+
+  const byRegistration = new Map<string, typeof movingParticipants>();
+  for (const participant of movingParticipants) {
+    byRegistration.set(participant.registrationId, [...(byRegistration.get(participant.registrationId) ?? []), participant]);
+  }
+
+  const transactionResult = await prisma.$transaction(async (tx) => {
+    const targetRegistrations = [];
+
+    for (const [sourceRegistrationId, group] of byRegistration.entries()) {
+      const sourceRegistration = group[0]!.registration;
+      const targetRegistration = await tx.registration.create({
+        data: {
+          cohortId: targetCohortId,
+          organizationId: sourceRegistration.organizationId,
+          primaryContactName: sourceRegistration.primaryContactName,
+          primaryContactEmail: sourceRegistration.primaryContactEmail,
+          primaryContactPhone: sourceRegistration.primaryContactPhone,
+          primaryContactTitle: sourceRegistration.primaryContactTitle,
+          billingContactName: sourceRegistration.billingContactName,
+          billingContactEmail: sourceRegistration.billingContactEmail,
+          billingAddress: sourceRegistration.billingAddress,
+          paymentMethod: PaymentMethod.COMPED,
+          paymentStatus: PaymentStatus.PAID,
+          participantListStatus: ParticipantListStatus.COMPLETE,
+          supportingDocumentStatus: SupportingDocumentStatus.READY,
+          participantCount: group.length,
+          totalAmount: 0,
+          status: RegistrationStatus.CONFIRMED,
+          source: "participant_move",
+          notes: [
+            `Created by moving ${group.length} participant${group.length === 1 ? "" : "s"} from ${sourceRegistration.cohort.title}.`,
+            `Finance and QuickBooks references remain on source registration ${sourceRegistrationId}.`
+          ].join(" ")
+        }
+      });
+
+      await tx.participant.updateMany({
+        where: { id: { in: group.map((participant) => participant.id) } },
+        data: {
+          registrationId: targetRegistration.id,
+          cohortId: targetCohortId,
+          organizationId: sourceRegistration.organizationId
+        }
+      });
+
+      await tx.registration.update({
+        where: { id: sourceRegistrationId },
+        data: {
+          participantCount: Math.max(0, Number(sourceRegistration.participantCount ?? 0) - group.length)
+        }
+      });
+
+      targetRegistrations.push({
+        id: targetRegistration.id,
+        sourceRegistrationId,
+        sourceCohortId: sourceRegistration.cohortId,
+        movedParticipantIds: group.map((participant) => participant.id),
+        movedParticipantEmails: group.map((participant) => participant.email)
+      });
+    }
+
+    return { targetRegistrations };
+  });
+
+  for (const sourceRegistrationId of summary.sourceRegistrationIds) {
+    await syncRegistrationParticipantListStatus(sourceRegistrationId);
+    void queueRegistrationCrmSync(sourceRegistrationId, "participant.moved_out").catch(() => undefined);
+    void syncRegistrationToCrm(sourceRegistrationId, { eventType: "participant.moved_out" }).catch(() => undefined);
+  }
+
+  const moveConfirmationBatchKey = randomUUID();
+  const journeyResults = [];
+  for (const targetRegistration of transactionResult.targetRegistrations) {
+    await syncRegistrationParticipantListStatus(targetRegistration.id);
+    void queueRegistrationCrmSync(targetRegistration.id, "participant.moved_in").catch(() => undefined);
+    void syncRegistrationToCrm(targetRegistration.id, { eventType: "participant.moved_in" }).catch(() => undefined);
+    for (const participantId of targetRegistration.movedParticipantIds) {
+      logAuditEventAsync({
+        entityType: "Participant",
+        entityId: participantId,
+        action: "MOVED_COHORT",
+        description: `Participant moved to ${targetCohort.title}`,
+        metadata: {
+          sourceRegistrationId: targetRegistration.sourceRegistrationId,
+          targetRegistrationId: targetRegistration.id,
+          sourceCohortId: targetRegistration.sourceCohortId,
+          targetCohortId
+        }
+      });
+      void queueParticipantCrmSync(participantId, "participant.moved").catch(() => undefined);
+    }
+    journeyResults.push(await planRegistrationJourneys(targetRegistration.id, {
+      sendPocConfirmation: false,
+      participantEmails: targetRegistration.movedParticipantEmails,
+      retryFailed: true,
+      participantConfirmationCohortScoped: true,
+      participantConfirmationBatchKey: moveConfirmationBatchKey,
+      bypassCohortStatusForImmediate: true
+    }));
+  }
+
+  const sourceCalendarSync = [];
+  for (const sourceCohortId of summary.sourceCohortIds) {
+    sourceCalendarSync.push(await syncFutureLinkedGoogleCalendarInvitesForCohort(sourceCohortId));
+  }
+  const targetCalendarSync = await syncFutureLinkedGoogleCalendarInvitesForCohort(targetCohortId);
+
+  return {
+    count: movingParticipants.length,
+    summary,
+    targetCohort,
+    targetRegistrations: transactionResult.targetRegistrations,
+    sourceCalendarSync,
+    targetCalendarSync,
+    confirmationsSent: journeyResults.reduce((total, result) => total + Number(result.sent ?? 0), 0),
+    confirmationFailures: journeyResults.reduce((total, result) => total + Number(result.failed ?? 0), 0)
+  };
 }
 
 export async function listParticipantsByCohort(cohortId: string) {

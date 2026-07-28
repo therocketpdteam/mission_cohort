@@ -1,5 +1,5 @@
 import { fail, handleApiError, ok } from "@/lib/api";
-import { addParticipant, listParticipants, removeParticipant, updateParticipant } from "@/services/participantService";
+import { addParticipant, bulkMoveParticipantsToCohort, listParticipants, removeParticipant, updateParticipant } from "@/services/participantService";
 
 export async function GET() {
   try {
@@ -23,6 +23,10 @@ export async function PATCH(request: Request) {
     const body = await request.json();
 
     if (!body.id) {
+      if (body.action === "bulkMoveParticipants" && Array.isArray(body.ids)) {
+        return ok(await bulkMoveParticipantsToCohort({ ids: body.ids, targetCohortId: body.targetCohortId }));
+      }
+
       return fail("id is required", "BAD_REQUEST", 400);
     }
 

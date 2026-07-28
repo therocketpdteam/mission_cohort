@@ -334,6 +334,9 @@ export function ParticipantsClient() {
   const [moveDialogOpen, setMoveDialogOpen] = useState(false);
   const [moveTargetCohortId, setMoveTargetCohortId] = useState("");
   const [movingRegistrations, setMovingRegistrations] = useState(false);
+  const [moveParticipantsDialogOpen, setMoveParticipantsDialogOpen] = useState(false);
+  const [moveParticipantsTargetCohortId, setMoveParticipantsTargetCohortId] = useState("");
+  const [movingParticipants, setMovingParticipants] = useState(false);
   const [customEmailOpen, setCustomEmailOpen] = useState(false);
   const [customRecipientMode, setCustomRecipientMode] = useState<"participants" | "pocs" | "participants_and_pocs">("participants_and_pocs");
   const [customSubject, setCustomSubject] = useState("");
@@ -562,6 +565,39 @@ export function ParticipantsClient() {
     }
   }
 
+  async function moveSelectedParticipants() {
+    if (selectedIds.length === 0 || !moveParticipantsTargetCohortId) {
+      notifyError("Choose participants and a target cohort first");
+      return;
+    }
+
+    setMovingParticipants(true);
+    try {
+      const result = await adminApi<AdminRow>("/api/participants", {
+        method: "PATCH",
+        body: {
+          action: "bulkMoveParticipants",
+          ids: selectedIds,
+          targetCohortId: moveParticipantsTargetCohortId
+        }
+      });
+      const moved = Number(result.count ?? result.summary?.movedCount ?? selectedIds.length);
+      const confirmationsSent = Number(result.confirmationsSent ?? 0);
+      const confirmationFailures = Number(result.confirmationFailures ?? 0);
+      notifySuccess(
+        `${moved} participant${moved === 1 ? "" : "s"} moved. ${confirmationsSent} participant confirmation${confirmationsSent === 1 ? "" : "s"} sent${confirmationFailures ? `; ${confirmationFailures} need attention` : ""}.`
+      );
+      setMoveParticipantsDialogOpen(false);
+      setMoveParticipantsTargetCohortId("");
+      setSelectedIds([]);
+      await load();
+    } catch (error) {
+      notifyError((error as Error).message);
+    } finally {
+      setMovingParticipants(false);
+    }
+  }
+
   async function sendCustomEmail() {
     if (selectedIds.length === 0 || customRecipientEmails.length === 0) {
       notifyError("Choose at least one recipient");
@@ -755,7 +791,7 @@ export function ParticipantsClient() {
               disabled={selectedRegistrationIds.length === 0}
               onClick={() => setMoveDialogOpen(true)}
             >
-              Move to Cohort
+              Move Registrations
             </Button>
             <Button type="button" variant="outlined" startIcon={<ArticleOutlined />} disabled={csvExportRows.length === 0} onClick={() => exportParticipantsCsv(csvExportRows)}>
               {selectedRows.length > 0 ? "Export Selected CSV" : "Export CSV"}
@@ -780,6 +816,14 @@ export function ParticipantsClient() {
             </TextField>
             <Button size="small" variant="outlined" startIcon={<SendOutlined />} onClick={() => runBulkAction("send")}>Send Message</Button>
             <Button size="small" variant="outlined" startIcon={<SendOutlined />} onClick={() => setCustomEmailOpen(true)}>Custom Email</Button>
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<ArrowRightLeftOutlined />}
+              onClick={() => setMoveParticipantsDialogOpen(true)}
+            >
+              Move Participants
+            </Button>
           </div>
         )}
         <TableShell>
@@ -796,6 +840,30 @@ export function ParticipantsClient() {
         </TableShell>
         {!loading && filteredRows.length === 0 && <EmptyState title="No participants found" description="Add participants or adjust roster filters." />}
       </SectionCard>
+      <Dialog open={moveParticipantsDialogOpen} onClose={() => !movingParticipants && setMoveParticipantsDialogOpen(false)} fullWidth maxWidth="md" PaperProps={{ className: "move-registration-modal" }}>
+        <DialogTitle>Move Selected Participants</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 0.5 }}>
+            <Typography color="text.secondary">
+              This moves {selectedIds.length} individual participant{selectedIds.length === 1 ? "" : "s"} into a new comped registration in the target cohort. The original team registration stays in place with its payment, invoice, and QuickBooks history.
+            </Typography>
+            <Typography color="warning.main">
+              Use Move Registrations when the whole team/order should move. Use this action only when specific people are changing cohorts.
+            </Typography>
+            <TextField select fullWidth label="Target cohort" value={moveParticipantsTargetCohortId} onChange={(event) => setMoveParticipantsTargetCohortId(event.target.value)}>
+              {allCohorts.map((cohort) => (
+                <MenuItem value={cohort.id} key={cohort.id}>{cohortMoveLabel(cohort)}</MenuItem>
+              ))}
+            </TextField>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button variant="outlined" onClick={() => setMoveParticipantsDialogOpen(false)} disabled={movingParticipants}>Cancel</Button>
+          <Button onClick={moveSelectedParticipants} disabled={!moveParticipantsTargetCohortId || movingParticipants || selectedIds.length === 0}>
+            {movingParticipants ? "Moving" : "Move participants"}
+          </Button>
+        </DialogActions>
+      </Dialog>
       <Dialog open={moveDialogOpen} onClose={() => setMoveDialogOpen(false)} fullWidth maxWidth="md" PaperProps={{ className: "move-registration-modal" }}>
         <DialogTitle>Move Registrations</DialogTitle>
         <DialogContent>
