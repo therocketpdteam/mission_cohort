@@ -4538,6 +4538,41 @@ h6,
   object-fit: cover;
 }
 
+.cohort-overview-details {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 12px;
+  min-width: 0;
+}
+
+.cohort-overview-details small,
+.cohort-overview-link-field small {
+  color: var(--color-slate-500);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.cohort-overview-details p,
+.cohort-overview-link-field span,
+.cohort-overview-link-field a {
+  margin: 2px 0 0;
+  color: var(--color-slate-800);
+  font-weight: 700;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.cohort-overview-link-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  min-width: 0;
+}
+
+.cohort-overview-link-field {
+  min-width: 0;
+}
+
 .cohort-evolution-chart span {
   color: var(--color-slate-500);
   font-size: 0.8rem;
@@ -7625,6 +7660,7 @@ h6,
   .cohort-revenue-card,
   .cohort-finance-wow-card,
   .cohort-thumbnail-editor,
+  .cohort-overview-link-grid,
   .session-defaults-card > div {
     grid-template-columns: 1fr;
   }

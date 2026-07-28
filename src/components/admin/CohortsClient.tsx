@@ -29,7 +29,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { adminApi, uploadAdminFile } from "@/lib/adminApi";
 import { formatProperDisplay, formatStatusLabel } from "@/lib/formatting";
-import { dateTimeInputInZoneToIso } from "@/lib/timezones";
+import { dateTimeInputInZoneToIso, formatDateInZone } from "@/lib/timezones";
 import {
   AdminRow,
   AppDataGrid,
@@ -159,6 +159,24 @@ function duplicatedSessions(source: AdminRow) {
 
 function formatDate(value?: string) {
   return value ? new Date(value).toLocaleDateString("en-US") : "";
+}
+
+function formatCohortDateRange(row: AdminRow) {
+  const sessions = [...((row.sessions ?? []) as AdminRow[])]
+    .filter((session) => session.startTime)
+    .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+  const firstSession = sessions[0];
+  const lastSession = sessions.at(-1);
+
+  if (firstSession && lastSession) {
+    const startTimezone = firstSession.timezone ?? row.defaultTimezone;
+    const endTimezone = lastSession.timezone ?? startTimezone;
+    const start = formatDateInZone(firstSession.startTime, startTimezone, { month: "numeric", day: "numeric", year: "numeric" });
+    const end = formatDateInZone(lastSession.endTime ?? lastSession.startTime, endTimezone, { month: "numeric", day: "numeric", year: "numeric" });
+    return `${start} - ${end}`;
+  }
+
+  return `${formatDate(row.startDate)} - ${formatDate(row.endDate)}`;
 }
 
 function cohortFinanceSummary(row: AdminRow) {
@@ -843,7 +861,7 @@ export function CohortsClient() {
       field: "dates",
       headerName: "Dates",
       width: 156,
-      valueGetter: (_value, row) => `${formatDate(row.startDate)} - ${formatDate(row.endDate)}`
+      valueGetter: (_value, row) => formatCohortDateRange(row)
     },
     {
       field: "counts",

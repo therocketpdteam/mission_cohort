@@ -32,7 +32,7 @@ import type { CSSProperties, SyntheticEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { adminApi, uploadAdminFile } from "@/lib/adminApi";
 import { formatProperDisplay, formatRegistrationPaymentStatus, formatRegistrationSource, formatStatusLabel, isCompedRegistration } from "@/lib/formatting";
-import { formatDateTimeInZone, formatTimeInZone } from "@/lib/timezones";
+import { formatDateInZone, formatDateTimeInZone, formatTimeInZone } from "@/lib/timezones";
 import { mergeFields, renderMergeFields, sampleMergeContext } from "@/modules/email/mergeFields";
 import { textToEmailHtml } from "@/modules/email/templateFormatting";
 import { exportParticipantsCsv } from "@/lib/participantCsv";
@@ -89,8 +89,46 @@ const participantMessageMergeFields = mergeFields.filter((field) => (
   field.startsWith("participant.") ||
   field.startsWith("registration.") ||
   field.startsWith("organization.") ||
-  ["cohort.title", "cohort.shortName", "cohort.presenterName", "cohort.presenterEmail"].includes(field)
+  ["cohort.title", "cohort.shortName", "cohort.description", "cohort.guideTopic", "cohort.guideUrl", "cohort.podcastUrl", "cohort.presenterName", "cohort.presenterEmail"].includes(field)
 ));
+
+function sortedScheduleSessions(sessions: AdminRow[]) {
+  return [...sessions]
+    .filter((session) => session.startTime)
+    .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+}
+
+function formatScheduleDateRange(sessions: AdminRow[], cohort?: AdminRow | null) {
+  const sortedSessions = sortedScheduleSessions(sessions);
+  const firstSession = sortedSessions[0];
+  const lastSession = sortedSessions.at(-1);
+
+  if (firstSession && lastSession) {
+    const startTimezone = firstSession.timezone ?? cohort?.defaultTimezone;
+    const endTimezone = lastSession.timezone ?? startTimezone;
+    const start = formatDateInZone(firstSession.startTime, startTimezone, { month: "numeric", day: "numeric", year: "numeric" });
+    const end = formatDateInZone(lastSession.endTime ?? lastSession.startTime, endTimezone, { month: "numeric", day: "numeric", year: "numeric" });
+    return `${start} - ${end}`;
+  }
+
+  const start = cohort?.startDate ? formatDateInZone(cohort.startDate, cohort.defaultTimezone, { month: "numeric", day: "numeric", year: "numeric" }) : "";
+  const end = cohort?.endDate ? formatDateInZone(cohort.endDate, cohort.defaultTimezone, { month: "numeric", day: "numeric", year: "numeric" }) : "";
+  return start || end ? `${start || "-"} - ${end || "-"}` : "-";
+}
+
+function OverviewLinkField({ label, value }: { label: string; value?: unknown }) {
+  const text = String(value ?? "").trim();
+  const isUrl = /^https?:\/\//i.test(text);
+
+  return (
+    <div className="cohort-overview-link-field">
+      <small>{label}</small>
+      {text ? (
+        isUrl ? <a href={text} target="_blank" rel="noreferrer">{text}</a> : <span>{text}</span>
+      ) : <span>-</span>}
+    </div>
+  );
+}
 
 type ParticipantMessageSendResponse = {
   communications?: Array<{ status?: string; providerError?: string | null }>;
@@ -2578,10 +2616,21 @@ export function CohortDetailClient({ id }: { id: string }) {
                 <div className="quick-view-grid">
                   <DetailField label="Status" value={formatStatusLabel(cohort?.status)} />
                   <DetailField label="Presenter" value={`${cohort?.presenter?.firstName ?? ""} ${cohort?.presenter?.lastName ?? ""}`} proper />
-                  <DetailField label="Dates" value={`${cohort?.startDate ? new Date(cohort.startDate).toLocaleDateString("en-US") : "-"} - ${cohort?.endDate ? new Date(cohort.endDate).toLocaleDateString("en-US") : "-"}`} />
+                  <DetailField label="Session Dates" value={formatScheduleDateRange(sessions, cohort)} />
                   <DetailField label="Timezone" value={cohort?.defaultTimezone ?? "-"} />
                   <DetailField label="Slug" value={cohort?.slug ?? "-"} />
                   <DetailField label="Public Registration" value={cohort?.publicRegistrationEnabled ? "Enabled" : "Off"} />
+                </div>
+                <div className="cohort-overview-details">
+                  <div>
+                    <small>Description</small>
+                    <p>{cohort?.description || "-"}</p>
+                  </div>
+                  <div className="cohort-overview-link-grid">
+                    <OverviewLinkField label="Guide Topic" value={cohort?.guideTopic} />
+                    <OverviewLinkField label="Guide Download" value={cohort?.guideUrl} />
+                    <OverviewLinkField label="Podcast YouTube" value={cohort?.podcastUrl} />
+                  </div>
                 </div>
                 <div className="action-group" style={{ justifyContent: "flex-start" }}>
                   <Button component="label" variant="outlined" disabled={thumbnailUploading}>

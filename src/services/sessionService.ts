@@ -18,6 +18,28 @@ function calendarDetailsChanged(
   });
 }
 
+async function syncCohortScheduleRange(cohortId: string) {
+  const sessions = await prisma.cohortSession.findMany({
+    where: { cohortId },
+    orderBy: { startTime: "asc" },
+    select: { startTime: true, endTime: true }
+  });
+  const firstSession = sessions[0];
+  const lastSession = sessions.at(-1);
+
+  if (!firstSession || !lastSession) {
+    return;
+  }
+
+  await prisma.cohort.update({
+    where: { id: cohortId },
+    data: {
+      startDate: firstSession.startTime,
+      endDate: lastSession.endTime
+    }
+  });
+}
+
 export async function createSession(input: z.input<typeof sessionCreateSchema>) {
   const data = sessionCreateSchema.parse(input);
   const session = await prisma.cohortSession.create({ data });
@@ -28,6 +50,7 @@ export async function createSession(input: z.input<typeof sessionCreateSchema>) 
     description: "Session created",
     metadata: { cohortId: session.cohortId, sessionNumber: session.sessionNumber }
   });
+  await syncCohortScheduleRange(session.cohortId);
   await createDefaultSessionCommunications(session.id);
   return session;
 }
@@ -42,6 +65,7 @@ export async function updateSession(id: string, input: z.input<typeof sessionUpd
 
   const linkedGoogleEvent = await prisma.calendarEvent.findFirst({ where: { sessionId: id, provider: "google" } });
   let session = await prisma.cohortSession.update({ where: { id }, data });
+  await syncCohortScheduleRange(session.cohortId);
   const detailsChanged = calendarDetailsChanged(existingSession, session);
   const reminderSync = existingSession.startTime.getTime() !== session.startTime.getTime()
     ? await rescheduleUnsentSessionCommunications(id, session.startTime)
@@ -60,7 +84,9 @@ export async function updateSession(id: string, input: z.input<typeof sessionUpd
 }
 
 export async function deleteSession(id: string) {
-  return prisma.cohortSession.delete({ where: { id } });
+  const session = await prisma.cohortSession.delete({ where: { id } });
+  await syncCohortScheduleRange(session.cohortId);
+  return session;
 }
 
 export async function listSessionsByCohort(cohortId: string) {
