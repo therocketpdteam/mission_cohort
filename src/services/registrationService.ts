@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { CommunicationStatus, PaymentStatus, Prisma, RegistrationStatus, SupportingDocumentStatus } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
@@ -426,6 +427,9 @@ export async function bulkMoveRegistrationsToCohort(input: { ids: string[]; targ
     return { cancelledCommunications: cancelled.count };
   });
 
+  const moveConfirmationBatchKey = randomUUID();
+  const journeyResults = [];
+
   for (const registration of registrations.filter((row) => moveIds.includes(row.id))) {
     logAuditEventAsync({
       entityType: "Registration",
@@ -448,14 +452,23 @@ export async function bulkMoveRegistrationsToCohort(input: { ids: string[]; targ
     for (const participant of registration.participants) {
       void queueParticipantCrmSync(participant.id, "participant.moved").catch(() => undefined);
     }
-    await planRegistrationJourneys(registration.id);
+    journeyResults.push(await planRegistrationJourneys(registration.id, {
+      sendPocConfirmation: false,
+      planMilestones: false,
+      retryFailed: true,
+      participantConfirmationCohortScoped: true,
+      participantConfirmationBatchKey: moveConfirmationBatchKey,
+      bypassCohortStatusForImmediate: true
+    }));
   }
 
   return {
     count: moveIds.length,
     targetCohort,
     summary,
-    cancelledCommunications: transactionResult.cancelledCommunications
+    cancelledCommunications: transactionResult.cancelledCommunications,
+    confirmationsSent: journeyResults.reduce((total, result) => total + Number(result.sent ?? 0), 0),
+    confirmationFailures: journeyResults.reduce((total, result) => total + Number(result.failed ?? 0), 0)
   };
 }
 

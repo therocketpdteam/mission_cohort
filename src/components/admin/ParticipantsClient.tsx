@@ -537,7 +537,11 @@ export function ParticipantsClient() {
         }
       });
       const moved = Number(result.count ?? result.summary?.movedCount ?? selectedRegistrationIds.length);
-      notifySuccess(`${moved} registration${moved === 1 ? "" : "s"} moved. Future journeys were replanned for the target cohort.`);
+      const confirmationsSent = Number(result.confirmationsSent ?? 0);
+      const confirmationFailures = Number(result.confirmationFailures ?? 0);
+      notifySuccess(
+        `${moved} registration${moved === 1 ? "" : "s"} moved. ${confirmationsSent} participant confirmation${confirmationsSent === 1 ? "" : "s"} sent${confirmationFailures ? `; ${confirmationFailures} need attention` : ""}.`
+      );
       setMoveDialogOpen(false);
       setMoveTargetCohortId("");
       setSelectedIds([]);

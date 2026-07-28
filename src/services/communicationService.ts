@@ -12,7 +12,7 @@ import { logAuditEventAsync } from "./auditService";
 import { generateSessionReminderSchedule, textToEmailHtml } from "@/modules/email";
 import { sendEmail } from "@/services/emailService";
 import { deletePrivateAppFile } from "@/services/storageService";
-import { assertCohortDeliveryAllowed, getSendGridSetup } from "@/services/integrationSetupService";
+import { assertCohortDeliveryAllowed, assertOutboundRecipientsAllowed, getSendGridSetup } from "@/services/integrationSetupService";
 import { getOrganizationInvoiceProfile } from "./appSettingsService";
 import { registrationConfirmationDocumentReadiness } from "./registrationDocumentReadiness";
 
@@ -1154,7 +1154,7 @@ async function preflightPocRegistrationConfirmation(communication: {
   };
 }
 
-export async function sendCommunication(id: string, options?: { recipients?: string[]; context?: Parameters<typeof sendEmail>[0]["context"] }) {
+export async function sendCommunication(id: string, options?: { recipients?: string[]; context?: Parameters<typeof sendEmail>[0]["context"]; bypassCohortStatus?: boolean }) {
   const communication = await prisma.cohortCommunication.findUnique({
     where: { id },
     include: {
@@ -1192,7 +1192,11 @@ export async function sendCommunication(id: string, options?: { recipients?: str
       });
     }
 
-    await assertCohortDeliveryAllowed("SENDGRID", communication.cohort.status, recipients);
+    if (options?.bypassCohortStatus) {
+      await assertOutboundRecipientsAllowed("SENDGRID", recipients);
+    } else {
+      await assertCohortDeliveryAllowed("SENDGRID", communication.cohort.status, recipients);
+    }
     const baseContext = {
       cohort: {
         ...communication.cohort,
@@ -1221,7 +1225,11 @@ export async function sendCommunication(id: string, options?: { recipients?: str
         });
       }
 
-      await assertCohortDeliveryAllowed("SENDGRID", communication.cohort.status, targetRecipients);
+      if (options?.bypassCohortStatus) {
+        await assertOutboundRecipientsAllowed("SENDGRID", targetRecipients);
+      } else {
+        await assertCohortDeliveryAllowed("SENDGRID", communication.cohort.status, targetRecipients);
+      }
       const providerMessageIds: string[] = [];
       attemptedRecipients = targetRecipients;
 
@@ -2172,12 +2180,24 @@ export async function processScheduledCommunications(limit = 25) {
       scheduledFor: { lte: new Date() },
       ...(setup.liveSendingEnabled ? { cohort: { status: { in: [CohortStatus.PUBLISHED, CohortStatus.ACTIVE] } } } : {})
     },
+    include: { template: true, session: true },
     orderBy: { scheduledFor: "asc" },
     take: limit
   });
   const results = [];
 
   for (const communication of communications) {
+    if (communication.template?.type === TemplateType.WEEK_BEFORE_REMINDER && Number(communication.session?.sessionNumber ?? 1) > 1) {
+      results.push(await prisma.cohortCommunication.update({
+        where: { id: communication.id },
+        data: {
+          status: CommunicationStatus.SKIPPED,
+          providerError: "Skipped because one-week session reminders are only sent before Session 1."
+        }
+      }));
+      continue;
+    }
+
     try {
       results.push(await sendCommunication(communication.id));
     } catch (error) {

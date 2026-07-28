@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { registrationConfirmationDocumentReadiness } from "../../src/services/registrationDocumentReadiness";
-import { buildRegistrationMilestones } from "../../src/services/registrationJourneyService";
+import { buildRegistrationMilestones, participantConfirmationJourneyKey } from "../../src/services/registrationJourneyService";
 
 const cohortStart = new Date("2026-08-15T14:00:00.000Z");
 
@@ -23,6 +23,30 @@ test("skips both cohort milestones for a registration made inside the final week
   const milestones = buildRegistrationMilestones(cohortStart, new Date("2026-08-12T14:00:00.000Z"));
 
   assert.deepEqual(milestones.map((milestone) => milestone.eligible), [false, false]);
+});
+
+test("cohort move participant confirmations use unique cohort and batch scoped journey keys", () => {
+  const original = participantConfirmationJourneyKey({
+    registrationId: "registration-1",
+    participantEmail: "Teacher@Example.com"
+  });
+  const moved = participantConfirmationJourneyKey({
+    registrationId: "registration-1",
+    participantEmail: "Teacher@Example.com",
+    cohortId: "cohort-2",
+    batchKey: "move-1"
+  });
+  const movedAgain = participantConfirmationJourneyKey({
+    registrationId: "registration-1",
+    participantEmail: "teacher@example.com",
+    cohortId: "cohort-2",
+    batchKey: "move-2"
+  });
+
+  assert.equal(original, "registration:registration-1:participant:teacher@example.com:confirmation");
+  assert.notEqual(moved, original);
+  assert.notEqual(movedAgain, moved);
+  assert.match(moved, /cohort:cohort-2:batch:move-1$/);
 });
 
 test("holds POC confirmations until invoice and W-9 documents are ready", () => {

@@ -1891,7 +1891,11 @@ export function CohortDetailClient({ id }: { id: string }) {
         }
       });
       const moved = Number(result.count ?? result.summary?.movedCount ?? moveRegistrationIds.length);
-      notifySuccess(`${moved} registration${moved === 1 ? "" : "s"} moved to ${result.targetCohort?.title ?? "the target cohort"}.`);
+      const confirmationsSent = Number(result.confirmationsSent ?? 0);
+      const confirmationFailures = Number(result.confirmationFailures ?? 0);
+      notifySuccess(
+        `${moved} registration${moved === 1 ? "" : "s"} moved to ${result.targetCohort?.title ?? "the target cohort"}. ${confirmationsSent} participant confirmation${confirmationsSent === 1 ? "" : "s"} sent${confirmationFailures ? `; ${confirmationFailures} need attention` : ""}.`
+      );
       setMoveDialogOpen(false);
       setMoveRegistrationIds([]);
       setMoveTargetCohortId("");

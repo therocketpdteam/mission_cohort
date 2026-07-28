@@ -46,6 +46,19 @@ export function buildRegistrationMilestones(firstSessionStart: Date | string, no
   return rows.map((row) => ({ ...row, eligible: row.scheduledFor.getTime() > now.getTime() }));
 }
 
+export function participantConfirmationJourneyKey(input: {
+  registrationId: string;
+  participantEmail: string;
+  cohortId?: string;
+  batchKey?: string;
+}) {
+  const base = `registration:${input.registrationId}:participant:${normalizeEmail(input.participantEmail)}:confirmation`;
+  const cohortSegment = input.cohortId ? `:cohort:${input.cohortId}` : "";
+  const batchSegment = input.batchKey ? `:batch:${input.batchKey}` : "";
+
+  return `${base}${cohortSegment}${batchSegment}`;
+}
+
 const cancellableJourneyStatuses = [
   CommunicationStatus.DRAFT,
   CommunicationStatus.SCHEDULED,
@@ -209,7 +222,16 @@ async function syncFutureCalendarInvites(registration: {
 
 export async function planRegistrationJourneys(
   registrationId: string,
-  options: { syncCalendar?: boolean; sendPocConfirmation?: boolean; participantEmails?: string[]; retryFailed?: boolean } = {}
+  options: {
+    syncCalendar?: boolean;
+    sendPocConfirmation?: boolean;
+    participantEmails?: string[];
+    retryFailed?: boolean;
+    planMilestones?: boolean;
+    participantConfirmationCohortScoped?: boolean;
+    participantConfirmationBatchKey?: string;
+    bypassCohortStatusForImmediate?: boolean;
+  } = {}
 ) {
   const registration = await prisma.registration.findUnique({
     where: { id: registrationId },
@@ -273,7 +295,7 @@ export async function planRegistrationJourneys(
   }
 
   const firstSession = registration.cohort.sessions[0];
-  const milestones = firstSession ? buildRegistrationMilestones(firstSession.startTime) : [];
+  const milestones = firstSession && options.planMilestones !== false ? buildRegistrationMilestones(firstSession.startTime) : [];
   const targetParticipantEmails = options.participantEmails
     ? new Set(options.participantEmails.map(normalizeEmail))
     : null;
@@ -284,7 +306,12 @@ export async function planRegistrationJourneys(
       continue;
     }
     const confirmation = await upsertJourneyCommunication({
-      journeyKey: `registration:${registration.id}:participant:${email}:confirmation`,
+      journeyKey: participantConfirmationJourneyKey({
+        registrationId: registration.id,
+        participantEmail: email,
+        cohortId: options.participantConfirmationCohortScoped ? registration.cohortId : undefined,
+        batchKey: options.participantConfirmationBatchKey
+      }),
       cohortId: registration.cohortId,
       registrationId: registration.id,
       participantId: participant.id,
@@ -315,11 +342,11 @@ export async function planRegistrationJourneys(
 
   const sent = [];
   const failed: string[] = [];
-  if (deliveryAuthorized(registration.cohort.status)) {
+  if (deliveryAuthorized(registration.cohort.status) || options.bypassCohortStatusForImmediate) {
     for (const communication of immediate) {
       if (communication.status === CommunicationStatus.DRAFT) {
         try {
-          sent.push(await sendCommunication(communication.id));
+          sent.push(await sendCommunication(communication.id, { bypassCohortStatus: options.bypassCohortStatusForImmediate }));
         } catch {
           // The failed communication remains visible and retryable in Communications.
           failed.push(communication.id);
