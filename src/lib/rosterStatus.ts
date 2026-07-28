@@ -10,12 +10,9 @@ export function countParticipantsMissingTitles(participants: ParticipantTitleInp
   return participants.filter((participant) => !participant.title?.trim()).length;
 }
 
-export function deriveParticipantListStatus(expectedCount: number, actualCount: number, missingTitleCount = 0) {
+export function deriveParticipantListStatus(expectedCount: number, actualCount: number, _missingTitleCount = 0) {
   if (expectedCount === 0 && actualCount === 0) {
     return ParticipantListStatus.NOT_REQUESTED;
-  }
-  if (actualCount > 0 && missingTitleCount > 0) {
-    return ParticipantListStatus.PARTIAL;
   }
   if (expectedCount === 0 || actualCount >= expectedCount) {
     return ParticipantListStatus.COMPLETE;

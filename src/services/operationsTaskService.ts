@@ -81,15 +81,12 @@ export async function createDefaultRegistrationOperationsTasks(input: {
   const isComped = String(input.paymentMethod ?? "").toUpperCase() === "COMPED" ||
     (input.participantCount > 0 && Number(input.totalAmount ?? 0) <= 0 && !["CANCELLED", "REFUNDED"].includes(String(input.paymentStatus).toUpperCase()));
 
-  if (input.participantCount > input.actualParticipantCount || Number(input.missingParticipantTitleCount ?? 0) > 0) {
-    const missingTitleCount = Number(input.missingParticipantTitleCount ?? 0);
+  if (input.participantCount > input.actualParticipantCount) {
     tasks.push({
       cohortId: input.cohortId,
       registrationId: input.registrationId,
       title: "Collect participant list",
-      description: missingTitleCount > 0
-        ? `Registration roster is missing ${missingTitleCount} participant title${missingTitleCount === 1 ? "" : "s"}.`
-        : "Registration was received without a complete participant roster.",
+      description: "Registration was received without a complete participant roster.",
       category: OperationsTaskCategory.PARTICIPANT_LIST,
       priority: OperationsTaskPriority.HIGH
     });

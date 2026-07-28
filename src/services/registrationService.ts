@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { CommunicationStatus, PaymentStatus, Prisma, RegistrationStatus, SupportingDocumentStatus } from "@prisma/client";
+import { CommunicationStatus, ParticipantListStatus, PaymentStatus, Prisma, RegistrationStatus, SupportingDocumentStatus } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { shouldDefaultPrimaryContactParticipant } from "@/lib/rosterStatus";
@@ -171,6 +171,36 @@ export async function updateRegistration(
     ? await cancelRegistrationJourneys(registration.id, "Registration cancelled.")
     : await planRegistrationJourneys(registration.id);
   return { ...registration, participantListStatus: roster?.status ?? registration.participantListStatus, journey };
+}
+
+export async function syncRegistrationRosterStatuses(input: { id?: string; cohortId?: string }) {
+  const ids = input.id
+    ? [input.id]
+    : input.cohortId
+      ? (await prisma.registration.findMany({
+        where: { cohortId: input.cohortId, archivedAt: null },
+        select: { id: true }
+      })).map((registration) => registration.id)
+      : [];
+
+  if (ids.length === 0) {
+    throw Object.assign(new Error("id or cohortId is required"), { code: "BAD_REQUEST", status: 400 });
+  }
+
+  const results = [];
+
+  for (const id of ids) {
+    results.push({ registrationId: id, ...(await syncRegistrationParticipantListStatus(id)) });
+  }
+
+  return {
+    updated: results.length,
+    complete: results.filter((result) => result.status === ParticipantListStatus.COMPLETE).length,
+    partial: results.filter((result) => result.status === ParticipantListStatus.PARTIAL).length,
+    needed: results.filter((result) => result.status === ParticipantListStatus.NEEDED).length,
+    notRequested: results.filter((result) => result.status === ParticipantListStatus.NOT_REQUESTED).length,
+    results
+  };
 }
 
 export async function confirmRegistration(id: string) {

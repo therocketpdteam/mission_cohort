@@ -17,8 +17,8 @@ test("derives roster status from expected and saved participant counts", () => {
   assert.equal(deriveParticipantListStatus(2, 3), ParticipantListStatus.COMPLETE);
 });
 
-test("keeps roster partial when saved participants are missing titles", () => {
+test("does not keep roster partial when saved participants are only missing titles", () => {
   assert.equal(countParticipantsMissingTitles([{ title: "Principal" }, { title: "" }, { title: null }]), 2);
-  assert.equal(deriveParticipantListStatus(2, 2, 1), ParticipantListStatus.PARTIAL);
-  assert.equal(deriveParticipantListStatus(0, 1, 1), ParticipantListStatus.PARTIAL);
+  assert.equal(deriveParticipantListStatus(2, 2, 1), ParticipantListStatus.COMPLETE);
+  assert.equal(deriveParticipantListStatus(0, 1, 1), ParticipantListStatus.COMPLETE);
 });

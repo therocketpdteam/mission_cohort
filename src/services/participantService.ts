@@ -41,7 +41,7 @@ export async function syncRegistrationParticipantListStatus(registrationId: stri
 
   const actualCount = registration._count.participants;
   const missingTitleCount = countParticipantsMissingTitles(registration.participants);
-  const status = deriveParticipantListStatus(registration.participantCount, actualCount, missingTitleCount);
+  const status = deriveParticipantListStatus(registration.participantCount, actualCount);
 
   await prisma.registration.update({
     where: { id: registrationId },
@@ -58,7 +58,7 @@ export async function syncRegistrationParticipantListStatus(registrationId: stri
       data: {
         status: OperationsTaskStatus.COMPLETED,
         completedAt: new Date(),
-        description: `Roster completed automatically at ${actualCount}/${registration.participantCount || actualCount} participants with titles.`
+        description: `Roster completed automatically at ${actualCount}/${registration.participantCount || actualCount} participants.`
       }
     });
   } else if (status === ParticipantListStatus.NEEDED || status === ParticipantListStatus.PARTIAL) {
@@ -71,11 +71,9 @@ export async function syncRegistrationParticipantListStatus(registrationId: stri
       data: {
         status: OperationsTaskStatus.OPEN,
         completedAt: null,
-        description: missingTitleCount > 0
-          ? `Roster is missing ${missingTitleCount} participant title${missingTitleCount === 1 ? "" : "s"}.`
-          : status === ParticipantListStatus.PARTIAL
+        description: status === ParticipantListStatus.PARTIAL
             ? `Roster is partial at ${actualCount}/${registration.participantCount} participants.`
-          : "Registration still needs a participant roster."
+            : "Registration still needs a participant roster."
       }
     });
   }

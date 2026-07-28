@@ -10,6 +10,7 @@ import {
   getRegistrationById,
   listRegistrations,
   restoreRegistration,
+  syncRegistrationRosterStatuses,
   updateRegistration
 } from "@/services/registrationService";
 import { applyRegistrationChanges } from "@/services/registrationChangeService";
@@ -44,6 +45,10 @@ export async function PATCH(request: Request) {
     const body = await request.json();
 
     if (!body.id) {
+      if (body.action === "syncRosterStatuses" && body.cohortId) {
+        return ok(await syncRegistrationRosterStatuses({ cohortId: body.cohortId }));
+      }
+
       if (body.action === "bulkMoveCohort" && Array.isArray(body.ids)) {
         return ok(await bulkMoveRegistrationsToCohort({ ids: body.ids, targetCohortId: body.targetCohortId }));
       }
@@ -77,6 +82,10 @@ export async function PATCH(request: Request) {
 
     if (body.action === "syncCrm") {
       return ok(await syncRegistrationToCrm(body.id, { eventType: "manual.registration_sync" }), { status: 202 });
+    }
+
+    if (body.action === "syncRosterStatus") {
+      return ok(await syncRegistrationRosterStatuses({ id: body.id }));
     }
 
     return ok(await updateRegistration(body.id, body, { deferNotifications: true }));
