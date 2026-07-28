@@ -5436,7 +5436,8 @@ h6,
 }
 
 .poc-history-row strong,
-.poc-history-row span {
+.poc-history-row span,
+.poc-history-row small {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -5452,6 +5453,13 @@ h6,
 .poc-history-row span {
   color: var(--color-slate-500);
   font-size: 0.78rem;
+}
+
+.poc-history-row small {
+  color: var(--color-slate-500);
+  font-size: 0.7rem;
+  font-weight: 780;
+  text-transform: uppercase;
 }
 
 .poc-history-row-actions,

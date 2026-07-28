@@ -1118,8 +1118,8 @@ function RegistrationDetailDialog({
           <section className="registration-detail-section">
             <div className="registration-section-heading">
               <div>
-                <h3>POC Sent Emails</h3>
-                <p>Every outbound email this contact received, with delivery signals and quick resend.</p>
+                <h3>POC Email Summary</h3>
+                <p>High-level delivery status for this contact. Full provider history lives in Communications.</p>
               </div>
               {registration.primaryContactEmail ? (
                 <Button href={`/communications?search=${encodeURIComponent(registration.primaryContactEmail)}`} variant="outlined" size="small">
@@ -1131,17 +1131,6 @@ function RegistrationDetailDialog({
               loading={threadLoading}
               communications={thread}
               pocEmail={registration.primaryContactEmail}
-              onChanged={async () => {
-                await onChanged();
-                if (registration.primaryContactEmail) {
-                  await loadPocThread(registration.primaryContactEmail);
-                }
-              }}
-              onSuccess={onSuccess}
-              onError={(message) => {
-                setError(message);
-                onError(message);
-              }}
             />
           </section>
 

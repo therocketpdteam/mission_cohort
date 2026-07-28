@@ -3706,7 +3706,7 @@ export function CohortDetailClient({ id }: { id: string }) {
               />
             </SectionCard>
             <SectionCard
-              title="POC Sent Emails"
+              title="POC Email Summary"
               action={registrationDetail.primaryContactEmail ? (
                 <Button href={`/communications?search=${encodeURIComponent(registrationDetail.primaryContactEmail)}`} variant="outlined" size="small">
                   Open in Communications
@@ -3717,19 +3717,6 @@ export function CohortDetailClient({ id }: { id: string }) {
                 loading={registrationThreadLoading}
                 communications={registrationThread}
                 pocEmail={registrationDetail.primaryContactEmail}
-                onChanged={async () => {
-                  if (registrationDetail?.primaryContactEmail) {
-                    setRegistrationThreadLoading(true);
-                    try {
-                      setRegistrationThread(await adminApi<AdminRow[]>(`/api/communications/thread?email=${encodeURIComponent(registrationDetail.primaryContactEmail)}`));
-                    } finally {
-                      setRegistrationThreadLoading(false);
-                    }
-                  }
-                  await load();
-                }}
-                onSuccess={notifySuccess}
-                onError={notifyError}
               />
             </SectionCard>
           </>
