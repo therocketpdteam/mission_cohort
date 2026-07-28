@@ -3290,7 +3290,7 @@ export function CohortDetailClient({ id }: { id: string }) {
         </Stack>
       )}
 
-      <Dialog open={moveDialogOpen} onClose={() => !movingRegistrations && setMoveDialogOpen(false)} fullWidth maxWidth="sm">
+      <Dialog open={moveDialogOpen} onClose={() => !movingRegistrations && setMoveDialogOpen(false)} fullWidth maxWidth="md" PaperProps={{ className: "move-registration-modal" }}>
         <DialogTitle>Move Registrations to Cohort</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 0.5 }}>

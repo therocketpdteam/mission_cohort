@@ -796,7 +796,7 @@ export function ParticipantsClient() {
         </TableShell>
         {!loading && filteredRows.length === 0 && <EmptyState title="No participants found" description="Add participants or adjust roster filters." />}
       </SectionCard>
-      <Dialog open={moveDialogOpen} onClose={() => setMoveDialogOpen(false)} fullWidth maxWidth="sm">
+      <Dialog open={moveDialogOpen} onClose={() => setMoveDialogOpen(false)} fullWidth maxWidth="md" PaperProps={{ className: "move-registration-modal" }}>
         <DialogTitle>Move Registrations</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 0.5 }}>

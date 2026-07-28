@@ -6310,6 +6310,28 @@ h6,
   white-space: normal;
 }
 
+.move-registration-modal {
+  width: min(calc(100vw - 32px), 880px);
+  max-height: calc(100dvh - 32px);
+  overflow: visible;
+}
+
+.move-registration-modal .ui-modal-body {
+  min-height: min(430px, calc(100dvh - 190px));
+  overflow: visible;
+}
+
+.move-registration-modal .ui-select-menu {
+  z-index: 180;
+  max-height: min(360px, 48vh);
+}
+
+.move-registration-modal .ui-select-option {
+  min-height: 40px;
+  overflow: visible;
+  white-space: normal;
+}
+
 .participant-message-composer {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(240px, 340px);
