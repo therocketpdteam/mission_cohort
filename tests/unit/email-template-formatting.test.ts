@@ -51,6 +51,30 @@ test("builds private SendGrid personalizations for multiple recipients", () => {
   ]);
 });
 
+test("builds SendGrid file attachments from resolved content", () => {
+  const payload = buildSendGridMailPayload({
+    to: "gerardo@rocketpd.com",
+    subject: "Invoice",
+    html: "<p>Hello</p>",
+    attachments: [{
+      content: Buffer.from("pdf-bytes").toString("base64"),
+      filename: "Invoice JS-2026-355.pdf",
+      type: "application/pdf",
+      disposition: "attachment"
+    }]
+  }, {
+    fromEmail: "info@rocketpd.com",
+    fromName: "The RocketPD Team"
+  });
+
+  assert.deepEqual(payload.attachments, [{
+    content: Buffer.from("pdf-bytes").toString("base64"),
+    filename: "Invoice JS-2026-355.pdf",
+    type: "application/pdf",
+    disposition: "attachment"
+  }]);
+});
+
 test("default communication templates only use registered merge fields", () => {
   const warnings = defaultTemplates.flatMap((template) => [
     ...renderMergeFields(template.subject, sampleMergeContext, true).warnings,

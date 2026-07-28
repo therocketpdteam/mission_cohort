@@ -13,26 +13,63 @@ export async function sendEmail(input: {
   bodyHtml: string;
   bodyText?: string;
   context?: MergeFieldContext;
-  attachments?: Array<{ fileName: string; url?: string | null }>;
+  attachments?: Array<{ fileName: string; contentType?: string | null; url?: string | null }>;
 }) {
   const recipients = Array.isArray(input.to) ? input.to : [input.to];
   await assertOutboundRecipientsAllowed("SENDGRID", recipients);
   const renderedHtml = renderTemplate(input.bodyHtml, input.context ?? {}).output;
   const renderedText = input.bodyText ? renderTemplate(input.bodyText, input.context ?? {}).output : undefined;
-  const attachmentLinks = (input.attachments ?? []).filter((attachment) => attachment.url);
-  const html = attachmentLinks.length > 0
-    ? `${renderedHtml}<hr><p><strong>Attachments</strong></p><ul>${attachmentLinks.map((attachment) => `<li><a href="${attachment.url}">${attachment.fileName}</a></li>`).join("")}</ul>`
-    : renderedHtml;
-  const text = attachmentLinks.length > 0
-    ? `${renderedText ?? renderedHtml.replace(/<[^>]+>/g, " ")}\n\nAttachments:\n${attachmentLinks.map((attachment) => `${attachment.fileName}: ${attachment.url}`).join("\n")}`
-    : renderedText;
+  const attachments = await resolveSendGridAttachments(input.attachments ?? []);
 
   return sendWithSendGrid({
     to: input.to,
     subject: renderTemplate(input.subject, input.context ?? {}).output,
-    html,
-    text
+    html: renderedHtml,
+    text: renderedText,
+    attachments
   });
+}
+
+async function resolveSendGridAttachments(attachments: Array<{ fileName: string; contentType?: string | null; url?: string | null }>) {
+  const resolved = [];
+
+  for (const attachment of attachments) {
+    if (!attachment.url) {
+      continue;
+    }
+
+    const response = await fetch(attachment.url);
+    if (!response.ok) {
+      throw Object.assign(new Error(`Attachment ${attachment.fileName} could not be downloaded before sending.`), {
+        code: "BAD_REQUEST",
+        status: 400
+      });
+    }
+
+    const bytes = Buffer.from(await response.arrayBuffer());
+    if (bytes.byteLength > 20 * 1024 * 1024) {
+      throw Object.assign(new Error(`Attachment ${attachment.fileName} is larger than the 20 MB email limit.`), {
+        code: "BAD_REQUEST",
+        status: 400
+      });
+    }
+    const contentType = attachment.contentType ?? response.headers.get("content-type") ?? "application/octet-stream";
+    if (contentType.toLowerCase().includes("pdf") && bytes.subarray(0, 4).toString("utf8") !== "%PDF") {
+      throw Object.assign(new Error(`Attachment ${attachment.fileName} must use a direct PDF download URL.`), {
+        code: "BAD_REQUEST",
+        status: 400
+      });
+    }
+
+    resolved.push({
+      content: bytes.toString("base64"),
+      filename: attachment.fileName,
+      type: contentType,
+      disposition: "attachment" as const
+    });
+  }
+
+  return resolved;
 }
 
 export function renderTemplate(template: string, context: MergeFieldContext) {

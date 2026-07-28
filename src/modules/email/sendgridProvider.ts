@@ -8,6 +8,12 @@ export type SendEmailInput = {
   html: string;
   text?: string;
   from?: string;
+  attachments?: Array<{
+    content: string;
+    filename: string;
+    type?: string;
+    disposition?: "attachment" | "inline";
+  }>;
 };
 
 async function getSendGridConfig() {
@@ -60,7 +66,8 @@ export function buildSendGridMailPayload(input: SendEmailInput, config: { fromEm
     content: [
       { type: "text/plain", value: input.text ?? input.html.replace(/<[^>]+>/g, " ") },
       { type: "text/html", value: input.html }
-    ]
+    ],
+    ...(input.attachments?.length ? { attachments: input.attachments } : {})
   };
 }
 

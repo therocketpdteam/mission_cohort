@@ -484,19 +484,18 @@ export async function sendInvoiceDocument(id: string, receipt = false) {
     throw Object.assign(new Error(`Generate the ${documentLabel} PDF before sending.`), { code: "BAD_REQUEST", status: 400 });
   }
 
-  const invoiceLink = `<a href="${escapeHtml(url)}">open your ${documentLabel}</a>`;
-  const w9Link = w9Url ? `<p>For your convenience, <a href="${escapeHtml(w9Url)}">here is RocketPD's W-9</a>.</p>` : "";
-  const w9Text = w9Url ? " RocketPD's W-9 is included for your convenience." : "";
+  const w9Html = w9Url ? "<p>RocketPD's W-9 is attached for your convenience.</p>" : "";
+  const w9Text = w9Url ? " RocketPD's W-9 is attached for your convenience." : "";
   const communication = await prisma.cohortCommunication.create({
     data: {
       cohortId: invoice.cohortId,
       subject: `${receipt ? "Receipt" : "Invoice"} ${invoice.invoiceNumber ?? ""} for ${invoice.cohort.title}`.trim(),
       bodyHtml: receipt
-        ? `<p>Hello,</p><p>Your paid receipt for <strong>${escapeHtml(invoice.cohort.title)}</strong> is attached below. You can also ${invoiceLink}.</p><p>Thank you.</p>`
-        : `<p>Hello,</p><p>Your invoice for <strong>${escapeHtml(invoice.cohort.title)}</strong> is attached below. You can also ${invoiceLink}.</p><p>Total: <strong>${money(invoice.totalAmount)}</strong></p>${w9Link}`,
+        ? `<p>Hello,</p><p>Your paid receipt for <strong>${escapeHtml(invoice.cohort.title)}</strong> is attached to this email.</p><p>Thank you.</p>`
+        : `<p>Hello,</p><p>Your invoice for <strong>${escapeHtml(invoice.cohort.title)}</strong> is attached to this email.</p><p>Total: <strong>${money(invoice.totalAmount)}</strong></p>${w9Html}`,
       bodyText: receipt
-        ? `Your paid receipt for ${invoice.cohort.title} is attached below.`
-        : `Your invoice for ${invoice.cohort.title} is attached below. Total: ${money(invoice.totalAmount)}.${w9Text}`,
+        ? `Your paid receipt for ${invoice.cohort.title} is attached to this email.`
+        : `Your invoice for ${invoice.cohort.title} is attached to this email. Total: ${money(invoice.totalAmount)}.${w9Text}`,
       status: CommunicationStatus.DRAFT,
       recipientScope: RecipientScope.CUSTOM,
       recipientEmails: recipients,

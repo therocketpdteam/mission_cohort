@@ -8,8 +8,21 @@ function pdfLine(text: string, x: number, y: number, size = 10, font = "F1") {
   return `BT /${font} ${size} Tf ${x} ${y} Td (${escapePdfText(text)}) Tj ET`;
 }
 
-function textWidth(text: string, size: number) {
-  return text.length * size * 0.52;
+function characterWidthRatio(character: string) {
+  if (character === " ") return 0.278;
+  if ("ilI.,'|!".includes(character)) return 0.25;
+  if ("fjrt()[]{}".includes(character)) return 0.34;
+  if ("mwMW".includes(character)) return 0.83;
+  if ("ABCDEFGHIJKLMNOPQRSTUVWXYZ".includes(character)) return 0.66;
+  if ("0123456789".includes(character)) return 0.56;
+  if ("$#%&@".includes(character)) return 0.72;
+  if ("-/:\\".includes(character)) return 0.32;
+  return 0.5;
+}
+
+function textWidth(text: string, size: number, font: string) {
+  const width = Array.from(text).reduce((sum, character) => sum + characterWidthRatio(character), 0) * size;
+  return font === "F2" ? width * 1.04 : width;
 }
 
 function pdfText(text: string, x: number, y: number, options: { size?: number; font?: string; color?: [number, number, number]; align?: "left" | "center" | "right" } = {}) {
@@ -17,9 +30,9 @@ function pdfText(text: string, x: number, y: number, options: { size?: number; f
   const font = options.font ?? "F1";
   const color = options.color ?? [15, 23, 42];
   const left = options.align === "right"
-    ? x - textWidth(text, size)
+    ? x - textWidth(text, size, font)
     : options.align === "center"
-      ? x - textWidth(text, size) / 2
+      ? x - textWidth(text, size, font) / 2
       : x;
   return `BT ${color.map((value) => (value / 255).toFixed(3)).join(" ")} rg /${font} ${size} Tf ${left} ${y} Td (${escapePdfText(text)}) Tj ET`;
 }
@@ -341,32 +354,34 @@ export function buildInvoicePdf(input: InvoicePdfInput) {
   const logoWidth = logoImage ? logoHeight * (logoImage.width / logoImage.height) : 0;
   const logoX = 56;
   const logoY = 716 + (45 - logoHeight) / 2;
-  const rightLabelX = 568;
-  const rightValueX = 568;
-  const amountX = 568;
+  const rightEdgeX = 568;
+  const quantityX = 405;
+  const priceX = 465;
+  const taxX = 512;
+  const amountX = rightEdgeX;
   const content: string[] = [
     fillRect(0, 642, 612, 150, purple),
     logoImage ? drawImage("Logo", logoX, logoY, logoWidth, logoHeight) : pdfText("Rocket", 44, 728, { size: 30, font: "F2", color: [255, 255, 255] }),
     logoImage ? "" : fillRect(151, 715, 47, 35, accent),
     logoImage ? "" : pdfText("PD", 158, 728, { size: 28, font: "F2", color: [255, 255, 255] }),
     pdfText(title, 44, 684, { size: 42, font: "F2", color: [255, 255, 255] }),
-    ...issuerLines.slice(0, 5).map((line, index) => pdfText(line, 568, 730 - index * 16, { size: index === 0 ? 12 : 9.5, font: index === 0 ? "F2" : "F1", color: [255, 255, 255], align: "right" })),
+    ...issuerLines.slice(0, 5).map((line, index) => pdfText(line, rightEdgeX, 730 - index * 16, { size: index === 0 ? 12 : 9.5, font: index === 0 ? "F2" : "F1", color: [255, 255, 255], align: "right" })),
     pdfText(isReceipt ? "PAYMENT RECEIVED FROM:" : "BILL TO:", 44, 594, { size: 9, font: "F2", color: ink }),
     input.contactName ? pdfText(input.contactName, 44, 571, { size: 13, font: "F2", color: ink }) : "",
     pdfText(input.organizationName, 44, input.contactName ? 550 : 571, { size: 11, color: muted }),
     ...(input.organizationAddressLines ?? []).slice(0, 3).map((line, index) => pdfText(line, 44, (input.contactName ? 532 : 553) - index * 15, { size: 10.5, color: muted })),
     input.contactEmail ? pdfText(input.contactEmail, 44, 488, { size: 9, color: muted }) : "",
-    pdfText(`${isReceipt ? "RECEIPT" : "INVOICE"} #`, rightLabelX, 594, { size: 9, font: "F2", color: ink, align: "right" }),
-    pdfText(input.invoiceNumber, rightValueX, 576, { size: 11, color: muted, align: "right" }),
-    pdfText("DATE", rightLabelX, 544, { size: 9, font: "F2", color: ink, align: "right" }),
-    pdfText(input.issueDate, rightValueX, 526, { size: 11, color: muted, align: "right" }),
-    pdfText("PURCHASE ORDER", rightLabelX, 494, { size: 9, font: "F2", color: ink, align: "right" }),
-    pdfText(input.purchaseOrderNumber || "-", rightValueX, 476, { size: 11, color: muted, align: "right" }),
+    pdfText(`${isReceipt ? "RECEIPT" : "INVOICE"} #`, rightEdgeX, 594, { size: 9, font: "F2", color: ink, align: "right" }),
+    pdfText(input.invoiceNumber, rightEdgeX, 576, { size: 11, color: muted, align: "right" }),
+    pdfText("DATE", rightEdgeX, 544, { size: 9, font: "F2", color: ink, align: "right" }),
+    pdfText(input.issueDate, rightEdgeX, 526, { size: 11, color: muted, align: "right" }),
+    pdfText("PURCHASE ORDER", rightEdgeX, 494, { size: 9, font: "F2", color: ink, align: "right" }),
+    pdfText(input.purchaseOrderNumber || "-", rightEdgeX, 476, { size: 11, color: muted, align: "right" }),
     pdfText("ITEMS", 44, 426, { size: 9, font: "F2", color: ink }),
     pdfText("DESCRIPTION", 112, 426, { size: 9, font: "F2", color: ink }),
-    pdfText("QUANTITY", 423, 426, { size: 9, font: "F2", color: ink, align: "right" }),
-    pdfText("PRICE", 488, 426, { size: 9, font: "F2", color: ink, align: "right" }),
-    pdfText("TAX", 520, 426, { size: 9, font: "F2", color: ink, align: "right" }),
+    pdfText("QUANTITY", quantityX, 426, { size: 9, font: "F2", color: ink, align: "right" }),
+    pdfText("PRICE", priceX, 426, { size: 9, font: "F2", color: ink, align: "right" }),
+    pdfText("TAX", taxX, 426, { size: 9, font: "F2", color: ink, align: "right" }),
     pdfText("AMOUNT", amountX, 426, { size: 9, font: "F2", color: ink, align: "right" })
   ].filter(Boolean);
 
@@ -380,9 +395,9 @@ export function buildInvoicePdf(input: InvoicePdfInput) {
     detailLines.forEach((line, lineIndex) => {
       content.push(pdfText(line, 112, y - 21 - lineIndex * 15, { size: 9, color: muted }));
     });
-    content.push(pdfText(String(item.quantity), 423, y, { size: 10, color: ink, align: "right" }));
-    content.push(pdfText(item.unitAmount, 488, y, { size: 10, color: ink, align: "right" }));
-    content.push(pdfText(input.taxAmount === "$0.00" ? "NA" : input.taxAmount, 520, y, { size: 10, font: "F2", color: ink, align: "right" }));
+    content.push(pdfText(String(item.quantity), quantityX, y, { size: 10, color: ink, align: "right" }));
+    content.push(pdfText(item.unitAmount, priceX, y, { size: 10, color: ink, align: "right" }));
+    content.push(pdfText(input.taxAmount === "$0.00" ? "NA" : input.taxAmount, taxX, y, { size: 10, font: "F2", color: ink, align: "right" }));
     content.push(pdfText(item.totalAmount, amountX, y, { size: 10, font: "F2", color: ink, align: "right" }));
 
     if (index < input.lineItems.length - 1) {
