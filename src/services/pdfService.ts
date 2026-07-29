@@ -398,6 +398,8 @@ export function buildInvoicePdf(input: InvoicePdfInput) {
   const priceX = 465;
   const taxX = 512;
   const amountX = rightEdgeX;
+  const footerSplitX = 386;
+  const footerAmountX = 572;
   const content: string[] = [
     fillRect(0, 642, 612, 150, purple),
     logoImage ? drawImage("Logo", logoX, logoY, logoWidth, logoHeight) : pdfText("Rocket", headerLeftX, 728, { size: 30, font: "F2", color: [255, 255, 255] }),
@@ -441,7 +443,7 @@ export function buildInvoicePdf(input: InvoicePdfInput) {
     });
     content.push(pdfText(String(item.quantity), quantityX, y, { size: 10, color: ink, align: "right" }));
     content.push(pdfText(item.unitAmount, priceX, y, { size: 10, color: ink, align: "right" }));
-    content.push(pdfText(input.taxAmount === "$0.00" ? "NA" : input.taxAmount, taxX, y, { size: 10, font: "F2", color: ink, align: "right" }));
+    content.push(input.taxAmount === "$0.00" ? "" : pdfText(input.taxAmount, taxX, y, { size: 10, font: "F2", color: ink, align: "right" }));
     content.push(pdfText(item.totalAmount, amountX, y, { size: 10, font: "F2", color: ink, align: "right" }));
 
     if (index < input.lineItems.length - 1) {
@@ -462,14 +464,14 @@ export function buildInvoicePdf(input: InvoicePdfInput) {
   content.push(pdfText(input.balanceAmount, amountX, 232, { size: 9, color: ink, align: "right" }));
 
   const noteLines = wrapText(input.notes || (isReceipt ? "Thank you. This receipt confirms payment recorded by RocketPD." : "Please address checks to RocketPD."), 42).slice(0, 4);
-  content.push(fillRect(0, 58, 408, 96, lavender));
-  content.push(fillRect(408, 58, 204, 96, accent));
+  content.push(fillRect(0, 58, footerSplitX, 96, lavender));
+  content.push(fillRect(footerSplitX, 58, 612 - footerSplitX, 96, accent));
   content.push(pdfText("NOTES:", 44, 118, { size: 9, font: "F2", color: ink }));
   noteLines.forEach((line, index) => {
     content.push(pdfText(line, 44, 99 - index * 14, { size: 9, font: index === 0 ? "F2" : "F1", color: ink }));
   });
-  content.push(pdfText("TOTAL:", amountX, 116, { size: 10, font: "F2", color: [255, 255, 255], align: "right" }));
-  content.push(pdfText(isReceipt ? input.paidAmount : input.totalAmount, amountX, 78, { size: 31, font: "F2", color: [255, 255, 255], align: "right" }));
+  content.push(pdfText("TOTAL:", footerAmountX, 116, { size: 10, font: "F2", color: [255, 255, 255], align: "right" }));
+  content.push(pdfText(isReceipt ? input.paidAmount : input.totalAmount, footerAmountX, 78, { size: 31, font: "F2", color: [255, 255, 255], align: "right" }));
   content.push(pdfText(input.footerNote || "In Demand Group, LLC", 306, 34, { size: 8, color: [100, 116, 139], align: "center" }));
   content.push(pdfText("DBA RocketPD", 306, 22, { size: 8, color: [100, 116, 139], align: "center" }));
 
