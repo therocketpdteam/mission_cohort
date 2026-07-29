@@ -291,19 +291,21 @@ The RocketPD Team`
   defaultEmailTemplate({
     type: TemplateType.PAYMENT_REMINDER,
     name: "Payment Reminder",
-    subject: "Payment reminder: {{cohort.title}}",
+    subject: "Invoice reminder for {{cohort.title}}",
     bodyText: `Hello {{registration.primaryContactName}},
 
-This is a friendly reminder about payment for **{{cohort.title}}**.
+I hope you are doing well.
 
-Current payment status: **{{registration.paymentStatus}}**
+I'm reaching out with a quick payment reminder for **{{cohort.title}}**. We are excited to have your team learning with us, and we would appreciate your help getting the invoice wrapped up.
+
 Invoice number: {{registration.invoiceNumber}}
+Payment status: **{{registration.paymentStatus}}**
 
-Your invoice and RocketPD W-9 are attached to this email for your convenience.
+I've attached the invoice and RocketPD W-9 to make this easy to forward to your business office.
 
-If your organization requires a purchase order or any additional accounting documentation, reply to this email and we’ll help right away.
+If a purchase order, updated invoice detail, or anything else is needed before payment can be processed, just reply here and we'll take care of it quickly.
 
-Thank you,
+Thank you for helping us keep everything on track,
 The RocketPD Team`
   }),
   defaultEmailTemplate({
@@ -582,7 +584,10 @@ const defaultCopyRefreshMatchers: Record<string, (bodyText: string) => boolean> 
   "1 Week Before Session": (bodyText) =>
     bodyText.includes("You’re receiving this because you are registered for **{{session.title}}** in RocketPD’s **{{cohort.title}}** cohort"),
   "24 Hours Before Session": (bodyText) =>
-    bodyText.includes("This is a quick reminder that **{{session.title}}** for **{{cohort.title}}**, with {{cohort.presenterName}}, is tomorrow")
+    bodyText.includes("This is a quick reminder that **{{session.title}}** for **{{cohort.title}}**, with {{cohort.presenterName}}, is tomorrow"),
+  "Payment Reminder": (bodyText) =>
+    bodyText.includes("This is a friendly reminder about payment for **{{cohort.title}}**.") ||
+    bodyText.includes("Your invoice and RocketPD W-9 are attached to this email for your convenience.")
 };
 
 const sessionTemplateTypes = [
