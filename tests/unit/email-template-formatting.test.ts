@@ -79,10 +79,14 @@ test("POC registration confirmation describes invoice and W-9 as attachments", (
   const template = defaultTemplates.find((item) => item.name === "POC Registration Confirmation");
 
   assert.ok(template);
+  assert.match(template.bodyText, /Hello \{\{registration\.primaryContactFirstName\}\}/);
   assert.match(template.bodyText, /invoice and RocketPD W-9 are attached/i);
+  assert.match(template.bodyText, /\{\{registration\.purchaseOrderBullet\}\}/);
+  assert.match(template.bodyText, /\{\{registration\.participantRosterNextStep\}\}/);
   assert.doesNotMatch(template.bodyText, /\{\{registration\.paymentStatus\}\}/);
   assert.doesNotMatch(template.bodyText, /\{\{registration\.w9Url\}\}/);
   assert.doesNotMatch(template.bodyText, /\{\{registration\.invoiceUrl\}\}/);
+  assert.doesNotMatch(template.bodyText, /If you registered a team and already shared participant information/);
 });
 
 test("payment reminder describes invoice and W-9 as attachments", () => {

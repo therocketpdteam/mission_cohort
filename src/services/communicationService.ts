@@ -142,12 +142,26 @@ function registrationMergeContext(registration: Record<string, any> | undefined)
     return undefined;
   }
   const invoice = Array.isArray(registration.invoiceDrafts) ? registration.invoiceDrafts[0] : null;
+  const primaryContactName = String(registration.primaryContactName ?? "").trim();
+  const primaryContactFirstName = primaryContactName.split(/\s+/).filter(Boolean)[0] || primaryContactName;
+  const participantCount = Number(registration.participantCount ?? 0);
+  const savedParticipantCount = Array.isArray(registration.participants)
+    ? registration.participants.length
+    : Number(registration._count?.participants ?? 0);
+  const rosterStatus = String(registration.participantListStatus ?? "").toUpperCase();
+  const rosterComplete = rosterStatus === "COMPLETE" || (participantCount > 0 && savedParticipantCount >= participantCount);
+  const participantRosterNextStep = rosterComplete || participantCount <= 1
+    ? "We received the participant information we need, so there is nothing else you need to do right now."
+    : "We still need participant names and work email addresses. Please reply with each participant on a separate line, or send the roster to info@rocketpd.com, so we can send calendar invitations, meeting links, reminders, and resources.";
 
   return {
     ...registration,
+    primaryContactFirstName,
     totalAmount: formatMergeMoney(registration.totalAmount),
     invoiceSentDate: formatMergeDate(registration.confirmationDocsSentAt ?? invoice?.issueDate ?? registration.createdAt),
-    purchaseOrderLine: registration.purchaseOrderNumber ? `Purchase order: ${registration.purchaseOrderNumber}` : ""
+    purchaseOrderLine: registration.purchaseOrderNumber ? `Purchase order: ${registration.purchaseOrderNumber}` : "",
+    purchaseOrderBullet: registration.purchaseOrderNumber ? `- Purchase order: ${registration.purchaseOrderNumber}` : "",
+    participantRosterNextStep
   };
 }
 
@@ -214,7 +228,7 @@ function manualEmailContext(target: ManualEmailTarget) {
     cohort: cohortMergeContext(target.cohort),
     participant: participantMergeContext(target.participant),
     organization: target.organization ?? undefined,
-    registration: target.registration ?? undefined
+    registration: registrationMergeContext(target.registration ?? undefined)
   };
 }
 
@@ -456,7 +470,7 @@ The RocketPD Team`
     type: TemplateType.CUSTOM,
     name: "POC Registration Confirmation",
     subject: "Registration received: {{cohort.title}}",
-    bodyText: `Hello {{registration.primaryContactName}},
+    bodyText: `Hello {{registration.primaryContactFirstName}},
 
 Hope you are well.
 
@@ -466,14 +480,13 @@ Registration summary:
 
 - Participants registered: {{registration.participantCount}}
 - Invoice number: {{registration.invoiceNumber}}
+{{registration.purchaseOrderBullet}}
 
 Available documents:
 
 Your invoice and RocketPD W-9 are attached to this email for your convenience.
 
-If you registered a team and already shared participant information, we are reviewing it and will let you know if we have questions.
-
-If you registered a team and have not shared participant information yet, please reply with each participant’s name and work email address so we can send calendar invitations, meeting links, reminders, and resources.
+{{registration.participantRosterNextStep}}
 
 Thank you again for signing up for this cohort. We’re looking forward to a great experience.
 
@@ -635,7 +648,8 @@ const defaultCopyRefreshMatchers: Record<string, (bodyText: string) => boolean> 
     bodyText.includes("This is a quick reminder that **{{session.title}}** for **{{cohort.title}}**, with {{cohort.presenterName}}, is tomorrow"),
   "POC Registration Confirmation": (bodyText) =>
     bodyText.includes("- Payment status: {{registration.paymentStatus}}") ||
-    bodyText.includes("- Payment status: **{{registration.paymentStatus}}**"),
+    bodyText.includes("- Payment status: **{{registration.paymentStatus}}**") ||
+    bodyText.includes("If you registered a team and already shared participant information"),
   "Payment Reminder": (bodyText) =>
     bodyText.includes("This is a friendly reminder about payment for **{{cohort.title}}**.") ||
     bodyText.includes("Your invoice and RocketPD W-9 are attached to this email for your convenience.") ||
@@ -1348,7 +1362,13 @@ export async function sendCommunication(id: string, options?: { recipients?: str
     include: {
       cohort: { include: { presenter: true } },
       session: true,
-      registration: { include: { organization: true, invoiceDrafts: { orderBy: { updatedAt: "desc" } } } },
+      registration: {
+        include: {
+          organization: true,
+          participants: { where: { status: ParticipantStatus.REGISTERED } },
+          invoiceDrafts: { orderBy: { updatedAt: "desc" } }
+        }
+      },
       participant: true,
       template: true,
       createdBy: true,
@@ -1754,7 +1774,17 @@ async function createCommunicationFromTemplate(input: {
 export async function sendTemplateToParticipant(input: { templateId: string; participantId: string }) {
   const participant = await prisma.participant.findUnique({
     where: { id: input.participantId },
-    include: { cohort: { include: { presenter: true } }, organization: true, registration: { include: { invoiceDrafts: { orderBy: { updatedAt: "desc" } } } } }
+    include: {
+      cohort: { include: { presenter: true } },
+      organization: true,
+      registration: {
+        include: {
+          organization: true,
+          participants: { where: { status: ParticipantStatus.REGISTERED } },
+          invoiceDrafts: { orderBy: { updatedAt: "desc" } }
+        }
+      }
+    }
   });
 
   if (!participant) {
@@ -1771,19 +1801,10 @@ export async function sendTemplateToParticipant(input: { templateId: string; par
   return sendCommunication(communication.id, {
     recipients: [participant.email],
     context: {
-        cohort: {
-          ...participant.cohort,
-          title: participant.cohort.title,
-          description: participant.cohort.description,
-          startDate: participant.cohort.startDate,
-          presenterName: `${participant.cohort.presenter.firstName} ${participant.cohort.presenter.lastName}`,
-          presenterFirstName: participant.cohort.presenter.firstName,
-          presenterLastName: participant.cohort.presenter.lastName,
-          presenterEmail: participant.cohort.presenter.email
-      },
-      participant,
+      cohort: cohortMergeContext(participant.cohort),
+      participant: participantMergeContext(participant),
       organization: participant.organization,
-      registration: participant.registration
+      registration: registrationMergeContext(participant.registration)
     }
   });
 }
@@ -1802,7 +1823,13 @@ export async function sendManualTemplateToParticipants(input: { templateId: stri
       include: {
         cohort: { include: { presenter: true } },
         organization: true,
-        registration: { include: { organization: true, invoiceDrafts: { orderBy: { updatedAt: "desc" } } } }
+        registration: {
+          include: {
+            organization: true,
+            participants: { where: { status: ParticipantStatus.REGISTERED } },
+            invoiceDrafts: { orderBy: { updatedAt: "desc" } }
+          }
+        }
       }
     })
   ]);
@@ -1907,7 +1934,12 @@ export async function sendManualTemplateToParticipants(input: { templateId: stri
 export async function sendTemplateToRegistrations(input: { templateId: string; registrationIds: string[] }) {
   const registrations = await prisma.registration.findMany({
     where: { id: { in: input.registrationIds }, archivedAt: null },
-    include: { cohort: { include: { presenter: true } }, organization: true, invoiceDrafts: { orderBy: { updatedAt: "desc" } } }
+    include: {
+      cohort: { include: { presenter: true } },
+      organization: true,
+      participants: { where: { status: ParticipantStatus.REGISTERED } },
+      invoiceDrafts: { orderBy: { updatedAt: "desc" } }
+    }
   });
   const results = [];
 
@@ -1921,18 +1953,9 @@ export async function sendTemplateToRegistrations(input: { templateId: string; r
     results.push(await sendCommunication(communication.id, {
       recipients: [registration.primaryContactEmail],
       context: {
-        cohort: {
-          ...registration.cohort,
-          title: registration.cohort.title,
-          description: registration.cohort.description,
-          startDate: registration.cohort.startDate,
-          presenterName: `${registration.cohort.presenter.firstName} ${registration.cohort.presenter.lastName}`,
-          presenterFirstName: registration.cohort.presenter.firstName,
-          presenterLastName: registration.cohort.presenter.lastName,
-          presenterEmail: registration.cohort.presenter.email
-        },
+        cohort: cohortMergeContext(registration.cohort),
         organization: registration.organization,
-        registration
+        registration: registrationMergeContext(registration)
       }
     }));
   }
@@ -1969,7 +1992,13 @@ export async function sendManualCustomEmail(input: {
     include: {
       cohort: { include: { presenter: true } },
       organization: true,
-      registration: { include: { organization: true, invoiceDrafts: { orderBy: { updatedAt: "desc" } } } }
+      registration: {
+        include: {
+          organization: true,
+          participants: { where: { status: ParticipantStatus.REGISTERED } },
+          invoiceDrafts: { orderBy: { updatedAt: "desc" } }
+        }
+      }
     }
   });
 
@@ -2079,11 +2108,14 @@ function publishExperienceTestContext(input: {
       email: input.recipientEmail
     },
     registration: {
+      primaryContactFirstName: "Gerardo",
       primaryContactName: "Gerardo Grosso",
       primaryContactEmail: input.recipientEmail,
       participantCount: 1,
       paymentStatus: "Test",
       invoiceNumber: "TEST",
+      purchaseOrderBullet: "",
+      participantRosterNextStep: "We received the participant information we need, so there is nothing else you need to do right now.",
       totalAmount: "$0"
     },
     organization: {
