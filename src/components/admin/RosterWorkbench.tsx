@@ -15,6 +15,19 @@ type RosterWorkbenchProps = {
   showSavedParticipants?: boolean;
 };
 
+function rosterStatusFromCounts(expected: number, actual: number) {
+  if (expected === 0 && actual === 0) {
+    return "NOT_REQUESTED";
+  }
+  if (expected === 0 || actual >= expected) {
+    return "COMPLETE";
+  }
+  if (actual > 0) {
+    return "PARTIAL";
+  }
+  return "NEEDED";
+}
+
 export function RosterWorkbench({
   registration,
   existingParticipants = [],
@@ -36,8 +49,9 @@ export function RosterWorkbench({
   const projectedTotal = existingParticipants.length + newParticipants.length;
   const existingMissingTitleCount = existingParticipants.filter((participant) => !String(participant.title ?? "").trim()).length;
   const newMissingTitleCount = newParticipants.filter((participant) => !participant.title?.trim()).length;
-  const projectedMissingTitleCount = existingMissingTitleCount + newMissingTitleCount;
-  const savedComplete = expected > 0 && existingParticipants.length >= expected && existingMissingTitleCount === 0;
+  const savedStatus = rosterStatusFromCounts(expected, existingParticipants.length);
+  const projectedStatus = rosterStatusFromCounts(expected, projectedTotal);
+  const savedComplete = savedStatus === "COMPLETE";
   const savedPartial = expected > 0 && existingParticipants.length > 0 && existingParticipants.length < expected;
   const primaryContactEmail = String(registration.primaryContactEmail ?? "").toLowerCase();
   const primaryContactMissing = Boolean(primaryContactEmail && !existingEmails.has(primaryContactEmail));
@@ -65,14 +79,14 @@ export function RosterWorkbench({
           <p>
             {savedComplete
               ? "Roster is complete. New valid rows can still be added if the team grows."
-              : savedPartial || existingMissingTitleCount > 0
-                ? "Roster is partial. Paste missing people or add participant titles when they arrive."
+              : savedPartial
+                ? "Roster is partial. Paste missing people when they arrive."
                 : "Paste names, titles, and emails from a message, spreadsheet, or CSV."}
           </p>
         </div>
         <Stack direction="row" flexWrap="wrap" useFlexGap gap={1} alignItems="center" justifyContent="flex-end">
           {canAddPrimaryContact ? <Button size="small" variant="outlined" onClick={onAddPrimaryContact}>Add POC to roster</Button> : null}
-          <StatusChip value={projectedTotal >= expected && expected > 0 && projectedMissingTitleCount === 0 ? "COMPLETE" : projectedTotal > 0 ? "PARTIAL" : "NEEDED"} />
+          <StatusChip value={projectedStatus} />
         </Stack>
       </div>
       {savedComplete && (
@@ -86,8 +100,8 @@ export function RosterWorkbench({
         </div>
       )}
       {existingMissingTitleCount > 0 && (
-        <div className="roster-workbench-state is-partial">
-          {existingMissingTitleCount} saved participant{existingMissingTitleCount === 1 ? "" : "s"} missing title. The participant-list follow-up stays open until titles are added.
+        <div className="roster-workbench-state is-complete">
+          {existingMissingTitleCount} saved participant{existingMissingTitleCount === 1 ? "" : "s"} missing title. Titles are optional cleanup and do not block roster completion.
         </div>
       )}
       {showSavedParticipants && existingParticipants.length > 0 ? (

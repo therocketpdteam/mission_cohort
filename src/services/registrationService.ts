@@ -11,6 +11,7 @@ import { syncRegistrationToCrmWebhook } from "./crmRegistrationWebhookService";
 import { voidRegistrationQuickBooksInvoice } from "./quickBooksService";
 import { cancelRegistrationJourneys, planRegistrationJourneys } from "./registrationJourneyService";
 import { syncRegistrationParticipantListStatus } from "./participantService";
+import { syncPaymentRecordsToRegistrationStatus } from "./paymentService";
 import { shouldDeferRegistrationDelivery, stageParticipantAddition, stageRegistrationFieldChanges } from "./registrationChangeService";
 import { syncFutureLinkedGoogleCalendarInvitesForCohort } from "./calendarService";
 
@@ -140,6 +141,9 @@ export async function updateRegistration(
     include: { _count: { select: { participants: true } } }
   });
   const registration = await prisma.registration.update({ where: { id }, data });
+  if (data.paymentStatus) {
+    await syncPaymentRecordsToRegistrationStatus(registration.id, data.paymentStatus);
+  }
   const fallback = await ensureSingleSeatPrimaryContactParticipant(
     registration,
     previous.participantCount === 1 && previous._count.participants === 0

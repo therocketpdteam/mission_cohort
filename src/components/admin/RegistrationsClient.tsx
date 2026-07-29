@@ -77,12 +77,28 @@ function splitName(name?: string | null) {
   };
 }
 
+function rosterStatusFromCounts(registration: AdminRow) {
+  const expected = Number(registration.participantCount ?? 0);
+  const actual = Number(registration.participants?.length ?? registration._count?.participants ?? 0);
+
+  if (expected === 0 && actual === 0) {
+    return "NOT_REQUESTED";
+  }
+  if (expected === 0 || actual >= expected) {
+    return "COMPLETE";
+  }
+  if (actual > 0) {
+    return "PARTIAL";
+  }
+  return "NEEDED";
+}
+
 function rosterHealth(registration: AdminRow) {
   const expected = Number(registration.participantCount ?? 0);
   const actual = Number(registration.participants?.length ?? registration._count?.participants ?? 0);
-  const status = String(registration.participantListStatus ?? "");
+  const status = rosterStatusFromCounts(registration);
 
-  if (status === "COMPLETE" && (!expected || actual >= expected)) {
+  if (status === "COMPLETE") {
     return { tone: "success", label: "Roster complete", helper: `${actual}/${expected || actual} participants` };
   }
 
@@ -98,7 +114,7 @@ function rosterHealth(registration: AdminRow) {
     return { tone: "error", label: "Roster missing", helper: `${expected || "Unknown"} expected` };
   }
 
-  return { tone: "warning", label: formatStatusLabel(status || "NEEDED"), helper: `${actual}/${expected || actual} participants` };
+  return { tone: "warning", label: formatStatusLabel(status), helper: `${actual}/${expected || actual} participants` };
 }
 
 function taskTemplateName(task: AdminRow) {
@@ -1400,7 +1416,7 @@ export function RegistrationsClient() {
           .toLowerCase()
           .includes(search.toLowerCase());
         const matchPayment = paymentStatus ? row.paymentStatus === paymentStatus : true;
-        const matchRoster = rosterStatus ? row.participantListStatus === rosterStatus : true;
+        const matchRoster = rosterStatus ? rosterStatusFromCounts(row) === rosterStatus : true;
         const sourceLabel = formatRegistrationSource(row);
         const matchSource = source ? sourceLabel === source : true;
         const matchCohort = cohortId ? row.cohortId === cohortId : true;

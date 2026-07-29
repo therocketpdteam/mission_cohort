@@ -41,6 +41,19 @@ function plural(count: number, singular: string, pluralLabel = `${singular}s`) {
   return `${count} ${count === 1 ? singular : pluralLabel}`;
 }
 
+function rosterStatusFromCounts(expected: number, actual: number) {
+  if (expected === 0 && actual === 0) {
+    return "NOT_REQUESTED";
+  }
+  if (expected === 0 || actual >= expected) {
+    return "COMPLETE";
+  }
+  if (actual > 0) {
+    return "PARTIAL";
+  }
+  return "NEEDED";
+}
+
 export function RegistrationDeliveryPreflight({
   registration,
   onAddPrimaryContact
@@ -60,7 +73,7 @@ export function RegistrationDeliveryPreflight({
   const removals = Array.isArray(pending?.participantRemovals) ? pending.participantRemovals as AdminRow[] : [];
   const blocked = blockedSafetyRecipients(registration);
   const canAddPoc = Boolean(onAddPrimaryContact && pocEmail && !pocOnRoster && missing > 0);
-  const rosterTone = missing === 0 && actual > 0 ? "COMPLETE" : actual > 0 ? "PARTIAL" : "NEEDED";
+  const rosterTone = rosterStatusFromCounts(expected, actual);
   const participantDelivery = participantEmails.length
     ? `${plural(participantEmails.length, "participant")} eligible for calendar invites and session reminders.`
     : "No participant recipients are saved yet.";
@@ -79,7 +92,7 @@ export function RegistrationDeliveryPreflight({
       </div>
 
       <div className="registration-preflight-grid">
-        <div className={`registration-preflight-tile${missing === 0 && actual > 0 ? " is-success" : " is-warning"}`}>
+        <div className={`registration-preflight-tile${rosterTone === "COMPLETE" ? " is-success" : " is-warning"}`}>
           <span>Roster count</span>
           <strong>{actual}/{expected || actual || 0}</strong>
           <p>{missing > 0 ? `${plural(missing, "seat")} still needs participant details.` : "Saved roster matches expected seats."}</p>
@@ -129,4 +142,3 @@ export function RegistrationDeliveryPreflight({
     </section>
   );
 }
-

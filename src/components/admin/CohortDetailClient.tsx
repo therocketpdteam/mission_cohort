@@ -335,6 +335,22 @@ function registrationBillingStatus(registration: AdminRow, paymentRows?: AdminRo
   return "Invoiced";
 }
 
+function registrationRosterStatus(registration: AdminRow) {
+  const expected = Number(registration.participantCount ?? 0);
+  const actual = Number(registration.participants?.length ?? registration._count?.participants ?? 0);
+
+  if (expected === 0 && actual === 0) {
+    return "NOT_REQUESTED";
+  }
+  if (expected === 0 || actual >= expected) {
+    return "COMPLETE";
+  }
+  if (actual > 0) {
+    return "PARTIAL";
+  }
+  return "NEEDED";
+}
+
 function formatDate(value: unknown) {
   const date = value ? new Date(String(value)) : null;
   return date && Number.isFinite(date.getTime()) ? date.toLocaleDateString("en-US") : "-";
@@ -1488,7 +1504,7 @@ export function CohortDetailClient({ id }: { id: string }) {
       .filter((payment) => ["PENDING", "INVOICED", "PARTIALLY_PAID"].includes(payment.status))
       .reduce((sum, payment) => sum + Number(payment.amount ?? 0), 0);
     const participantSeats = registrations.reduce((sum, registration) => sum + Number(registration.participantCount ?? 0), 0);
-    const rosterComplete = registrations.filter((registration) => registration.participantListStatus === "COMPLETE").length;
+    const rosterComplete = registrations.filter((registration) => registrationRosterStatus(registration) === "COMPLETE").length;
     const openPaymentFollowUps = tasks.filter((task) => task.status !== "COMPLETED" && task.category === "PAYMENT_FOLLOW_UP").length;
     const upcomingSessions = sessions.filter((session) => new Date(session.startTime).getTime() >= Date.now()).length;
 
@@ -1544,7 +1560,7 @@ export function CohortDetailClient({ id }: { id: string }) {
 
   const filteredRegistrations = useMemo(() => registrations.filter((registration) => {
     const paymentMatch = !registrationPaymentFilter || registration.paymentStatus === registrationPaymentFilter;
-    const rosterMatch = !registrationRosterFilter || registration.participantListStatus === registrationRosterFilter;
+    const rosterMatch = !registrationRosterFilter || registrationRosterStatus(registration) === registrationRosterFilter;
     return paymentMatch && rosterMatch;
   }).sort((a, b) => {
     const aTime = new Date(String(a.createdAt ?? 0)).getTime();
@@ -2422,7 +2438,12 @@ export function CohortDetailClient({ id }: { id: string }) {
       valueGetter: (_value, row) => registrationBillingStatus(row, payments, invoiceDrafts),
       renderCell: (params) => <StatusChip value={params.value} />
     },
-    { field: "participantListStatus", headerName: "Roster", width: 124, renderCell: (params) => <StatusChip value={params.value} /> },
+    {
+      field: "participantListStatus",
+      headerName: "Roster",
+      width: 124,
+      renderCell: (params) => <StatusChip value={registrationRosterStatus(params.row)} />
+    },
     {
       field: "billing",
       headerName: "Billing",
@@ -3639,7 +3660,7 @@ export function CohortDetailClient({ id }: { id: string }) {
               <DetailField label="Value" value={money(registrationDetail.totalAmount)} />
               <DetailField label="Collected" value={money(registrationCollectedAmount(registrationDetail, payments, invoiceDrafts))} />
               <DetailField label="Status" value={registrationBillingStatus(registrationDetail, payments, invoiceDrafts)} />
-              <DetailField label="Roster" value={formatStatusLabel(registrationDetail.participantListStatus)} />
+              <DetailField label="Roster" value={formatStatusLabel(registrationRosterStatus(registrationDetail))} />
               <DetailField label="Invoice" value={registrationDetail.invoiceNumber} />
               <DetailField label="PO" value={registrationDetail.purchaseOrderNumber} />
               <DetailField label="UTM / Source" value={formatRegistrationSource(registrationDetail)} />
