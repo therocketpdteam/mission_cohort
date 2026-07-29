@@ -84,6 +84,15 @@ test("POC registration confirmation describes invoice and W-9 as attachments", (
   assert.doesNotMatch(template.bodyText, /\{\{registration\.invoiceUrl\}\}/);
 });
 
+test("payment reminder describes invoice and W-9 as attachments", () => {
+  const template = defaultTemplates.find((item) => item.name === "Payment Reminder");
+
+  assert.ok(template);
+  assert.match(template.bodyText, /invoice and RocketPD W-9 are attached/i);
+  assert.doesNotMatch(template.bodyText, /\{\{registration\.w9Url\}\}/);
+  assert.doesNotMatch(template.bodyText, /\{\{registration\.invoiceUrl\}\}/);
+});
+
 test("default communication templates only use registered merge fields", () => {
   const warnings = defaultTemplates.flatMap((template) => [
     ...renderMergeFields(template.subject, sampleMergeContext, true).warnings,

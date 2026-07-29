@@ -419,13 +419,30 @@ async function invoicePdfInput(invoice: Awaited<ReturnType<typeof createInvoiceD
 }
 
 export async function generateInvoicePdf(id: string, receipt = false) {
-  const invoice = await prisma.invoiceDraft.findUnique({
+  let invoice = await prisma.invoiceDraft.findUnique({
     where: { id },
     include: invoiceInclude()
   });
 
   if (!invoice) {
     throw Object.assign(new Error("Invoice draft not found."), { code: "NOT_FOUND", status: 404 });
+  }
+
+  if (!receipt && !invoice.invoiceNumber) {
+    invoice = await prisma.invoiceDraft.update({
+      where: { id },
+      data: {
+        invoiceNumber: await defaultInvoiceNumber({ id: invoice.id, cohort: invoice.cohort })
+      },
+      include: invoiceInclude()
+    });
+
+    if (invoice.registrationId && invoice.invoiceNumber) {
+      await prisma.registration.update({
+        where: { id: invoice.registrationId },
+        data: { invoiceNumber: invoice.invoiceNumber }
+      });
+    }
   }
 
   const pdf = buildInvoicePdf(await invoicePdfInput(invoice, receipt));

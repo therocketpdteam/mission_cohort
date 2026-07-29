@@ -299,11 +299,9 @@ This is a friendly reminder about payment for **{{cohort.title}}**.
 Current payment status: **{{registration.paymentStatus}}**
 Invoice number: {{registration.invoiceNumber}}
 
-[View the invoice]({{registration.invoiceUrl}})
+Your invoice and RocketPD W-9 are attached to this email for your convenience.
 
-If your organization requires a purchase order, W-9, or any additional accounting documentation, reply to this email and we’ll help right away.
-
-[Here is your W-9 for your convenience]({{registration.w9Url}})
+If your organization requires a purchase order or any additional accounting documentation, reply to this email and we’ll help right away.
 
 Thank you,
 The RocketPD Team`
@@ -628,7 +626,11 @@ export async function ensureDefaultCommunicationTemplates() {
       existing?.name === "POC Registration Confirmation" &&
       (existing.bodyText?.includes("{{registration.w9Url}}") || existing.bodyText?.includes("{{registration.invoiceUrl}}"))
     );
-    const shouldRefreshExisting = shouldRefreshLegacyDefault || shouldRefreshDefaultCopy || shouldRefreshPocAttachmentCopy;
+    const shouldRefreshPaymentReminderAttachmentCopy = Boolean(
+      existing?.name === "Payment Reminder" &&
+      (existing.bodyText?.includes("{{registration.w9Url}}") || existing.bodyText?.includes("{{registration.invoiceUrl}}"))
+    );
+    const shouldRefreshExisting = shouldRefreshLegacyDefault || shouldRefreshDefaultCopy || shouldRefreshPocAttachmentCopy || shouldRefreshPaymentReminderAttachmentCopy;
 
     if (existing) {
       const updated = await prisma.communicationTemplate.update({
@@ -1195,6 +1197,93 @@ async function preflightPocRegistrationConfirmation(communication: {
   };
 }
 
+async function attachRegistrationBillingDocuments(communicationId: string, registration: {
+  id: string;
+  w9Url: string | null;
+  invoiceUrl: string | null;
+  invoiceDrafts?: Array<{
+    invoiceNumber?: string | null;
+    pdfFileKey?: string | null;
+    pdfUrl?: string | null;
+  }>;
+}, fallbackW9Url?: string | null) {
+  const invoice = registration.invoiceDrafts?.find((item) => item.pdfFileKey && item.pdfUrl);
+  const w9Url = registration.w9Url || fallbackW9Url || null;
+  const documents = [
+    invoice
+      ? {
+          fileName: `Invoice ${invoice.invoiceNumber ?? registration.id}.pdf`,
+          contentType: "application/pdf",
+          provider: "supabase",
+          fileKey: invoice.pdfFileKey!,
+          url: invoice.pdfUrl!
+        }
+      : registration.invoiceUrl
+        ? {
+            fileName: "Registration invoice.pdf",
+            contentType: "application/pdf",
+            provider: "external",
+            fileKey: `registration/${registration.id}/invoice`,
+            url: registration.invoiceUrl
+          }
+        : null,
+    w9Url
+      ? {
+          fileName: "RocketPD W-9.pdf",
+          contentType: "application/pdf",
+          provider: "external",
+          fileKey: `registration/${registration.id}/w9`,
+          url: w9Url
+        }
+      : null
+  ].filter((document): document is { fileName: string; contentType: string; provider: string; fileKey: string; url: string } => Boolean(document));
+
+  for (const document of documents) {
+    const existing = await prisma.communicationAttachment.findFirst({
+      where: { communicationId, fileKey: document.fileKey }
+    });
+    if (!existing) {
+      await addCommunicationAttachment({ communicationId, ...document });
+    }
+  }
+
+  return documents.length;
+}
+
+async function preflightPaymentReminder(communication: {
+  id: string;
+  template: { name: string } | null;
+  registration: any;
+}) {
+  if (communication.template?.name !== "Payment Reminder" || !communication.registration) {
+    return null;
+  }
+
+  const invoiceProfile = await getOrganizationInvoiceProfile();
+  const readiness = registrationConfirmationDocumentReadiness(communication.registration, invoiceProfile.w9Url);
+  if (!readiness.ready) {
+    await prisma.cohortCommunication.update({
+      where: { id: communication.id },
+      data: {
+        status: CommunicationStatus.DRAFT,
+        providerError: readiness.reason
+      }
+    });
+    throw Object.assign(new Error(readiness.reason ?? "Payment reminder documents are not ready."), {
+      code: "BAD_REQUEST",
+      status: 400
+    });
+  }
+
+  await attachRegistrationBillingDocuments(communication.id, communication.registration, invoiceProfile.w9Url);
+
+  return {
+    ...communication.registration,
+    w9Url: communication.registration.w9Url || readiness.w9Url,
+    invoiceUrl: communication.registration.invoiceUrl || readiness.invoiceUrl
+  };
+}
+
 export async function sendCommunication(id: string, options?: { recipients?: string[]; context?: Parameters<typeof sendEmail>[0]["context"]; bypassCohortStatus?: boolean }) {
   const communication = await prisma.cohortCommunication.findUnique({
     where: { id },
@@ -1214,6 +1303,10 @@ export async function sendCommunication(id: string, options?: { recipients?: str
   }
 
   const registrationContext = await preflightPocRegistrationConfirmation(communication);
+  const paymentReminderRegistrationContext = registrationContext ?? await preflightPaymentReminder(communication);
+  const refreshedAttachments = paymentReminderRegistrationContext
+    ? await prisma.communicationAttachment.findMany({ where: { communicationId: id } })
+    : communication.attachments;
 
   await prisma.cohortCommunication.update({
     where: { id },
@@ -1251,8 +1344,8 @@ export async function sendCommunication(id: string, options?: { recipients?: str
       },
       session: communication.session ?? undefined,
       participant: communication.participant ?? undefined,
-      registration: registrationContext ?? communication.registration ?? undefined,
-      organization: registrationContext?.organization ?? communication.registration?.organization ?? undefined
+      registration: paymentReminderRegistrationContext ?? communication.registration ?? undefined,
+      organization: paymentReminderRegistrationContext?.organization ?? communication.registration?.organization ?? undefined
     };
 
     if (!options?.recipients && !options?.context && communication.recipientScope === RecipientScope.ALL_PARTICIPANTS) {
@@ -1281,7 +1374,7 @@ export async function sendCommunication(id: string, options?: { recipients?: str
           subject: communication.subject,
           bodyHtml: communication.bodyHtml,
           bodyText: communication.bodyText ?? undefined,
-          attachments: communication.attachments,
+          attachments: refreshedAttachments,
           context: {
             ...baseContext,
             participant: participantMergeContext(target.participant),
@@ -1319,7 +1412,7 @@ export async function sendCommunication(id: string, options?: { recipients?: str
       subject: communication.subject,
       bodyHtml: communication.bodyHtml,
       bodyText: communication.bodyText ?? undefined,
-      attachments: communication.attachments,
+      attachments: refreshedAttachments,
       context: options?.context ?? baseContext
     });
 

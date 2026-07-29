@@ -449,10 +449,29 @@ export async function bulkMoveRegistrationsToCohort(input: { ids: string[]; targ
       }
     });
 
-    await tx.registration.updateMany({ where: { id: { in: moveIds } }, data: { cohortId: targetCohortId } });
+    await tx.registration.updateMany({
+      where: { id: { in: moveIds } },
+      data: {
+        cohortId: targetCohortId,
+        invoiceNumber: null,
+        invoiceUrl: null,
+        confirmationDocsSentAt: null,
+        supportingDocumentStatus: SupportingDocumentStatus.NOT_READY
+      }
+    });
     await tx.participant.updateMany({ where: { registrationId: { in: moveIds } }, data: { cohortId: targetCohortId } });
     await tx.paymentRecord.updateMany({ where: { registrationId: { in: moveIds } }, data: { cohortId: targetCohortId } });
-    await tx.invoiceDraft.updateMany({ where: { registrationId: { in: moveIds } }, data: { cohortId: targetCohortId } });
+    await tx.invoiceDraft.updateMany({
+      where: { registrationId: { in: moveIds } },
+      data: {
+        cohortId: targetCohortId,
+        invoiceNumber: null,
+        pdfFileKey: null,
+        pdfUrl: null,
+        receiptFileKey: null,
+        receiptUrl: null
+      }
+    });
     await tx.operationsTask.updateMany({ where: { registrationId: { in: moveIds } }, data: { cohortId: targetCohortId } });
 
     return { cancelledCommunications: cancelled.count };
