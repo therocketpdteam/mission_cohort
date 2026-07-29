@@ -375,18 +375,18 @@ The RocketPD Team`
     type: TemplateType.CUSTOM,
     name: "Participant List Request",
     subject: "Participant list needed: {{cohort.title}}",
-    bodyText: `Hello {{registration.primaryContactName}},
+    bodyText: `Hello {{registration.primaryContactFirstName}},
 
 Hope you are well.
 
 We are excited to have {{organization.name}} as part of **{{cohort.title}}**.
 
-You registered more than one person for this cohort, and we still need the participant names and work email addresses so every participant receives calendar invitations, meeting links, reminders, and resources.
+You registered more than one person for this cohort, and we still need participant names, work email addresses, and titles if available so every participant receives calendar invitations, meeting links, reminders, and resources.
 
 Please reply with each participant on a separate line, like this:
 
-- First Last, email@school.org
-- First Last, email@school.org
+- First Last, Title, email@school.org
+- First Last, Title, email@school.org
 
 You can also reply with an Excel file if that is easier.
 
@@ -650,6 +650,9 @@ const defaultCopyRefreshMatchers: Record<string, (bodyText: string) => boolean> 
     bodyText.includes("- Payment status: {{registration.paymentStatus}}") ||
     bodyText.includes("- Payment status: **{{registration.paymentStatus}}**") ||
     bodyText.includes("If you registered a team and already shared participant information"),
+  "Participant List Request": (bodyText) =>
+    bodyText.includes("Hello {{registration.primaryContactName}}") ||
+    bodyText.includes("participant names and work email addresses so every participant receives"),
   "Payment Reminder": (bodyText) =>
     bodyText.includes("This is a friendly reminder about payment for **{{cohort.title}}**.") ||
     bodyText.includes("Your invoice and RocketPD W-9 are attached to this email for your convenience.") ||

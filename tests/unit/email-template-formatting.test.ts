@@ -105,6 +105,16 @@ test("payment reminder describes invoice and W-9 as attachments", () => {
   assert.doesNotMatch(template.bodyText, /\{\{registration\.invoiceUrl\}\}/);
 });
 
+test("participant list request asks for optional titles and greets the POC by first name", () => {
+  const template = defaultTemplates.find((item) => item.name === "Participant List Request");
+
+  assert.ok(template);
+  assert.match(template.bodyText, /Hello \{\{registration\.primaryContactFirstName\}\}/);
+  assert.match(template.bodyText, /titles if available/i);
+  assert.match(template.bodyText, /First Last, Title, email@school\.org/);
+  assert.doesNotMatch(template.bodyText, /Hello \{\{registration\.primaryContactName\}\}/);
+});
+
 test("default communication templates only use registered merge fields", () => {
   const warnings = defaultTemplates.flatMap((template) => [
     ...renderMergeFields(template.subject, sampleMergeContext, true).warnings,
