@@ -80,6 +80,7 @@ test("POC registration confirmation describes invoice and W-9 as attachments", (
 
   assert.ok(template);
   assert.match(template.bodyText, /invoice and RocketPD W-9 are attached/i);
+  assert.doesNotMatch(template.bodyText, /\{\{registration\.paymentStatus\}\}/);
   assert.doesNotMatch(template.bodyText, /\{\{registration\.w9Url\}\}/);
   assert.doesNotMatch(template.bodyText, /\{\{registration\.invoiceUrl\}\}/);
 });

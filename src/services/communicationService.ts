@@ -465,7 +465,6 @@ We received the registration for **{{organization.name}}** in **{{cohort.title}}
 Registration summary:
 
 - Participants registered: {{registration.participantCount}}
-- Payment status: {{registration.paymentStatus}}
 - Invoice number: {{registration.invoiceNumber}}
 
 Available documents:
@@ -634,6 +633,9 @@ const defaultCopyRefreshMatchers: Record<string, (bodyText: string) => boolean> 
     bodyText.includes("You’re receiving this because you are registered for **{{session.title}}** in RocketPD’s **{{cohort.title}}** cohort"),
   "24 Hours Before Session": (bodyText) =>
     bodyText.includes("This is a quick reminder that **{{session.title}}** for **{{cohort.title}}**, with {{cohort.presenterName}}, is tomorrow"),
+  "POC Registration Confirmation": (bodyText) =>
+    bodyText.includes("- Payment status: {{registration.paymentStatus}}") ||
+    bodyText.includes("- Payment status: **{{registration.paymentStatus}}**"),
   "Payment Reminder": (bodyText) =>
     bodyText.includes("This is a friendly reminder about payment for **{{cohort.title}}**.") ||
     bodyText.includes("Your invoice and RocketPD W-9 are attached to this email for your convenience.") ||
