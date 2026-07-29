@@ -401,16 +401,15 @@ The RocketPD Team`
     type: TemplateType.CUSTOM,
     name: "Supporting Documents Request",
     subject: "Supporting documents needed: {{cohort.title}}",
-    bodyText: `Hello {{registration.primaryContactName}},
+    bodyText: `Hello {{registration.primaryContactFirstName}},
 
-We are preparing **{{cohort.title}}** for {{organization.name}} and want to make sure purchasing/accounting has what it needs.
+We are preparing **{{cohort.title}}** for {{organization.name}} and want to make sure your purchasing/accounting team has everything it needs.
 
 Available documents:
 
-- [Here is your W-9 for your convenience]({{registration.w9Url}})
-- [Here is your invoice]({{registration.invoiceUrl}})
+The invoice and RocketPD W-9 are attached to this email for your convenience.
 
-If you need a PO number added, a revised invoice date, updated participant count, or any other adjustment, reply directly to this message and we’ll take care of it.
+If you need a PO number added, a revised invoice date, an updated participant count, or any other adjustment, reply directly to this message and we’ll take care of it.
 
 Thank you,
 The RocketPD Team`
@@ -653,6 +652,10 @@ const defaultCopyRefreshMatchers: Record<string, (bodyText: string) => boolean> 
   "Participant List Request": (bodyText) =>
     bodyText.includes("Hello {{registration.primaryContactName}}") ||
     bodyText.includes("participant names and work email addresses so every participant receives"),
+  "Supporting Documents Request": (bodyText) =>
+    bodyText.includes("Hello {{registration.primaryContactName}}") ||
+    bodyText.includes("{{registration.w9Url}}") ||
+    bodyText.includes("{{registration.invoiceUrl}}"),
   "Payment Reminder": (bodyText) =>
     bodyText.includes("This is a friendly reminder about payment for **{{cohort.title}}**.") ||
     bodyText.includes("Your invoice and RocketPD W-9 are attached to this email for your convenience.") ||

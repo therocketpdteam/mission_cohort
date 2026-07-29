@@ -115,6 +115,18 @@ test("participant list request asks for optional titles and greets the POC by fi
   assert.doesNotMatch(template.bodyText, /Hello \{\{registration\.primaryContactName\}\}/);
 });
 
+test("supporting documents request describes attachments and greets the POC by first name", () => {
+  const template = defaultTemplates.find((item) => item.name === "Supporting Documents Request");
+
+  assert.ok(template);
+  assert.match(template.bodyText, /Hello \{\{registration\.primaryContactFirstName\}\}/);
+  assert.match(template.bodyText, /invoice and RocketPD W-9 are attached/i);
+  assert.match(template.bodyText, /PO number added/i);
+  assert.doesNotMatch(template.bodyText, /\{\{registration\.w9Url\}\}/);
+  assert.doesNotMatch(template.bodyText, /\{\{registration\.invoiceUrl\}\}/);
+  assert.doesNotMatch(template.bodyText, /Hello \{\{registration\.primaryContactName\}\}/);
+});
+
 test("default communication templates only use registered merge fields", () => {
   const warnings = defaultTemplates.flatMap((template) => [
     ...renderMergeFields(template.subject, sampleMergeContext, true).warnings,
