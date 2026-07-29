@@ -146,7 +146,8 @@ function registrationMergeContext(registration: Record<string, any> | undefined)
   return {
     ...registration,
     totalAmount: formatMergeMoney(registration.totalAmount),
-    invoiceSentDate: formatMergeDate(registration.confirmationDocsSentAt ?? invoice?.issueDate ?? registration.createdAt)
+    invoiceSentDate: formatMergeDate(registration.confirmationDocsSentAt ?? invoice?.issueDate ?? registration.createdAt),
+    purchaseOrderLine: registration.purchaseOrderNumber ? `Purchase order: ${registration.purchaseOrderNumber}` : ""
   };
 }
 
@@ -347,6 +348,7 @@ I'm reaching out with a quick payment reminder for **{{cohort.title}}**. We are 
 Invoice number: {{registration.invoiceNumber}}
 Invoice sent: {{registration.invoiceSentDate}}
 Amount: **{{registration.totalAmount}}**
+{{registration.purchaseOrderLine}}
 
 I've attached the invoice and RocketPD W-9 to make this easy to forward to your business office.
 
@@ -635,7 +637,8 @@ const defaultCopyRefreshMatchers: Record<string, (bodyText: string) => boolean> 
   "Payment Reminder": (bodyText) =>
     bodyText.includes("This is a friendly reminder about payment for **{{cohort.title}}**.") ||
     bodyText.includes("Your invoice and RocketPD W-9 are attached to this email for your convenience.") ||
-    bodyText.includes("Payment status: **{{registration.paymentStatus}}**")
+    bodyText.includes("Payment status: **{{registration.paymentStatus}}**") ||
+    bodyText.includes("Amount: **{{registration.totalAmount}}**\n\nI've attached")
 };
 
 const sessionTemplateTypes = [
