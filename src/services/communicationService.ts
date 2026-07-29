@@ -104,6 +104,52 @@ function cohortMergeContext(cohort: Record<string, any> | undefined) {
   };
 }
 
+function formatMergeDate(value: unknown) {
+  if (!value) {
+    return "";
+  }
+  const date = new Date(value as string | Date);
+  if (!Number.isFinite(date.getTime())) {
+    return String(value);
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric"
+  }).format(date);
+}
+
+function formatMergeMoney(value: unknown) {
+  if (typeof value === "string" && value.trim().startsWith("$")) {
+    return value;
+  }
+  const amount = Number(value ?? 0);
+  if (!Number.isFinite(amount)) {
+    return String(value ?? "");
+  }
+
+  return amount.toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
+}
+
+function registrationMergeContext(registration: Record<string, any> | undefined) {
+  if (!registration) {
+    return undefined;
+  }
+  const invoice = Array.isArray(registration.invoiceDrafts) ? registration.invoiceDrafts[0] : null;
+
+  return {
+    ...registration,
+    totalAmount: formatMergeMoney(registration.totalAmount),
+    invoiceSentDate: formatMergeDate(registration.confirmationDocsSentAt ?? invoice?.issueDate ?? registration.createdAt)
+  };
+}
+
 function participantMergeContext(participant: Record<string, any> | undefined) {
   if (!participant) {
     return undefined;
@@ -299,7 +345,8 @@ I hope you are doing well.
 I'm reaching out with a quick payment reminder for **{{cohort.title}}**. We are excited to have your team learning with us, and we would appreciate your help getting the invoice wrapped up.
 
 Invoice number: {{registration.invoiceNumber}}
-Payment status: **{{registration.paymentStatus}}**
+Invoice sent: {{registration.invoiceSentDate}}
+Amount: **{{registration.totalAmount}}**
 
 I've attached the invoice and RocketPD W-9 to make this easy to forward to your business office.
 
@@ -587,7 +634,8 @@ const defaultCopyRefreshMatchers: Record<string, (bodyText: string) => boolean> 
     bodyText.includes("This is a quick reminder that **{{session.title}}** for **{{cohort.title}}**, with {{cohort.presenterName}}, is tomorrow"),
   "Payment Reminder": (bodyText) =>
     bodyText.includes("This is a friendly reminder about payment for **{{cohort.title}}**.") ||
-    bodyText.includes("Your invoice and RocketPD W-9 are attached to this email for your convenience.")
+    bodyText.includes("Your invoice and RocketPD W-9 are attached to this email for your convenience.") ||
+    bodyText.includes("Payment status: **{{registration.paymentStatus}}**")
 };
 
 const sessionTemplateTypes = [
@@ -1337,19 +1385,10 @@ export async function sendCommunication(id: string, options?: { recipients?: str
       await assertCohortDeliveryAllowed("SENDGRID", communication.cohort.status, recipients);
     }
     const baseContext = {
-      cohort: {
-        ...communication.cohort,
-        title: communication.cohort.title,
-        description: communication.cohort.description,
-        startDate: communication.cohort.startDate,
-        presenterName: `${communication.cohort.presenter.firstName} ${communication.cohort.presenter.lastName}`,
-        presenterFirstName: communication.cohort.presenter.firstName,
-        presenterLastName: communication.cohort.presenter.lastName,
-        presenterEmail: communication.cohort.presenter.email
-      },
+      cohort: cohortMergeContext(communication.cohort),
       session: communication.session ?? undefined,
       participant: communication.participant ?? undefined,
-      registration: paymentReminderRegistrationContext ?? communication.registration ?? undefined,
+      registration: registrationMergeContext(paymentReminderRegistrationContext ?? communication.registration ?? undefined),
       organization: paymentReminderRegistrationContext?.organization ?? communication.registration?.organization ?? undefined
     };
 
@@ -1383,7 +1422,7 @@ export async function sendCommunication(id: string, options?: { recipients?: str
           context: {
             ...baseContext,
             participant: participantMergeContext(target.participant),
-            registration: target.participant.registration,
+            registration: registrationMergeContext(target.participant.registration),
             organization: target.participant.organization ?? target.participant.registration?.organization ?? undefined
           }
         });

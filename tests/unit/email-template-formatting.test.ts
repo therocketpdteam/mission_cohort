@@ -91,6 +91,9 @@ test("payment reminder describes invoice and W-9 as attachments", () => {
   assert.match(template.bodyText, /I've attached the invoice and RocketPD W-9/i);
   assert.match(template.bodyText, /getting the invoice wrapped up/i);
   assert.match(template.bodyText, /business office/i);
+  assert.match(template.bodyText, /Invoice sent: \{\{registration\.invoiceSentDate\}\}/);
+  assert.match(template.bodyText, /Amount: \*\*\{\{registration\.totalAmount\}\}\*\*/);
+  assert.doesNotMatch(template.bodyText, /\{\{registration\.paymentStatus\}\}/);
   assert.doesNotMatch(template.bodyText, /\{\{registration\.w9Url\}\}/);
   assert.doesNotMatch(template.bodyText, /\{\{registration\.invoiceUrl\}\}/);
 });
