@@ -549,7 +549,13 @@ async function recordCalendarEnrollmentOutcome(registration: {
   const firstError = calendar.details.failed[0]?.error;
   const description = calendar.status === "no_linked_google_events"
     ? "Registration was saved, but this published cohort has no linked future Google Calendar events to enroll attendees into."
-    : `Registration was saved, but Google Calendar enrollment failed for ${calendar.failed} future session${calendar.failed === 1 ? "" : "s"}.${firstError ? ` First error: ${firstError}` : ""}`;
+    : [
+        `Registration was saved, but Google Calendar enrollment failed for ${calendar.failed} future session${calendar.failed === 1 ? "" : "s"}.`,
+        firstError ? `First error: ${firstError}` : null,
+        calendar.details.fallback?.sent
+          ? `Fallback calendar file email sent for ${calendar.details.fallback.sent} recipient${calendar.details.fallback.sent === 1 ? "" : "s"}.`
+          : null
+      ].filter(Boolean).join(" ");
 
   const existing = await prisma.operationsTask.findFirst({ where: openTaskWhere });
   const data = {
