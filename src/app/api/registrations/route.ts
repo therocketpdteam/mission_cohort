@@ -15,6 +15,7 @@ import {
 } from "@/services/registrationService";
 import { applyRegistrationChanges } from "@/services/registrationChangeService";
 import { syncRegistrationToCrm } from "@/services/crmRegistrationWebhookService";
+import { planRegistrationJourneys } from "@/services/registrationJourneyService";
 
 export async function GET(request: Request) {
   try {
@@ -82,6 +83,14 @@ export async function PATCH(request: Request) {
 
     if (body.action === "syncCrm") {
       return ok(await syncRegistrationToCrm(body.id, { eventType: "manual.registration_sync" }), { status: 202 });
+    }
+
+    if (body.action === "syncCalendar") {
+      return ok(await planRegistrationJourneys(body.id, {
+        sendPocConfirmation: false,
+        retryFailed: true,
+        planMilestones: false
+      }), { status: 202 });
     }
 
     if (body.action === "syncRosterStatus") {

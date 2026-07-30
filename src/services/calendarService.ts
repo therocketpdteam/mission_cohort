@@ -102,6 +102,21 @@ async function getCohortCalendarAttendees(cohortId: string) {
   return uniqueCalendarAttendees(rows);
 }
 
+function missingCalendarAttendees(
+  expected: Array<{ email: string }>,
+  actual?: Array<{ email?: string | null }> | null,
+  attendeesOmitted?: boolean | null
+) {
+  if (attendeesOmitted) {
+    return [];
+  }
+
+  const actualEmails = new Set((actual ?? []).map((attendee) => attendee.email?.trim().toLowerCase()).filter(Boolean));
+  return expected
+    .map((attendee) => attendee.email.trim().toLowerCase())
+    .filter((email) => email && !actualEmails.has(email));
+}
+
 export async function listConnectedGoogleCalendars() {
   return listGoogleCalendars({ accessToken: await getConnectedGoogleCalendarAccessToken() });
 }
@@ -164,6 +179,22 @@ export async function createCalendarInvitePlaceholder(sessionId?: string, mode: 
         })),
         sendUpdates: true
       });
+      const verifiedGoogleEvent = result.attendeesOmitted
+        ? await getGoogleCalendarEvent({
+            accessToken: await getConnectedGoogleCalendarAccessToken(),
+            calendarId: (await googleSetupWithEnvFallback()).calendarId,
+            providerEventId: result.id,
+            maxAttendees: attendees.length + 5
+          })
+        : result;
+      const missingAttendees = missingCalendarAttendees(attendees, verifiedGoogleEvent?.attendees, verifiedGoogleEvent?.attendeesOmitted);
+
+      if (missingAttendees.length > 0) {
+        throw Object.assign(new Error(`Google Calendar event saved but is missing ${missingAttendees.length} attendee${missingAttendees.length === 1 ? "" : "s"}: ${missingAttendees.slice(0, 8).join(", ")}`), {
+          code: "BAD_REQUEST",
+          status: 400
+        });
+      }
 
       const calendarEvent = existing
         ? await prisma.calendarEvent.update({

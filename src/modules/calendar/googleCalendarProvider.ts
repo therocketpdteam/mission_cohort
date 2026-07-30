@@ -195,20 +195,26 @@ export async function upsertGoogleCalendarEvent(input: GoogleCalendarEventInput)
     });
   }
 
-  return response.json() as Promise<{ id: string; htmlLink?: string }>;
+  return response.json() as Promise<{
+    id: string;
+    htmlLink?: string;
+    attendees?: Array<{ email?: string; displayName?: string; responseStatus?: string }>;
+    attendeesOmitted?: boolean;
+  }>;
 }
 
-export async function getGoogleCalendarEvent(input: { accessToken?: string; calendarId?: string; providerEventId: string }) {
+export async function getGoogleCalendarEvent(input: { accessToken?: string; calendarId?: string; providerEventId: string; maxAttendees?: number }) {
   const calendarIdValue = input.calendarId ?? env.GOOGLE_CALENDAR_ID;
 
   if (!input.accessToken || !calendarIdValue) {
     throw Object.assign(new Error("Google Calendar is not connected."), { code: "BAD_REQUEST", status: 400 });
   }
 
-  const response = await fetch(
-    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarIdValue)}/events/${encodeURIComponent(input.providerEventId)}`,
-    { headers: { Authorization: `Bearer ${input.accessToken}`, Accept: "application/json" } }
-  );
+  const url = new URL(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarIdValue)}/events/${encodeURIComponent(input.providerEventId)}`);
+  if (input.maxAttendees) {
+    url.searchParams.set("maxAttendees", String(input.maxAttendees));
+  }
+  const response = await fetch(url, { headers: { Authorization: `Bearer ${input.accessToken}`, Accept: "application/json" } });
 
   if (response.status === 404 || response.status === 410) {
     return null;
@@ -222,6 +228,7 @@ export async function getGoogleCalendarEvent(input: { accessToken?: string; cale
     id: string;
     htmlLink?: string;
     attendees?: Array<{ email?: string; displayName?: string; responseStatus?: string }>;
+    attendeesOmitted?: boolean;
   }>;
 }
 

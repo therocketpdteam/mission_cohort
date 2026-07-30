@@ -2,6 +2,9 @@ import {
   CohortStatus,
   CommunicationStatus,
   InvoiceDraftStatus,
+  OperationsTaskCategory,
+  OperationsTaskPriority,
+  OperationsTaskStatus,
   ParticipantStatus,
   RecipientScope,
   RegistrationStatus,
@@ -294,23 +297,105 @@ async function prepareRegistrationConfirmationDocuments(registration: Registrati
 }
 
 async function syncFutureCalendarInvites(registration: {
-  cohort: { status: CohortStatus; sessions: Array<{ id: string; startTime: Date; calendarEvents: Array<{ provider: string; providerEventId: string | null }> }> };
+  cohortId: string;
+  id: string;
+  cohort: { status: CohortStatus; sessions: Array<{ id: string; title: string; startTime: Date; calendarEvents: Array<{ provider: string; providerEventId: string | null }> }> };
 }) {
   if (!deliveryAuthorized(registration.cohort.status)) {
-    return { updated: 0, status: "waiting_for_publish" as const };
+    return { updated: 0, failed: 0, status: "waiting_for_publish" as const, details: { updated: [], failed: [] } };
   }
 
   const futureLinkedSessions = registration.cohort.sessions.filter((session) =>
     session.startTime.getTime() > Date.now() && session.calendarEvents.some((event) => event.provider === "google" && event.providerEventId)
   );
-  let updated = 0;
+  const updated: Array<{ sessionId: string; title: string; attendeeCount: number }> = [];
+  const failed: Array<{ sessionId: string; title: string; error: string }> = [];
 
-  for (const session of futureLinkedSessions) {
-    await createCalendarInvitePlaceholder(session.id, "google");
-    updated += 1;
+  if (futureLinkedSessions.length === 0) {
+    return {
+      updated: 0,
+      failed: 0,
+      status: registration.cohort.sessions.some((session) => session.startTime.getTime() > Date.now())
+        ? "no_linked_google_events" as const
+        : "no_future_sessions" as const,
+      details: { updated, failed }
+    };
   }
 
-  return { updated, status: "synced" as const };
+  for (const session of futureLinkedSessions) {
+    try {
+      const result = await createCalendarInvitePlaceholder(session.id, "google");
+      updated.push({
+        sessionId: session.id,
+        title: session.title,
+        attendeeCount: result.attendeeCount ?? 0
+      });
+    } catch (error) {
+      failed.push({
+        sessionId: session.id,
+        title: session.title,
+        error: error instanceof Error ? error.message : "Google Calendar update failed"
+      });
+    }
+  }
+
+  return {
+    updated: updated.length,
+    failed: failed.length,
+    status: failed.length > 0 ? "failed" as const : "synced" as const,
+    details: { updated, failed }
+  };
+}
+
+async function recordCalendarEnrollmentOutcome(registration: {
+  id: string;
+  cohortId: string;
+  primaryContactEmail: string;
+}, calendar: Awaited<ReturnType<typeof syncFutureCalendarInvites>>) {
+  const openTaskWhere = {
+    registrationId: registration.id,
+    category: OperationsTaskCategory.CALENDAR_INVITE,
+    status: { in: [OperationsTaskStatus.OPEN, OperationsTaskStatus.IN_PROGRESS] }
+  };
+
+  if (calendar.status === "synced") {
+    await prisma.operationsTask.updateMany({
+      where: openTaskWhere,
+      data: {
+        status: OperationsTaskStatus.COMPLETED,
+        completedAt: new Date(),
+        description: `Calendar enrollment verified for ${calendar.updated} future session${calendar.updated === 1 ? "" : "s"}.`
+      }
+    });
+    return;
+  }
+
+  if (calendar.status === "waiting_for_publish" || calendar.status === "no_future_sessions") {
+    return;
+  }
+
+  const firstError = calendar.details.failed[0]?.error;
+  const description = calendar.status === "no_linked_google_events"
+    ? "Registration was saved, but this published cohort has no linked future Google Calendar events to enroll attendees into."
+    : `Registration was saved, but Google Calendar enrollment failed for ${calendar.failed} future session${calendar.failed === 1 ? "" : "s"}.${firstError ? ` First error: ${firstError}` : ""}`;
+
+  const existing = await prisma.operationsTask.findFirst({ where: openTaskWhere });
+  const data = {
+    cohortId: registration.cohortId,
+    registrationId: registration.id,
+    title: `Verify calendar invites for ${registration.primaryContactEmail}`,
+    description,
+    category: OperationsTaskCategory.CALENDAR_INVITE,
+    priority: OperationsTaskPriority.URGENT,
+    status: OperationsTaskStatus.OPEN
+  };
+
+  if (existing) {
+    await prisma.operationsTask.update({ where: { id: existing.id }, data });
+    return;
+  }
+
+  await prisma.operationsTask.create({ data });
 }
 
 export async function planRegistrationJourneys(
@@ -477,14 +562,13 @@ export async function planRegistrationJourneys(
 
   let calendar: Awaited<ReturnType<typeof syncFutureCalendarInvites>> = {
     updated: 0,
-    status: "waiting_for_publish" as const
+    failed: 0,
+    status: "waiting_for_publish" as const,
+    details: { updated: [], failed: [] }
   };
   if (options.syncCalendar !== false) {
-    try {
-      calendar = await syncFutureCalendarInvites(registration);
-    } catch (error) {
-      console.warn("Registration calendar enrollment failed", error);
-    }
+    calendar = await syncFutureCalendarInvites(registration);
+    await recordCalendarEnrollmentOutcome(registration, calendar);
   }
 
   return {
