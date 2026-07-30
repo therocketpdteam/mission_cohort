@@ -353,7 +353,7 @@ The RocketPD Team`
     type: TemplateType.PAYMENT_REMINDER,
     name: "Payment Reminder",
     subject: "Invoice reminder for {{cohort.title}}",
-    bodyText: `Hello {{registration.primaryContactName}},
+    bodyText: `Hello {{registration.primaryContactFirstName}},
 
 I hope you are doing well.
 
@@ -657,6 +657,7 @@ const defaultCopyRefreshMatchers: Record<string, (bodyText: string) => boolean> 
     bodyText.includes("{{registration.w9Url}}") ||
     bodyText.includes("{{registration.invoiceUrl}}"),
   "Payment Reminder": (bodyText) =>
+    bodyText.includes("Hello {{registration.primaryContactName}}") ||
     bodyText.includes("This is a friendly reminder about payment for **{{cohort.title}}**.") ||
     bodyText.includes("Your invoice and RocketPD W-9 are attached to this email for your convenience.") ||
     bodyText.includes("Payment status: **{{registration.paymentStatus}}**") ||

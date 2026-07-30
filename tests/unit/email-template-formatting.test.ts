@@ -93,6 +93,7 @@ test("payment reminder describes invoice and W-9 as attachments", () => {
   const template = defaultTemplates.find((item) => item.name === "Payment Reminder");
 
   assert.ok(template);
+  assert.match(template.bodyText, /Hello \{\{registration\.primaryContactFirstName\}\}/);
   assert.match(template.bodyText, /I've attached the invoice and RocketPD W-9/i);
   assert.match(template.bodyText, /getting the invoice wrapped up/i);
   assert.match(template.bodyText, /business office/i);
@@ -103,6 +104,7 @@ test("payment reminder describes invoice and W-9 as attachments", () => {
   assert.doesNotMatch(template.bodyText, /\{\{registration\.paymentStatus\}\}/);
   assert.doesNotMatch(template.bodyText, /\{\{registration\.w9Url\}\}/);
   assert.doesNotMatch(template.bodyText, /\{\{registration\.invoiceUrl\}\}/);
+  assert.doesNotMatch(template.bodyText, /Hello \{\{registration\.primaryContactName\}\}/);
 });
 
 test("participant list request asks for optional titles and greets the POC by first name", () => {
