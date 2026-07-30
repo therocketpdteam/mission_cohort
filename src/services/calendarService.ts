@@ -190,7 +190,8 @@ export async function createCalendarInvitePlaceholder(sessionId?: string, mode: 
       if (missingAttendees.length > 0) {
         throw Object.assign(new Error(`Google Calendar event saved but is missing ${missingAttendees.length} attendee${missingAttendees.length === 1 ? "" : "s"}: ${missingAttendees.slice(0, 8).join(", ")}`), {
           code: "BAD_REQUEST",
-          status: 400
+          status: 400,
+          missingAttendees
         });
       }
 

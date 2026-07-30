@@ -1,6 +1,7 @@
 import {
   CohortStatus,
   CommunicationStatus,
+  EmailEventType,
   InvoiceDraftStatus,
   OperationsTaskCategory,
   OperationsTaskPriority,
@@ -12,7 +13,9 @@ import {
 } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { createCalendarInvitePlaceholder } from "./calendarService";
+import { generateSessionIcs } from "@/modules/calendar";
 import { ensureDefaultCommunicationTemplates, getSystemUserId, sendCommunication } from "./communicationService";
+import { sendEmail } from "./emailService";
 import { getOrganizationInvoiceProfile } from "./appSettingsService";
 import { registrationConfirmationDocumentReadiness } from "./registrationDocumentReadiness";
 import { createInvoiceDraft, generateInvoicePdf } from "./invoiceService";
@@ -123,6 +126,15 @@ export async function cancelParticipantJourneys(participantIds: string[], reason
 
 function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 function deliveryAuthorized(status: CohortStatus) {
@@ -299,7 +311,24 @@ async function prepareRegistrationConfirmationDocuments(registration: Registrati
 async function syncFutureCalendarInvites(registration: {
   cohortId: string;
   id: string;
-  cohort: { status: CohortStatus; sessions: Array<{ id: string; title: string; startTime: Date; calendarEvents: Array<{ provider: string; providerEventId: string | null }> }> };
+  cohort: {
+    title: string;
+    description: string | null;
+    status: CohortStatus;
+    presenter: { firstName: string; lastName: string };
+    sessions: Array<{
+      id: string;
+      title: string;
+      description: string | null;
+      sessionNumber: number;
+      startTime: Date;
+      endTime: Date;
+      timezone: string;
+      meetingUrl: string | null;
+      location: string | null;
+      calendarEvents: Array<{ provider: string; providerEventId: string | null }>;
+    }>;
+  };
 }) {
   if (!deliveryAuthorized(registration.cohort.status)) {
     return { updated: 0, failed: 0, status: "waiting_for_publish" as const, details: { updated: [], failed: [] } };
@@ -309,7 +338,7 @@ async function syncFutureCalendarInvites(registration: {
     session.startTime.getTime() > Date.now() && session.calendarEvents.some((event) => event.provider === "google" && event.providerEventId)
   );
   const updated: Array<{ sessionId: string; title: string; attendeeCount: number }> = [];
-  const failed: Array<{ sessionId: string; title: string; error: string }> = [];
+  const failed: Array<{ sessionId: string; title: string; error: string; missingAttendees?: string[] }> = [];
 
   if (futureLinkedSessions.length === 0) {
     return {
@@ -331,19 +360,162 @@ async function syncFutureCalendarInvites(registration: {
         attendeeCount: result.attendeeCount ?? 0
       });
     } catch (error) {
+      const missingAttendees = Array.isArray((error as { missingAttendees?: unknown }).missingAttendees)
+        ? (error as { missingAttendees: unknown[] }).missingAttendees.map(String)
+        : undefined;
       failed.push({
         sessionId: session.id,
         title: session.title,
-        error: error instanceof Error ? error.message : "Google Calendar update failed"
+        error: error instanceof Error ? error.message : "Google Calendar update failed",
+        missingAttendees
       });
     }
   }
+  const fallback = failed.length > 0 ? await sendCalendarFallbacks(registration, failed) : { sent: 0, failed: 0, details: [] };
 
   return {
     updated: updated.length,
     failed: failed.length,
     status: failed.length > 0 ? "failed" as const : "synced" as const,
-    details: { updated, failed }
+    details: { updated, failed, fallback }
+  };
+}
+
+function calendarFileName(sessionNumber: number, title: string) {
+  const safeTitle = title
+    .replace(/[^a-z0-9]+/gi, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48) || "session";
+  return `session-${sessionNumber}-${safeTitle}.ics`;
+}
+
+async function sendCalendarFallbacks(
+  registration: Parameters<typeof syncFutureCalendarInvites>[0],
+  failed: Array<{ sessionId: string; missingAttendees?: string[] }>
+) {
+  const missingByEmail = new Map<string, Set<string>>();
+
+  for (const failure of failed) {
+    for (const email of failure.missingAttendees ?? []) {
+      const normalized = email.trim().toLowerCase();
+      if (!normalized) continue;
+      missingByEmail.set(normalized, (missingByEmail.get(normalized) ?? new Set()).add(failure.sessionId));
+    }
+  }
+
+  const details = [];
+  const systemUserId = await getSystemUserId();
+  const presenterName = [registration.cohort.presenter.firstName, registration.cohort.presenter.lastName].filter(Boolean).join(" ");
+
+  for (const [email, sessionIds] of missingByEmail.entries()) {
+    const journeyKey = `registration:${registration.id}:calendar-fallback:${email}`;
+    const existing = await prisma.cohortCommunication.findUnique({ where: { journeyKey } });
+    if (existing?.status === CommunicationStatus.SENT) {
+      details.push({ email, status: "already_sent" });
+      continue;
+    }
+
+    const sessions = registration.cohort.sessions
+      .filter((session) => sessionIds.has(session.id))
+      .sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
+
+    if (sessions.length === 0) {
+      continue;
+    }
+
+    const subject = `Calendar files for ${registration.cohort.title}`;
+    const bodyText = [
+      "Hello,",
+      "",
+      `Google Calendar did not attach you directly to ${registration.cohort.title}, so we are sending calendar files you can add manually.`,
+      "",
+      "Please open the attached .ics files to add the cohort sessions to your calendar. Each file includes the Zoom link and session details.",
+      "",
+      "The RocketPD Team"
+    ].join("\n");
+    const bodyHtml = `<p>Hello,</p><p>Google Calendar did not attach you directly to <strong>${escapeHtml(registration.cohort.title)}</strong>, so we are sending calendar files you can add manually.</p><p>Please open the attached .ics files to add the cohort sessions to your calendar. Each file includes the Zoom link and session details.</p><p>The RocketPD Team</p>`;
+    const communication = existing
+      ? await prisma.cohortCommunication.update({
+          where: { id: existing.id },
+          data: {
+            subject,
+            bodyHtml,
+            bodyText,
+            status: CommunicationStatus.SENDING,
+            recipientEmails: [email],
+            providerError: null
+          }
+        })
+      : await prisma.cohortCommunication.create({
+          data: {
+            cohortId: registration.cohortId,
+            registrationId: registration.id,
+            journeyKey,
+            subject,
+            bodyHtml,
+            bodyText,
+            recipientScope: RecipientScope.CUSTOM,
+            recipientEmails: [email],
+            status: CommunicationStatus.SENDING,
+            createdById: systemUserId
+          }
+        });
+
+    try {
+      const sendResult = await sendEmail({
+        to: email,
+        subject,
+        bodyHtml,
+        bodyText,
+        attachments: sessions.map((session, index) => ({
+          fileName: calendarFileName(session.sessionNumber ?? index + 1, session.title),
+          contentType: "text/calendar; method=REQUEST",
+          content: generateSessionIcs({
+            ...session,
+            cohort: {
+              title: registration.cohort.title,
+              description: registration.cohort.description,
+              presenterName
+            }
+          })
+        }))
+      });
+      await prisma.emailEvent.create({
+        data: {
+          communicationId: communication.id,
+          recipientEmail: email,
+          provider: "sendgrid",
+          providerMessageId: sendResult.providerMessageId,
+          eventType: EmailEventType.SENT
+        }
+      });
+      await prisma.cohortCommunication.update({
+        where: { id: communication.id },
+        data: {
+          status: CommunicationStatus.SENT,
+          sentAt: new Date(),
+          providerMessageId: sendResult.providerMessageId,
+          providerError: "Google Calendar omitted this attendee; ICS fallback sent."
+        }
+      });
+      details.push({ email, status: "sent", sessions: sessions.length });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "ICS fallback send failed";
+      await prisma.cohortCommunication.update({
+        where: { id: communication.id },
+        data: {
+          status: CommunicationStatus.FAILED,
+          providerError: message
+        }
+      });
+      details.push({ email, status: "failed", error: message });
+    }
+  }
+
+  return {
+    sent: details.filter((detail) => detail.status === "sent" || detail.status === "already_sent").length,
+    failed: details.filter((detail) => detail.status === "failed").length,
+    details
   };
 }
 
@@ -419,6 +591,7 @@ export async function planRegistrationJourneys(
       invoiceDrafts: { orderBy: { updatedAt: "desc" } },
       cohort: {
         include: {
+          presenter: true,
           sessions: {
             orderBy: { startTime: "asc" },
             include: { calendarEvents: { where: { provider: "google" } } }

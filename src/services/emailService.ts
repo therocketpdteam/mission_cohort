@@ -13,7 +13,7 @@ export async function sendEmail(input: {
   bodyHtml: string;
   bodyText?: string;
   context?: MergeFieldContext;
-  attachments?: Array<{ fileName: string; contentType?: string | null; url?: string | null }>;
+  attachments?: Array<{ fileName: string; contentType?: string | null; url?: string | null; content?: string | Buffer | null }>;
 }) {
   const recipients = Array.isArray(input.to) ? input.to : [input.to];
   await assertOutboundRecipientsAllowed("SENDGRID", recipients);
@@ -30,10 +30,27 @@ export async function sendEmail(input: {
   });
 }
 
-async function resolveSendGridAttachments(attachments: Array<{ fileName: string; contentType?: string | null; url?: string | null }>) {
+async function resolveSendGridAttachments(attachments: Array<{ fileName: string; contentType?: string | null; url?: string | null; content?: string | Buffer | null }>) {
   const resolved = [];
 
   for (const attachment of attachments) {
+    if (attachment.content) {
+      const bytes = Buffer.isBuffer(attachment.content) ? attachment.content : Buffer.from(attachment.content, "utf8");
+      if (bytes.byteLength > 20 * 1024 * 1024) {
+        throw Object.assign(new Error(`Attachment ${attachment.fileName} is larger than the 20 MB email limit.`), {
+          code: "BAD_REQUEST",
+          status: 400
+        });
+      }
+      resolved.push({
+        content: bytes.toString("base64"),
+        filename: attachment.fileName,
+        type: attachment.contentType ?? "application/octet-stream",
+        disposition: "attachment" as const
+      });
+      continue;
+    }
+
     if (!attachment.url) {
       continue;
     }
