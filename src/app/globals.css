@@ -308,6 +308,210 @@ h6,
   flex: 1;
 }
 
+.global-people-search {
+  position: relative;
+  z-index: 35;
+  flex: 0 1 460px;
+  width: min(460px, 34vw);
+  min-width: 280px;
+}
+
+.global-people-search-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 42px;
+  border: 1px solid var(--color-slate-200);
+  border-radius: var(--radius-md);
+  background: var(--color-white);
+  color: var(--color-slate-500);
+  padding: 0 12px;
+  box-shadow: 0 8px 18px rgba(38, 34, 84, 0.06);
+}
+
+.global-people-search-field:focus-within {
+  border-color: var(--color-primary-500);
+  box-shadow: 0 0 0 3px rgba(101, 47, 230, 0.12);
+}
+
+.global-people-search-field input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--color-slate-900);
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.global-people-search-field input::placeholder {
+  color: var(--color-slate-500);
+}
+
+.global-people-search-panel {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  display: grid;
+  width: min(720px, calc(100vw - 320px));
+  max-height: min(72vh, 680px);
+  overflow: hidden;
+  border: 1px solid var(--color-slate-200);
+  border-radius: var(--radius-lg);
+  background: var(--color-white);
+  box-shadow: var(--shadow-panel);
+}
+
+.global-people-search-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--color-slate-200);
+}
+
+.global-people-search-summary strong {
+  color: var(--color-primary-900);
+  font-size: 0.9rem;
+  font-weight: 900;
+}
+
+.global-people-search-summary button {
+  border: 0;
+  background: transparent;
+  color: var(--color-primary-700);
+  cursor: pointer;
+  font-weight: 850;
+}
+
+.global-people-search-results {
+  display: grid;
+  gap: 10px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px;
+}
+
+.global-people-search-empty {
+  margin: 0;
+  padding: 18px;
+  color: var(--color-slate-500);
+  font-weight: 750;
+}
+
+.global-people-search-card {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--color-slate-200);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  padding: 12px;
+}
+
+.global-people-search-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.global-people-search-card-header > div:first-child {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.global-people-search-card-header strong {
+  color: var(--color-primary-900);
+  font-size: 0.96rem;
+  font-weight: 950;
+}
+
+.global-people-search-card-header span,
+.global-people-search-meta span,
+.global-people-search-team span {
+  overflow-wrap: anywhere;
+}
+
+.global-people-search-card-header > div:first-child span {
+  color: var(--color-slate-500);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.global-people-search-tags,
+.global-people-search-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.global-people-search-tags span {
+  border-radius: 999px;
+  background: var(--color-primary-100);
+  color: var(--color-primary-700);
+  padding: 4px 8px;
+  font-size: 0.7rem;
+  font-weight: 900;
+}
+
+.global-people-search-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 14px;
+  color: var(--color-slate-700);
+  font-size: 0.78rem;
+  font-weight: 750;
+}
+
+.global-people-search-team {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.global-people-search-team span {
+  border: 1px solid var(--color-slate-200);
+  border-radius: 999px;
+  background: var(--color-white);
+  color: var(--color-slate-700);
+  padding: 5px 8px;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.global-people-search-actions {
+  border-top: 1px solid var(--color-slate-200);
+  padding-top: 9px;
+}
+
+.global-people-search-actions a {
+  color: var(--color-primary-700);
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.app-shell.is-night .global-people-search-field,
+.app-shell.is-night .global-people-search-panel,
+.app-shell.is-night .global-people-search-card,
+.app-shell.is-night .global-people-search-team span {
+  border-color: rgba(197, 192, 253, 0.18);
+  background: #151229;
+}
+
+.app-shell.is-night .global-people-search-field input,
+.app-shell.is-night .global-people-search-card-header strong {
+  color: #f4f1ff;
+}
+
+.app-shell.is-night .global-people-search-meta,
+.app-shell.is-night .global-people-search-team span {
+  color: #e3dfff;
+}
+
 .app-topbar-title h1 {
   margin: 0;
   color: var(--color-primary-900);
@@ -7705,6 +7909,19 @@ h6,
     justify-content: flex-start;
   }
 
+  .global-people-search {
+    order: 2;
+    width: 100%;
+    max-width: none;
+    flex-basis: 100%;
+  }
+
+  .global-people-search-panel {
+    left: 0;
+    right: auto;
+    width: min(100%, calc(100vw - 28px));
+  }
+
   .page-header,
   .section-card-header {
     flex-direction: column;
@@ -7836,9 +8053,25 @@ h6,
   }
 
   .app-view-controls,
+  .global-people-search,
   .user-menu {
     grid-column: 1 / -1;
     width: 100%;
+  }
+
+  .global-people-search {
+    min-width: 0;
+  }
+
+  .global-people-search-panel {
+    position: fixed;
+    inset: 138px 12px auto 12px;
+    width: auto;
+    max-height: calc(100vh - 158px);
+  }
+
+  .global-people-search-meta {
+    grid-template-columns: 1fr;
   }
 
   .app-view-controls {

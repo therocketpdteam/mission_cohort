@@ -24,6 +24,7 @@ import {
   Plus,
   Power,
   RefreshCw,
+  Search,
   Send,
   Settings,
   Sun,
@@ -77,6 +78,7 @@ export const MoreHorizIcon = icon(MoreHorizontal);
 export const PersonOffOutlined = icon(UserRoundX);
 export const PowerSettingsNewOutlined = icon(Power);
 export const ReplayOutlined = icon(RefreshCw);
+export const SearchOutlined = icon(Search);
 export const SendOutlined = icon(Send);
 export const SettingsOutlined = icon(Settings);
 export const SunOutlined = icon(Sun);

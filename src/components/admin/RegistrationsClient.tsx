@@ -1398,6 +1398,16 @@ export function RegistrationsClient() {
     });
   }, [notifyError, visibility]);
 
+  useEffect(() => {
+    const registrationId = new URLSearchParams(window.location.search).get("id");
+
+    if (!registrationId || detail?.id === registrationId) {
+      return;
+    }
+
+    openDetail(registrationId).catch((error) => notifyError(error.message));
+  }, [detail?.id, notifyError]);
+
   const filteredRows = useMemo(
     () =>
       rows.filter((row) => {

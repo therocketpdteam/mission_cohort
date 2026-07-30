@@ -12,10 +12,12 @@ import {
   LogoutOutlined,
   MenuIcon,
   MoonOutlined,
+  SearchOutlined,
   SettingsOutlined,
   SunOutlined
 } from "@/components/ui/icons";
 import { Button, IconButton } from "@/components/ui/primitives";
+import { formatCurrency, formatProperDisplay, formatStatusLabel } from "@/lib/formatting";
 import type { Route } from "next";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -23,6 +25,69 @@ import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
 import { NewVersionPrompt } from "./NewVersionPrompt";
+
+type PeopleSearchResult = {
+  id: string;
+  status: string;
+  paymentStatus: string;
+  paymentMethod: string;
+  participantListStatus: string;
+  participantCount: number;
+  savedParticipantCount: number;
+  totalAmount: number;
+  invoiceNumber?: string | null;
+  purchaseOrderNumber?: string | null;
+  primaryContactName: string;
+  primaryContactEmail: string;
+  billingContactName?: string | null;
+  billingContactEmail?: string | null;
+  archivedAt?: string | null;
+  createdAt: string;
+  cohort: {
+    id: string;
+    title: string;
+    shortName?: string | null;
+    slug: string;
+    status: string;
+    startDate: string;
+  };
+  organization: {
+    id: string;
+    name: string;
+    type: string;
+  };
+  participants: Array<{
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    title?: string | null;
+    status: string;
+  }>;
+  invoiceDrafts: Array<{
+    id: string;
+    invoiceNumber?: string | null;
+    purchaseOrderNumber?: string | null;
+    status: string;
+    totalAmount: number;
+    paidAmount: number;
+    quickBooksInvoiceRef?: string | null;
+    quickBooksInvoiceStatus: string;
+  }>;
+  paymentRecords: Array<{
+    id: string;
+    amount: number;
+    status: string;
+    method: string;
+    invoiceNumber?: string | null;
+  }>;
+  links: {
+    registration: string;
+    cohort: string;
+    communications: string;
+  };
+  matchTypes: string[];
+};
 
 const navItems: ReadonlyArray<{
   label: string;
@@ -58,6 +123,148 @@ function breadcrumbsFor(pathname: string, labels: Record<string, string> = {}) {
     const key = `/${parts.slice(0, index + 1).join("/")}`;
     return labels[key] ?? part.replace(/-/g, " ");
   })];
+}
+
+function formatShortDate(value?: string | null) {
+  if (!value) {
+    return "-";
+  }
+
+  return new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function participantName(participant: PeopleSearchResult["participants"][number]) {
+  return formatProperDisplay([participant.firstName, participant.lastName].filter(Boolean).join(" ")) || participant.email;
+}
+
+function GlobalPeopleSearch() {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<PeopleSearchResult[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const trimmed = query.trim();
+
+    if (trimmed.length < 2) {
+      setResults([]);
+      setLoading(false);
+      setError("");
+      return;
+    }
+
+    let cancelled = false;
+    setLoading(true);
+
+    const timeout = window.setTimeout(() => {
+      adminApi<{ results: PeopleSearchResult[] }>(`/api/search/people?q=${encodeURIComponent(trimmed)}&limit=8`)
+        .then((payload) => {
+          if (cancelled) return;
+          setResults(payload.results ?? []);
+          setError("");
+          setOpen(true);
+        })
+        .catch((searchError) => {
+          if (cancelled) return;
+          setResults([]);
+          setError(searchError instanceof Error ? searchError.message : "Search failed");
+          setOpen(true);
+        })
+        .finally(() => {
+          if (!cancelled) {
+            setLoading(false);
+          }
+        });
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+    };
+  }, [query]);
+
+  function closeSearch() {
+    setOpen(false);
+  }
+
+  const showPanel = open && query.trim().length >= 2;
+
+  return (
+    <div className="global-people-search">
+      <label className="global-people-search-field">
+        <SearchOutlined />
+        <input
+          value={query}
+          onChange={(event) => {
+            setQuery(event.target.value);
+            setOpen(true);
+          }}
+          onFocus={() => setOpen(true)}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              closeSearch();
+            }
+          }}
+          placeholder="Search email, person, invoice..."
+          aria-label="Search people, registrations, invoices, and cohorts"
+        />
+      </label>
+      {showPanel && (
+        <div className="global-people-search-panel">
+          <div className="global-people-search-summary">
+            <strong>{loading ? "Searching..." : `${results.length} result${results.length === 1 ? "" : "s"}`}</strong>
+            <button type="button" onClick={closeSearch}>Close</button>
+          </div>
+          {error ? <p className="global-people-search-empty">{error}</p> : null}
+          {!loading && !error && results.length === 0 ? (
+            <p className="global-people-search-empty">No registration, participant, POC, invoice, or PO matches.</p>
+          ) : null}
+          <div className="global-people-search-results">
+            {results.map((result) => {
+              const invoice = result.invoiceDrafts[0];
+              const participants = result.participants.slice(0, 4);
+
+              return (
+                <article className="global-people-search-card" key={result.id}>
+                  <div className="global-people-search-card-header">
+                    <div>
+                      <strong>{formatProperDisplay(result.organization.name)}</strong>
+                      <span>{result.cohort.shortName || result.cohort.slug} · {formatStatusLabel(result.cohort.status)}</span>
+                    </div>
+                    <div className="global-people-search-tags">
+                      {result.matchTypes.map((match) => <span key={match}>{match}</span>)}
+                    </div>
+                  </div>
+                  <div className="global-people-search-meta">
+                    <span>POC: {formatProperDisplay(result.primaryContactName)} · {result.primaryContactEmail}</span>
+                    <span>Registered: {formatShortDate(result.createdAt)}</span>
+                    <span>Registration: {formatStatusLabel(result.status)} · Roster {formatStatusLabel(result.participantListStatus)}</span>
+                    <span>Payment: {formatStatusLabel(result.paymentStatus)} · {formatCurrency(result.totalAmount)}</span>
+                    <span>Invoice: {invoice?.invoiceNumber ?? result.invoiceNumber ?? "-"} · {invoice ? formatStatusLabel(invoice.status) : "No draft"}{invoice?.quickBooksInvoiceRef ? " · QBO linked" : ""}</span>
+                    <span>PO: {invoice?.purchaseOrderNumber ?? result.purchaseOrderNumber ?? "-"}</span>
+                  </div>
+                  {participants.length > 0 && (
+                    <div className="global-people-search-team">
+                      {participants.map((participant) => (
+                        <span key={participant.id}>{participantName(participant)} · {participant.email}</span>
+                      ))}
+                      {result.participants.length > participants.length && <span>+{result.participants.length - participants.length} more</span>}
+                    </div>
+                  )}
+                  <div className="global-people-search-actions">
+                    <Link href={result.links.registration as Route} onClick={closeSearch}>Open registration</Link>
+                    <Link href={result.links.cohort as Route} onClick={closeSearch}>Open cohort</Link>
+                    <Link href={result.links.communications as Route} onClick={closeSearch}>Email history</Link>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -169,6 +376,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               </div>
             )}
           </div>
+          <GlobalPeopleSearch />
           <div className="app-view-controls" aria-label="View controls">
             <div className="app-density-toggle" aria-label="Density">
               <button type="button" className={density === "standard" ? "is-active" : ""} onClick={() => setDensity("standard")}>
