@@ -179,14 +179,12 @@ export async function createCalendarInvitePlaceholder(sessionId?: string, mode: 
         })),
         sendUpdates: true
       });
-      const verifiedGoogleEvent = result.attendeesOmitted
-        ? await getGoogleCalendarEvent({
-            accessToken: await getConnectedGoogleCalendarAccessToken(),
-            calendarId: (await googleSetupWithEnvFallback()).calendarId,
-            providerEventId: result.id,
-            maxAttendees: attendees.length + 5
-          })
-        : result;
+      const verifiedGoogleEvent = await getGoogleCalendarEvent({
+        accessToken: await getConnectedGoogleCalendarAccessToken(),
+        calendarId: (await googleSetupWithEnvFallback()).calendarId,
+        providerEventId: result.id,
+        maxAttendees: attendees.length + 5
+      }) ?? result;
       const missingAttendees = missingCalendarAttendees(attendees, verifiedGoogleEvent?.attendees, verifiedGoogleEvent?.attendeesOmitted);
 
       if (missingAttendees.length > 0) {

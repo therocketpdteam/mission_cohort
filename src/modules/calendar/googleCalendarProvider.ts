@@ -178,6 +178,9 @@ export async function upsertGoogleCalendarEvent(input: GoogleCalendarEventInput)
   if (input.sendUpdates && input.attendees?.length) {
     url.searchParams.set("sendUpdates", "all");
   }
+  if (input.attendees?.length) {
+    url.searchParams.set("maxAttendees", String(input.attendees.length + 5));
+  }
 
   const response = await fetch(url, {
     method: input.providerEventId ? "PATCH" : "POST",
