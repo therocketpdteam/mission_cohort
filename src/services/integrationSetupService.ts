@@ -47,6 +47,7 @@ export async function getSendGridSetup() {
     fromName: String(data.fromName ?? connection?.accountName ?? ""),
     webhookPublicKey: "",
     liveSendingEnabled: data.liveSendingEnabled === true,
+    webhookIngestionEnabled: data.webhookIngestionEnabled === true,
     testRecipientEmails: cleanRecipientEmails(data.testRecipientEmails),
     hasApiKey: maskedSecret(connection?.accessToken),
     hasWebhookPublicKey: maskedSecret(String(data.webhookPublicKey ?? "")),
@@ -136,6 +137,7 @@ export async function saveIntegrationSetup(provider: IntegrationSetupProvider, i
     const webhookPublicKey = cleanString(input.webhookPublicKey) || String(existingMetadata.webhookPublicKey ?? "");
     const testRecipientEmails = cleanRecipientEmails(input.testRecipientEmails ?? existingMetadata.testRecipientEmails);
     const liveSendingEnabled = input.liveSendingEnabled === true;
+    const webhookIngestionEnabled = input.webhookIngestionEnabled === true;
 
     if (!fromEmail) {
       throw Object.assign(new Error("SendGrid from email is required."), { code: "BAD_REQUEST", status: 400 });
@@ -157,7 +159,8 @@ export async function saveIntegrationSetup(provider: IntegrationSetupProvider, i
         fromName,
         webhookPublicKey,
         testRecipientEmails,
-        liveSendingEnabled
+        liveSendingEnabled,
+        webhookIngestionEnabled
       } as Prisma.InputJsonValue
     });
 

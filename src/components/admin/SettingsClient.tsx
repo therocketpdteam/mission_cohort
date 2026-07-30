@@ -1753,7 +1753,8 @@ export function SettingsClient() {
         webhookPublicKey: "",
         apiKey: "",
         testRecipientEmails: (setupData?.sendgrid?.testRecipientEmails ?? []).join(", "),
-        liveSendingEnabled: setupData?.sendgrid?.liveSendingEnabled === true
+        liveSendingEnabled: setupData?.sendgrid?.liveSendingEnabled === true,
+        webhookIngestionEnabled: setupData?.sendgrid?.webhookIngestionEnabled === true
       },
       GOOGLE_CALENDAR: {
         clientId: "",
@@ -2065,12 +2066,12 @@ export function SettingsClient() {
       setup: integrationSetup?.sendgrid,
       docs: [
         { label: "Create a SendGrid API key", href: "https://www.twilio.com/docs/sendgrid/ui/account-and-settings/api-keys" },
-        { label: "Set up Event Webhook", href: "https://www.twilio.com/docs/sendgrid/for-developers/tracking-events/getting-started-event-webhook" }
+        { label: "Event Webhook docs (optional)", href: "https://www.twilio.com/docs/sendgrid/for-developers/tracking-events/getting-started-event-webhook" }
       ],
       instructions: [
         "Create or copy a SendGrid API key with Mail Send access.",
         "Use a verified sender or authenticated domain for the From email.",
-        "Paste the Event Webhook public key so delivery/open/bounce events can be trusted."
+        "Optional: enable webhook telemetry only when Mission Control should record delivered/open/bounce events."
       ]
     },
     {
@@ -2424,6 +2425,11 @@ export function SettingsClient() {
                         placeholder={provider.setup?.hasWebhookPublicKey ? "******** (saved)" : ""}
                         value={setupForms.SENDGRID?.webhookPublicKey ?? ""}
                         onChange={(event) => updateSetupForm("SENDGRID", "webhookPublicKey", event.target.value)}
+                        helperText="Optional. Leave telemetry paused while SendGrid's Event Webhook is used somewhere else."
+                      />
+                      <FormControlLabel
+                        control={<Switch checked={setupForms.SENDGRID?.webhookIngestionEnabled === true} onChange={(event) => updateSetupForm("SENDGRID", "webhookIngestionEnabled", event.target.checked)} />}
+                        label="Record SendGrid delivery events in Mission Control"
                       />
                       <div className="integration-copy-row">
                         <TextField fullWidth label="Event Webhook URL" value={integrationUrl("/api/webhooks/sendgrid")} InputProps={{ readOnly: true }} />
