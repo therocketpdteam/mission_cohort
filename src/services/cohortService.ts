@@ -6,7 +6,7 @@ import { cohortCreateSchema, cohortUpdateSchema } from "@/validators/cohort";
 import { logAuditEventAsync } from "./auditService";
 import { createDefaultCohortSessionCommunications, createDefaultSessionCommunications } from "./communicationService";
 import { prepareCohortCalendarInvites } from "./calendarService";
-import { getCohortReadiness, withCohortLifecycle } from "./cohortLifecycle";
+import { withCohortLifecycle } from "./cohortLifecycle";
 import { activateCohortRegistrationJourneys } from "./registrationJourneyService";
 import { syncCohortQuickBooksProjectAfterCreate } from "./quickBooksService";
 import { syncCohortTotalsToCrm } from "./crmRegistrationWebhookService";
@@ -307,7 +307,7 @@ export async function publishCohort(id: string) {
     throw Object.assign(new Error("Cohort not found"), { code: "NOT_FOUND", status: 404 });
   }
 
-  const readiness = getCohortReadiness(cohort);
+  const readiness = withCohortLifecycle(cohort).readiness;
   if (!readiness.ready) {
     const blockers = readiness.items.filter((item) => !item.ready).map((item) => item.label).join(", ");
     throw Object.assign(new Error(`Cohort is not ready to publish: ${blockers}`), { code: "COHORT_NOT_READY", status: 409 });

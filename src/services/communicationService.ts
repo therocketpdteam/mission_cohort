@@ -2319,7 +2319,8 @@ export async function createDefaultSessionCommunications(sessionId: string) {
       sessionId,
       template: { type: { in: [...sessionTemplateTypes] } }
     },
-    include: { template: true }
+    include: { template: true },
+    orderBy: { createdAt: "desc" }
   });
   const existingByType = new Map(existing
     .filter((communication) => communication.template?.type)
@@ -2360,27 +2361,25 @@ export async function createDefaultSessionCommunications(sessionId: string) {
     const existingCommunication = existingByType.get(template.type);
 
     if (existingCommunication) {
-      if (
-        existingCommunication.status === CommunicationStatus.SENT ||
-        existingCommunication.status === CommunicationStatus.CANCELLED ||
-        existingCommunication.status === CommunicationStatus.SKIPPED
-      ) {
+      if (existingCommunication.status === CommunicationStatus.SENT) {
         continue;
       }
 
-      records.push(await prisma.cohortCommunication.update({
-        where: { id: existingCommunication.id },
-        data: {
-          subject: template.subject,
-          bodyHtml: template.bodyHtml,
-          bodyText: template.bodyText,
-          scheduledFor,
-          status: scheduledFor ? CommunicationStatus.SCHEDULED : CommunicationStatus.DRAFT,
-          providerError: null,
-          recipientScope: template.type === TemplateType.REGISTRATION_CONFIRMATION ? RecipientScope.PRIMARY_CONTACTS : RecipientScope.ALL_PARTICIPANTS
-        }
-      }));
-      continue;
+      if (existingCommunication.status !== CommunicationStatus.CANCELLED && existingCommunication.status !== CommunicationStatus.SKIPPED) {
+        records.push(await prisma.cohortCommunication.update({
+          where: { id: existingCommunication.id },
+          data: {
+            subject: template.subject,
+            bodyHtml: template.bodyHtml,
+            bodyText: template.bodyText,
+            scheduledFor,
+            status: scheduledFor ? CommunicationStatus.SCHEDULED : CommunicationStatus.DRAFT,
+            providerError: null,
+            recipientScope: template.type === TemplateType.REGISTRATION_CONFIRMATION ? RecipientScope.PRIMARY_CONTACTS : RecipientScope.ALL_PARTICIPANTS
+          }
+        }));
+        continue;
+      }
     }
 
     records.push(await prisma.cohortCommunication.create({

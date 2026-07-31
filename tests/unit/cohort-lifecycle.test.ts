@@ -8,7 +8,7 @@ import {
   OperationsTaskStatus,
   TemplateType
 } from "@prisma/client";
-import { deriveCohortStatus, getCohortReadiness } from "../../src/services/cohortLifecycle";
+import { deriveCohortStatus, getCohortReadiness, withCohortLifecycle } from "../../src/services/cohortLifecycle";
 
 const sessionStart = new Date("2026-07-10T14:00:00.000Z");
 const readyPrepResources = {
@@ -69,6 +69,50 @@ test("treats draft session email plans as system-ready before concrete schedules
   assert.equal(readiness.ready, true);
   assert.equal(readiness.items.find((item) => item.key === "communications")?.label, "Session email plan ready");
   assert.equal(readiness.items.find((item) => item.key === "communications")?.detail, "1/1 session email plan ready");
+});
+
+test("shows draft plan readiness after an active cohort falls back to draft operationally", () => {
+  const futureSessionStart = new Date("2099-07-10T14:00:00.000Z");
+  const cohort = withCohortLifecycle({
+    status: CohortStatus.ACTIVE,
+    ...readyPrepResources,
+    sessions: [{
+      id: "session-1",
+      title: "Session 1",
+      startTime: futureSessionStart,
+      endTime: new Date(futureSessionStart.getTime() + 60 * 60 * 1000),
+      timezone: "America/New_York",
+      meetingUrl: "https://zoom.us/j/123456789",
+      calendarInviteStatus: CalendarInviteStatus.NOT_CREATED,
+      calendarEvents: [],
+      communications: [
+        communication(TemplateType.WEEK_BEFORE_REMINDER, futureSessionStart, CommunicationStatus.CANCELLED),
+        communication(TemplateType.DAY_BEFORE_REMINDER, futureSessionStart, CommunicationStatus.CANCELLED),
+        communication(TemplateType.HOUR_BEFORE_REMINDER, futureSessionStart, CommunicationStatus.CANCELLED),
+        communication(TemplateType.FOLLOW_UP, futureSessionStart, CommunicationStatus.CANCELLED)
+      ]
+    }],
+    operationsTasks: [
+      {
+        category: OperationsTaskCategory.CALENDAR_INVITE,
+        status: OperationsTaskStatus.OPEN
+      },
+      {
+        category: OperationsTaskCategory.REMINDER_EMAILS,
+        status: OperationsTaskStatus.IN_PROGRESS
+      }
+    ]
+  });
+
+  assert.equal(cohort.storedStatus, CohortStatus.ACTIVE);
+  assert.equal(cohort.status, CohortStatus.DRAFT);
+  assert.equal(cohort.readiness.items.find((item) => item.key === "calendar")?.label, "Calendar plans ready");
+  assert.equal(cohort.readiness.items.find((item) => item.key === "calendar")?.ready, true);
+  assert.equal(cohort.readiness.items.find((item) => item.key === "communications")?.label, "Session email plan ready");
+  assert.equal(cohort.readiness.items.find((item) => item.key === "communications")?.ready, true);
+  assert.equal(cohort.readiness.items.find((item) => item.key === "manual-tasks")?.ready, true);
+  assert.equal(cohort.readiness.sessionDetails[0]?.calendar.detail, "Invite will be created on publish");
+  assert.equal(cohort.readiness.sessionDetails[0]?.emails.detail, "4/4 email plans ready");
 });
 
 test("does not require one-week session reminders after the first session", () => {

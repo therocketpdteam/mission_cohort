@@ -197,6 +197,7 @@ function getSessionCalendarReadiness(session: LifecycleSession, options: { requi
 
 export function getCohortReadiness(cohort: LifecycleCohort) {
   const sessions = cohort.sessions ?? [];
+  const isDraft = cohort.status === CohortStatus.DRAFT;
   const requireGoogleInvites = cohort.status !== CohortStatus.DRAFT && sessions.some((session) =>
     (session.calendarEvents ?? []).some((event) => event.provider === "google" && event.providerEventId)
   );
@@ -214,14 +215,30 @@ export function getCohortReadiness(cohort: LifecycleCohort) {
     OperationsTaskCategory.CALENDAR_INVITE,
     OperationsTaskCategory.REMINDER_EMAILS
   ];
-  const openReadinessTasks = (cohort.operationsTasks ?? []).filter((task) =>
+  const openReadinessTasks = isDraft ? [] : (cohort.operationsTasks ?? []).filter((task) =>
     !task.registrationId &&
     openTaskStatuses.includes(task.status ?? "") &&
     publishReadinessTaskCategories.includes(task.category ?? "")
   );
   const sessionDetails = sessions.map((session) => {
-    const calendar = getSessionCalendarReadiness(session, { requireGoogleInvite: requireGoogleInvites });
-    const emails = getSessionEmailReadiness(session);
+    const draftCalendarPlanReady = Boolean(session.title && validDate(session.startTime) && validDate(session.endTime) && session.timezone);
+    const requiredEmailTypes = requiredSessionTemplateTypesForSession(session.sessionNumber);
+    const calendar = isDraft
+      ? {
+        ready: draftCalendarPlanReady,
+        stale: false,
+        detail: draftCalendarPlanReady ? "Invite will be created on publish" : "Add session date, time, and timezone"
+      }
+      : getSessionCalendarReadiness(session, { requireGoogleInvite: requireGoogleInvites });
+    const emails = isDraft
+      ? {
+        ready: true,
+        missing: [] as string[],
+        stale: [] as string[],
+        scheduled: requiredEmailTypes.length,
+        total: requiredEmailTypes.length
+      }
+      : getSessionEmailReadiness(session);
     const sessionTasks = openReadinessTasks.filter((task) => task.sessionId === session.id);
     const blockers = [
       ...(!calendar.ready ? [calendar.detail] : []),
@@ -245,7 +262,9 @@ export function getCohortReadiness(cohort: LifecycleCohort) {
         missing: emails.missing,
         stale: emails.stale,
         detail: emails.ready
-          ? `${emails.total}/${emails.total} emails ready`
+          ? isDraft
+            ? `${emails.total}/${emails.total} email plan${emails.total === 1 ? "" : "s"} ready`
+            : `${emails.total}/${emails.total} emails ready`
           : `${emails.scheduled}/${emails.total} emails ready`
       },
       materials: {
@@ -259,11 +278,11 @@ export function getCohortReadiness(cohort: LifecycleCohort) {
   const readyCalendarCount = sessionDetails.filter((session) => session.calendar.ready).length;
   const readyCommunicationCount = sessionDetails.filter((session) => session.emails.ready).length;
   const openManualTasks = openReadinessTasks.length;
-  const draftCalendarPlansReady = cohort.status === CohortStatus.DRAFT && sessions.every((session) =>
+  const draftCalendarPlansReady = isDraft && sessions.every((session) =>
     Boolean(session.title && validDate(session.startTime) && validDate(session.endTime) && session.timezone)
   );
   const calendarReady = sessions.length > 0 && (draftCalendarPlansReady || readyCalendarCount === sessions.length);
-  const draftCommunicationPlansReady = cohort.status === CohortStatus.DRAFT && sessions.length > 0;
+  const draftCommunicationPlansReady = isDraft && sessions.length > 0;
   const communicationsReady = sessions.length > 0 && (draftCommunicationPlansReady || readyCommunicationCount === sessions.length);
   const manualTasksReady = openManualTasks === 0;
 
@@ -365,8 +384,8 @@ export function withCohortLifecycle<T extends LifecycleCohort>(cohort: T): T & {
   status: CohortStatus;
   readiness: ReturnType<typeof getCohortReadiness>;
 } {
-  const readiness = getCohortReadiness(cohort);
   const status = deriveCohortStatus(cohort);
+  const readiness = getCohortReadiness({ ...cohort, status });
 
   return {
     ...cohort,
