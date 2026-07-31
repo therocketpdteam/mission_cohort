@@ -31,6 +31,7 @@ import {
   StatusChip,
   TableShell,
   ToolbarButton,
+  cohortDropdownLabel,
   useNotifier
 } from "./common";
 
@@ -595,7 +596,7 @@ function ComposeMessageDialog({
             <div className="compose-message-grid">
               <TextField select label="Cohort" value={values.cohortId ?? ""} onChange={(event) => setValue("cohortId", event.target.value)} required>
                 <MenuItem value="">Choose cohort</MenuItem>
-                {cohorts.map((cohort) => <MenuItem value={cohort.id} key={cohort.id}>{cohort.title}</MenuItem>)}
+                {cohorts.map((cohort) => <MenuItem value={cohort.id} key={cohort.id}>{cohortDropdownLabel(cohort)}</MenuItem>)}
               </TextField>
               <TextField select label="Session" value={values.sessionId ?? ""} onChange={(event) => setValue("sessionId", event.target.value)}>
                 <MenuItem value="">All sessions</MenuItem>
@@ -662,7 +663,7 @@ function ComposeMessageDialog({
               <span>Distribution</span>
               <strong>{estimatedRecipients.toLocaleString()} recipient{estimatedRecipients === 1 ? "" : "s"}</strong>
               <p title={recipientScopeHelper(recipientScope)}>
-                {recipientScopeLabel(recipientScope)} · {selectedCohort?.title ?? "Choose a cohort"}
+                {recipientScopeLabel(recipientScope)} · {selectedCohort ? cohortDropdownLabel(selectedCohort) : "Choose a cohort"}
               </p>
               <div className="compose-distribution-meta">
                 <span>Participants: {Number(selectedCohort?._count?.participants ?? 0).toLocaleString()}</span>
@@ -677,7 +678,7 @@ function ComposeMessageDialog({
             )}
             <div className="compose-message-context">
               <span>Context</span>
-              <strong title={selectedCohort?.title ?? ""}>{selectedCohort?.title ?? "Choose a cohort"}</strong>
+              <strong title={selectedCohort?.title ?? ""}>{selectedCohort ? cohortDropdownLabel(selectedCohort) : "Choose a cohort"}</strong>
               <p title={selectedTemplate?.name ?? ""}>
                 {[selectedTemplate?.name, recipientScopeLabel(recipientScope)].filter(Boolean).join(" · ") || "Template and audience will appear here."}
               </p>
@@ -1280,7 +1281,7 @@ export function CommunicationsClient() {
             <MenuItem value="">All cohorts</MenuItem>
             {cohorts.map((cohort) => (
               <MenuItem value={cohort.id} key={cohort.id}>
-                {cohort.title}
+                {cohortDropdownLabel(cohort)}
               </MenuItem>
             ))}
           </TextField>
@@ -1290,7 +1291,7 @@ export function CommunicationsClient() {
           <Tabs value={activeTab} onChange={(_event, value) => setActiveTab(value)}>
             {tabs.map((label) => <Tab key={label} label={label === "Issues" && issueRows.length ? `Issues (${issueRows.length})` : label} />)}
           </Tabs>
-          <span title={selectedCohort?.title ?? "All cohorts"}>{selectedCohort?.title ?? "All cohorts"}</span>
+          <span title={selectedCohort?.title ?? "All cohorts"}>{selectedCohort ? cohortDropdownLabel(selectedCohort) : "All cohorts"}</span>
         </div>
 
         {activeTab < 2 ? (

@@ -6,7 +6,7 @@ import { GridColDef } from "./common";
 import { useEffect, useMemo, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
 import { formatProperDisplay, formatRegistrationPaymentStatus, formatStatusLabel } from "@/lib/formatting";
-import { AdminRow, AppDataGrid, EmptyState, PageHeader, PageStack, RowActionMenu, SectionCard, StatusChip, TableShell, useNotifier } from "./common";
+import { AdminRow, AppDataGrid, EmptyState, PageHeader, PageStack, RowActionMenu, SectionCard, StatusChip, TableShell, cohortDropdownLabel, cohortDropdownSearchText, useNotifier } from "./common";
 
 const registrationStatuses = ["NEW", "CONFIRMED", "CANCELLED"];
 const paymentStatuses = ["PENDING", "INVOICED", "PARTIALLY_PAID", "PAID", "REFUNDED", "CANCELLED"];
@@ -57,17 +57,6 @@ function cityState(row: AdminRow) {
 
 function columnLabel(key: string) {
   return columnOptions.find((option) => option.key === key)?.label ?? key;
-}
-
-function cohortShortLabel(cohort?: AdminRow | null) {
-  return String(cohort?.shortName ?? cohort?.title ?? "").trim();
-}
-
-function cohortMenuLabel(cohort: AdminRow) {
-  const shortName = cohortShortLabel(cohort);
-  const title = String(cohort.title ?? "").trim();
-
-  return shortName && shortName !== title ? `${shortName} · ${title}` : title || shortName;
 }
 
 function reportCell(row: AdminRow, column: string) {
@@ -145,7 +134,7 @@ function RegistrationReportPreview({ report, columns }: { report: AdminRow; colu
       <header className="registration-report-print-header">
         <div>
           <p>Mission Cohort Report</p>
-          <h1>{report.cohort ? cohortMenuLabel(report.cohort) : "Cohort Registration Report"}</h1>
+          <h1>{report.cohort ? cohortDropdownLabel(report.cohort) : "Cohort Registration Report"}</h1>
           <span>Generated {shortDate(report.generatedAt)} · {report.audience === "internal" ? "Internal operations" : "Thought leader / public-safe"}</span>
         </div>
         <StatusChip value={report.cohort?.status} />
@@ -401,10 +390,10 @@ export function ReportsClient() {
                 <MenuItem
                   value={cohort.id}
                   key={cohort.id}
-                  label={cohortShortLabel(cohort) || cohort.title}
-                  searchText={`${cohort.shortName ?? ""} ${cohort.title ?? ""}`}
+                  label={cohortDropdownLabel(cohort)}
+                  searchText={cohortDropdownSearchText(cohort)}
                 >
-                  {cohortMenuLabel(cohort)}
+                  {cohortDropdownLabel(cohort)}
                 </MenuItem>
               ))}
             </TextField>

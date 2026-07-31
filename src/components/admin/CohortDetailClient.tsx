@@ -61,6 +61,7 @@ import {
   SectionCard,
   StatusChip,
   TableShell,
+  cohortDropdownLabel,
   useNotifier
 } from "./common";
 
@@ -115,15 +116,6 @@ function formatScheduleDateRange(sessions: AdminRow[], cohort?: AdminRow | null)
   const start = cohort?.startDate ? formatDateInZone(cohort.startDate, cohort.defaultTimezone, { month: "numeric", day: "numeric", year: "numeric" }) : "";
   const end = cohort?.endDate ? formatDateInZone(cohort.endDate, cohort.defaultTimezone, { month: "numeric", day: "numeric", year: "numeric" }) : "";
   return start || end ? `${start || "-"} - ${end || "-"}` : "-";
-}
-
-function cohortMoveLabel(cohort: AdminRow) {
-  const code = String(cohort.slug || cohort.shortName || cohort.title || "")
-    .trim()
-    .replace(/\s+/g, "-");
-  const title = String(cohort.title ?? "").trim();
-
-  return title && title !== code ? `${code} - ${title}` : code || "Untitled cohort";
 }
 
 function zoomLinkOverview(sessions: AdminRow[]) {
@@ -3389,7 +3381,7 @@ export function CohortDetailClient({ id }: { id: string }) {
             </Typography>
             <TextField select fullWidth label="Target cohort" value={moveParticipantsTargetCohortId} onChange={(event) => setMoveParticipantsTargetCohortId(event.target.value)}>
               {moveTargetOptions.map((targetCohort) => (
-                <MenuItem value={targetCohort.id} key={targetCohort.id}>{cohortMoveLabel(targetCohort)}</MenuItem>
+                <MenuItem value={targetCohort.id} key={targetCohort.id}>{cohortDropdownLabel(targetCohort)}</MenuItem>
               ))}
             </TextField>
           </Stack>
@@ -3419,7 +3411,7 @@ export function CohortDetailClient({ id }: { id: string }) {
             ) : null}
             <TextField select fullWidth label="Target cohort" value={moveTargetCohortId} onChange={(event) => setMoveTargetCohortId(event.target.value)}>
               {moveTargetOptions.map((targetCohort) => (
-                <MenuItem value={targetCohort.id} key={targetCohort.id}>{cohortMoveLabel(targetCohort)}</MenuItem>
+                <MenuItem value={targetCohort.id} key={targetCohort.id}>{cohortDropdownLabel(targetCohort)}</MenuItem>
               ))}
             </TextField>
           </Stack>

@@ -55,6 +55,7 @@ import {
   SectionCard,
   StatusChip,
   TableShell,
+  cohortDropdownLabel,
   useNotifier
 } from "./common";
 
@@ -157,7 +158,7 @@ function mappingFields(cohorts: AdminRow[]): FieldConfig[] {
       type: "select",
       options: [
         { label: "Use cohortSlug from URL", value: "" },
-        ...cohorts.map((cohort) => ({ label: cohort.title, value: cohort.id }))
+        ...cohorts.map((cohort) => ({ label: cohortDropdownLabel(cohort), value: cohort.id }))
       ]
     },
     { name: "requireCohortSlug", label: "Require cohortSlug", type: "checkbox" },
@@ -797,7 +798,7 @@ function JotformMappingWizard({
                                 value={route.cohortId}
                                 onChange={(event) => updateLandingPageRoute(index, "cohortId", event.target.value)}
                               >
-                                {cohorts.map((cohort) => <MenuItem value={cohort.id} key={cohort.id}>{cohort.title}</MenuItem>)}
+                                {cohorts.map((cohort) => <MenuItem value={cohort.id} key={cohort.id}>{cohortDropdownLabel(cohort)}</MenuItem>)}
                               </TextField>
                             </Grid>
                             <Grid size={{ xs: 12, md: 2 }}>
@@ -832,7 +833,7 @@ function JotformMappingWizard({
                 {routingMode === "default" && (
                   <Grid size={{ xs: 12 }}>
                     <TextField select fullWidth label="Default cohort" value={defaultCohortId} onChange={(event) => setDefaultCohortId(event.target.value)}>
-                      {cohorts.map((cohort) => <MenuItem value={cohort.id} key={cohort.id}>{cohort.title}</MenuItem>)}
+                      {cohorts.map((cohort) => <MenuItem value={cohort.id} key={cohort.id}>{cohortDropdownLabel(cohort)}</MenuItem>)}
                     </TextField>
                   </Grid>
                 )}

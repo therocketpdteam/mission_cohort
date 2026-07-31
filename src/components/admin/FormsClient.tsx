@@ -21,12 +21,13 @@ import {
   StatusChip,
   TableShell,
   ToolbarButton,
+  cohortDropdownLabel,
   useNotifier
 } from "./common";
 
 function formFields(cohorts: AdminRow[]): FieldConfig[] {
   return [
-    { name: "cohortId", label: "Cohort", type: "select", options: cohorts.map((cohort) => ({ label: cohort.title, value: cohort.id })), required: true },
+    { name: "cohortId", label: "Cohort", type: "select", options: cohorts.map((cohort) => ({ label: cohortDropdownLabel(cohort), value: cohort.id })), required: true },
     { name: "title", label: "Form title", required: true },
     { name: "slug", label: "Slug", required: true },
     { name: "active", label: "Form enabled", type: "checkbox" },
@@ -166,7 +167,7 @@ export function FormsClient() {
         <TextField select label="Cohort" value={selectedCohortId} onChange={(event) => loadForms(event.target.value)} sx={{ minWidth: 280 }}>
           {cohorts.map((cohort) => (
             <MenuItem value={cohort.id} key={cohort.id}>
-              {cohort.title}
+              {cohortDropdownLabel(cohort)}
             </MenuItem>
           ))}
         </TextField>

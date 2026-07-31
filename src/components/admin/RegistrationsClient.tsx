@@ -53,6 +53,7 @@ import {
   StatusChip,
   TableShell,
   ToolbarButton,
+  cohortDropdownLabel,
   useNotifier
 } from "./common";
 
@@ -401,7 +402,7 @@ export function RegistrationEditor({
               value={cohort}
               disabled={lockCohort}
               onChange={(_event, value) => setCohort(value)}
-              getOptionLabel={(option) => option.title ?? ""}
+              getOptionLabel={(option) => cohortDropdownLabel(option)}
               renderInput={(params) => <TextField {...params} label="Cohort" required />}
             />
           </Grid>
@@ -1625,7 +1626,7 @@ export function RegistrationsClient() {
         </TextField>
         <TextField select label="Cohort" value={cohortId} onChange={(event) => setCohortId(event.target.value)} sx={{ minWidth: 220 }}>
           <MenuItem value="">All cohorts</MenuItem>
-          {cohorts.map((cohort) => <MenuItem value={cohort.id} key={cohort.id}>{cohort.title}</MenuItem>)}
+          {cohorts.map((cohort) => <MenuItem value={cohort.id} key={cohort.id}>{cohortDropdownLabel(cohort)}</MenuItem>)}
         </TextField>
       </CompactFilterBar>
       <SectionCard title="Registration Management">

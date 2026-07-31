@@ -26,6 +26,26 @@ import { dateTimeInputInZoneToIso, dateToDateInput, dateToDateTimeInputInZone, f
 
 export type AdminRow = Record<string, any>;
 
+export function cohortDropdownLabel(cohort?: AdminRow | null) {
+  const shortName = String(cohort?.shortName ?? "").trim();
+  const slug = String(cohort?.slug ?? "").trim();
+  const title = String(cohort?.title ?? "").trim();
+  const label = shortName || slug || title;
+
+  return label ? label.replace(/\s+/g, "-") : "Untitled-cohort";
+}
+
+export function cohortDropdownSearchText(cohort?: AdminRow | null) {
+  return [
+    cohortDropdownLabel(cohort),
+    cohort?.shortName,
+    cohort?.slug,
+    cohort?.title,
+    cohort?.presenter?.firstName,
+    cohort?.presenter?.lastName
+  ].filter(Boolean).join(" ");
+}
+
 export type FieldConfig = {
   name: string;
   label: string;

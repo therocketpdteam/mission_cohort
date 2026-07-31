@@ -39,6 +39,7 @@ import {
   StatusChip,
   TableShell,
   ToolbarButton,
+  cohortDropdownLabel,
   useNotifier
 } from "./common";
 
@@ -109,7 +110,7 @@ function ParticipantEditor({
               options={registrations}
               value={registration}
               onChange={(_event, value) => setRegistration(value)}
-              getOptionLabel={(option) => `${formatProperDisplay(option.primaryContactName ?? "POC")} • ${option.cohort?.title ?? "Cohort"} • ${formatProperDisplay(option.organization?.name ?? "Organization")}`}
+              getOptionLabel={(option) => `${formatProperDisplay(option.primaryContactName ?? "POC")} • ${option.cohort ? cohortDropdownLabel(option.cohort) : "Cohort"} • ${formatProperDisplay(option.organization?.name ?? "Organization")}`}
               renderInput={(params) => <TextField {...params} label="Registration" required />}
             />
           </Grid>
@@ -312,15 +313,6 @@ function ParticipantTile({ label, value }: { label: string; value?: unknown }) {
   );
 }
 
-function cohortMoveLabel(cohort: AdminRow) {
-  const code = String(cohort.slug || cohort.shortName || cohort.title || "")
-    .trim()
-    .replace(/\s+/g, "-");
-  const title = String(cohort.title ?? "").trim();
-
-  return title && title !== code ? `${code} - ${title}` : code || "Untitled cohort";
-}
-
 export function ParticipantsClient() {
   const [rows, setRows] = useState<AdminRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -401,7 +393,7 @@ export function ParticipantsClient() {
   );
 
   const cohortOptions = useMemo(
-    () => Array.from(new Map(rows.map((row) => [row.cohortId, row.cohort?.title ?? row.cohortId])).entries()),
+    () => Array.from(new Map(rows.map((row) => [row.cohortId, row.cohort ? cohortDropdownLabel(row.cohort) : row.cohortId])).entries()),
     [rows]
   );
   const organizationOptions = useMemo(
@@ -852,7 +844,7 @@ export function ParticipantsClient() {
             </Typography>
             <TextField select fullWidth label="Target cohort" value={moveParticipantsTargetCohortId} onChange={(event) => setMoveParticipantsTargetCohortId(event.target.value)}>
               {allCohorts.map((cohort) => (
-                <MenuItem value={cohort.id} key={cohort.id}>{cohortMoveLabel(cohort)}</MenuItem>
+                <MenuItem value={cohort.id} key={cohort.id}>{cohortDropdownLabel(cohort)}</MenuItem>
               ))}
             </TextField>
           </Stack>
@@ -878,7 +870,7 @@ export function ParticipantsClient() {
             ) : null}
             <TextField select fullWidth label="Target cohort" value={moveTargetCohortId} onChange={(event) => setMoveTargetCohortId(event.target.value)}>
               {allCohorts.map((cohort) => (
-                <MenuItem value={cohort.id} key={cohort.id}>{cohortMoveLabel(cohort)}</MenuItem>
+                <MenuItem value={cohort.id} key={cohort.id}>{cohortDropdownLabel(cohort)}</MenuItem>
               ))}
             </TextField>
           </Stack>

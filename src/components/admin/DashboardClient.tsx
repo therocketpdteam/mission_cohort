@@ -34,6 +34,7 @@ import {
   MetadataPill,
   PageStack,
   StatusChip,
+  cohortDropdownLabel,
   useNotifier
 } from "./common";
 
@@ -599,7 +600,7 @@ export function DashboardClient() {
           <MenuItem value="">All selected view cohorts</MenuItem>
           {cohorts.map((cohort) => (
             <MenuItem value={cohort.id} key={cohort.id}>
-              {cohort.shortName ? `${cohort.shortName} · ` : ""}{cohort.title}
+              {cohortDropdownLabel(cohort)}
             </MenuItem>
           ))}
         </TextField>
