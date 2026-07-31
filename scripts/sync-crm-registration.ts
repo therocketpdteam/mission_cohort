@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-const STAGING_WEBHOOK_URL = "https://rocketpd-sales-os-git-staging-rocket-pd.vercel.app/api/webhooks/mission-cohort/registrations";
+const DEFAULT_CRM_WEBHOOK_URL = "https://rocketpd-sales-os.vercel.app/api/webhooks/mission-cohort/registrations";
 
 function loadEnvFile(path: string) {
   if (!existsSync(path)) {
@@ -24,17 +24,13 @@ function loadEnv() {
   const candidates = [
     resolve(process.cwd(), ".env"),
     resolve(process.cwd(), ".env.local"),
-    process.env.CRM_STAGING_ENV_FILE ? resolve(process.env.CRM_STAGING_ENV_FILE) : "",
-    resolve(process.cwd(), ".env.mission-cohort.staging.local"),
-    resolve(process.cwd(), "../rocketpd-sales-os/.env.mission-cohort.staging.local"),
-    resolve(process.cwd(), "../rocketpd-sales-os-git-staging-rocket-pd/.env.mission-cohort.staging.local"),
-    resolve(process.cwd(), "../../rocketpd-sales-os/.env.mission-cohort.staging.local")
+    process.env.CRM_ENV_FILE ? resolve(process.env.CRM_ENV_FILE) : ""
   ].filter(Boolean);
 
   const loaded = candidates.filter(loadEnvFile);
 
   if (!process.env.CRM_MISSION_COHORT_WEBHOOK_URL && !process.env.CRM_REGISTRATION_WEBHOOK_URL) {
-    process.env.CRM_MISSION_COHORT_WEBHOOK_URL = STAGING_WEBHOOK_URL;
+    process.env.CRM_MISSION_COHORT_WEBHOOK_URL = DEFAULT_CRM_WEBHOOK_URL;
   }
 
   if (!process.env.CRM_MISSION_COHORT_WEBHOOK_SECRET && !process.env.CRM_REGISTRATION_WEBHOOK_SECRET && process.env.MISSION_COHORT_WEBHOOK_SECRET) {
@@ -52,7 +48,7 @@ async function main() {
 
   if (!registrationId) {
     console.log("Usage: pnpm crm:sync-registration <registrationId> [--dry-run]");
-    console.log("Set CRM_STAGING_ENV_FILE=/path/to/.env.mission-cohort.staging.local if the CRM env file is not in a default sibling repo path.");
+    console.log("Set CRM_ENV_FILE=/path/to/.env.mission-cohort.local if the CRM env file is not in a default sibling repo path.");
     process.exitCode = 1;
     return;
   }
@@ -80,7 +76,7 @@ async function main() {
     }
 
     console.log(`Loaded env files: ${loadedEnvFiles.length ? loadedEnvFiles.join(", ") : "none"}`);
-    console.log(`Posting registration ${registrationId} to CRM registration webhook staging...`);
+    console.log(`Posting registration ${registrationId} to CRM registration webhook...`);
     const result = await syncRegistrationToCrmWebhook(registrationId, "manual.registration_sync");
 
     if (result.status !== "sent") {

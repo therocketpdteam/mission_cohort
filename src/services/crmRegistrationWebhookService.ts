@@ -171,7 +171,7 @@ type RegistrationSyncOptions = {
   participantOverride?: CrmParticipantRecord;
 };
 
-const CRM_REGISTRATION_WEBHOOK_URL = "https://rocketpd-sales-os-git-staging-rocket-pd.vercel.app/api/webhooks/mission-cohort/registrations";
+const CRM_REGISTRATION_WEBHOOK_URL = "https://rocketpd-sales-os.vercel.app/api/webhooks/mission-cohort/registrations";
 
 function isoDate(value: Date | string) {
   return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
