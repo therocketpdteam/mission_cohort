@@ -4785,7 +4785,7 @@ h6,
 }
 
 .cohort-overview-resource-icon {
-  display: inline-grid;
+  display: grid;
   width: 36px;
   height: 36px;
   place-items: center;
@@ -4794,10 +4794,16 @@ h6,
   border-radius: 9px;
   background: var(--color-blue-100);
   color: var(--color-primary-700);
+  line-height: 0;
 }
 
 .cohort-overview-resource-icon svg {
   display: block;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  color: currentColor;
+  transform: none;
 }
 
 .cohort-overview-resource-card small {
@@ -4808,7 +4814,7 @@ h6,
 }
 
 .cohort-overview-resource-card strong,
-.cohort-overview-resource-card span,
+.cohort-overview-resource-card > div > span,
 .cohort-overview-resource-card a,
 .cohort-overview-resource-card em {
   display: block;
@@ -5147,7 +5153,7 @@ h6,
 }
 
 .readiness-summary > span:last-child,
-.readiness-row span,
+.readiness-row > div span,
 .readiness-task-strip,
 .distribution-ledger-row span {
   color: var(--color-slate-500);
@@ -5193,6 +5199,14 @@ h6,
   width: 34px;
   height: 34px;
   border-radius: 10px;
+  line-height: 0;
+}
+
+.readiness-metric-icon svg {
+  display: block;
+  width: 20px;
+  height: 20px;
+  margin: 0;
 }
 
 .readiness-metric-icon.is-done {
