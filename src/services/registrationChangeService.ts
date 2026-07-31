@@ -415,3 +415,12 @@ export async function applyRegistrationChanges(registrationId: string) {
     invoiceId: invoice?.id ?? null
   };
 }
+
+export async function discardRegistrationChanges(registrationId: string) {
+  await prisma.registration.update({
+    where: { id: registrationId },
+    data: { pendingChanges: Prisma.JsonNull, pendingChangesAt: null }
+  });
+
+  return { registrationId, status: "discarded" as const };
+}

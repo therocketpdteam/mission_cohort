@@ -13,7 +13,7 @@ import {
   syncRegistrationRosterStatuses,
   updateRegistration
 } from "@/services/registrationService";
-import { applyRegistrationChanges } from "@/services/registrationChangeService";
+import { applyRegistrationChanges, discardRegistrationChanges } from "@/services/registrationChangeService";
 import { syncRegistrationToCrm } from "@/services/crmRegistrationWebhookService";
 import { planRegistrationJourneys } from "@/services/registrationJourneyService";
 
@@ -79,6 +79,10 @@ export async function PATCH(request: Request) {
 
     if (body.action === "applyChanges") {
       return ok(await applyRegistrationChanges(body.id));
+    }
+
+    if (body.action === "discardChanges") {
+      return ok(await discardRegistrationChanges(body.id));
     }
 
     if (body.action === "syncCrm") {

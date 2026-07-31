@@ -86,6 +86,7 @@ export function RegistrationPendingChangesPanel({
   onError: (message: string) => void;
 }) {
   const [applying, setApplying] = useState(false);
+  const [discarding, setDiscarding] = useState(false);
   const pending = registration.pendingChanges && typeof registration.pendingChanges === "object" && !Array.isArray(registration.pendingChanges)
     ? registration.pendingChanges as AdminRow
     : null;
@@ -174,6 +175,21 @@ export function RegistrationPendingChangesPanel({
     }
   }
 
+  async function discardChanges() {
+    setDiscarding(true);
+    try {
+      await adminApi<AdminRow>("/api/registrations", {
+        method: "PATCH",
+        body: { id: registration.id, action: "discardChanges" }
+      });
+      await onApplied("Pending registration delivery changes discarded.");
+    } catch (error) {
+      onError((error as Error).message);
+    } finally {
+      setDiscarding(false);
+    }
+  }
+
   return (
     <div className="registration-change-review">
       <div className="registration-change-review-header">
@@ -182,7 +198,10 @@ export function RegistrationPendingChangesPanel({
           <strong>{rows.length} registration change{rows.length === 1 ? "" : "s"}</strong>
           <Typography color="text.secondary">Saved in Mission Control. Calendar and email updates wait for Apply.</Typography>
         </div>
-        <Button onClick={applyChanges} disabled={applying}>{applying ? "Applying" : "Apply Changes"}</Button>
+        <div className="registration-change-review-actions">
+          <Button variant="outlined" onClick={discardChanges} disabled={applying || discarding}>{discarding ? "Discarding" : "Discard"}</Button>
+          <Button onClick={applyChanges} disabled={applying || discarding}>{applying ? "Applying" : "Apply Changes"}</Button>
+        </div>
       </div>
       <div className="quick-view-list">
         {rows.map((row) => (

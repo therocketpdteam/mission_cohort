@@ -2984,6 +2984,13 @@ h6,
   font-size: 0.94rem;
 }
 
+.registration-change-review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .registration-change-impact,
 .registration-change-plan,
 .registration-preflight-notes {
