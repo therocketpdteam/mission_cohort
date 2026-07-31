@@ -4709,6 +4709,10 @@ h6,
   gap: 12px;
 }
 
+.revenue-snapshot-card .finance-wow-values {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .cohort-evolution-chart {
   display: grid;
   gap: 8px;

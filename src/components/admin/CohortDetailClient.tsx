@@ -453,32 +453,28 @@ function RegistrationEvolutionChart({
 function FinanceSnapshotCard({
   totalAmount,
   paidAmount,
-  pendingAmount,
   projectReturn
 }: {
   totalAmount: number;
   paidAmount: number;
-  pendingAmount: number;
   projectReturn?: number;
 }) {
-  const openAmount = Math.max(totalAmount - paidAmount - pendingAmount, 0);
-  const collectedPercent = totalAmount > 0 ? Math.round((paidAmount / totalAmount) * 100) : 0;
-  const pendingPercent = totalAmount > 0 ? Math.round((pendingAmount / totalAmount) * 100) : 0;
-  const openPercent = Math.max(0, 100 - collectedPercent - pendingPercent);
+  const invoicedAmount = Math.max(totalAmount - paidAmount, 0);
+  const collectedPercent = totalAmount > 0 ? Math.min(100, Math.round((paidAmount / totalAmount) * 100)) : 0;
 
   return (
     <article
-      className="cohort-finance-wow-card"
+      className="cohort-finance-wow-card revenue-snapshot-card"
       style={{
         "--paid": `${collectedPercent}%`,
-        "--pending": `${collectedPercent + pendingPercent}%`
+        "--pending": "100%"
       } as CSSProperties}
     >
       <div className="finance-wow-copy">
         <span className="cohort-metric-label">Revenue Snapshot</span>
         <strong>{money(totalAmount)}</strong>
         <p>
-          {collectedPercent}% collected
+          {collectedPercent}% paid · {money(invoicedAmount)} invoiced
           {typeof projectReturn === "number" ? ` · ${money(projectReturn)} project return` : ""}
         </p>
       </div>
@@ -491,13 +487,10 @@ function FinanceSnapshotCard({
       <div className="finance-wow-bars" aria-hidden="true">
         <span className="is-paid" />
         <span className="is-pending" />
-        <span className="is-open" />
       </div>
       <div className="finance-wow-values">
         <DetailField label="Paid" value={money(paidAmount)} />
-        <DetailField label="Pending" value={money(pendingAmount)} />
-        <DetailField label="Open" value={money(openAmount)} />
-        <DetailField label="Open %" value={`${openPercent}%`} />
+        <DetailField label="Invoiced" value={money(invoicedAmount)} />
       </div>
     </article>
   );
@@ -1483,19 +1476,15 @@ export function CohortDetailClient({ id }: { id: string }) {
 
   const totals = useMemo(() => {
     const totalAmount = registrations.reduce((sum, registration) => sum + Number(registration.totalAmount ?? 0), 0);
-    const paidAmount = payments
-      .filter((payment) => payment.status === "PAID")
-      .reduce((sum, payment) => sum + Number(payment.amount ?? 0), 0);
-    const pendingAmount = payments
-      .filter((payment) => ["PENDING", "INVOICED", "PARTIALLY_PAID"].includes(payment.status))
-      .reduce((sum, payment) => sum + Number(payment.amount ?? 0), 0);
+    const paidAmount = registrations.reduce((sum, registration) => sum + registrationCollectedAmount(registration, payments, invoiceDrafts), 0);
+    const invoicedAmount = Math.max(totalAmount - paidAmount, 0);
     const participantSeats = registrations.reduce((sum, registration) => sum + Number(registration.participantCount ?? 0), 0);
     const rosterComplete = registrations.filter((registration) => registrationRosterStatus(registration) === "COMPLETE").length;
     const openPaymentFollowUps = tasks.filter((task) => task.status !== "COMPLETED" && task.category === "PAYMENT_FOLLOW_UP").length;
     const upcomingSessions = sessions.filter((session) => new Date(session.startTime).getTime() >= Date.now()).length;
 
-    return { totalAmount, paidAmount, pendingAmount, participantSeats, rosterComplete, openPaymentFollowUps, upcomingSessions };
-  }, [registrations, payments, sessions, tasks]);
+    return { totalAmount, paidAmount, invoicedAmount, participantSeats, rosterComplete, openPaymentFollowUps, upcomingSessions };
+  }, [invoiceDrafts, payments, registrations, sessions, tasks]);
 
   const compareCohort = allCohorts.find((item) => item.id === compareCohortId);
   const detailTabs = ["Overview", "Registrations", "Participants", "Communications", "Distribution"];
@@ -2683,7 +2672,6 @@ export function CohortDetailClient({ id }: { id: string }) {
             <FinanceSnapshotCard
               totalAmount={totals.totalAmount}
               paidAmount={totals.paidAmount}
-              pendingAmount={totals.pendingAmount}
               projectReturn={distribution?.totals?.projectReturn}
             />
           </div>
@@ -3322,7 +3310,7 @@ export function CohortDetailClient({ id }: { id: string }) {
             <div className="cohort-finance-strip">
               <DetailField label="Invoice Drafts" value={invoiceDrafts.length} />
               <DetailField label="Paid" value={money(totals.paidAmount)} />
-              <DetailField label="Pending" value={money(totals.pendingAmount)} />
+              <DetailField label="Invoiced" value={money(totals.invoicedAmount)} />
             </div>
             <TableShell>
               <AppDataGrid
