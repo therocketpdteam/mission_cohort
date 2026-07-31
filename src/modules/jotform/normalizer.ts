@@ -30,8 +30,8 @@ type JotformTargetField = {
   aliases: string[];
 };
 
-const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const emailInTextPattern = /[^\s<>,;]+@[^\s<>,;]+\.[^\s<>,;]+/;
+const emailPattern = /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i;
+const emailInTextPattern = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
 const usStateNames = [
   "Alabama",
   "Alaska",
@@ -882,12 +882,35 @@ function normalizeParticipants(input: unknown): ParsedParticipant[] {
 export function parseParticipantCsvText(text: unknown): { participants: ParsedParticipant[]; errors: string[] } {
   const rawText = readString(text);
 
-  if (!emailInTextPattern.test(rawText)) {
+  if (!emailInTextPattern.test(rawText) || looksLikeRawJotformBlob(rawText)) {
     return { participants: [], errors: [] };
   }
 
   const result = parseRosterText(rawText);
   return { participants: result.participants, errors: [...result.errors, ...result.warnings] };
+}
+
+function looksLikeUnsafeParticipantValue(value: string) {
+  const normalized = value.trim().toLowerCase();
+
+  return (
+    !normalized ||
+    normalized.startsWith("{") ||
+    normalized.startsWith("[") ||
+    normalized.includes("jsexecutiontracker") ||
+    normalized.includes("submitdate") ||
+    normalized.includes("validatednewrequiredfieldids") ||
+    /["\\]?q\d+_[a-z0-9]+["\\]?\s*:/.test(value)
+  );
+}
+
+function cleanParsedParticipants(participants: ParsedParticipant[]) {
+  return participants.filter((participant) => (
+    emailPattern.test(participant.email) &&
+    !looksLikeUnsafeParticipantValue(participant.firstName) &&
+    !looksLikeUnsafeParticipantValue(participant.lastName) &&
+    !looksLikeUnsafeParticipantValue(participant.email)
+  ));
 }
 
 function splitFullName(value: string): { firstName: string; lastName: string } {
@@ -1014,10 +1037,10 @@ export function normalizeJotformRegistrationPayload(payload: UnknownRecord, mapp
     "Please enter the names, titles, and email addresses of all participants, one per line, in the following format: Full Name, Title, Email"
   ]) ?? Object.entries(flat).find(([key, value]) => looksLikeParticipantRosterField(key, value))?.[1];
   const parsedParticipantText = parseParticipantCsvText(participantText);
-  const participants = [
+  const participants = cleanParsedParticipants([
     ...normalizeParticipants(rawParticipants),
     ...parsedParticipantText.participants
-  ];
+  ]);
   const formId = readString(mappedFirstValue(flat, flat, fieldMap, "formId", ["formID", "formId", "form_id"]));
   const landingPageCandidate = mappedFirstValue(flat, registration, fieldMap, "landingPageUrl", ["landingPageUrl", "landing_page_url", "Get Page URL", "lead_source", "q25_leadSource", "q59_typeA59"]);
   const referrerCandidate = mappedFirstValue(flat, registration, fieldMap, "referrerUrl", ["referrerUrl", "referrer", "Referrer"]);

@@ -245,6 +245,52 @@ test("does not autodetect raw Jotform pretty blobs as participant rosters withou
   assert.equal(normalized.participants[0].email, "jekabat@gmail.com");
 });
 
+test("does not save raw Jotform request blobs as participant rows even when mapped", () => {
+  const mapping = {
+    ...urlMapping,
+    id: "mapping-raw-roster",
+    formId: "250093910014647",
+    fieldMapJson: {
+      ...urlMapping.fieldMapJson,
+      formId: "formID",
+      primaryContactName: "q7_name",
+      primaryContactEmail: "q12_email",
+      primaryContactTitle: "q63_title",
+      organizationName: "q15_nameOf",
+      participantCount: "q20_howMany",
+      participantText: "rawRequest"
+    }
+  } as any;
+  const normalized = normalizeJotformRegistrationPayload(
+    {
+      formID: "250093910014647",
+      submissionID: "6592616946602044068",
+      q7_name: { first: "Andrew", last: "Wilson" },
+      q63_title: "Director of Lower School",
+      q12_email: "awilson@trevor.org",
+      q15_nameOf: "Trevor Day School",
+      q20_howMany: "1",
+      q46_preferredMethod: "Credit Card",
+      q50_cc: "795.00",
+      q59_typeA59: "https://rocketpd.com/",
+      rawRequest: JSON.stringify({
+        slug: "submit/250093910014647",
+        jsExecutionTracker: "build-date=>init-started",
+        q12_email: "awilson@trevor.org",
+        q62_pleaseEnter: "Andy Wilson"
+      })
+    },
+    [mapping]
+  );
+
+  assert.equal(normalized.participantParseErrors.length, 0);
+  assert.equal(normalized.participants.length, 1);
+  assert.equal(normalized.participants[0].firstName, "Andrew");
+  assert.equal(normalized.participants[0].lastName, "Wilson");
+  assert.equal(normalized.participants[0].email, "awilson@trevor.org");
+  assert.equal(normalized.participants[0].title, "Director of Lower School");
+});
+
 test("parses participant titles and reports roster title warnings", () => {
   const result = parseParticipantCsvText("Ada Lovelace, Math Coach, ada@example.com\nBroken Person\nGrace Hopper grace@example.com");
 

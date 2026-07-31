@@ -12,8 +12,8 @@ export type ParsedRosterResult = {
   warnings: string[];
 };
 
-const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const emailInTextPattern = /[^\s<>,;]+@[^\s<>,;]+\.[^\s<>,;]+/;
+const emailPattern = /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i;
+const emailInTextPattern = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
 const titleHintPattern = /\b(?:administrator|assistant|coach|consultant|coordinator|counselor|curriculum|dean|director|educator|facilitator|head|instruction|instructor|leader|literacy|manager|math|officer|principal|professor|school|science|specialist|superintendent|teacher|title)\b/i;
 
 function cleanCell(value: string) {
