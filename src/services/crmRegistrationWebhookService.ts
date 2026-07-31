@@ -497,6 +497,10 @@ function crmVercelBypassSecret(config: CrmRegistrationWebhookConfig) {
   return config.vercelBypassSecret ?? env.CRM_MISSION_COHORT_VERCEL_BYPASS_SECRET;
 }
 
+function isPermanentCrmWebhookFailure(status: number, responseText: string) {
+  return status < 500 || /webhook secret is not configured/i.test(responseText);
+}
+
 export function crmRegistrationWebhookHeaders(secret: string, vercelBypassSecret?: string) {
   return {
     Authorization: `Bearer ${secret}`,
@@ -630,7 +634,7 @@ export async function postCrmRegistrationWebhookPayload(
       const responseText = await response.text().catch(() => "");
       lastError = `CRM Mission Cohort webhook failed with status ${response.status}${responseText ? `: ${responseText.slice(0, 300)}` : ""}`;
 
-      if (response.status < 500) {
+      if (isPermanentCrmWebhookFailure(response.status, responseText)) {
         await updateSyncEvent(syncEventId, { status: CrmSyncEventStatus.FAILED, attempts: attempt, errorMessage: lastError });
         return { status: "failed", attempts: attempt, httpStatus: response.status, permanent: true, error: lastError };
       }

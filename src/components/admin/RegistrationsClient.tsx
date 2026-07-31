@@ -848,11 +848,22 @@ function RegistrationDetailDialog({
     setSyncingCrm(true);
     setError(null);
     try {
-      await adminApi("/api/registrations", {
+      const result = await adminApi<AdminRow>("/api/registrations", {
         method: "PATCH",
         body: { id: registration.id, action: "syncCrm" }
       });
-      onSuccess("Registration synced to CRM.");
+      const results = Array.isArray(result.results) ? result.results : [];
+      const sentCount = results.filter((item: AdminRow) => item?.result?.status === "sent").length;
+      const failedCount = results.length - sentCount;
+      const firstFailure = results.find((item: AdminRow) => item?.result?.status !== "sent")?.result?.error;
+
+      if (result.status !== "sent" || failedCount > 0) {
+        const message = `CRM sync sent ${sentCount}/${results.length} payload${results.length === 1 ? "" : "s"}.${firstFailure ? ` ${firstFailure}` : ""}`;
+        setError(message);
+        onError(message);
+      } else {
+        onSuccess(`CRM sync sent ${sentCount}/${results.length} payload${results.length === 1 ? "" : "s"}.`);
+      }
       await onChanged();
     } catch (syncError) {
       const message = (syncError as Error).message;

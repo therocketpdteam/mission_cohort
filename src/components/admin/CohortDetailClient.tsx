@@ -2420,8 +2420,19 @@ export function CohortDetailClient({ id }: { id: string }) {
 
   async function syncCohortCrm() {
     try {
-      await adminApi(`/api/cohorts/${id}`, { method: "PATCH", body: { action: "syncCrm" } });
-      notifySuccess("Cohort synced to CRM");
+      const result = await adminApi<AdminRow>(`/api/cohorts/${id}`, { method: "PATCH", body: { action: "syncCrm" } });
+      const sentCount = Number(result.sentCount ?? 0);
+      const payloads = Number(result.payloads ?? 0);
+      const failedCount = Number(result.failedCount ?? 0);
+      const firstFailure = Array.isArray(result.results)
+        ? result.results.find((item: AdminRow) => item?.result?.status !== "sent")?.result?.error
+        : null;
+
+      if (failedCount > 0 || result.status === "partial") {
+        notifyError(`CRM sync sent ${sentCount}/${payloads} payload${payloads === 1 ? "" : "s"}.${firstFailure ? ` ${firstFailure}` : ""}`);
+      } else {
+        notifySuccess(`CRM sync sent ${sentCount}/${payloads} payload${payloads === 1 ? "" : "s"}`);
+      }
       await load();
     } catch (error) {
       notifyError((error as Error).message);
