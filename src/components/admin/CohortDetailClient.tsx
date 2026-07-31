@@ -1150,8 +1150,6 @@ export function CohortDetailClient({ id }: { id: string }) {
   const [loadingQuickBooksRefs, setLoadingQuickBooksRefs] = useState(false);
   const [financeHealth, setFinanceHealth] = useState<FinanceHealth | null>(null);
   const [creatingSessionEmails, setCreatingSessionEmails] = useState(false);
-  const [autoRepairingSessionEmails, setAutoRepairingSessionEmails] = useState(false);
-  const [sessionEmailRepairAttempted, setSessionEmailRepairAttempted] = useState(false);
   const [publishingCohort, setPublishingCohort] = useState(false);
   const [movingCohortToDraft, setMovingCohortToDraft] = useState(false);
   const [applyingSessionChanges, setApplyingSessionChanges] = useState(false);
@@ -1201,10 +1199,6 @@ export function CohortDetailClient({ id }: { id: string }) {
       setLoading(false);
     });
   }, [id, notifyError]);
-
-  useEffect(() => {
-    setSessionEmailRepairAttempted(false);
-  }, [id]);
 
   async function openRegistrationDetail(row: AdminRow) {
     setRegistrationDetail(row);
@@ -1508,17 +1502,9 @@ export function CohortDetailClient({ id }: { id: string }) {
   const readinessItems = cohort?.readiness?.items ?? [];
   const sessionEmailReadiness = readinessItems.find((item: AdminRow) => item.key === "communications");
   const cohortStatus = String(cohort?.status ?? cohort?.derivedStatus ?? "");
-  const canAutoRepairSessionEmails = Boolean(
-    sessionEmailReadiness &&
-    !sessionEmailReadiness.ready &&
-    ["PUBLISHED", "ACTIVE"].includes(cohortStatus)
-  );
-  const showAutoRepairingSessionEmails = canAutoRepairSessionEmails && (autoRepairingSessionEmails || !sessionEmailRepairAttempted);
   const showPublishAction = cohortStatus === "DRAFT";
   const canMoveBackToDraft = ["PUBLISHED", "ACTIVE"].includes(cohortStatus);
-  const readinessSummaryText = showAutoRepairingSessionEmails
-    ? "Repairing session email schedules automatically."
-    : cohort?.readiness?.ready
+  const readinessSummaryText = cohort?.readiness?.ready
       ? cohortStatus === "DRAFT"
         ? "All systems are ready for publication."
         : "Delivery systems are ready."
@@ -1526,29 +1512,6 @@ export function CohortDetailClient({ id }: { id: string }) {
         ? "Complete these systems before this cohort can become Published."
         : "Delivery systems need attention.";
   const pendingSessionChanges = (cohort?.readiness?.sessionDetails ?? []).filter((session: AdminRow) => session.calendar?.stale);
-
-  useEffect(() => {
-    if (!canAutoRepairSessionEmails || autoRepairingSessionEmails || sessionEmailRepairAttempted) {
-      return;
-    }
-
-    setAutoRepairingSessionEmails(true);
-    setSessionEmailRepairAttempted(true);
-    adminApi<AdminRow>("/api/communications", {
-      method: "PATCH",
-      body: { action: "createDefaultCohortSessionCommunications", cohortId: id }
-    })
-      .then(async (result) => {
-        if (Number(result.created ?? 0) > 0) {
-          notifySuccess("Session email plan repaired automatically.");
-        }
-        await load();
-      })
-      .catch((error) => {
-        notifyError((error as Error).message);
-      })
-      .finally(() => setAutoRepairingSessionEmails(false));
-  }, [autoRepairingSessionEmails, canAutoRepairSessionEmails, id, notifyError, notifySuccess, sessionEmailRepairAttempted]);
 
   const filteredRegistrations = useMemo(() => registrations.filter((registration) => {
     const paymentMatch = !registrationPaymentFilter || registration.paymentStatus === registrationPaymentFilter;
@@ -1740,7 +1703,19 @@ export function CohortDetailClient({ id }: { id: string }) {
     }
   }
 
-  function sessionEmailSummary(session: AdminRow) {
+  function sessionEmailSummary(session: AdminRow, readiness?: AdminRow) {
+    if (readiness?.emails) {
+      const total = Number(readiness.emails.total ?? 0);
+      const scheduled = Number(readiness.emails.scheduled ?? 0);
+
+      return {
+        scheduled,
+        total,
+        ready: Boolean(readiness.emails.ready),
+        label: String(readiness.emails.detail ?? `${scheduled}/${total} emails`)
+      };
+    }
+
     const expectedEmailTypes = sessionEmailTypesForSession(Number(session.sessionNumber ?? 0));
     const scheduled = expectedEmailTypes.filter((template) => sessionEmailStatus(session.id, template.type) !== "NOT_SCHEDULED");
     return {
@@ -2784,8 +2759,7 @@ export function CohortDetailClient({ id }: { id: string }) {
                 </div>
                 <div className="readiness-list readiness-metric-grid">
                   {readinessItems.map((item: AdminRow) => {
-                    const autoRepairingEmailItem = item.key === "communications" && showAutoRepairingSessionEmails;
-                    const itemReady = item.ready || autoRepairingEmailItem;
+                    const itemReady = Boolean(item.ready);
                     const icon =
                       item.key === "calendar" ? <CalendarMonthOutlined /> :
                           item.key === "communications" ? <EmailOutlined /> :
@@ -2800,9 +2774,9 @@ export function CohortDetailClient({ id }: { id: string }) {
                           {itemReady ? <CheckCircleOutline /> : icon}
                         </span>
                         <div>
-                          <strong>{autoRepairingEmailItem ? "Session emails syncing" : item.label}</strong>
-                          <span>{autoRepairingEmailItem ? "Repairing missing system emails" : item.detail}</span>
-                          {item.key === "communications" && !item.ready && !showAutoRepairingSessionEmails ? (
+                          <strong>{item.label}</strong>
+                          <span>{item.detail}</span>
+                          {item.key === "communications" && !item.ready ? (
                             <Button
                               variant="outlined"
                               size="small"
@@ -2818,11 +2792,7 @@ export function CohortDetailClient({ id }: { id: string }) {
                     );
                   })}
                 </div>
-                {showAutoRepairingSessionEmails ? (
-                  <Alert severity="info">
-                    Missing session emails are being repaired automatically. This should clear after the page refreshes.
-                  </Alert>
-                ) : sessionEmailReadiness && !sessionEmailReadiness.ready ? (
+                {sessionEmailReadiness && !sessionEmailReadiness.ready ? (
                   <Alert severity="warning">
                     {sessionEmailReadiness.detail}. Use Create missing emails to generate the required 24-hour and 1-hour session messages before publishing.
                   </Alert>
@@ -2900,8 +2870,8 @@ export function CohortDetailClient({ id }: { id: string }) {
               </div>
               {sessions.map((session) => {
                 const sessionMaterials = resources.filter((resource) => resource.sessionId === session.id);
-                const emailSummary = sessionEmailSummary(session);
                 const sessionReadiness = (cohort?.readiness?.sessionDetails ?? []).find((item: AdminRow) => item.id === session.id);
+                const emailSummary = sessionEmailSummary(session, sessionReadiness);
 
                 return (
                 <div className="session-check-row" role="row" key={session.id}>

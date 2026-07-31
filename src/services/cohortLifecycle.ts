@@ -126,7 +126,7 @@ function getCommunicationForType(session: LifecycleSession, type: TemplateType) 
 
   return communications.find((communication) => {
     const status = String(communication.status ?? "");
-    return communication.template?.type === type && !["CANCELLED", "FAILED"].includes(status);
+    return communication.template?.type === type && status !== "CANCELLED";
   });
 }
 
