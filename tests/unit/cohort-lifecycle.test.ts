@@ -167,6 +167,43 @@ test("requires every published session to have a Google invite once Google is in
   assert.equal(readiness.sessionDetails[1]?.calendar.detail, "Google invite missing");
 });
 
+test("keeps published calendar readiness when attendee sync fails after the Google event exists", () => {
+  const readiness = getCohortReadiness({
+    status: CohortStatus.PUBLISHED,
+    ...readyPrepResources,
+    sessions: [{
+      id: "session-1",
+      sessionNumber: 1,
+      title: "Session 1",
+      startTime: sessionStart,
+      endTime: new Date(sessionStart.getTime() + 60 * 60 * 1000),
+      timezone: "America/New_York",
+      meetingUrl: "https://zoom.us/j/123456789",
+      calendarInviteStatus: CalendarInviteStatus.FAILED,
+      calendarEvents: [{
+        provider: "google",
+        providerEventId: "google-session-1",
+        title: "Session 1",
+        startTime: sessionStart,
+        endTime: new Date(sessionStart.getTime() + 60 * 60 * 1000),
+        timezone: "America/New_York",
+        inviteUrl: "https://zoom.us/j/123456789",
+        updatedAt: new Date("2026-07-01T00:00:00.000Z")
+      }],
+      communications: [
+        communication(TemplateType.WEEK_BEFORE_REMINDER, new Date(sessionStart.getTime() - 7 * 24 * 60 * 60 * 1000)),
+        communication(TemplateType.DAY_BEFORE_REMINDER, new Date(sessionStart.getTime() - 24 * 60 * 60 * 1000)),
+        communication(TemplateType.HOUR_BEFORE_REMINDER, new Date(sessionStart.getTime() - 60 * 60 * 1000)),
+        communication(TemplateType.FOLLOW_UP, new Date(sessionStart.getTime() + 24 * 60 * 60 * 1000))
+      ]
+    }]
+  });
+
+  assert.equal(readiness.items.find((item) => item.key === "calendar")?.ready, true);
+  assert.equal(readiness.items.find((item) => item.key === "calendar")?.detail, "1/1 session invite ready");
+  assert.equal(readiness.sessionDetails[0]?.calendar.detail, "Invite ready");
+});
+
 test("keeps sent reminders satisfied and ignores optional material tasks", () => {
   const readiness = getCohortReadiness({
     status: CohortStatus.DRAFT,

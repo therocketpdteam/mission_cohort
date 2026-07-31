@@ -160,12 +160,14 @@ function getSessionEmailReadiness(session: LifecycleSession) {
 
 function getSessionCalendarReadiness(session: LifecycleSession, options: { requireGoogleInvite?: boolean } = {}) {
   const readyCalendarStatuses: Array<CalendarInviteStatus | string> = [CalendarInviteStatus.CREATED, CalendarInviteStatus.UPDATED];
-  const ready = readyCalendarStatuses.includes(session.calendarInviteStatus ?? "");
   const relevantEvents = options.requireGoogleInvite
     ? (session.calendarEvents ?? []).filter((event) => event.provider === "google" && event.providerEventId)
     : (session.calendarEvents ?? []);
   const latestEvent = [...relevantEvents]
     .sort((a, b) => (validDate(b.updatedAt)?.getTime() ?? 0) - (validDate(a.updatedAt)?.getTime() ?? 0))[0];
+  const hasUsableInviteRecord = Boolean(latestEvent);
+  const ready = readyCalendarStatuses.includes(session.calendarInviteStatus ?? "") ||
+    (session.calendarInviteStatus === CalendarInviteStatus.FAILED && hasUsableInviteRecord);
   const pendingUpdate = Boolean(latestEvent && session.calendarInviteStatus === CalendarInviteStatus.NOT_CREATED);
   const missingRequiredGoogleInvite = Boolean(options.requireGoogleInvite && !latestEvent);
   const stale = Boolean(

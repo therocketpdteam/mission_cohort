@@ -185,16 +185,6 @@ export async function createCalendarInvitePlaceholder(sessionId?: string, mode: 
         providerEventId: result.id,
         maxAttendees: attendees.length + 5
       }) ?? result;
-      const missingAttendees = missingCalendarAttendees(attendees, verifiedGoogleEvent?.attendees, verifiedGoogleEvent?.attendeesOmitted);
-
-      if (missingAttendees.length > 0) {
-        throw Object.assign(new Error(`Google Calendar event saved but is missing ${missingAttendees.length} attendee${missingAttendees.length === 1 ? "" : "s"}: ${missingAttendees.slice(0, 8).join(", ")}`), {
-          code: "BAD_REQUEST",
-          status: 400,
-          missingAttendees
-        });
-      }
-
       const calendarEvent = existing
         ? await prisma.calendarEvent.update({
             where: { id: existing.id },
@@ -222,13 +212,22 @@ export async function createCalendarInvitePlaceholder(sessionId?: string, mode: 
               inviteUrl: session.meetingUrl,
               htmlLink: result.htmlLink,
               status: CalendarInviteStatus.CREATED
-            }
-          });
+          }
+        });
 
       await prisma.cohortSession.update({
         where: { id: session.id },
         data: { calendarInviteStatus: CalendarInviteStatus.CREATED }
       });
+      const missingAttendees = missingCalendarAttendees(attendees, verifiedGoogleEvent?.attendees, verifiedGoogleEvent?.attendeesOmitted);
+
+      if (missingAttendees.length > 0) {
+        throw Object.assign(new Error(`Google Calendar event saved but is missing ${missingAttendees.length} attendee${missingAttendees.length === 1 ? "" : "s"}: ${missingAttendees.slice(0, 8).join(", ")}`), {
+          code: "PARTIAL_ATTENDEE_SYNC",
+          status: 202,
+          missingAttendees
+        });
+      }
 
       await prisma.operationsTask.updateMany({
         where: {
@@ -284,10 +283,12 @@ export async function createCalendarInvitePlaceholder(sessionId?: string, mode: 
       ics
     };
   } catch (error) {
-    await prisma.cohortSession.update({
-      where: { id: session.id },
-      data: { calendarInviteStatus: CalendarInviteStatus.FAILED }
-    });
+    if ((error as { code?: string }).code !== "PARTIAL_ATTENDEE_SYNC") {
+      await prisma.cohortSession.update({
+        where: { id: session.id },
+        data: { calendarInviteStatus: CalendarInviteStatus.FAILED }
+      });
+    }
     throw error;
   }
 }
