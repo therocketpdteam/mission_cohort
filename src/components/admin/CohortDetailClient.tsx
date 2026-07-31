@@ -496,6 +496,19 @@ function smoothPathForPoints(points: Array<{ x: number; y: number }>) {
   return commands.join(" ");
 }
 
+function softAreaPathForPoints(points: Array<{ x: number; y: number }>, baselineY: number) {
+  const linePath = smoothPathForPoints(points);
+
+  if (!linePath || points.length === 0) {
+    return "";
+  }
+
+  const first = points[0];
+  const last = points.at(-1)!;
+
+  return `${linePath} L ${last.x} ${baselineY} L ${first.x} ${baselineY} Z`;
+}
+
 function RegistrationEvolutionChart({
   rows,
   compareRows,
@@ -540,11 +553,37 @@ function RegistrationEvolutionChart({
   }
 
   function chartPoints(nextPoints: RegistrationTrendPoint[]) {
-    return nextPoints.map((point, index) => ({
+    const plotted = nextPoints.map((point, index) => ({
       point,
       x: xFor(point, index, nextPoints.length),
       y: yFor(point.value)
     }));
+
+    if (plotted.length <= 1) {
+      return plotted;
+    }
+
+    const minGap = Math.min(9, innerWidth / Math.max(plotted.length - 1, 1));
+    const maxX = width - margin.right;
+
+    for (let index = 1; index < plotted.length; index += 1) {
+      if (plotted[index].x - plotted[index - 1].x < minGap) {
+        plotted[index].x = plotted[index - 1].x + minGap;
+      }
+    }
+
+    if (plotted.at(-1)!.x > maxX) {
+      plotted[plotted.length - 1].x = maxX;
+      for (let index = plotted.length - 2; index >= 0; index -= 1) {
+        plotted[index].x = Math.min(plotted[index].x, plotted[index + 1].x - minGap);
+      }
+    }
+
+    return plotted;
+  }
+
+  function areaPathFor(nextPoints: RegistrationTrendPoint[]) {
+    return softAreaPathForPoints(chartPoints(nextPoints), height - margin.bottom);
   }
 
   function pathFor(nextPoints: RegistrationTrendPoint[]) {
@@ -580,12 +619,18 @@ function RegistrationEvolutionChart({
   return (
     <div className="cohort-evolution-chart">
       <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Registration evolution chart">
+        <defs>
+          <linearGradient id="registration-evolution-fill" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stopColor="var(--color-blue-600)" stopOpacity="0.12" />
+            <stop offset="100%" stopColor="var(--color-blue-600)" stopOpacity="0" />
+          </linearGradient>
+        </defs>
         {yTicks.map((tick) => {
           const y = yFor(tick);
 
           return (
             <g key={`y-${tick}`}>
-              <line x1={margin.left} y1={y} x2={width - margin.right} y2={y} stroke="var(--color-slate-200)" strokeDasharray={tick === 0 ? undefined : "4 8"} />
+              <line x1={margin.left} y1={y} x2={width - margin.right} y2={y} stroke="var(--color-slate-200)" strokeDasharray={tick === 0 ? undefined : "4 8"} opacity={tick === 0 ? 0.95 : 0.7} />
               <text x={margin.left - 10} y={y + 4} fill="var(--color-slate-500)" fontSize="11" textAnchor="end">{yTickLabel(tick)}</text>
             </g>
           );
@@ -595,18 +640,21 @@ function RegistrationEvolutionChart({
 
           return (
             <g key={`x-${tick.timestamp}`}>
-              <line x1={x} y1={margin.top} x2={x} y2={height - margin.bottom} stroke="var(--color-slate-100)" />
+              <line x1={x} y1={margin.top} x2={x} y2={height - margin.bottom} stroke="var(--color-slate-100)" opacity="0.72" />
               <text x={x} y={height - 14} fill="var(--color-slate-500)" fontSize="11" textAnchor="middle">{tick.label}</text>
             </g>
           );
         })}
-        <line x1={margin.left} y1={height - margin.bottom} x2={width - margin.right} y2={height - margin.bottom} stroke="var(--color-slate-300)" />
-        <line x1={margin.left} y1={margin.top} x2={margin.left} y2={height - margin.bottom} stroke="var(--color-slate-300)" />
+        <line x1={margin.left} y1={height - margin.bottom} x2={width - margin.right} y2={height - margin.bottom} stroke="var(--color-slate-300)" opacity="0.8" />
+        <line x1={margin.left} y1={margin.top} x2={margin.left} y2={height - margin.bottom} stroke="var(--color-slate-300)" opacity="0.8" />
         {comparisonPoints.length > 0 && <path d={pathFor(comparisonPoints)} fill="none" stroke="var(--color-slate-300)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="6 8" />}
-        <path d={pathFor(points)} fill="none" stroke="var(--color-blue-600)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+        <path d={areaPathFor(points)} fill="url(#registration-evolution-fill)" />
+        <path d={pathFor(points)} fill="none" stroke="var(--color-blue-600)" strokeWidth="5.5" strokeLinecap="round" strokeLinejoin="round" opacity="0.12" />
+        <path d={pathFor(points)} fill="none" stroke="var(--color-blue-600)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
         {chartPoints(points).map(({ point, x, y }, index) => (
           <g key={`${point.timestamp}-${index}`}>
-            <circle cx={x} cy={y} r="3.6" fill="var(--color-orange-500)" stroke="var(--color-white)" strokeWidth="1.4" />
+            <circle cx={x} cy={y} r="5.2" fill="var(--color-orange-100)" opacity="0.55" />
+            <circle cx={x} cy={y} r="3.1" fill="var(--color-orange-500)" stroke="var(--color-white)" strokeWidth="1.5" />
             <circle
               cx={x}
               cy={y}
