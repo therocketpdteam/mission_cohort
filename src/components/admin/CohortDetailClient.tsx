@@ -388,13 +388,113 @@ function splitContactName(value?: string | null) {
   };
 }
 
-function registrationTrendPoints(rows: AdminRow[], mode: "count" | "amount") {
+type RegistrationTrendPoint = {
+  label: string;
+  date: Date;
+  timestamp: number;
+  value: number;
+  seats: number;
+  amount: number;
+  cumulativeSeats: number;
+  cumulativeAmount: number;
+  registrant: string;
+  organization: string;
+};
+
+function registrationTrendPoints(rows: AdminRow[], mode: "count" | "amount"): RegistrationTrendPoint[] {
   const sorted = [...rows].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-  let cumulative = 0;
+  let cumulativeSeats = 0;
+  let cumulativeAmount = 0;
+
   return sorted.map((registration) => {
-    cumulative += mode === "count" ? Number(registration.participantCount ?? 0) : Number(registration.totalAmount ?? 0);
-    return { label: new Date(registration.createdAt).toLocaleDateString("en-US"), value: cumulative };
+    const date = new Date(registration.createdAt);
+    const seats = Number(registration.participantCount ?? 0);
+    const amount = Number(registration.totalAmount ?? 0);
+    cumulativeSeats += seats;
+    cumulativeAmount += amount;
+
+    return {
+      label: date.toLocaleDateString("en-US", { month: "numeric", day: "numeric", year: "numeric" }),
+      date,
+      timestamp: date.getTime(),
+      value: mode === "count" ? cumulativeSeats : cumulativeAmount,
+      seats,
+      amount,
+      cumulativeSeats,
+      cumulativeAmount,
+      registrant: formatProperDisplay(registration.primaryContactName ?? registration.billingContactName ?? "Registration"),
+      organization: formatProperDisplay(registration.organization?.name ?? registration.organizationName ?? "Organization")
+    };
   });
+}
+
+function niceAxisTicks(maxValue: number, targetTicks = 5) {
+  const safeMax = Math.max(maxValue, 1);
+  const roughStep = safeMax / Math.max(targetTicks - 1, 1);
+  const power = Math.pow(10, Math.floor(Math.log10(roughStep)));
+  const normalized = roughStep / power;
+  const niceNormalized =
+    normalized <= 1 ? 1 :
+    normalized <= 2 ? 2 :
+    normalized <= 2.5 ? 2.5 :
+    normalized <= 5 ? 5 :
+    10;
+  const step = niceNormalized * power;
+  const top = Math.ceil(safeMax / step) * step;
+  const ticks: number[] = [];
+
+  for (let value = 0; value <= top + step / 2; value += step) {
+    ticks.push(Math.round(value * 100) / 100);
+  }
+
+  return { ticks, top };
+}
+
+function dateAxisTicks(points: RegistrationTrendPoint[], maxTicks = 5) {
+  if (points.length <= 1) {
+    return points.map((point) => ({ timestamp: point.timestamp, label: point.label }));
+  }
+
+  const start = points[0].timestamp;
+  const end = points.at(-1)?.timestamp ?? start;
+  const count = Math.min(maxTicks, Math.max(2, points.length));
+  const formatter = new Intl.DateTimeFormat("en-US", { month: "numeric", day: "numeric" });
+
+  return Array.from({ length: count }, (_item, index) => {
+    const timestamp = start + ((end - start) * index) / Math.max(count - 1, 1);
+    return { timestamp, label: formatter.format(new Date(timestamp)) };
+  });
+}
+
+function smoothPathForPoints(points: Array<{ x: number; y: number }>) {
+  if (points.length === 0) {
+    return "";
+  }
+
+  if (points.length === 1) {
+    return `M ${points[0].x} ${points[0].y}`;
+  }
+
+  const commands = [`M ${points[0].x} ${points[0].y}`];
+
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const current = points[index];
+    const next = points[index + 1];
+    const previous = points[index - 1] ?? current;
+    const afterNext = points[index + 2] ?? next;
+    const controlOne = {
+      x: current.x + (next.x - previous.x) / 6,
+      y: current.y + (next.y - previous.y) / 6
+    };
+    const controlTwo = {
+      x: next.x - (afterNext.x - current.x) / 6,
+      y: next.y - (afterNext.y - current.y) / 6
+    };
+
+    commands.push(`C ${controlOne.x} ${controlOne.y}, ${controlTwo.x} ${controlTwo.y}, ${next.x} ${next.y}`);
+  }
+
+  return commands.join(" ");
 }
 
 function RegistrationEvolutionChart({
@@ -410,19 +510,49 @@ function RegistrationEvolutionChart({
 }) {
   const points = useMemo(() => registrationTrendPoints(rows, mode), [mode, rows]);
   const comparisonPoints = useMemo(() => registrationTrendPoints(compareRows, mode), [compareRows, mode]);
-  const max = Math.max(...points.map((point) => point.value), ...comparisonPoints.map((point) => point.value), 1);
-  const width = 720;
-  const height = 180;
-  const innerWidth = width - 64;
-  const innerHeight = height - 48;
+  const allPoints = [...points, ...comparisonPoints];
+  const max = Math.max(...allPoints.map((point) => point.value), 1);
+  const { ticks: yTicks, top: yMax } = niceAxisTicks(max, 5);
+  const width = 820;
+  const height = 260;
+  const margin = { top: 22, right: 28, bottom: 42, left: 78 };
+  const innerWidth = width - margin.left - margin.right;
+  const innerHeight = height - margin.top - margin.bottom;
+  const startTimestamp = Math.min(...allPoints.map((point) => point.timestamp));
+  const endTimestamp = Math.max(...allPoints.map((point) => point.timestamp));
+  const timeRange = endTimestamp - startTimestamp;
+  const xTicks = dateAxisTicks(points.length ? points : comparisonPoints, 5);
 
-  function pathFor(nextPoints: Array<{ label: string; value: number }>) {
-    return nextPoints.map((point, index) => {
-      const x = 40 + (nextPoints.length <= 1 ? innerWidth : (index / (nextPoints.length - 1)) * innerWidth);
-      const y = 16 + innerHeight - (point.value / max) * innerHeight;
-      return `${index === 0 ? "M" : "L"} ${x} ${y}`;
-    })
-    .join(" ");
+  function xFor(point: RegistrationTrendPoint, index: number, total: number) {
+    const ratio = timeRange > 0
+      ? (point.timestamp - startTimestamp) / timeRange
+      : total <= 1 ? 0.5 : index / Math.max(total - 1, 1);
+    return margin.left + ratio * innerWidth;
+  }
+
+  function xForTimestamp(timestamp: number) {
+    const ratio = timeRange > 0 ? (timestamp - startTimestamp) / timeRange : 0.5;
+    return margin.left + ratio * innerWidth;
+  }
+
+  function yFor(value: number) {
+    return margin.top + innerHeight - (value / yMax) * innerHeight;
+  }
+
+  function chartPoints(nextPoints: RegistrationTrendPoint[]) {
+    return nextPoints.map((point, index) => ({
+      point,
+      x: xFor(point, index, nextPoints.length),
+      y: yFor(point.value)
+    }));
+  }
+
+  function pathFor(nextPoints: RegistrationTrendPoint[]) {
+    return smoothPathForPoints(chartPoints(nextPoints));
+  }
+
+  function yTickLabel(value: number) {
+    return mode === "count" ? `${value.toLocaleString()} seats` : money(value);
   }
 
   if (points.length === 0) {
@@ -432,18 +562,41 @@ function RegistrationEvolutionChart({
   return (
     <div className="cohort-evolution-chart">
       <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Registration evolution chart">
-        <line x1="40" y1={height - 32} x2={width - 24} y2={height - 32} stroke="var(--color-slate-200)" />
-        <line x1="40" y1="16" x2="40" y2={height - 32} stroke="var(--color-slate-200)" />
-        {comparisonPoints.length > 0 && <path d={pathFor(comparisonPoints)} fill="none" stroke="var(--color-slate-300)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="6 8" />}
-        <path d={pathFor(points)} fill="none" stroke="var(--color-blue-600)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-        {points.map((point, index) => {
-          const x = 40 + (points.length <= 1 ? innerWidth : (index / (points.length - 1)) * innerWidth);
-          const y = 16 + innerHeight - (point.value / max) * innerHeight;
-          return <circle key={`${point.label}-${index}`} cx={x} cy={y} r="2.8" fill="var(--color-orange-500)" />;
+        {yTicks.map((tick) => {
+          const y = yFor(tick);
+
+          return (
+            <g key={`y-${tick}`}>
+              <line x1={margin.left} y1={y} x2={width - margin.right} y2={y} stroke="var(--color-slate-200)" strokeDasharray={tick === 0 ? undefined : "4 8"} />
+              <text x={margin.left - 10} y={y + 4} fill="var(--color-slate-500)" fontSize="11" textAnchor="end">{yTickLabel(tick)}</text>
+            </g>
+          );
         })}
-        <text x="40" y="14" fill="var(--color-slate-500)" fontSize="12">{mode === "count" ? `${max} seats` : money(max)}</text>
-        <text x="40" y={height - 8} fill="var(--color-slate-500)" fontSize="12">{points[0]?.label}</text>
-        <text x={width - 150} y={height - 8} fill="var(--color-slate-500)" fontSize="12">{points.at(-1)?.label}</text>
+        {xTicks.map((tick) => {
+          const x = xForTimestamp(tick.timestamp);
+
+          return (
+            <g key={`x-${tick.timestamp}`}>
+              <line x1={x} y1={margin.top} x2={x} y2={height - margin.bottom} stroke="var(--color-slate-100)" />
+              <text x={x} y={height - 14} fill="var(--color-slate-500)" fontSize="11" textAnchor="middle">{tick.label}</text>
+            </g>
+          );
+        })}
+        <line x1={margin.left} y1={height - margin.bottom} x2={width - margin.right} y2={height - margin.bottom} stroke="var(--color-slate-300)" />
+        <line x1={margin.left} y1={margin.top} x2={margin.left} y2={height - margin.bottom} stroke="var(--color-slate-300)" />
+        {comparisonPoints.length > 0 && <path d={pathFor(comparisonPoints)} fill="none" stroke="var(--color-slate-300)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="6 8" />}
+        <path d={pathFor(points)} fill="none" stroke="var(--color-blue-600)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+        {chartPoints(points).map(({ point, x, y }, index) => (
+          <circle key={`${point.timestamp}-${index}`} cx={x} cy={y} r="3.4" fill="var(--color-orange-500)" stroke="var(--color-white)" strokeWidth="1.4">
+            <title>
+              {`${point.label}
+${point.registrant} · ${point.organization}
+Registration: ${point.seats.toLocaleString()} seat${point.seats === 1 ? "" : "s"} · ${money(point.amount)}
+Aggregate seats: ${point.cumulativeSeats.toLocaleString()}
+Aggregate registration value: ${money(point.cumulativeAmount)}`}
+            </title>
+          </circle>
+        ))}
       </svg>
       {comparisonPoints.length > 0 && <span>Comparing against {compareLabel}</span>}
     </div>
