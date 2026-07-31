@@ -41,12 +41,30 @@ export type RegistrationPendingChanges = {
   calendarAppliedAt?: string;
 };
 
+const emailPattern = /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i;
 const trackedRegistrationFields = [
   "participantCount",
   "totalAmount",
   "purchaseOrderNumber",
   "invoiceNumber"
 ] as const;
+
+function looksLikeRawJotformValue(value: unknown) {
+  const text = String(value ?? "");
+  return (
+    text.startsWith("{") ||
+    text.includes("jsExecutionTracker") ||
+    text.includes("validatedNewRequiredFieldIDs") ||
+    /["\\]?q\d+_[a-z0-9]+["\\]?\s*:/.test(text)
+  );
+}
+
+function cleanRecipientEmails(value: unknown, fallbackEmail: string) {
+  const emails = Array.isArray(value) ? value.map((email) => String(email ?? "").trim().toLowerCase()) : [];
+  const clean = emails.filter((email) => emailPattern.test(email) && !looksLikeRawJotformValue(email));
+
+  return clean.length > 0 ? Array.from(new Set(clean)) : [fallbackEmail].filter(Boolean);
+}
 
 function valueForJson(value: unknown): string | number | null {
   if (value === undefined || value === null || value === "") {
@@ -417,10 +435,54 @@ export async function applyRegistrationChanges(registrationId: string) {
 }
 
 export async function discardRegistrationChanges(registrationId: string) {
+  const registration = await prisma.registration.findUniqueOrThrow({
+    where: { id: registrationId },
+    select: {
+      primaryContactEmail: true,
+      participants: { select: { id: true, email: true } },
+      communications: {
+        select: {
+          id: true,
+          participantId: true,
+          journeyKey: true,
+          recipientEmails: true,
+          status: true
+        }
+      }
+    }
+  });
+  const participantEmailById = new Map(registration.participants.map((participant) => [participant.id, participant.email.toLowerCase()]));
+  let sanitizedCommunications = 0;
+
+  for (const communication of registration.communications) {
+    const rawRecipient = looksLikeRawJotformValue(JSON.stringify(communication.recipientEmails ?? []));
+    const rawJourneyKey = looksLikeRawJotformValue(communication.journeyKey ?? "");
+
+    if (!rawRecipient && !rawJourneyKey) {
+      continue;
+    }
+
+    const fallbackEmail = communication.participantId
+      ? participantEmailById.get(communication.participantId) ?? registration.primaryContactEmail.toLowerCase()
+      : registration.primaryContactEmail.toLowerCase();
+
+    await prisma.cohortCommunication.update({
+      where: { id: communication.id },
+      data: {
+        recipientEmails: cleanRecipientEmails(communication.recipientEmails, fallbackEmail),
+        journeyKey: rawJourneyKey ? null : communication.journeyKey,
+        providerError: communication.status === CommunicationStatus.CANCELLED
+          ? "Cancelled after participant contact data was corrected."
+          : undefined
+      }
+    });
+    sanitizedCommunications += 1;
+  }
+
   await prisma.registration.update({
     where: { id: registrationId },
     data: { pendingChanges: Prisma.JsonNull, pendingChangesAt: null }
   });
 
-  return { registrationId, status: "discarded" as const };
+  return { registrationId, status: "discarded" as const, sanitizedCommunications };
 }
