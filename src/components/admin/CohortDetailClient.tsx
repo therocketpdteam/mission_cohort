@@ -28,7 +28,7 @@ import {
   Typography
 } from "@/components/ui/primitives";
 import { GridColDef } from "./common";
-import type { CSSProperties, ReactNode, SyntheticEvent } from "react";
+import type { CSSProperties, PointerEvent, ReactNode, SyntheticEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { adminApi, uploadAdminFile } from "@/lib/adminApi";
 import { formatProperDisplay, formatRegistrationPaymentStatus, formatRegistrationSource, formatStatusLabel, isCompedRegistration } from "@/lib/formatting";
@@ -480,15 +480,14 @@ function smoothPathForPoints(points: Array<{ x: number; y: number }>) {
   for (let index = 0; index < points.length - 1; index += 1) {
     const current = points[index];
     const next = points[index + 1];
-    const previous = points[index - 1] ?? current;
-    const afterNext = points[index + 2] ?? next;
+    const horizontalEase = (next.x - current.x) * 0.22;
     const controlOne = {
-      x: current.x + (next.x - previous.x) / 6,
-      y: current.y + (next.y - previous.y) / 6
+      x: current.x + horizontalEase,
+      y: current.y
     };
     const controlTwo = {
-      x: next.x - (afterNext.x - current.x) / 6,
-      y: next.y - (afterNext.y - current.y) / 6
+      x: next.x - horizontalEase,
+      y: next.y
     };
 
     commands.push(`C ${controlOne.x} ${controlOne.y}, ${controlTwo.x} ${controlTwo.y}, ${next.x} ${next.y}`);
@@ -510,6 +509,7 @@ function RegistrationEvolutionChart({
 }) {
   const points = useMemo(() => registrationTrendPoints(rows, mode), [mode, rows]);
   const comparisonPoints = useMemo(() => registrationTrendPoints(compareRows, mode), [compareRows, mode]);
+  const [tooltip, setTooltip] = useState<{ point: RegistrationTrendPoint; left: number; top: number } | null>(null);
   const allPoints = [...points, ...comparisonPoints];
   const max = Math.max(...allPoints.map((point) => point.value), 1);
   const { ticks: yTicks, top: yMax } = niceAxisTicks(max, 5);
@@ -555,6 +555,24 @@ function RegistrationEvolutionChart({
     return mode === "count" ? `${value.toLocaleString()} seats` : money(value);
   }
 
+  function updateTooltip(point: RegistrationTrendPoint, event: PointerEvent<SVGCircleElement>) {
+    const chartBounds = event.currentTarget.ownerSVGElement?.parentElement?.getBoundingClientRect();
+
+    if (!chartBounds) {
+      return;
+    }
+
+    const tooltipWidth = Math.min(280, Math.max(chartBounds.width - 24, 180));
+    const nextLeft = event.clientX - chartBounds.left + 14;
+    const nextTop = event.clientY - chartBounds.top + 14;
+
+    setTooltip({
+      point,
+      left: Math.max(8, Math.min(nextLeft, chartBounds.width - tooltipWidth - 8)),
+      top: Math.max(8, Math.min(nextTop, chartBounds.height - 120))
+    });
+  }
+
   if (points.length === 0) {
     return <EmptyState title="No registration trend yet" description="Registrations will draw the cohort evolution chart here." />;
   }
@@ -587,17 +605,30 @@ function RegistrationEvolutionChart({
         {comparisonPoints.length > 0 && <path d={pathFor(comparisonPoints)} fill="none" stroke="var(--color-slate-300)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="6 8" />}
         <path d={pathFor(points)} fill="none" stroke="var(--color-blue-600)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
         {chartPoints(points).map(({ point, x, y }, index) => (
-          <circle key={`${point.timestamp}-${index}`} cx={x} cy={y} r="3.4" fill="var(--color-orange-500)" stroke="var(--color-white)" strokeWidth="1.4">
-            <title>
-              {`${point.label}
-${point.registrant} · ${point.organization}
-Registration: ${point.seats.toLocaleString()} seat${point.seats === 1 ? "" : "s"} · ${money(point.amount)}
-Aggregate seats: ${point.cumulativeSeats.toLocaleString()}
-Aggregate registration value: ${money(point.cumulativeAmount)}`}
-            </title>
-          </circle>
+          <g key={`${point.timestamp}-${index}`}>
+            <circle cx={x} cy={y} r="3.6" fill="var(--color-orange-500)" stroke="var(--color-white)" strokeWidth="1.4" />
+            <circle
+              cx={x}
+              cy={y}
+              r="11"
+              fill="transparent"
+              className="cohort-evolution-hit"
+              onPointerEnter={(event) => updateTooltip(point, event)}
+              onPointerMove={(event) => updateTooltip(point, event)}
+              onPointerLeave={() => setTooltip(null)}
+            />
+          </g>
         ))}
       </svg>
+      {tooltip && (
+        <div className="cohort-evolution-tooltip" style={{ left: tooltip.left, top: tooltip.top }}>
+          <strong>{tooltip.point.label}</strong>
+          <span>{tooltip.point.registrant}</span>
+          <span>{tooltip.point.organization}</span>
+          <em>{tooltip.point.seats.toLocaleString()} seat{tooltip.point.seats === 1 ? "" : "s"} · {money(tooltip.point.amount)}</em>
+          <em>Total: {tooltip.point.cumulativeSeats.toLocaleString()} seats · {money(tooltip.point.cumulativeAmount)}</em>
+        </div>
+      )}
       {comparisonPoints.length > 0 && <span>Comparing against {compareLabel}</span>}
     </div>
   );

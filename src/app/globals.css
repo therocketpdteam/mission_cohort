@@ -3531,9 +3531,11 @@ h6,
 }
 
 .image-field-preview img {
+  display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: center center;
 }
 
 .image-field-controls {
@@ -3575,8 +3577,10 @@ h6,
 
 .create-cohort-image-field .image-field-preview img {
   display: block;
-  max-width: 100%;
-  max-height: 100%;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center center;
 }
 
 .create-cohort-presenter-field .ui-field {
@@ -3616,6 +3620,7 @@ h6,
 }
 
 .cohort-cell-thumb {
+  display: block;
   width: 42px;
   min-width: 42px;
   height: 42px;
@@ -3623,6 +3628,7 @@ h6,
   border-radius: 999px;
   box-shadow: 0 0 0 1px var(--color-slate-200);
   object-fit: cover;
+  object-position: center center;
 }
 
 .app-shell.is-compact .cohort-cell-thumb {
@@ -4714,10 +4720,11 @@ h6,
 }
 
 .cohort-evolution-chart {
+  position: relative;
   display: grid;
   gap: 8px;
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .cohort-evolution-chart svg {
@@ -4736,6 +4743,8 @@ h6,
 
 .cohort-thumbnail-preview {
   display: grid;
+  aspect-ratio: 1 / 1;
+  width: 100%;
   min-height: 148px;
   overflow: hidden;
   place-items: center;
@@ -4748,9 +4757,11 @@ h6,
 }
 
 .cohort-thumbnail-preview img {
+  display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: center center;
 }
 
 .cohort-overview-details {
@@ -4842,6 +4853,43 @@ h6,
   color: var(--color-slate-500);
   font-size: 0.8rem;
   font-weight: 750;
+}
+
+.cohort-evolution-hit {
+  cursor: pointer;
+  pointer-events: all;
+}
+
+.cohort-evolution-tooltip {
+  position: absolute;
+  z-index: 5;
+  display: grid;
+  width: min(280px, calc(100vw - 48px));
+  gap: 3px;
+  border: 1px solid rgba(38, 34, 84, 0.16);
+  border-radius: 10px;
+  background: var(--color-white);
+  box-shadow: 0 16px 36px rgba(7, 29, 51, 0.16);
+  padding: 10px 12px;
+  pointer-events: none;
+}
+
+.cohort-evolution-tooltip strong {
+  color: var(--color-primary-900);
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
+.cohort-evolution-tooltip span,
+.cohort-evolution-tooltip em {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-slate-600);
+  font-size: 0.76rem;
+  font-style: normal;
+  font-weight: 720;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .chart-filter-row {
@@ -5121,10 +5169,13 @@ h6,
 }
 
 .readiness-metric-card {
+  position: relative;
   min-height: 104px;
   padding: 10px 8px;
   border-color: color-mix(in srgb, var(--color-primary-fixed-dim) 54%, var(--color-outline-variant));
   border-radius: 12px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-primary-fixed-dim) 54%, var(--color-outline-variant));
+  overflow: hidden;
 }
 
 .readiness-metric-card.needs-work {
