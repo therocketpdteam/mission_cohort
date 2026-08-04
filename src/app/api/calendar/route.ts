@@ -64,7 +64,7 @@ export async function POST(request: Request) {
       }), { status: 202 });
     }
 
-    return ok(await createCalendarInvitePlaceholder(body.sessionId, body.mode ?? "ics"), { status: 202 });
+    return ok(await createCalendarInvitePlaceholder(body.sessionId, body.mode ?? "ics", { sendUpdates: body.mode === "google" }), { status: 202 });
   } catch (error) {
     return handleApiError(error);
   }
@@ -76,7 +76,7 @@ export async function PATCH(request: Request) {
     const body = await request.json();
 
     if (body.action === "cancelSessionInvites" && body.sessionId) {
-      const calendar = await cancelGoogleCalendarInvites({ sessionId: body.sessionId });
+      const calendar = await cancelGoogleCalendarInvites({ sessionId: body.sessionId }, { notifyAttendees: true });
       const session = await prisma.cohortSession.findUnique({ where: { id: body.sessionId }, select: { cohortId: true } });
       let cancellationEmail: { status: string; error?: string } = { status: "not_sent" };
       if (session) {
@@ -91,7 +91,7 @@ export async function PATCH(request: Request) {
     }
 
     if (body.action === "cancelCohortInvites" && body.cohortId) {
-      const calendar = await cancelGoogleCalendarInvites({ cohortId: body.cohortId });
+      const calendar = await cancelGoogleCalendarInvites({ cohortId: body.cohortId }, { notifyAttendees: true });
       let cancellationEmail: { status: string; error?: string };
       try {
         await sendCalendarCancellationNotice({ cohortId: body.cohortId });

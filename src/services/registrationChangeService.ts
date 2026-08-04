@@ -336,7 +336,7 @@ export async function applyRegistrationChanges(registrationId: string) {
     if (attendeeChanges) {
       for (const session of registration.cohort.sessions.filter((row) => row.startTime.getTime() > Date.now() && row.calendarEvents.some((event) => event.providerEventId))) {
         try {
-          await createCalendarInvitePlaceholder(session.id, "google");
+          await createCalendarInvitePlaceholder(session.id, "google", { sendUpdates: false });
         } catch (error) {
           calendarIssues.push({
             sessionId: session.id,

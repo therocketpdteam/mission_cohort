@@ -747,7 +747,7 @@ export async function planRegistrationJourneys(
     details: { updated: [], failed: [] }
   };
   if (options.syncCalendar !== false) {
-    calendar = await syncFutureCalendarInvites(registration, { sendUpdates: options.calendarSendUpdates });
+    calendar = await syncFutureCalendarInvites(registration, { sendUpdates: options.calendarSendUpdates ?? true });
     await recordCalendarEnrollmentOutcome(registration, calendar);
   }
 

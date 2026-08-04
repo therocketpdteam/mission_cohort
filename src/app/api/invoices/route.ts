@@ -1,4 +1,5 @@
 import { handleApiError, ok } from "@/lib/api";
+import { MUTATION_ROLES, requireRole } from "@/lib/auth";
 import { isMissingPrismaSchema, migrationRequiredResult } from "@/lib/prismaCompatibility";
 import { createInvoiceDraft, generateInvoicePdf, listInvoiceDrafts, prepareAndSendRegistrationInvoicePackage, sendInvoiceDocument, updateInvoiceDraft } from "@/services/invoiceService";
 import { createQuickBooksInvoiceFromDraft } from "@/services/quickBooksService";
@@ -17,6 +18,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    await requireRole(MUTATION_ROLES);
     return ok(await createInvoiceDraft(await request.json()), { status: 201 });
   } catch (error) {
     if (isMissingPrismaSchema(error)) {
@@ -28,6 +30,7 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
+    await requireRole(MUTATION_ROLES);
     const body = await request.json();
 
     if (body.action === "generatePdf") {

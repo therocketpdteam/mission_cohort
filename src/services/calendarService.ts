@@ -177,7 +177,7 @@ export async function createCalendarInvitePlaceholder(sessionId?: string, mode: 
           ...attendee,
           responseStatus: existingResponses.get(attendee.email.toLowerCase())
         })),
-        sendUpdates: options.sendUpdates ?? true
+        sendUpdates: options.sendUpdates === true
       });
       const verifiedGoogleEvent = await getGoogleCalendarEvent({
         accessToken: await getConnectedGoogleCalendarAccessToken(),
@@ -382,7 +382,7 @@ export async function syncFutureLinkedGoogleCalendarInvitesForCohort(cohortId: s
 
   for (const session of sessions) {
     try {
-      const result = await createCalendarInvitePlaceholder(session.id, "google", { sendUpdates: options.sendUpdates });
+      const result = await createCalendarInvitePlaceholder(session.id, "google", { sendUpdates: options.sendUpdates === true });
       updated.push({
         sessionId: session.id,
         title: session.title,
@@ -448,7 +448,7 @@ export async function applyCohortCalendarChanges(cohortId: string) {
 
   for (const { session, previous } of pending) {
     try {
-      const result = await createCalendarInvitePlaceholder(session.id, "google");
+      const result = await createCalendarInvitePlaceholder(session.id, "google", { sendUpdates: true });
       applied.push({
         sessionId: session.id,
         sessionNumber: session.sessionNumber,
@@ -501,7 +501,7 @@ async function connectedGoogleEventDetails(sessionIds: string[]) {
   return { details, accessToken, calendarId: setup.calendarId };
 }
 
-export async function cancelGoogleCalendarInvites(input: { sessionId?: string; cohortId?: string }) {
+export async function cancelGoogleCalendarInvites(input: { sessionId?: string; cohortId?: string }, options: { notifyAttendees: true }) {
   const sessions = await prisma.cohortSession.findMany({
     where: input.sessionId ? { id: input.sessionId } : input.cohortId ? { cohortId: input.cohortId } : { id: "" },
     select: { id: true }
@@ -522,7 +522,7 @@ export async function cancelGoogleCalendarInvites(input: { sessionId?: string; c
         accessToken,
         calendarId,
         providerEventId: record.providerEventId!,
-        sendUpdates: true
+        sendUpdates: options.notifyAttendees
       });
     }
   }
@@ -568,7 +568,7 @@ export async function prepareCohortCalendarInvites(input: { cohortId?: string; m
       results.push({
         sessionId: session.id,
         sessionTitle: session.title,
-        ...(await createCalendarInvitePlaceholder(session.id, mode))
+        ...(await createCalendarInvitePlaceholder(session.id, mode, { sendUpdates: true }))
       });
     } catch (error) {
       if (mode === "google" && input.fallbackToIcs !== false) {

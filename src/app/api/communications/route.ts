@@ -1,5 +1,5 @@
 import { fail, handleApiError, ok } from "@/lib/api";
-import { requireUser } from "@/lib/auth";
+import { MUTATION_ROLES, requireRole } from "@/lib/auth";
 import {
   addCommunicationAttachment,
   attachResourceToCommunication,
@@ -43,7 +43,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const user = await requireUser();
+    const user = await requireRole(MUTATION_ROLES);
     return ok(await createCommunicationDraft({ ...(await request.json()), createdById: user.id }), { status: 201 });
   } catch (error) {
     return handleApiError(error);
@@ -52,6 +52,7 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
+    const user = await requireRole(MUTATION_ROLES);
     const body = await request.json();
 
     if (body.action === "attachFile") {
@@ -102,7 +103,6 @@ export async function PATCH(request: Request) {
       if (!body.cohortId) {
         return fail("cohortId is required", "BAD_REQUEST", 400);
       }
-      await requireUser();
 
       return ok(await skipPocRegistrationConfirmationsForCohort(
         body.cohortId,
@@ -122,7 +122,6 @@ export async function PATCH(request: Request) {
       if (!body.templateId || !Array.isArray(body.participantIds)) {
         return fail("templateId and participantIds are required", "BAD_REQUEST", 400);
       }
-      const user = await requireUser();
 
       return ok(await sendManualTemplateToParticipants({
         templateId: body.templateId,
@@ -143,7 +142,6 @@ export async function PATCH(request: Request) {
       if (!Array.isArray(body.participantIds)) {
         return fail("participantIds are required", "BAD_REQUEST", 400);
       }
-      const user = await requireUser();
 
       return ok(await sendManualCustomEmail({
         participantIds: body.participantIds,
@@ -158,7 +156,6 @@ export async function PATCH(request: Request) {
       if (!body.cohortId || !body.recipientEmail) {
         return fail("cohortId and recipientEmail are required", "BAD_REQUEST", 400);
       }
-      const user = await requireUser();
 
       return ok(await sendCohortPublishExperienceTest({
         cohortId: body.cohortId,
@@ -195,7 +192,6 @@ export async function PATCH(request: Request) {
       if (!body.communicationId || !body.recipientEmail) {
         return fail("communicationId and recipientEmail are required", "BAD_REQUEST", 400);
       }
-      const user = await requireUser();
 
       return ok(await reviewRecipientIssue({
         communicationId: body.communicationId,
