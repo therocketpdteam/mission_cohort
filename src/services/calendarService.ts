@@ -293,6 +293,80 @@ export async function createCalendarInvitePlaceholder(sessionId?: string, mode: 
   }
 }
 
+export async function auditCohortGoogleCalendarInvites(cohortId?: string) {
+  if (!cohortId) {
+    throw Object.assign(new Error("cohortId is required"), { code: "BAD_REQUEST", status: 400 });
+  }
+
+  const [cohort, attendees, accessToken, setup] = await Promise.all([
+    prisma.cohort.findUnique({
+      where: { id: cohortId },
+      select: { id: true, title: true, shortName: true, slug: true, status: true }
+    }),
+    getCohortCalendarAttendees(cohortId),
+    getConnectedGoogleCalendarAccessToken(),
+    googleSetupWithEnvFallback()
+  ]);
+
+  if (!cohort) {
+    throw Object.assign(new Error("Cohort not found"), { code: "NOT_FOUND", status: 404 });
+  }
+
+  const sessions = await prisma.cohortSession.findMany({
+    where: { cohortId },
+    orderBy: { startTime: "asc" },
+    include: {
+      calendarEvents: {
+        where: { provider: "google", providerEventId: { not: null } },
+        orderBy: { createdAt: "desc" },
+        take: 1
+      }
+    }
+  });
+
+  const expectedEmails = attendees.map((attendee) => attendee.email);
+  const sessionsAudit = await Promise.all(sessions.map(async (session) => {
+    const calendarRecord = session.calendarEvents[0] ?? null;
+    const googleEvent = calendarRecord?.providerEventId
+      ? await getGoogleCalendarEvent({
+          accessToken,
+          calendarId: setup.calendarId,
+          providerEventId: calendarRecord.providerEventId,
+          maxAttendees: attendees.length + 5
+        })
+      : null;
+    const missingAttendees = missingCalendarAttendees(attendees, googleEvent?.attendees, googleEvent?.attendeesOmitted);
+    const googleAttendeeCount = googleEvent?.attendees?.filter((attendee) => attendee.email).length ?? 0;
+
+    return {
+      sessionId: session.id,
+      sessionNumber: session.sessionNumber,
+      title: session.title,
+      startTime: session.startTime,
+      timezone: session.timezone,
+      calendarInviteStatus: session.calendarInviteStatus,
+      providerEventId: calendarRecord?.providerEventId ?? null,
+      htmlLink: googleEvent?.htmlLink ?? calendarRecord?.htmlLink ?? null,
+      active: Boolean(googleEvent),
+      attendeesOmitted: Boolean(googleEvent?.attendeesOmitted),
+      expectedAttendeeCount: attendees.length,
+      googleAttendeeCount,
+      missingAttendeeCount: missingAttendees.length,
+      missingAttendees
+    };
+  }));
+
+  return {
+    cohort,
+    expectedAttendeeCount: attendees.length,
+    expectedEmails,
+    sessions: sessionsAudit,
+    allSessionsActive: sessionsAudit.length > 0 && sessionsAudit.every((session) => session.active),
+    allAttendeesPresent: sessionsAudit.every((session) => session.missingAttendeeCount === 0 && !session.attendeesOmitted),
+    checkedAt: new Date().toISOString()
+  };
+}
+
 export async function syncFutureLinkedGoogleCalendarInvitesForCohort(cohortId: string, options: { sendUpdates?: boolean } = {}) {
   const sessions = await prisma.cohortSession.findMany({
     where: {

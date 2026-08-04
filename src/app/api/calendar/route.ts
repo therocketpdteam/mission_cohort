@@ -1,28 +1,39 @@
 import { fail, handleApiError, ok } from "@/lib/api";
 import { getEnvPresence } from "@/lib/env";
-import { applyCohortCalendarChanges, createCalendarInvitePlaceholder, prepareCohortCalendarInvites } from "@/services/calendarService";
+import { applyCohortCalendarChanges, auditCohortGoogleCalendarInvites, createCalendarInvitePlaceholder, prepareCohortCalendarInvites } from "@/services/calendarService";
 import { getIntegrationConnection } from "@/services/integrationService";
 import { IntegrationProvider } from "@prisma/client";
 import { cancelGoogleCalendarInvites } from "@/services/calendarService";
-import { MUTATION_ROLES, requireRole } from "@/lib/auth";
+import { ADMIN_ROLES, MUTATION_ROLES, requireRole } from "@/lib/auth";
 import { sendCalendarCancellationNotice, sendCohortScheduleChangeNotice } from "@/services/communicationService";
 import { prisma } from "@/lib/prisma";
 
-export async function GET() {
-  const connection = await getIntegrationConnection(IntegrationProvider.GOOGLE_CALENDAR);
-  return ok({
-    configured: getEnvPresence().googleCalendarConfigured,
-    connection: connection ? {
-      id: connection.id,
-      provider: connection.provider,
-      label: connection.label,
-      status: connection.status,
-      accountName: connection.accountName,
-      tokenExpiresAt: connection.tokenExpiresAt,
-      lastSyncedAt: connection.lastSyncedAt,
-      errorMessage: connection.errorMessage
-    } : null
-  });
+export async function GET(request: Request) {
+  try {
+    const url = new URL(request.url);
+
+    if (url.searchParams.get("action") === "auditCohort") {
+      await requireRole(ADMIN_ROLES);
+      return ok(await auditCohortGoogleCalendarInvites(url.searchParams.get("cohortId") ?? undefined));
+    }
+
+    const connection = await getIntegrationConnection(IntegrationProvider.GOOGLE_CALENDAR);
+    return ok({
+      configured: getEnvPresence().googleCalendarConfigured,
+      connection: connection ? {
+        id: connection.id,
+        provider: connection.provider,
+        label: connection.label,
+        status: connection.status,
+        accountName: connection.accountName,
+        tokenExpiresAt: connection.tokenExpiresAt,
+        lastSyncedAt: connection.lastSyncedAt,
+        errorMessage: connection.errorMessage
+      } : null
+    });
+  } catch (error) {
+    return handleApiError(error);
+  }
 }
 
 export async function POST(request: Request) {
