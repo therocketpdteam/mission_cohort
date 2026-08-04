@@ -99,11 +99,27 @@ export async function queueParticipantCrmSync(participantId: string, eventType =
 }
 
 export async function processCrmSyncEvents(limit = 25) {
-  const events = await prisma.crmSyncEvent.findMany({
+  const candidateLimit = Math.min(Math.max(limit * 100, limit), 5000);
+  const candidates = await prisma.crmSyncEvent.findMany({
     where: { status: { in: [CrmSyncEventStatus.QUEUED, CrmSyncEventStatus.FAILED] } },
     orderBy: { createdAt: "asc" },
-    take: limit
+    take: candidateLimit
   });
+
+  const events = candidates
+    .map((event) => ({
+      event,
+      missionPayload: isCrmRegistrationWebhookPayload(event.payload)
+    }))
+    .sort((a, b) => {
+      if (a.missionPayload !== b.missionPayload) {
+        return a.missionPayload ? -1 : 1;
+      }
+
+      return a.event.createdAt.getTime() - b.event.createdAt.getTime();
+    })
+    .slice(0, limit)
+    .map(({ event }) => event);
   const results = [];
 
   for (const event of events) {
