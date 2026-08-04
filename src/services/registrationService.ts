@@ -516,7 +516,8 @@ export async function bulkMoveRegistrationsToCohort(input: { ids: string[]; targ
       retryFailed: true,
       participantConfirmationCohortScoped: true,
       participantConfirmationBatchKey: moveConfirmationBatchKey,
-      bypassCohortStatusForImmediate: true
+      bypassCohortStatusForImmediate: true,
+      calendarSendUpdates: false
     }));
   }
 

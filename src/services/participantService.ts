@@ -345,7 +345,8 @@ export async function bulkMoveParticipantsToCohort(input: { ids: string[]; targe
       retryFailed: true,
       participantConfirmationCohortScoped: true,
       participantConfirmationBatchKey: moveConfirmationBatchKey,
-      bypassCohortStatusForImmediate: true
+      bypassCohortStatusForImmediate: true,
+      calendarSendUpdates: false
     }));
   }
 
@@ -353,7 +354,7 @@ export async function bulkMoveParticipantsToCohort(input: { ids: string[]; targe
   for (const sourceCohortId of summary.sourceCohortIds) {
     sourceCalendarSync.push(await syncFutureLinkedGoogleCalendarInvitesForCohort(sourceCohortId, { sendUpdates: false }));
   }
-  const targetCalendarSync = await syncFutureLinkedGoogleCalendarInvitesForCohort(targetCohortId);
+  const targetCalendarSync = await syncFutureLinkedGoogleCalendarInvitesForCohort(targetCohortId, { sendUpdates: false });
 
   return {
     count: movingParticipants.length,

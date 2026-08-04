@@ -329,7 +329,7 @@ async function syncFutureCalendarInvites(registration: {
       calendarEvents: Array<{ provider: string; providerEventId: string | null }>;
     }>;
   };
-}) {
+}, options: { sendUpdates?: boolean } = {}) {
   if (!deliveryAuthorized(registration.cohort.status)) {
     return { updated: 0, failed: 0, status: "waiting_for_publish" as const, details: { updated: [], failed: [] } };
   }
@@ -353,7 +353,7 @@ async function syncFutureCalendarInvites(registration: {
 
   for (const session of futureLinkedSessions) {
     try {
-      const result = await createCalendarInvitePlaceholder(session.id, "google");
+      const result = await createCalendarInvitePlaceholder(session.id, "google", { sendUpdates: options.sendUpdates });
       updated.push({
         sessionId: session.id,
         title: session.title,
@@ -587,6 +587,7 @@ export async function planRegistrationJourneys(
     participantConfirmationCohortScoped?: boolean;
     participantConfirmationBatchKey?: string;
     bypassCohortStatusForImmediate?: boolean;
+    calendarSendUpdates?: boolean;
   } = {}
 ) {
   const registration = await prisma.registration.findUnique({
@@ -746,7 +747,7 @@ export async function planRegistrationJourneys(
     details: { updated: [], failed: [] }
   };
   if (options.syncCalendar !== false) {
-    calendar = await syncFutureCalendarInvites(registration);
+    calendar = await syncFutureCalendarInvites(registration, { sendUpdates: options.calendarSendUpdates });
     await recordCalendarEnrollmentOutcome(registration, calendar);
   }
 
