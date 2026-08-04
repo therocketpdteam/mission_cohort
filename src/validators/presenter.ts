@@ -1,16 +1,22 @@
 import { z } from "zod";
 
+const requiredTrimmedString = z.string().trim().min(1);
+const optionalTrimmedString = z.preprocess(
+  (value) => typeof value === "string" && value.trim() === "" ? undefined : value,
+  z.string().trim().optional()
+);
+
 export const presenterCreateSchema = z.object({
-  firstName: z.string().min(1),
-  lastName: z.string().min(1),
-  shortName: z.string().optional(),
-  email: z.string().email(),
-  bio: z.string().optional(),
-  organization: z.string().optional(),
-  phone: z.string().optional(),
-  quickBooksVendorRef: z.string().optional(),
-  quickBooksExpenseAccountRef: z.string().optional(),
-  notes: z.string().optional(),
+  firstName: requiredTrimmedString,
+  lastName: requiredTrimmedString,
+  shortName: optionalTrimmedString.transform((value) => value?.toUpperCase()),
+  email: z.string().trim().toLowerCase().email(),
+  bio: optionalTrimmedString,
+  organization: optionalTrimmedString,
+  phone: optionalTrimmedString,
+  quickBooksVendorRef: optionalTrimmedString,
+  quickBooksExpenseAccountRef: optionalTrimmedString,
+  notes: optionalTrimmedString,
   active: z.boolean().default(true)
 });
 

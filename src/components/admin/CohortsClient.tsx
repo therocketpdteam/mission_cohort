@@ -261,6 +261,7 @@ function CreateCohortWizard({
   const [showCreatePresenter, setShowCreatePresenter] = useState(false);
   const [newPresenterFirstName, setNewPresenterFirstName] = useState("");
   const [newPresenterLastName, setNewPresenterLastName] = useState("");
+  const [newPresenterShortName, setNewPresenterShortName] = useState("");
   const [newPresenterEmail, setNewPresenterEmail] = useState("");
   const [sessionCount, setSessionCount] = useState(1);
   const [sessions, setSessions] = useState<AdminRow[]>([defaultSession(0)]);
@@ -298,6 +299,7 @@ function CreateCohortWizard({
       setShowCreatePresenter(false);
       setNewPresenterFirstName("");
       setNewPresenterLastName("");
+      setNewPresenterShortName("");
       setNewPresenterEmail("");
       setSessionCount(1);
       setSessions([defaultSession(0)]);
@@ -324,6 +326,7 @@ function CreateCohortWizard({
       setShowCreatePresenter(false);
       setNewPresenterFirstName("");
       setNewPresenterLastName("");
+      setNewPresenterShortName("");
       setNewPresenterEmail("");
       setSessionCount(nextSessions.length);
       setSessions(nextSessions);
@@ -407,6 +410,7 @@ function CreateCohortWizard({
   async function createPresenterInline() {
     const firstName = newPresenterFirstName.trim();
     const lastName = newPresenterLastName.trim();
+    const presenterShortName = newPresenterShortName.trim().toUpperCase();
     const email = newPresenterEmail.trim();
 
     if (!firstName || !lastName || !email) {
@@ -419,7 +423,7 @@ function CreateCohortWizard({
     try {
       const created = await adminApi<AdminRow>("/api/presenters", {
         method: "POST",
-        body: { firstName, lastName, email, active: true }
+        body: { firstName, lastName, shortName: presenterShortName || undefined, email, active: true }
       });
       onPresenterCreated(created);
       setPresenter(created);
@@ -427,6 +431,7 @@ function CreateCohortWizard({
       setShowCreatePresenter(false);
       setNewPresenterFirstName("");
       setNewPresenterLastName("");
+      setNewPresenterShortName("");
       setNewPresenterEmail("");
     } catch (createError) {
       setError((createError as Error).message);
@@ -633,28 +638,31 @@ function CreateCohortWizard({
             {!presenter && (
               <Grid size={{ xs: 12 }}>
                 {!showCreatePresenter ? (
-                  <Button startIcon={<AddIcon />} onClick={openCreatePresenter} variant="outlined">
+                  <Button type="button" startIcon={<AddIcon />} onClick={openCreatePresenter} variant="outlined">
                     Create new presenter
                   </Button>
                 ) : (
                   <Stack spacing={2}>
                     <Typography variant="subtitle2">Create presenter for future cohorts</Typography>
                     <Grid container spacing={2}>
-                      <Grid size={{ xs: 12, md: 4 }}>
+                      <Grid size={{ xs: 12, md: 3 }}>
                         <TextField fullWidth label="First name" value={newPresenterFirstName} onChange={(event) => setNewPresenterFirstName(event.target.value)} required />
                       </Grid>
-                      <Grid size={{ xs: 12, md: 4 }}>
+                      <Grid size={{ xs: 12, md: 3 }}>
                         <TextField fullWidth label="Last name" value={newPresenterLastName} onChange={(event) => setNewPresenterLastName(event.target.value)} required />
+                      </Grid>
+                      <Grid size={{ xs: 12, md: 2 }}>
+                        <TextField fullWidth label="Short" placeholder="PL" value={newPresenterShortName} onChange={(event) => setNewPresenterShortName(event.target.value.toUpperCase())} />
                       </Grid>
                       <Grid size={{ xs: 12, md: 4 }}>
                         <TextField fullWidth type="email" label="Email" value={newPresenterEmail} onChange={(event) => setNewPresenterEmail(event.target.value)} required />
                       </Grid>
                     </Grid>
                     <Stack direction="row" flexWrap="wrap" useFlexGap gap={1}>
-                      <Button startIcon={<AddIcon />} onClick={createPresenterInline} disabled={creatingPresenter}>
+                      <Button type="button" startIcon={<AddIcon />} onClick={createPresenterInline} disabled={creatingPresenter}>
                         {creatingPresenter ? "Saving presenter" : "Save Presenter"}
                       </Button>
-                      <Button variant="outlined" onClick={() => setShowCreatePresenter(false)} disabled={creatingPresenter}>
+                      <Button type="button" variant="outlined" onClick={() => setShowCreatePresenter(false)} disabled={creatingPresenter}>
                         Cancel
                       </Button>
                     </Stack>
