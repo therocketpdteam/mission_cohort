@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { registrationConfirmationDocumentReadiness } from "../../src/services/registrationDocumentReadiness";
-import { buildRegistrationMilestones, participantConfirmationJourneyKey, shouldAutoPrepareRegistrationInvoice } from "../../src/services/registrationJourneyService";
+import {
+  buildRegistrationMilestones,
+  calendarFilesJourneyKey,
+  participantConfirmationJourneyKey,
+  shouldAutoPrepareRegistrationInvoice
+} from "../../src/services/registrationJourneyService";
 import {
   quickBooksProductionAutomationReadiness,
   registrationRequiresQuickBooksInvoice,
@@ -54,6 +59,23 @@ test("cohort move participant confirmations use unique cohort and batch scoped j
   assert.notEqual(moved, original);
   assert.notEqual(movedAgain, moved);
   assert.match(moved, /cohort:cohort-2:batch:move-1$/);
+});
+
+test("calendar invite file sends are cohort scoped for moved registrations", () => {
+  const original = calendarFilesJourneyKey({
+    registrationId: "registration-1",
+    participantEmail: "Teacher@Example.com",
+    cohortId: "cohort-1"
+  });
+  const moved = calendarFilesJourneyKey({
+    registrationId: "registration-1",
+    participantEmail: "teacher@example.com",
+    cohortId: "cohort-2"
+  });
+
+  assert.equal(original, "registration:registration-1:calendar-files:teacher@example.com:cohort:cohort-1");
+  assert.equal(moved, "registration:registration-1:calendar-files:teacher@example.com:cohort:cohort-2");
+  assert.notEqual(moved, original);
 });
 
 test("holds POC confirmations until invoice and W-9 documents are ready", () => {

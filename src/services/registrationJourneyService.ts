@@ -91,6 +91,15 @@ export function participantConfirmationJourneyKey(input: {
   return `${base}${cohortSegment}${batchSegment}`;
 }
 
+export function calendarFilesJourneyKey(input: {
+  registrationId: string;
+  participantEmail: string;
+  cohortId?: string;
+}) {
+  const cohortSegment = input.cohortId ? `:cohort:${input.cohortId}` : "";
+  return `registration:${input.registrationId}:calendar-files:${normalizeEmail(input.participantEmail)}${cohortSegment}`;
+}
+
 export function shouldAutoPrepareRegistrationInvoice(registration: {
   paymentMethod?: string | null;
   totalAmount?: unknown;
@@ -501,7 +510,11 @@ async function sendRegistrationCalendarFiles(
   const presenterName = [registration.cohort.presenter.firstName, registration.cohort.presenter.lastName].filter(Boolean).join(" ");
 
   for (const recipient of recipients) {
-    const journeyKey = `registration:${registration.id}:calendar-files:${recipient.email}`;
+    const journeyKey = calendarFilesJourneyKey({
+      registrationId: registration.id,
+      participantEmail: recipient.email,
+      cohortId: registration.cohortId
+    });
     const existing = await prisma.cohortCommunication.findUnique({ where: { journeyKey } });
     if (existing?.status === CommunicationStatus.SENT) {
       details.push({ email: recipient.email, status: "already_sent" });
