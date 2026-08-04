@@ -351,7 +351,7 @@ export async function bulkMoveParticipantsToCohort(input: { ids: string[]; targe
 
   const sourceCalendarSync = [];
   for (const sourceCohortId of summary.sourceCohortIds) {
-    sourceCalendarSync.push(await syncFutureLinkedGoogleCalendarInvitesForCohort(sourceCohortId));
+    sourceCalendarSync.push(await syncFutureLinkedGoogleCalendarInvitesForCohort(sourceCohortId, { sendUpdates: false }));
   }
   const targetCalendarSync = await syncFutureLinkedGoogleCalendarInvitesForCohort(targetCohortId);
 

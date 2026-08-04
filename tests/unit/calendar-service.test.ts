@@ -83,3 +83,35 @@ test("google calendar events hide the guest list by default", async () => {
     globalThis.fetch = originalFetch;
   }
 });
+
+test("google calendar event updates can suppress attendee notifications", async () => {
+  const originalFetch = globalThis.fetch;
+  let requestUrl = "";
+  globalThis.fetch = (async (url) => {
+    requestUrl = String(url);
+    return new Response(JSON.stringify({ id: "event_123", htmlLink: "https://calendar.google.com/event" }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" }
+    });
+  }) as typeof fetch;
+
+  try {
+    await upsertGoogleCalendarEvent({
+      title: "Session 1",
+      description: "Calendar body",
+      startTime: "2026-10-29T22:30:00.000Z",
+      endTime: "2026-10-30T00:30:00.000Z",
+      timezone: "America/New_York",
+      meetingUrl: "https://zoom.us/j/123",
+      accessToken: "token",
+      calendarId: "support@rocketpd.com",
+      providerEventId: "event_123",
+      attendees: [{ email: "remaining@example.com", displayName: "Remaining Participant" }],
+      sendUpdates: false
+    });
+
+    assert.doesNotMatch(requestUrl, /sendUpdates=all/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

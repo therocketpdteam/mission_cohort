@@ -121,7 +121,7 @@ export async function listConnectedGoogleCalendars() {
   return listGoogleCalendars({ accessToken: await getConnectedGoogleCalendarAccessToken() });
 }
 
-export async function createCalendarInvitePlaceholder(sessionId?: string, mode: "google" | "ics" = "ics") {
+export async function createCalendarInvitePlaceholder(sessionId?: string, mode: "google" | "ics" = "ics", options: { sendUpdates?: boolean } = {}) {
   if (!sessionId) {
     return { status: "session_required", provider: mode };
   }
@@ -177,7 +177,7 @@ export async function createCalendarInvitePlaceholder(sessionId?: string, mode: 
           ...attendee,
           responseStatus: existingResponses.get(attendee.email.toLowerCase())
         })),
-        sendUpdates: true
+        sendUpdates: options.sendUpdates ?? true
       });
       const verifiedGoogleEvent = await getGoogleCalendarEvent({
         accessToken: await getConnectedGoogleCalendarAccessToken(),
@@ -293,7 +293,7 @@ export async function createCalendarInvitePlaceholder(sessionId?: string, mode: 
   }
 }
 
-export async function syncFutureLinkedGoogleCalendarInvitesForCohort(cohortId: string) {
+export async function syncFutureLinkedGoogleCalendarInvitesForCohort(cohortId: string, options: { sendUpdates?: boolean } = {}) {
   const sessions = await prisma.cohortSession.findMany({
     where: {
       cohortId,
@@ -308,7 +308,7 @@ export async function syncFutureLinkedGoogleCalendarInvitesForCohort(cohortId: s
 
   for (const session of sessions) {
     try {
-      const result = await createCalendarInvitePlaceholder(session.id, "google");
+      const result = await createCalendarInvitePlaceholder(session.id, "google", { sendUpdates: options.sendUpdates });
       updated.push({
         sessionId: session.id,
         title: session.title,

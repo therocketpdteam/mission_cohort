@@ -486,7 +486,7 @@ export async function bulkMoveRegistrationsToCohort(input: { ids: string[]; targ
   const departingCalendarSync = [];
 
   for (const sourceCohortId of summary.sourceCohortIds) {
-    departingCalendarSync.push(await syncFutureLinkedGoogleCalendarInvitesForCohort(sourceCohortId));
+    departingCalendarSync.push(await syncFutureLinkedGoogleCalendarInvitesForCohort(sourceCohortId, { sendUpdates: false }));
   }
 
   for (const registration of registrations.filter((row) => moveIds.includes(row.id))) {
