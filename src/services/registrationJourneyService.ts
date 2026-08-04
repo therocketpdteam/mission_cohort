@@ -508,18 +508,20 @@ async function sendRegistrationCalendarFiles(
       continue;
     }
 
-    const subject = `Calendar files for ${registration.cohort.title}`;
+    const subject = `Calendar invite: ${registration.cohort.title}`;
     const greeting = recipient.firstName ? `Hello ${recipient.firstName},` : "Hello,";
     const bodyText = [
       greeting,
       "",
-      `Your calendar files for ${registration.cohort.title} are attached.`,
+      `You are registered for ${registration.cohort.title}. Your calendar invitations are attached.`,
       "",
-      "Please open the attached .ics files to add each live session to your calendar. Each file includes the Zoom link and session details.",
+      "Please open the attached .ics files to add each live session to your calendar. Each invitation includes the Zoom link, session name, and session details.",
+      "",
+      "If your calendar asks for an RSVP, choose Yes or Accept so we know you are set.",
       "",
       "The RocketPD Team"
     ].join("\n");
-    const bodyHtml = `<p>${escapeHtml(greeting)}</p><p>Your calendar files for <strong>${escapeHtml(registration.cohort.title)}</strong> are attached.</p><p>Please open the attached .ics files to add each live session to your calendar. Each file includes the Zoom link and session details.</p><p>The RocketPD Team</p>`;
+    const bodyHtml = `<p>${escapeHtml(greeting)}</p><p>You are registered for <strong>${escapeHtml(registration.cohort.title)}</strong>. Your calendar invitations are attached.</p><p>Please open the attached .ics files to add each live session to your calendar. Each invitation includes the Zoom link, session name, and session details.</p><p>If your calendar asks for an RSVP, choose Yes or Accept so we know you are set.</p><p>The RocketPD Team</p>`;
     const communication = existing
       ? await prisma.cohortCommunication.update({
           where: { id: existing.id },
@@ -562,6 +564,10 @@ async function sendRegistrationCalendarFiles(
               title: registration.cohort.title,
               description: registration.cohort.description,
               presenterName
+            },
+            attendee: {
+              email: recipient.email,
+              name: recipient.firstName ?? recipient.email
             }
           })
         }))
@@ -581,12 +587,12 @@ async function sendRegistrationCalendarFiles(
           status: CommunicationStatus.SENT,
           sentAt: new Date(),
           providerMessageId: sendResult.providerMessageId,
-          providerError: "Calendar files sent directly to the new registration recipient."
+          providerError: "Calendar invite email sent directly to the new registration recipient."
         }
       });
       details.push({ email: recipient.email, status: "sent", sessions: sessions.length });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Calendar file send failed";
+      const message = error instanceof Error ? error.message : "Calendar invite send failed";
       await prisma.cohortCommunication.update({
         where: { id: communication.id },
         data: {
@@ -639,17 +645,19 @@ async function sendCalendarFallbacks(
       continue;
     }
 
-    const subject = `Calendar files for ${registration.cohort.title}`;
+    const subject = `Calendar invite: ${registration.cohort.title}`;
     const bodyText = [
       "Hello,",
       "",
-      `Google Calendar did not attach you directly to ${registration.cohort.title}, so we are sending calendar files you can add manually.`,
+      `You are registered for ${registration.cohort.title}. Your calendar invitations are attached.`,
       "",
-      "Please open the attached .ics files to add the cohort sessions to your calendar. Each file includes the Zoom link and session details.",
+      "Please open the attached .ics files to add each live session to your calendar. Each invitation includes the Zoom link, session name, and session details.",
+      "",
+      "If your calendar asks for an RSVP, choose Yes or Accept so we know you are set.",
       "",
       "The RocketPD Team"
     ].join("\n");
-    const bodyHtml = `<p>Hello,</p><p>Google Calendar did not attach you directly to <strong>${escapeHtml(registration.cohort.title)}</strong>, so we are sending calendar files you can add manually.</p><p>Please open the attached .ics files to add the cohort sessions to your calendar. Each file includes the Zoom link and session details.</p><p>The RocketPD Team</p>`;
+    const bodyHtml = `<p>Hello,</p><p>You are registered for <strong>${escapeHtml(registration.cohort.title)}</strong>. Your calendar invitations are attached.</p><p>Please open the attached .ics files to add each live session to your calendar. Each invitation includes the Zoom link, session name, and session details.</p><p>If your calendar asks for an RSVP, choose Yes or Accept so we know you are set.</p><p>The RocketPD Team</p>`;
     const communication = existing
       ? await prisma.cohortCommunication.update({
           where: { id: existing.id },
@@ -692,6 +700,10 @@ async function sendCalendarFallbacks(
               title: registration.cohort.title,
               description: registration.cohort.description,
               presenterName
+            },
+            attendee: {
+              email,
+              name: email
             }
           })
         }))
@@ -711,7 +723,7 @@ async function sendCalendarFallbacks(
           status: CommunicationStatus.SENT,
           sentAt: new Date(),
           providerMessageId: sendResult.providerMessageId,
-          providerError: "Google Calendar omitted this attendee; ICS fallback sent."
+          providerError: "Google Calendar omitted this attendee; direct calendar invite sent."
         }
       });
       details.push({ email, status: "sent", sessions: sessions.length });

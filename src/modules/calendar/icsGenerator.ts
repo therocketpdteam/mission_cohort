@@ -9,6 +9,10 @@ function escapeIcs(value: string) {
   return value.replace(/\\/g, "\\\\").replace(/,/g, "\\,").replace(/;/g, "\\;").replace(/\n/g, "\\n");
 }
 
+function escapeIcsParam(value: string) {
+  return value.replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
+}
+
 export type IcsSessionInput = {
   id?: string;
   title: string;
@@ -22,6 +26,10 @@ export type IcsSessionInput = {
     title?: string | null;
     description?: string | null;
     presenterName?: string | null;
+  } | null;
+  attendee?: {
+    email?: string | null;
+    name?: string | null;
   } | null;
 };
 
@@ -45,8 +53,12 @@ export function generateSessionIcs(session: IcsSessionInput) {
     `SUMMARY:${escapeIcs(session.title)}`,
     `DESCRIPTION:${escapeIcs(description)}`,
     `LOCATION:${escapeIcs(session.location ?? session.meetingUrl ?? "")}`,
+    "ORGANIZER;CN=The RocketPD Team:mailto:support@rocketpd.com",
+    session.attendee?.email
+      ? `ATTENDEE;CN="${escapeIcsParam(session.attendee.name || session.attendee.email)}";ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:${session.attendee.email.trim().toLowerCase()}`
+      : null,
     `X-MICROSOFT-CDO-TZID:${escapeIcs(session.timezone)}`,
     "END:VEVENT",
     "END:VCALENDAR"
-  ].join("\r\n");
+  ].filter(Boolean).join("\r\n");
 }

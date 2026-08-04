@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { uniqueCalendarAttendees } from "../../src/modules/calendar/attendees";
 import { buildSessionCalendarDescription } from "../../src/modules/calendar/description";
+import { generateSessionIcs } from "../../src/modules/calendar/icsGenerator";
 import { upsertGoogleCalendarEvent } from "../../src/modules/calendar/googleCalendarProvider";
 
 test("normalizes and deduplicates calendar attendees", () => {
@@ -43,6 +44,25 @@ test("builds a readable calendar invite description", () => {
     "Join Zoom: https://zoom.us/j/123",
     "Questions? Email info@rocketpd.com."
   ].join("\n"));
+});
+
+test("builds direct calendar invite files for one intended attendee", () => {
+  const ics = generateSessionIcs({
+    id: "session-1",
+    title: "Introduction to a Thinking Classroom",
+    description: "Bring your questions.",
+    startTime: "2026-10-29T22:30:00.000Z",
+    endTime: "2026-10-30T00:30:00.000Z",
+    timezone: "America/New_York",
+    meetingUrl: "https://zoom.us/j/123",
+    cohort: { title: "Building Thinking Classrooms", presenterName: "Peter Liljedahl" },
+    attendee: { email: "Teacher@Example.com", name: "Teacher One" }
+  });
+
+  assert.match(ics, /METHOD:REQUEST/);
+  assert.match(ics, /ORGANIZER;CN=The RocketPD Team:mailto:support@rocketpd.com/);
+  assert.match(ics, /ATTENDEE;CN="Teacher One";ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:teacher@example.com/);
+  assert.doesNotMatch(ics, /other@example.com/);
 });
 
 test("google calendar events hide the guest list by default", async () => {
