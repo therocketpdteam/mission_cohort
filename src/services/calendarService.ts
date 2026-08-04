@@ -547,7 +547,12 @@ export async function cancelGoogleCalendarInvites(input: { sessionId?: string; c
   };
 }
 
-export async function prepareCohortCalendarInvites(input: { cohortId?: string; mode?: "google" | "ics" | "auto"; fallbackToIcs?: boolean }) {
+export async function prepareCohortCalendarInvites(input: {
+  cohortId?: string;
+  mode?: "google" | "ics" | "auto";
+  fallbackToIcs?: boolean;
+  sendUpdates?: boolean;
+}) {
   if (!input.cohortId) {
     throw Object.assign(new Error("cohortId is required"), { code: "BAD_REQUEST", status: 400 });
   }
@@ -561,6 +566,7 @@ export async function prepareCohortCalendarInvites(input: { cohortId?: string; m
     ? googleConnection?.status === IntegrationConnectionStatus.CONNECTED ? "google" : "ics"
     : input.mode;
   const recipientCount = mode === "google" ? (await getCohortCalendarAttendees(input.cohortId)).length : 0;
+  const sendUpdates = input.sendUpdates !== false;
   const results = [];
 
   for (const session of sessions) {
@@ -568,7 +574,7 @@ export async function prepareCohortCalendarInvites(input: { cohortId?: string; m
       results.push({
         sessionId: session.id,
         sessionTitle: session.title,
-        ...(await createCalendarInvitePlaceholder(session.id, mode, { sendUpdates: true }))
+        ...(await createCalendarInvitePlaceholder(session.id, mode, { sendUpdates }))
       });
     } catch (error) {
       if (mode === "google" && input.fallbackToIcs !== false) {

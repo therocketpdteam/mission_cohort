@@ -19,6 +19,12 @@ import { sendEmail } from "./emailService";
 import { getOrganizationInvoiceProfile } from "./appSettingsService";
 import { registrationConfirmationDocumentReadiness } from "./registrationDocumentReadiness";
 import { createInvoiceDraft, generateInvoicePdf } from "./invoiceService";
+import {
+  createQuickBooksInvoiceFromDraft,
+  getQuickBooksAutomationReadiness,
+  registrationRequiresQuickBooksInvoice,
+  shouldAutoSyncRegistrationInvoiceToQuickBooks
+} from "./quickBooksService";
 
 const journeyTemplateNames = {
   pocConfirmation: "POC Registration Confirmation",
@@ -36,12 +42,14 @@ type RegistrationForPocDocuments = {
   totalAmount: unknown;
   w9Url: string | null;
   invoiceUrl: string | null;
+  quickBooksInvoiceRef?: string | null;
   invoiceDrafts: Array<{
     id: string;
     status?: InvoiceDraftStatus | string | null;
     invoiceNumber: string | null;
     pdfFileKey: string | null;
     pdfUrl: string | null;
+    quickBooksInvoiceRef?: string | null;
   }>;
 };
 
@@ -245,7 +253,10 @@ async function attachRegistrationDocuments(communicationId: string, registration
 
 async function prepareRegistrationConfirmationDocuments(registration: RegistrationForPocDocuments, fallbackW9Url?: string | null) {
   let readiness = registrationConfirmationDocumentReadiness(registration, fallbackW9Url);
-  if (!shouldAutoPrepareRegistrationInvoice(registration)) {
+  const requiresQuickBooksInvoice = registrationRequiresQuickBooksInvoice(registration);
+  const shouldPrepareInvoicePdf = shouldAutoPrepareRegistrationInvoice(registration);
+
+  if (!shouldPrepareInvoicePdf && !requiresQuickBooksInvoice) {
     return { registration, readiness };
   }
 
@@ -253,19 +264,56 @@ async function prepareRegistrationConfirmationDocuments(registration: Registrati
     const existingInvoice = registration.invoiceDrafts.find((invoice) =>
       invoice.status !== InvoiceDraftStatus.VOIDED && invoice.status !== InvoiceDraftStatus.CANCELLED
     );
-    const invoice = existingInvoice ?? await createInvoiceDraft({
-      cohortId: registration.cohortId,
-      registrationId: registration.id,
-      organizationId: registration.organizationId
-    });
-    const generatedInvoice = invoice.pdfFileKey && invoice.pdfUrl ? invoice : await generateInvoicePdf(invoice.id, false);
+    let invoice = existingInvoice;
+
+    if (!invoice && (shouldPrepareInvoicePdf || requiresQuickBooksInvoice)) {
+      invoice = await createInvoiceDraft({
+        cohortId: registration.cohortId,
+        registrationId: registration.id,
+        organizationId: registration.organizationId
+      });
+    }
+
+    if (!invoice) {
+      return { registration, readiness };
+    }
+
+    let generatedInvoice = invoice.pdfFileKey && invoice.pdfUrl ? invoice : await generateInvoicePdf(invoice.id, false);
+    let quickBooksError: string | null = null;
+    const quickBooksReadiness = requiresQuickBooksInvoice
+      ? await getQuickBooksAutomationReadiness()
+      : { ready: false, environment: undefined as string | undefined };
+
+    if (requiresQuickBooksInvoice && quickBooksReadiness.environment === "production") {
+      if (!quickBooksReadiness.ready) {
+        quickBooksError = quickBooksReadiness.reason ?? "QuickBooks production automation is not ready.";
+      } else if (shouldAutoSyncRegistrationInvoiceToQuickBooks({
+        ...registration,
+        invoiceDrafts: [
+          { quickBooksInvoiceRef: generatedInvoice.quickBooksInvoiceRef },
+          ...registration.invoiceDrafts.filter((item) => item.id !== generatedInvoice.id)
+        ]
+      }, quickBooksReadiness)) {
+        try {
+          const quickBooks = await createQuickBooksInvoiceFromDraft(generatedInvoice.id);
+          generatedInvoice = {
+            ...generatedInvoice,
+            quickBooksInvoiceRef: quickBooks.quickBooksInvoiceId
+          };
+        } catch (error) {
+          quickBooksError = error instanceof Error ? error.message : "QuickBooks invoice creation failed.";
+        }
+      }
+    }
+
     const invoiceDrafts = [
       {
         id: generatedInvoice.id,
         status: generatedInvoice.status,
         invoiceNumber: generatedInvoice.invoiceNumber,
         pdfFileKey: generatedInvoice.pdfFileKey,
-        pdfUrl: generatedInvoice.pdfUrl
+        pdfUrl: generatedInvoice.pdfUrl,
+        quickBooksInvoiceRef: generatedInvoice.quickBooksInvoiceRef
       },
       ...registration.invoiceDrafts.filter((item) => item.id !== generatedInvoice.id)
     ];
@@ -273,9 +321,18 @@ async function prepareRegistrationConfirmationDocuments(registration: Registrati
       ...registration,
       invoiceUrl: registration.invoiceUrl || generatedInvoice.pdfUrl || null,
       w9Url: registration.w9Url || fallbackW9Url || null,
+      quickBooksInvoiceRef: registration.quickBooksInvoiceRef || generatedInvoice.quickBooksInvoiceRef || null,
       invoiceDrafts
     };
     readiness = registrationConfirmationDocumentReadiness(updatedRegistration, fallbackW9Url);
+    if (quickBooksError) {
+      readiness = {
+        ...readiness,
+        ready: false,
+        missing: [...readiness.missing, "QuickBooks invoice link"],
+        reason: `${readiness.reason ?? "POC confirmation held."} QuickBooks invoice creation/linking failed: ${quickBooksError}`
+      };
+    }
 
     const updateData: {
       invoiceUrl?: string;
@@ -311,6 +368,14 @@ async function prepareRegistrationConfirmationDocuments(registration: Registrati
 async function syncFutureCalendarInvites(registration: {
   cohortId: string;
   id: string;
+  primaryContactName: string;
+  primaryContactEmail: string;
+  participantCount: number;
+  participants: Array<{
+    firstName: string;
+    lastName: string;
+    email: string;
+  }>;
   cohort: {
     title: string;
     description: string | null;
@@ -329,7 +394,7 @@ async function syncFutureCalendarInvites(registration: {
       calendarEvents: Array<{ provider: string; providerEventId: string | null }>;
     }>;
   };
-}, options: { sendUpdates?: boolean } = {}) {
+}, options: { sendUpdates?: boolean; recipientEmails?: string[] } = {}) {
   if (!deliveryAuthorized(registration.cohort.status)) {
     return { updated: 0, failed: 0, status: "waiting_for_publish" as const, details: { updated: [], failed: [] } };
   }
@@ -372,12 +437,15 @@ async function syncFutureCalendarInvites(registration: {
     }
   }
   const fallback = failed.length > 0 ? await sendCalendarFallbacks(registration, failed) : { sent: 0, failed: 0, details: [] };
+  const calendarFiles = failed.length === 0 && options.sendUpdates !== true
+    ? await sendRegistrationCalendarFiles(registration, futureLinkedSessions, options.recipientEmails)
+    : { sent: 0, failed: 0, details: [] };
 
   return {
     updated: updated.length,
     failed: failed.length,
     status: failed.length > 0 ? "failed" as const : "synced" as const,
-    details: { updated, failed, fallback }
+    details: { updated, failed, fallback, calendarFiles }
   };
 }
 
@@ -387,6 +455,154 @@ function calendarFileName(sessionNumber: number, title: string) {
     .replace(/^-+|-+$/g, "")
     .slice(0, 48) || "session";
   return `session-${sessionNumber}-${safeTitle}.ics`;
+}
+
+function resolveCalendarFileRecipients(
+  registration: Parameters<typeof syncFutureCalendarInvites>[0],
+  requestedEmails?: string[]
+) {
+  const requested = requestedEmails?.length
+    ? new Set(requestedEmails.map(normalizeEmail).filter(Boolean))
+    : null;
+  const recipients = new Map<string, { email: string; firstName?: string }>();
+
+  for (const participant of registration.participants) {
+    const email = normalizeEmail(participant.email);
+    if (!email || (requested && !requested.has(email))) {
+      continue;
+    }
+    recipients.set(email, { email, firstName: participant.firstName });
+  }
+
+  const pocEmail = normalizeEmail(registration.primaryContactEmail);
+  if (
+    pocEmail
+    && (requested?.has(pocEmail) || (!requested && registration.participantCount <= 1 && recipients.size === 0))
+  ) {
+    recipients.set(pocEmail, { email: pocEmail, firstName: registration.primaryContactName.split(/\s+/)[0] });
+  }
+
+  return [...recipients.values()];
+}
+
+async function sendRegistrationCalendarFiles(
+  registration: Parameters<typeof syncFutureCalendarInvites>[0],
+  sessions: Parameters<typeof syncFutureCalendarInvites>[0]["cohort"]["sessions"],
+  requestedEmails?: string[]
+) {
+  const recipients = resolveCalendarFileRecipients(registration, requestedEmails);
+  const details: Array<{ email: string; status: string; sessions?: number; error?: string }> = [];
+
+  if (recipients.length === 0 || sessions.length === 0) {
+    return { sent: 0, failed: 0, details };
+  }
+
+  const systemUserId = await getSystemUserId();
+  const presenterName = [registration.cohort.presenter.firstName, registration.cohort.presenter.lastName].filter(Boolean).join(" ");
+
+  for (const recipient of recipients) {
+    const journeyKey = `registration:${registration.id}:calendar-files:${recipient.email}`;
+    const existing = await prisma.cohortCommunication.findUnique({ where: { journeyKey } });
+    if (existing?.status === CommunicationStatus.SENT) {
+      details.push({ email: recipient.email, status: "already_sent" });
+      continue;
+    }
+
+    const subject = `Calendar files for ${registration.cohort.title}`;
+    const greeting = recipient.firstName ? `Hello ${recipient.firstName},` : "Hello,";
+    const bodyText = [
+      greeting,
+      "",
+      `Your calendar files for ${registration.cohort.title} are attached.`,
+      "",
+      "Please open the attached .ics files to add each live session to your calendar. Each file includes the Zoom link and session details.",
+      "",
+      "The RocketPD Team"
+    ].join("\n");
+    const bodyHtml = `<p>${escapeHtml(greeting)}</p><p>Your calendar files for <strong>${escapeHtml(registration.cohort.title)}</strong> are attached.</p><p>Please open the attached .ics files to add each live session to your calendar. Each file includes the Zoom link and session details.</p><p>The RocketPD Team</p>`;
+    const communication = existing
+      ? await prisma.cohortCommunication.update({
+          where: { id: existing.id },
+          data: {
+            subject,
+            bodyHtml,
+            bodyText,
+            status: CommunicationStatus.SENDING,
+            recipientEmails: [recipient.email],
+            providerError: null
+          }
+        })
+      : await prisma.cohortCommunication.create({
+          data: {
+            cohortId: registration.cohortId,
+            registrationId: registration.id,
+            journeyKey,
+            subject,
+            bodyHtml,
+            bodyText,
+            recipientScope: RecipientScope.CUSTOM,
+            recipientEmails: [recipient.email],
+            status: CommunicationStatus.SENDING,
+            createdById: systemUserId
+          }
+        });
+
+    try {
+      const sendResult = await sendEmail({
+        to: recipient.email,
+        subject,
+        bodyHtml,
+        bodyText,
+        attachments: sessions.map((session, index) => ({
+          fileName: calendarFileName(session.sessionNumber ?? index + 1, session.title),
+          contentType: "text/calendar; method=REQUEST",
+          content: generateSessionIcs({
+            ...session,
+            cohort: {
+              title: registration.cohort.title,
+              description: registration.cohort.description,
+              presenterName
+            }
+          })
+        }))
+      });
+      await prisma.emailEvent.create({
+        data: {
+          communicationId: communication.id,
+          recipientEmail: recipient.email,
+          provider: "sendgrid",
+          providerMessageId: sendResult.providerMessageId,
+          eventType: EmailEventType.SENT
+        }
+      });
+      await prisma.cohortCommunication.update({
+        where: { id: communication.id },
+        data: {
+          status: CommunicationStatus.SENT,
+          sentAt: new Date(),
+          providerMessageId: sendResult.providerMessageId,
+          providerError: "Calendar files sent directly to the new registration recipient."
+        }
+      });
+      details.push({ email: recipient.email, status: "sent", sessions: sessions.length });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Calendar file send failed";
+      await prisma.cohortCommunication.update({
+        where: { id: communication.id },
+        data: {
+          status: CommunicationStatus.FAILED,
+          providerError: message
+        }
+      });
+      details.push({ email: recipient.email, status: "failed", error: message });
+    }
+  }
+
+  return {
+    sent: details.filter((detail) => detail.status === "sent" || detail.status === "already_sent").length,
+    failed: details.filter((detail) => detail.status === "failed").length,
+    details
+  };
 }
 
 async function sendCalendarFallbacks(
@@ -747,7 +963,10 @@ export async function planRegistrationJourneys(
     details: { updated: [], failed: [] }
   };
   if (options.syncCalendar !== false) {
-    calendar = await syncFutureCalendarInvites(registration, { sendUpdates: options.calendarSendUpdates ?? true });
+    calendar = await syncFutureCalendarInvites(registration, {
+      sendUpdates: options.calendarSendUpdates === true,
+      recipientEmails: options.participantEmails
+    });
     await recordCalendarEnrollmentOutcome(registration, calendar);
   }
 

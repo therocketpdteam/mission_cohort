@@ -2,6 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { registrationConfirmationDocumentReadiness } from "../../src/services/registrationDocumentReadiness";
 import { buildRegistrationMilestones, participantConfirmationJourneyKey, shouldAutoPrepareRegistrationInvoice } from "../../src/services/registrationJourneyService";
+import {
+  quickBooksProductionAutomationReadiness,
+  registrationRequiresQuickBooksInvoice,
+  shouldAutoSyncRegistrationInvoiceToQuickBooks
+} from "../../src/services/quickBooksService";
 
 const cohortStart = new Date("2026-08-15T14:00:00.000Z");
 
@@ -106,4 +111,60 @@ test("auto-prepares invoice PDFs only for paid registrations missing invoice doc
     invoiceUrl: null,
     invoiceDrafts: []
   }), false);
+});
+
+test("QuickBooks automation stays paused until production is fully configured", () => {
+  assert.deepEqual(quickBooksProductionAutomationReadiness({
+    environment: "sandbox",
+    parentCustomerRef: "123",
+    serviceItemRef: "456",
+    connected: true,
+    realmId: "realm"
+  }), {
+    ready: false,
+    environment: "sandbox",
+    reason: "QuickBooks automation is paused until the connection is switched to production."
+  });
+
+  const missingServiceItem = quickBooksProductionAutomationReadiness({
+    environment: "production",
+    parentCustomerRef: "123",
+    connected: true,
+    realmId: "realm"
+  });
+
+  assert.equal(missingServiceItem.ready, false);
+  assert.match(missingServiceItem.reason ?? "", /service item ref/);
+});
+
+test("QuickBooks invoice auto-linking only applies to unpaid production invoice registrations without an existing ref", () => {
+  const readiness = quickBooksProductionAutomationReadiness({
+    environment: "production",
+    parentCustomerRef: "123",
+    serviceItemRef: "456",
+    connected: true,
+    realmId: "realm"
+  });
+
+  assert.equal(readiness.ready, true);
+  assert.equal(registrationRequiresQuickBooksInvoice({ paymentMethod: "INVOICE", totalAmount: 590 }), true);
+  assert.equal(registrationRequiresQuickBooksInvoice({ paymentMethod: "COMPED", totalAmount: 0 }), false);
+  assert.equal(shouldAutoSyncRegistrationInvoiceToQuickBooks({
+    paymentMethod: "INVOICE",
+    totalAmount: 590,
+    quickBooksInvoiceRef: null,
+    invoiceDrafts: [{ quickBooksInvoiceRef: null }]
+  }, readiness), true);
+  assert.equal(shouldAutoSyncRegistrationInvoiceToQuickBooks({
+    paymentMethod: "INVOICE",
+    totalAmount: 590,
+    quickBooksInvoiceRef: "qb-100",
+    invoiceDrafts: [{ quickBooksInvoiceRef: null }]
+  }, readiness), false);
+  assert.equal(shouldAutoSyncRegistrationInvoiceToQuickBooks({
+    paymentMethod: "PURCHASE_ORDER",
+    totalAmount: 590,
+    quickBooksInvoiceRef: null,
+    invoiceDrafts: [{ quickBooksInvoiceRef: "qb-101" }]
+  }, readiness), false);
 });

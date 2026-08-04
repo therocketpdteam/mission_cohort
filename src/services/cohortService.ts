@@ -86,6 +86,14 @@ export async function createCohortWithSessions(input: z.input<typeof cohortWithS
   }
 
   await syncCohortQuickBooksProjectAfterCreate(cohort.id);
+  try {
+    await prepareCohortCalendarInvites({ cohortId: cohort.id, mode: "auto", fallbackToIcs: false, sendUpdates: false });
+  } catch (error) {
+    console.error("Cohort calendar invite preparation failed after create", {
+      cohortId: cohort.id,
+      error: error instanceof Error ? error.message : "Unknown error"
+    });
+  }
 
   return cohort;
 }

@@ -94,6 +94,86 @@ function paymentStatusFromInvoice(invoice: Record<string, any>, status: QuickBoo
   return PaymentStatus.INVOICED;
 }
 
+export type QuickBooksAutomationReadiness = {
+  ready: boolean;
+  environment?: string;
+  reason?: string;
+};
+
+export function quickBooksProductionAutomationReadiness(input: {
+  environment?: string | null;
+  parentCustomerRef?: string | null;
+  serviceItemRef?: string | null;
+  connected?: boolean;
+  realmId?: string | null;
+}): QuickBooksAutomationReadiness {
+  const environment = String(input.environment ?? "").trim().toLowerCase();
+  if (environment !== "production") {
+    return {
+      ready: false,
+      environment: environment || undefined,
+      reason: "QuickBooks automation is paused until the connection is switched to production."
+    };
+  }
+
+  if (!input.connected) {
+    return { ready: false, environment, reason: "QuickBooks production is not connected." };
+  }
+
+  if (!String(input.realmId ?? "").trim()) {
+    return { ready: false, environment, reason: "QuickBooks production realm ID is missing." };
+  }
+
+  if (!String(input.parentCustomerRef ?? "").trim()) {
+    return { ready: false, environment, reason: "QuickBooks RocketPD parent customer ref is missing." };
+  }
+
+  if (!String(input.serviceItemRef ?? "").trim()) {
+    return { ready: false, environment, reason: "QuickBooks service item ref is missing." };
+  }
+
+  return { ready: true, environment };
+}
+
+export async function getQuickBooksAutomationReadiness(): Promise<QuickBooksAutomationReadiness> {
+  const [setup, connection] = await Promise.all([
+    quickBooksSetupWithEnvFallback(),
+    getDecryptedIntegrationConnection(IntegrationProvider.QUICKBOOKS)
+  ]);
+
+  return quickBooksProductionAutomationReadiness({
+    environment: setup.environment,
+    parentCustomerRef: setup.parentCustomerRef,
+    serviceItemRef: setup.serviceItemRef,
+    connected: Boolean(connection?.accessToken),
+    realmId: connection?.realmId
+  });
+}
+
+export function registrationRequiresQuickBooksInvoice(registration: {
+  paymentMethod?: string | null;
+  totalAmount?: unknown;
+}) {
+  return String(registration.paymentMethod ?? "").toUpperCase() !== "COMPED" && Number(registration.totalAmount ?? 0) > 0;
+}
+
+export function shouldAutoSyncRegistrationInvoiceToQuickBooks(
+  registration: {
+    paymentMethod?: string | null;
+    totalAmount?: unknown;
+    quickBooksInvoiceRef?: string | null;
+    invoiceDrafts?: Array<{ quickBooksInvoiceRef?: string | null }>;
+  },
+  readiness: QuickBooksAutomationReadiness
+) {
+  return Boolean(
+    readiness.ready
+    && registrationRequiresQuickBooksInvoice(registration)
+    && !String(registration.quickBooksInvoiceRef ?? "").trim()
+    && !registration.invoiceDrafts?.some((invoice) => String(invoice.quickBooksInvoiceRef ?? "").trim())
+  );
+}
+
 function toQuickBooksDate(value?: Date | string | null) {
   if (!value) {
     return undefined;
@@ -870,17 +950,8 @@ async function markQuickBooksInvoiceMissing(invoiceId: string, realmId?: string)
 }
 
 export async function syncQuickBooksInvoice(invoiceId: string, realmId?: string) {
-  const connection = await getDecryptedIntegrationConnection(IntegrationProvider.QUICKBOOKS);
-
-  if (!connection?.accessToken) {
-    throw Object.assign(new Error("QuickBooks is not connected."), { code: "BAD_REQUEST", status: 400 });
-  }
-
+  const connection = await quickBooksConnection();
   const resolvedRealmId = realmId ?? connection.realmId;
-
-  if (!resolvedRealmId) {
-    throw Object.assign(new Error("QuickBooks realm ID is missing."), { code: "BAD_REQUEST", status: 400 });
-  }
 
   let result: Record<string, any>;
   try {
@@ -888,7 +959,7 @@ export async function syncQuickBooksInvoice(invoiceId: string, realmId?: string)
       realmId: resolvedRealmId,
       accessToken: connection.accessToken,
       invoiceId,
-      environment: (await quickBooksSetupWithEnvFallback()).environment
+      environment: connection.setup.environment
     });
   } catch (error) {
     if (isQuickBooksMissingReference(error)) {
@@ -940,6 +1011,65 @@ export async function syncQuickBooksInvoice(invoiceId: string, realmId?: string)
   });
 
   return { invoiceId, invoiceStatus, paymentStatus, invoiceDrafts: invoiceDrafts.count, registrations: registrations.count, payments: payments.count };
+}
+
+export async function reconcileOpenQuickBooksInvoices(limit = 50) {
+  const readiness = await getQuickBooksAutomationReadiness();
+  if (!readiness.ready) {
+    return {
+      status: "skipped" as const,
+      reason: readiness.reason ?? "QuickBooks production automation is not ready.",
+      checked: 0,
+      failed: 0,
+      results: []
+    };
+  }
+
+  const invoices = await prisma.invoiceDraft.findMany({
+    where: {
+      quickBooksInvoiceRef: { not: null },
+      quickBooksInvoiceStatus: { notIn: [QuickBooksInvoiceStatus.PAID, QuickBooksInvoiceStatus.VOIDED, QuickBooksInvoiceStatus.CANCELLED] },
+      status: { notIn: [InvoiceDraftStatus.PAID, InvoiceDraftStatus.VOIDED, InvoiceDraftStatus.CANCELLED] }
+    },
+    select: {
+      quickBooksInvoiceRef: true,
+      quickBooksRealmId: true
+    },
+    orderBy: { quickBooksLastSyncedAt: "asc" },
+    take: limit
+  });
+
+  const seen = new Set<string>();
+  const results: Array<{ invoiceId: string; status: "synced" | "failed"; result?: unknown; error?: string }> = [];
+
+  for (const invoice of invoices) {
+    const invoiceId = invoice.quickBooksInvoiceRef;
+    if (!invoiceId || seen.has(invoiceId)) {
+      continue;
+    }
+    seen.add(invoiceId);
+
+    try {
+      results.push({
+        invoiceId,
+        status: "synced",
+        result: await syncQuickBooksInvoice(invoiceId, invoice.quickBooksRealmId ?? undefined)
+      });
+    } catch (error) {
+      results.push({
+        invoiceId,
+        status: "failed",
+        error: error instanceof Error ? error.message : "QuickBooks invoice reconciliation failed."
+      });
+    }
+  }
+
+  return {
+    status: "processed" as const,
+    checked: results.length,
+    failed: results.filter((result) => result.status === "failed").length,
+    results
+  };
 }
 
 export async function syncQuickBooksPayment(paymentId: string, realmId?: string) {
