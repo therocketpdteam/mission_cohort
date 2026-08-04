@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { PaymentMethod, PaymentStatus } from "@prisma/client";
 import {
+  historicalCohortBaseSlug,
   normalizeHistoricalImportRows,
   suggestHistoricalImportMapping
 } from "../../src/services/historicalImportService";
@@ -22,6 +23,17 @@ test("suggests historical import mappings from friendly CSV headers", () => {
   assert.equal(mapping.primaryContactEmail, "Email");
   assert.equal(mapping.participantCount, "Participant Count");
   assert.equal(mapping.totalAmount, "Amount");
+});
+
+test("uses cohort short code as the historical cohort slug without appending the year twice", () => {
+  assert.equal(historicalCohortBaseSlug({
+    cohortTitle: "Rethinking teacher supervision, coaching & evaluation",
+    cohortShortName: "KM-Fall-2025"
+  }, new Date("2025-09-24T19:30:00.000Z")), "km-fall-2025");
+
+  assert.equal(historicalCohortBaseSlug({
+    cohortTitle: "Rethinking teacher supervision, coaching & evaluation"
+  }, new Date("2026-09-24T19:30:00.000Z")), "rethinking-teacher-supervision-coaching-evaluation-2026");
 });
 
 test("normalizes historical CSV rows with paid defaults, state codes, sessions, and duplicate warnings", () => {

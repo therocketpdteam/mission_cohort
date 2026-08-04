@@ -26,8 +26,47 @@ const cohortWithSessionsCreateSchema = cohortCreateSchema.and(z.object({
   sessions: z.array(nestedSessionCreateSchema).min(1)
 }));
 
+export function cohortIdentityKey(value?: string | null) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+async function ensureCohortIdentityAvailable(data: {
+  slug?: string | null;
+  shortName?: string | null;
+}, existingId?: string) {
+  if (data.slug) {
+    const existingSlug = await prisma.cohort.findUnique({ where: { slug: data.slug }, select: { id: true } });
+    if (existingSlug && existingSlug.id !== existingId) {
+      throw Object.assign(new Error(`A cohort with slug "${data.slug}" already exists. Slugs must be unique.`), {
+        code: "CONFLICT",
+        status: 409
+      });
+    }
+  }
+
+  const shortNameKey = cohortIdentityKey(data.shortName);
+  if (shortNameKey) {
+    const cohortsWithShortNames = await prisma.cohort.findMany({
+      where: existingId ? { id: { not: existingId }, shortName: { not: null } } : { shortName: { not: null } },
+      select: { id: true, shortName: true }
+    });
+    const existingShortName = cohortsWithShortNames.find((cohort) => cohortIdentityKey(cohort.shortName) === shortNameKey);
+    if (existingShortName) {
+      throw Object.assign(new Error(`A cohort with short name "${data.shortName}" already exists. Short names must be unique.`), {
+        code: "CONFLICT",
+        status: 409
+      });
+    }
+  }
+}
+
 export async function createCohort(input: z.input<typeof cohortCreateSchema>) {
   const data = cohortCreateSchema.parse(input);
+  await ensureCohortIdentityAvailable(data);
   const cohort = await prisma.cohort.create({ data });
   logAuditEventAsync({
     entityType: "Cohort",
@@ -42,6 +81,7 @@ export async function createCohort(input: z.input<typeof cohortCreateSchema>) {
 
 export async function createCohortWithSessions(input: z.input<typeof cohortWithSessionsCreateSchema>) {
   const { sessions, ...cohortInput } = cohortWithSessionsCreateSchema.parse(input);
+  await ensureCohortIdentityAvailable(cohortInput);
   const sortedSessions = [...sessions].sort((a, b) => a.sessionNumber - b.sessionNumber);
   const firstSession = sortedSessions[0]!;
   const lastSession = sortedSessions[sortedSessions.length - 1]!;
@@ -105,6 +145,8 @@ export async function updateCohort(id: string, input: z.input<typeof cohortUpdat
   if (!existing) {
     throw Object.assign(new Error("Cohort not found"), { code: "NOT_FOUND", status: 404 });
   }
+
+  await ensureCohortIdentityAvailable(data, id);
 
   const pausableStatuses = [
     CommunicationStatus.DRAFT,

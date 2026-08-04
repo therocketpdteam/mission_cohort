@@ -14,9 +14,9 @@ import {
 const nullishEmptyToUndefined = (value: unknown) => (value === "" || value === null ? undefined : value);
 
 const cohortBaseSchema = z.object({
-  title: z.string().min(1),
+  title: z.string().trim().min(1),
   shortName: z.preprocess(nullishEmptyToUndefined, z.string().trim().min(1).max(80).optional()),
-  slug: slugSchema,
+  slug: slugSchema.transform((value) => value.trim().toLowerCase()),
   description: optionalString,
   guideTopic: optionalString,
   guideUrl: optionalString,

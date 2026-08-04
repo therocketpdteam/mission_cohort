@@ -681,6 +681,14 @@ function slugify(value: string) {
   return clean(value).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 96) || "historical-cohort";
 }
 
+export function historicalCohortBaseSlug(row: Pick<NormalizedHistoricalRow, "cohortShortName" | "cohortTitle">, startDate: Date) {
+  if (row.cohortShortName) {
+    return slugify(row.cohortShortName);
+  }
+
+  return slugify(`${row.cohortTitle || "Historical Cohort"}-${startDate.getUTCFullYear()}`);
+}
+
 function cohortImportKey(row: NormalizedHistoricalRow) {
   return [
     slugify(row.cohortShortName || row.cohortTitle),
@@ -742,11 +750,8 @@ async function findOrCreateCohort(tx: Prisma.TransactionClient, row: NormalizedH
   const end = row.endDate ? new Date(row.endDate) : new Date(start.getTime() + 24 * 60 * 60 * 1000);
   const safeEnd = end.getTime() > start.getTime() ? end : new Date(start.getTime() + 24 * 60 * 60 * 1000);
   const title = row.cohortTitle || row.cohortShortName || "Historical Cohort";
-  const baseSlug = slugify(`${row.cohortShortName || title}-${start.getUTCFullYear()}`);
-  const cohortMatches: Prisma.CohortWhereInput[] = [
-    { slug: baseSlug },
-    { title: { equals: title, mode: "insensitive" } }
-  ];
+  const baseSlug = historicalCohortBaseSlug(row, start);
+  const cohortMatches: Prisma.CohortWhereInput[] = [{ slug: baseSlug }];
 
   if (row.cohortShortName) {
     cohortMatches.push({ shortName: { equals: row.cohortShortName, mode: "insensitive" } });
