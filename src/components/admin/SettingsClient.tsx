@@ -196,6 +196,99 @@ function InfoTile({ label, value }: { label: string; value: unknown }) {
   );
 }
 
+function cohortById(cohorts: AdminRow[], id?: unknown) {
+  const normalizedId = String(id ?? "").trim();
+  return normalizedId ? cohorts.find((cohort) => cohort.id === normalizedId) : undefined;
+}
+
+function readableCohortLabel(cohort?: AdminRow, fallbackId?: unknown) {
+  if (cohort) {
+    return cohortDropdownLabel(cohort);
+  }
+
+  const rawId = String(fallbackId ?? "").trim();
+  return rawId ? `Unknown cohort (${rawId.slice(0, 8)})` : "";
+}
+
+function routeNeedsMapping(row?: AdminRow | null) {
+  const readiness = row?.readiness ?? {};
+  const missingFields = Array.isArray(readiness.missingRequiredFields) ? readiness.missingRequiredFields : [];
+  const message = `${row?.errorMessage ?? ""} ${readiness.recommendedAction ?? ""}`.toLowerCase();
+
+  return missingFields.includes("cohort routing") || message.includes("unmapped rocketpd cohort landing page") || message.includes("needs mapping");
+}
+
+function jotformRouteCohortSummary(row: AdminRow | null | undefined, cohorts: AdminRow[]) {
+  const preview = row?.preview ?? {};
+  const normalized = preview.normalized ?? {};
+  const registration = normalized.registration ?? {};
+  const routing = normalized.routing ?? {};
+  const revision = row?.revision ?? {};
+  const importedCohortId = row?.normalizedSummary?.cohortId ?? revision.summary?.cohortId;
+  const routeCohortId = routing.cohortId ?? registration.cohortId;
+  const importedCohort = cohortById(cohorts, importedCohortId);
+  const routeCohort = cohortById(cohorts, routeCohortId);
+  const importedLabel = readableCohortLabel(importedCohort, importedCohortId);
+  const routeLabel = preview.cohortSlug || readableCohortLabel(routeCohort, routeCohortId);
+  const isProcessed = (row?.reviewStatus ?? row?.status) === "PROCESSED";
+  const hasMismatch = Boolean(importedCohortId && routeCohortId && importedCohortId !== routeCohortId);
+
+  if (routeNeedsMapping(row) && !routeCohortId) {
+    return {
+      label: "Missing mapping",
+      detail: preview.landingPageUrl ? "No URL rule matches this page" : "Cohort routing required",
+      cohort: undefined,
+      missing: true
+    };
+  }
+
+  if (isProcessed && importedLabel) {
+    return {
+      label: importedLabel,
+      detail: hasMismatch && routeLabel ? `Current route: ${routeLabel}` : "Imported cohort",
+      cohort: importedCohort,
+      missing: false
+    };
+  }
+
+  return {
+    label: routeLabel || "Needs route",
+    detail: routeLabel ? "Current route" : "Cohort routing required",
+    cohort: routeCohort,
+    missing: !routeLabel
+  };
+}
+
+function CohortRoutePreview({
+  summary,
+  compact = false
+}: {
+  summary: ReturnType<typeof jotformRouteCohortSummary>;
+  compact?: boolean;
+}) {
+  const title = [summary.label, summary.detail].filter(Boolean).join(" - ");
+  const initials = String(summary.label ?? "")
+    .split(/\s+/)
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase() || "?";
+
+  return (
+    <div className={`jotform-cohort-route${summary.missing ? " is-missing" : ""}${compact ? " is-compact" : ""}`} title={title}>
+      {summary.cohort?.thumbnailUrl ? (
+        <img src={String(summary.cohort.thumbnailUrl)} alt="" />
+      ) : (
+        <span className="jotform-cohort-route-fallback">{summary.missing ? "!" : initials}</span>
+      )}
+      <div>
+        <strong>{summary.label}</strong>
+        {summary.detail && <span>{summary.detail}</span>}
+      </div>
+    </div>
+  );
+}
+
 function compactDate(value?: string) {
   return value ? new Date(value).toLocaleDateString("en-US") : "-";
 }
@@ -668,6 +761,7 @@ function JotformMappingWizard({
   const cleanRoutes = cleanLandingPageRoutes(landingPageRoutes);
   const matchedRoute = routingMode === "url" ? matchedLandingPageRoute(preview.landingPageUrl ?? "", landingPageRoutes) : undefined;
   const matchedRouteCohort = matchedRoute ? cohorts.find((cohort) => cohort.id === matchedRoute.cohortId) : undefined;
+  const routeSummary = jotformRouteCohortSummary(event, cohorts);
   const replayBlockingLabels = new Set(["Route", "POC", "Organization", "Participants"]);
   const readinessChecks = [
     {
@@ -726,7 +820,7 @@ function JotformMappingWizard({
                 <Grid size={{ xs: 12, md: 3 }}><InfoTile label="State" value={organization.state} /></Grid>
                 <Grid size={{ xs: 12, md: 3 }}><InfoTile label="ZIP" value={organization.zip} /></Grid>
                 <Grid size={{ xs: 12, md: 3 }}><InfoTile label="Address" value={organization.addressLine1} /></Grid>
-                <Grid size={{ xs: 12, md: 3 }}><InfoTile label="Cohort Route" value={preview.cohortSlug || registration.cohortId || "Needs routing"} /></Grid>
+                <Grid size={{ xs: 12, md: 3 }}><InfoTile label="Cohort Route" value={`${routeSummary.label}${routeSummary.detail ? ` - ${routeSummary.detail}` : ""}`} /></Grid>
                 <Grid size={{ xs: 12, md: 3 }}><InfoTile label="Participants" value={`${preview.parsedParticipantCount ?? 0}${preview.participantCount ? ` / ${preview.participantCount}` : ""}`} /></Grid>
                 <Grid size={{ xs: 12, md: 3 }}><InfoTile label="Payment" value={[registration.paymentMethod, registration.paymentStatus].filter(Boolean).join(" / ")} /></Grid>
                 <Grid size={{ xs: 12, md: 3 }}><InfoTile label="Amount" value={registration.totalAmount ? formatCurrency(registration.totalAmount) : ""} /></Grid>
@@ -961,7 +1055,7 @@ function JotformMappingWizard({
                   <PreviewTile label="City" value={organization.city} />
                   <PreviewTile label="State" value={organization.state} />
                   <PreviewTile label="ZIP" value={organization.zip} />
-                  <PreviewTile label="Cohort route" value={preview.cohortSlug || registration.cohortId || "Selected by mapping"} />
+                  <PreviewTile label="Cohort route" value={`${routeSummary.label}${routeSummary.detail ? ` - ${routeSummary.detail}` : ""}`} />
                   <PreviewTile label="Participant roster" value={`${participants.length} parsed from submission`} />
                   <PreviewTile label="Payment record" value={`${payment.method || registration.paymentMethod || "Unknown"} / ${payment.status || registration.paymentStatus || "Unknown"}`} />
                   <PreviewTile label="Amount" value={payment.amount ? formatCurrency(payment.amount) : "$0"} />
@@ -1054,10 +1148,12 @@ function JotformMappingWizard({
 
 function JotformSubmissionRow({
   row,
+  cohorts,
   onReview,
   onReplay
 }: {
   row: AdminRow;
+  cohorts: AdminRow[];
   onReview: (row: AdminRow) => void;
   onReplay: (row: AdminRow) => void;
 }) {
@@ -1071,6 +1167,7 @@ function JotformSubmissionRow({
   const revision = row.revision ?? {};
   const organization = formatProperDisplay(preview.organizationName) || "Unknown organization";
   const contact = formatProperDisplay(preview.primaryContactName) || preview.primaryContactEmail || "Unknown POC";
+  const routeSummary = jotformRouteCohortSummary(row, cohorts);
   const canReplay = Boolean(readiness.canReplay) && status !== "PROCESSED";
   const replayButtonLabel = status === "PROCESSED" ? "Imported" : canReplay ? "Replay" : "Map first";
 
@@ -1092,7 +1189,9 @@ function JotformSubmissionRow({
           <Typography sx={{ overflowWrap: "anywhere" }}>{contact}</Typography>
           <Typography variant="caption" color="text.secondary" sx={{ overflowWrap: "anywhere" }}>{preview.primaryContactEmail}</Typography>
         </Grid>
-        <Grid size={{ xs: 6, md: 1.4 }}><Typography>{preview.cohortSlug || registration.cohortId || "Needs route"}</Typography></Grid>
+        <Grid size={{ xs: 6, md: 1.4 }}>
+          <CohortRoutePreview summary={routeSummary} compact />
+        </Grid>
         <Grid size={{ xs: 6, md: 1.1 }}><Typography>{preview.parsedParticipantCount ?? 0}{preview.participantCount ? ` / ${preview.participantCount}` : ""}</Typography></Grid>
         <Grid size={{ xs: 6, md: 1.4 }}><Typography>{[formatStatusLabel(registration.paymentMethod), formatStatusLabel(registration.paymentStatus)].filter((item) => item !== "Unknown").join(" / ") || "-"}</Typography></Grid>
         <Grid size={{ xs: 6, md: 1 }}><Typography>{compactDate(row.createdAt)}</Typography></Grid>
@@ -1123,6 +1222,7 @@ function JotformSubmissionRow({
             <Grid size={{ xs: 12, md: 3 }}><InfoTile label="Submission ID" value={preview.submissionId} /></Grid>
             <Grid size={{ xs: 12, md: 3 }}><InfoTile label="Revision" value={revision.revisionNumber ? `Revision ${revision.revisionNumber}${revision.isRevision ? " update" : " first import"}` : "Not imported yet"} /></Grid>
             <Grid size={{ xs: 12, md: 3 }}><InfoTile label="Amount" value={registration.totalAmount ? formatCurrency(registration.totalAmount) : ""} /></Grid>
+            <Grid size={{ xs: 12, md: 3 }}><InfoTile label="Cohort route" value={`${routeSummary.label}${routeSummary.detail ? ` - ${routeSummary.detail}` : ""}`} /></Grid>
             <Grid size={{ xs: 12, md: 3 }}><InfoTile label="Field matches" value={`${preview.fieldOptions?.length ?? 0} incoming fields detected`} /></Grid>
           </Grid>
           {participants.length > 0 && (
@@ -2710,6 +2810,7 @@ export function SettingsClient() {
                   {webhookEvents.map((row) => (
                     <JotformSubmissionRow
                       row={row}
+                      cohorts={cohorts}
                       key={row.id}
                       onReview={setMappingWizardEvent}
                       onReplay={(event) => { void replayWebhook(event); }}

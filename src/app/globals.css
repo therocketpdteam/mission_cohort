@@ -1742,6 +1742,86 @@ h6,
   overflow-wrap: anywhere;
 }
 
+.jotform-cohort-route {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.jotform-cohort-route.is-compact {
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 7px;
+}
+
+.jotform-cohort-route img,
+.jotform-cohort-route-fallback {
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+}
+
+.jotform-cohort-route.is-compact img,
+.jotform-cohort-route.is-compact .jotform-cohort-route-fallback {
+  width: 30px;
+  height: 30px;
+}
+
+.jotform-cohort-route img {
+  display: block;
+  object-fit: cover;
+  border: 1px solid var(--stroke-soft);
+}
+
+.jotform-cohort-route-fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-primary-700);
+  background: var(--color-blue-100);
+  font-family: var(--font-heading);
+  font-size: 0.72rem;
+  font-weight: 850;
+}
+
+.jotform-cohort-route.is-missing .jotform-cohort-route-fallback {
+  color: #991b1b;
+  background: var(--color-danger-100);
+}
+
+.jotform-cohort-route div {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.jotform-cohort-route strong,
+.jotform-cohort-route span {
+  min-width: 0;
+  line-height: 1.15;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.jotform-cohort-route strong {
+  color: var(--color-slate-900);
+  font-size: 0.82rem;
+  font-weight: 850;
+}
+
+.jotform-cohort-route span {
+  color: var(--color-slate-500);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.jotform-cohort-route.is-missing strong,
+.jotform-cohort-route.is-missing span {
+  color: #991b1b;
+}
+
 .jotform-field-preview {
   min-height: 54px;
   padding: 9px 10px;
