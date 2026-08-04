@@ -339,6 +339,53 @@ test("uses the only URL route when Jotform sends a generic landing page", () => 
   assert.equal(normalized.registration.cohortId, "cohort-1");
 });
 
+test("rejects unmapped RocketPD cohort landing pages instead of using a default cohort", () => {
+  const mapping = {
+    ...urlMapping,
+    defaultCohortId: "pl-fall",
+    fieldMapJson: {
+      ...urlMapping.fieldMapJson,
+      __landingPageRoutes: JSON.stringify([])
+    }
+  } as any;
+
+  assert.throws(
+    () => normalizeJotformRegistrationPayload(
+      {
+        formID: "12345",
+        submissionID: "sub-blueprint",
+        Name: "Nicolas Grosso",
+        Email: "ggrosso85@hotmail.com",
+        "Name of Organization": "Grosso",
+        "How many participants will be joining?": "2",
+        "Total Cost": "$990.00",
+        "Get Page URL": "https://rocketpd.com/cohorts/blueprint-for-belonging/#sessions"
+      },
+      [mapping]
+    ),
+    /unmapped RocketPD cohort landing page/
+  );
+});
+
+test("does not use a single saved URL route for a different RocketPD cohort page", () => {
+  assert.throws(
+    () => normalizeJotformRegistrationPayload(
+      {
+        formID: "12345",
+        submissionID: "sub-other-page",
+        Name: "Nicolas Grosso",
+        Email: "ggrosso85@hotmail.com",
+        "Name of Organization": "Grosso",
+        "How many participants will be joining?": "2",
+        "Total Cost": "$990.00",
+        "Get Page URL": "https://rocketpd.com/cohorts/blueprint-for-belonging/#sessions"
+      },
+      [urlMapping]
+    ),
+    /unmapped RocketPD cohort landing page/
+  );
+});
+
 test("defaults one-person no-roster Jotform registrations to the primary contact participant", () => {
   const normalized = normalizeJotformRegistrationPayload(
     {

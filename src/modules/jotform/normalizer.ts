@@ -612,6 +612,22 @@ function landingPageMatchesPattern(landingPageUrl: string, pattern: string) {
   }
 }
 
+function isSpecificRocketPdCohortLandingPage(value: string) {
+  const normalized = normalizeUrlForMatch(value);
+
+  if (!normalized) {
+    return false;
+  }
+
+  try {
+    const url = new URL(normalized);
+    const host = url.hostname.replace(/^www\./, "");
+    return host === "rocketpd.com" && /^\/cohorts\/[^/]+/.test(url.pathname);
+  } catch {
+    return normalized.includes("rocketpd.com/cohorts/");
+  }
+}
+
 function resolveLandingPageRoute(mapping: JotformFormMapping | undefined, landingPageUrl: string) {
   const routes = readLandingPageRoutes(mapping);
   const matchedRoute = routes.find((route) => landingPageMatchesPattern(landingPageUrl, route.pattern));
@@ -620,7 +636,11 @@ function resolveLandingPageRoute(mapping: JotformFormMapping | undefined, landin
     return matchedRoute;
   }
 
-  return routes.length === 1 ? routes[0] : undefined;
+  if (routes.length === 1 && !isSpecificRocketPdCohortLandingPage(landingPageUrl)) {
+    return routes[0];
+  }
+
+  return undefined;
 }
 
 function mappedFirstValue(flat: UnknownRecord, source: UnknownRecord, fieldMap: FieldMap, target: string, fallbackKeys: string[]): unknown {
@@ -997,6 +1017,13 @@ export function resolveJotformCohort(
 
   if (landingPageRoute) {
     return { cohortId: landingPageRoute.cohortId, cohortSlug: "", mapping };
+  }
+
+  if (mapping && isSpecificRocketPdCohortLandingPage(payload.routing.landingPageUrl ?? "")) {
+    throw Object.assign(
+      new Error(`Jotform form ${mapping.formId} received an unmapped RocketPD cohort landing page: ${payload.routing.landingPageUrl}`),
+      { code: "BAD_REQUEST", status: 400 }
+    );
   }
 
   if (mapping?.requireCohortSlug) {
