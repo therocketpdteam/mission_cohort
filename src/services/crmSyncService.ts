@@ -427,9 +427,11 @@ export async function replayHistoricalCrmRegistrationEvents(input: {
   shortNames: string[];
   dryRun?: boolean;
   limit?: number;
+  force?: boolean;
 }) {
   const shortNames = input.shortNames.map((value) => value.trim()).filter(Boolean);
   const dryRun = input.dryRun !== false;
+  const force = input.force === true;
   const requestedLimit = Number(input.limit ?? 100);
   const limit = Number.isFinite(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 500) : 100;
   const url = env.CRM_MISSION_COHORT_WEBHOOK_URL ?? env.CRM_REGISTRATION_WEBHOOK_URL;
@@ -452,6 +454,7 @@ export async function replayHistoricalCrmRegistrationEvents(input: {
   }
 
   const filter = shortNameFilter(shortNames);
+  const auditFilter = force ? Prisma.empty : replayAuditFilter();
   const counts = await prisma.$queryRaw<CrmReplayCountRow[]>(Prisma.sql`
     SELECT
       payload->>'shortName' AS "shortName",
@@ -464,7 +467,7 @@ export async function replayHistoricalCrmRegistrationEvents(input: {
       AND "eventType" = 'historical_import.registration_imported'
       AND status = 'SENT'::"CrmSyncEventStatus"
       ${filter}
-      ${replayAuditFilter()}
+      ${auditFilter}
     GROUP BY payload->>'shortName'
     ORDER BY payload->>'shortName' ASC
   `);
@@ -501,7 +504,7 @@ export async function replayHistoricalCrmRegistrationEvents(input: {
       AND "eventType" = 'historical_import.registration_imported'
       AND status = 'SENT'::"CrmSyncEventStatus"
       ${filter}
-      ${replayAuditFilter()}
+      ${auditFilter}
     ORDER BY payload->>'shortName' ASC, "createdAt" ASC
     LIMIT ${limit}
   `);
@@ -590,6 +593,7 @@ export async function replayHistoricalCrmRegistrationEvents(input: {
   return {
     dryRun: false,
     target: missionCohortCrmTarget(),
+    force,
     limit,
     attempted: rows.length,
     succeeded,

@@ -33,7 +33,8 @@ export async function POST(request: Request) {
         await replayHistoricalCrmRegistrationEvents({
           shortNames: Array.isArray(body.shortNames) ? body.shortNames : [],
           dryRun: body.dryRun !== false,
-          limit: body.limit
+          limit: body.limit,
+          force: body.force === true
         }),
         { status: 202 }
       );
