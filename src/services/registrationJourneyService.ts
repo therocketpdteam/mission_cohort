@@ -91,6 +91,19 @@ export function participantConfirmationJourneyKey(input: {
   return `${base}${cohortSegment}${batchSegment}`;
 }
 
+export function pocConfirmationJourneyKey(input: {
+  registrationId: string;
+  primaryContactEmail: string;
+  cohortId?: string;
+  batchKey?: string;
+}) {
+  const base = `registration:${input.registrationId}:poc:${normalizeEmail(input.primaryContactEmail)}:confirmation`;
+  const cohortSegment = input.cohortId ? `:cohort:${input.cohortId}` : "";
+  const batchSegment = input.batchKey ? `:batch:${input.batchKey}` : "";
+
+  return `${base}${cohortSegment}${batchSegment}`;
+}
+
 export function calendarFilesJourneyKey(input: {
   registrationId: string;
   participantEmail: string;
@@ -827,6 +840,8 @@ export async function planRegistrationJourneys(
     planMilestones?: boolean;
     participantConfirmationCohortScoped?: boolean;
     participantConfirmationBatchKey?: string;
+    pocConfirmationCohortScoped?: boolean;
+    pocConfirmationBatchKey?: string;
     bypassCohortStatusForImmediate?: boolean;
     calendarSendUpdates?: boolean;
   } = {}
@@ -871,7 +886,12 @@ export async function planRegistrationJourneys(
     readiness: pocDocumentReadiness
   } = await prepareRegistrationConfirmationDocuments(registration, invoiceProfile.w9Url);
   const poc = await upsertJourneyCommunication({
-    journeyKey: `registration:${registration.id}:poc:${pocEmail}:confirmation`,
+    journeyKey: pocConfirmationJourneyKey({
+      registrationId: registration.id,
+      primaryContactEmail: pocEmail,
+      cohortId: options.pocConfirmationCohortScoped ? registration.cohortId : undefined,
+      batchKey: options.pocConfirmationBatchKey
+    }),
     cohortId: registration.cohortId,
     registrationId: registration.id,
     template: template(journeyTemplateNames.pocConfirmation),

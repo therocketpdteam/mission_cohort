@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { fail, handleApiError, ok } from "@/lib/api";
 import {
   archiveRegistration,
@@ -94,6 +95,19 @@ export async function PATCH(request: Request) {
         sendPocConfirmation: false,
         retryFailed: true,
         planMilestones: false
+      }), { status: 202 });
+    }
+
+    if (body.action === "sendPocConfirmation") {
+      return ok(await planRegistrationJourneys(body.id, {
+        syncCalendar: false,
+        sendPocConfirmation: true,
+        participantEmails: [],
+        retryFailed: true,
+        planMilestones: false,
+        pocConfirmationCohortScoped: true,
+        pocConfirmationBatchKey: randomUUID(),
+        bypassCohortStatusForImmediate: true
       }), { status: 202 });
     }
 

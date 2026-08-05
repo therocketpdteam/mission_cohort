@@ -5,6 +5,7 @@ import {
   buildRegistrationMilestones,
   calendarFilesJourneyKey,
   participantConfirmationJourneyKey,
+  pocConfirmationJourneyKey,
   shouldAutoPrepareRegistrationInvoice
 } from "../../src/services/registrationJourneyService";
 import {
@@ -75,6 +76,24 @@ test("calendar invite file sends are cohort scoped for moved registrations", () 
 
   assert.equal(original, "registration:registration-1:calendar-files:teacher@example.com:cohort:cohort-1");
   assert.equal(moved, "registration:registration-1:calendar-files:teacher@example.com:cohort:cohort-2");
+  assert.notEqual(moved, original);
+});
+
+test("POC confirmations can be cohort scoped for moved registrations", () => {
+  const original = pocConfirmationJourneyKey({
+    registrationId: "registration-1",
+    primaryContactEmail: "POC@Example.com",
+    cohortId: "cohort-1"
+  });
+  const moved = pocConfirmationJourneyKey({
+    registrationId: "registration-1",
+    primaryContactEmail: "poc@example.com",
+    cohortId: "cohort-2",
+    batchKey: "move-1"
+  });
+
+  assert.equal(original, "registration:registration-1:poc:poc@example.com:confirmation:cohort:cohort-1");
+  assert.equal(moved, "registration:registration-1:poc:poc@example.com:confirmation:cohort:cohort-2:batch:move-1");
   assert.notEqual(moved, original);
 });
 

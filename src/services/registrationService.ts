@@ -512,8 +512,10 @@ export async function bulkMoveRegistrationsToCohort(input: { ids: string[]; targ
       void queueParticipantCrmSync(participant.id, "participant.moved").catch(() => undefined);
     }
     journeyResults.push(await planRegistrationJourneys(registration.id, {
-      sendPocConfirmation: false,
+      sendPocConfirmation: true,
       retryFailed: true,
+      pocConfirmationCohortScoped: true,
+      pocConfirmationBatchKey: moveConfirmationBatchKey,
       participantConfirmationCohortScoped: true,
       participantConfirmationBatchKey: moveConfirmationBatchKey,
       bypassCohortStatusForImmediate: true,
