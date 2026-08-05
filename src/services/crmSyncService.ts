@@ -208,3 +208,79 @@ export async function listCrmSyncEvents() {
     take: 100
   });
 }
+
+type CrmSyncSummaryRow = {
+  shortName: string | null;
+  eventType: string;
+  status: CrmSyncEventStatus;
+  count: number | bigint;
+  oldestCreatedAt: Date | null;
+  newestCreatedAt: Date | null;
+  newestSentAt: Date | null;
+};
+
+type CrmSyncUnsentRow = {
+  id: string;
+  shortName: string | null;
+  eventType: string;
+  status: CrmSyncEventStatus;
+  attempts: number;
+  errorMessage: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+function shortNameFilter(shortNames: string[]) {
+  return shortNames.length > 0
+    ? Prisma.sql`AND payload->>'shortName' IN (${Prisma.join(shortNames)})`
+    : Prisma.empty;
+}
+
+export async function summarizeCrmSyncEvents(shortNames: string[] = []) {
+  const normalizedShortNames = shortNames.map((value) => value.trim()).filter(Boolean);
+  const filter = shortNameFilter(normalizedShortNames);
+  const [summaryRows, unsentRows] = await Promise.all([
+    prisma.$queryRaw<CrmSyncSummaryRow[]>(Prisma.sql`
+      SELECT
+        payload->>'shortName' AS "shortName",
+        "eventType",
+        status,
+        COUNT(*) AS count,
+        MIN("createdAt") AS "oldestCreatedAt",
+        MAX("createdAt") AS "newestCreatedAt",
+        MAX("sentAt") AS "newestSentAt"
+      FROM "CrmSyncEvent"
+      WHERE jsonb_typeof(payload) = 'object'
+        AND payload ? 'shortName'
+        ${filter}
+      GROUP BY payload->>'shortName', "eventType", status
+      ORDER BY payload->>'shortName' ASC, "eventType" ASC, status ASC
+    `),
+    prisma.$queryRaw<CrmSyncUnsentRow[]>(Prisma.sql`
+      SELECT
+        id,
+        payload->>'shortName' AS "shortName",
+        "eventType",
+        status,
+        attempts,
+        "errorMessage",
+        "createdAt",
+        "updatedAt"
+      FROM "CrmSyncEvent"
+      WHERE jsonb_typeof(payload) = 'object'
+        AND payload ? 'shortName'
+        AND status <> 'SENT'::"CrmSyncEventStatus"
+        ${filter}
+      ORDER BY "createdAt" ASC
+      LIMIT 100
+    `)
+  ]);
+
+  return {
+    summary: summaryRows.map((row) => ({
+      ...row,
+      count: Number(row.count)
+    })),
+    unsent: unsentRows
+  };
+}

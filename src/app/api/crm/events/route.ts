@@ -1,8 +1,18 @@
 import { handleApiError, ok } from "@/lib/api";
-import { listCrmSyncEvents, processCrmSyncEvents } from "@/services/crmSyncService";
+import { requireRole } from "@/lib/auth";
+import { Role } from "@prisma/client";
+import { listCrmSyncEvents, processCrmSyncEvents, summarizeCrmSyncEvents } from "@/services/crmSyncService";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const searchParams = new URL(request.url).searchParams;
+
+    if (searchParams.get("summary") === "1") {
+      await requireRole([Role.SUPER_ADMIN]);
+      const shortNames = searchParams.get("shortNames")?.split(",") ?? [];
+      return ok(await summarizeCrmSyncEvents(shortNames));
+    }
+
     return ok(await listCrmSyncEvents());
   } catch (error) {
     return handleApiError(error);
