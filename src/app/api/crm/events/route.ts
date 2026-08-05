@@ -34,7 +34,8 @@ export async function POST(request: Request) {
           shortNames: Array.isArray(body.shortNames) ? body.shortNames : [],
           dryRun: body.dryRun !== false,
           limit: body.limit,
-          force: body.force === true
+          force: body.force === true,
+          offset: body.offset
         }),
         { status: 202 }
       );

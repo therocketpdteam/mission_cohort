@@ -428,12 +428,15 @@ export async function replayHistoricalCrmRegistrationEvents(input: {
   dryRun?: boolean;
   limit?: number;
   force?: boolean;
+  offset?: number;
 }) {
   const shortNames = input.shortNames.map((value) => value.trim()).filter(Boolean);
   const dryRun = input.dryRun !== false;
   const force = input.force === true;
   const requestedLimit = Number(input.limit ?? 100);
   const limit = Number.isFinite(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 500) : 100;
+  const requestedOffset = Number(input.offset ?? 0);
+  const offset = Number.isFinite(requestedOffset) ? Math.max(Math.floor(requestedOffset), 0) : 0;
   const url = env.CRM_MISSION_COHORT_WEBHOOK_URL ?? env.CRM_REGISTRATION_WEBHOOK_URL;
   const secret = env.CRM_MISSION_COHORT_WEBHOOK_SECRET ?? env.CRM_REGISTRATION_WEBHOOK_SECRET;
 
@@ -481,7 +484,9 @@ export async function replayHistoricalCrmRegistrationEvents(input: {
     return {
       dryRun: true,
       target: missionCohortCrmTarget(),
+      force,
       limit,
+      offset,
       totalEligible,
       summary
     };
@@ -507,6 +512,7 @@ export async function replayHistoricalCrmRegistrationEvents(input: {
       ${auditFilter}
     ORDER BY payload->>'shortName' ASC, "createdAt" ASC
     LIMIT ${limit}
+    OFFSET ${offset}
   `);
 
   const results = [];
@@ -595,6 +601,7 @@ export async function replayHistoricalCrmRegistrationEvents(input: {
     target: missionCohortCrmTarget(),
     force,
     limit,
+    offset,
     attempted: rows.length,
     succeeded,
     failed,
