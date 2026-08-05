@@ -825,6 +825,7 @@ async function findOrCreateCohort(tx: Prisma.TransactionClient, row: NormalizedH
   const sourceCohort = await tx.cohort.findFirst({
     where: {
       presenterId,
+      status: { in: [CohortStatus.DRAFT, CohortStatus.PUBLISHED, CohortStatus.ACTIVE] },
       OR: [
         { description: { not: null } },
         { thumbnailUrl: { not: null } },

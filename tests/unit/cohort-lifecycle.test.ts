@@ -50,6 +50,13 @@ test("treats complete draft session plans as publish-ready before provider deliv
   assert.equal(readiness.sessionDetails[0]?.emails.total, 4);
 });
 
+test("preserves completed historical cohorts even when no sessions are recorded", () => {
+  assert.equal(deriveCohortStatus({
+    status: CohortStatus.COMPLETED,
+    sessions: []
+  }), CohortStatus.COMPLETED);
+});
+
 test("treats draft session email plans as system-ready before concrete schedules exist", () => {
   const readiness = getCohortReadiness({
     status: CohortStatus.DRAFT,

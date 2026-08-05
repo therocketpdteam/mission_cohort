@@ -353,6 +353,10 @@ export function deriveCohortStatus(cohort: LifecycleCohort, now = new Date()): C
     return CohortStatus.CANCELLED;
   }
 
+  if (cohort.status === CohortStatus.COMPLETED) {
+    return CohortStatus.COMPLETED;
+  }
+
   if (cohort.status === CohortStatus.DRAFT) {
     return CohortStatus.DRAFT;
   }
