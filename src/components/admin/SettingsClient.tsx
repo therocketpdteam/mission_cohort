@@ -1497,7 +1497,7 @@ function HistoricalImportsPanel({
       >
         <Stack spacing={2}>
           <Alert severity="info">
-            Historical imports are data-only. They create closed cohort records for reporting, but never send emails, calendar invites, QuickBooks records, CRM tasks, or operations journeys.
+            Historical imports are data-only. They create closed cohort records for reporting and queue CRM audience sync records, but never send emails, calendar invites, QuickBooks records, or operations journeys.
           </Alert>
           <Box sx={{ border: 1, borderColor: "divider", borderRadius: 1, p: 2, bgcolor: "var(--color-surface-container-lowest)" }}>
             <Typography variant="h3">Cohort Attributes</Typography>

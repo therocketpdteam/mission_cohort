@@ -163,3 +163,74 @@ test("excludes POC-only rows from participants while preserving the registration
   assert.equal(preview.rows[1].normalized.participants.length, 0);
   assert.equal(preview.rows[1].normalized.registrationDate, "2025-08-06T15:00:00.000Z");
 });
+
+test("uses primary contact marker for grouped historical imports and ignores placeholder participant rows", () => {
+  const headers = [
+    "Key",
+    "District",
+    "Address",
+    "City",
+    "State",
+    "Zip",
+    "Primary contact",
+    "Name",
+    "Title",
+    "Email",
+    "Phone",
+    "Package",
+    "Amount",
+    "Adtnl. team",
+    "Total",
+    "Status",
+    "# Participants",
+    "Add Participants",
+    "POC",
+    "Date",
+    "Invoice #",
+    "Notes"
+  ];
+  const csvRow = (cells: string[]) => headers.map((_, index) => cells[index] ?? "").join(",");
+  const groupedCsv = [
+    headers.join(","),
+    csvRow(["abc", "Southwest Regional Educational Cooperative", "1321 E. Poplar St.", "Deming", "NM", "88030", "X", "Valerie Brea", "Executive Director", "vbrea@swrecnm.org", "575-546-5951", "10 team members ($4,250.00)", "", "", "$4,250", "Paid"]),
+    csvRow(["", "Southwest Regional Educational Cooperative", "", "", "NM", "", "", "Amber Richmond", "", "arichmond@swrecnm.org"]),
+    csvRow(["", "Southwest Regional Educational Cooperative", "", "", "NM", "", "", "REQUESTED", "", "REQUESTED"]),
+    csvRow(["def", "The Madeira School", "8328 Va-193", "Mclean", "VA", "22102", "X", "Graham Goulding", "", "ggoulding@madeira.org", "(215) 534-9816", "1 person ($495.00)", "", "", "$495", "Paid", "", "", "", "8/26/2024", "PL-26", "VISA"])
+  ].join("\n");
+  const preview = normalizeHistoricalImportRows(groupedCsv, {
+    organizationName: "District",
+    organizationAddressLine1: "Address",
+    organizationCity: "City",
+    organizationState: "State",
+    organizationZip: "Zip",
+    registrationStartFlag: "Primary contact",
+    primaryContactName: "Name",
+    primaryContactEmail: "Email",
+    primaryContactPhone: "Phone",
+    primaryContactTitle: "Title",
+    participantCount: "Package",
+    totalAmount: "Total",
+    paymentStatus: "Status",
+    pocOnlyFlag: "POC",
+    registrationDate: "Date",
+    invoiceNumber: "Invoice #",
+    notes: "Notes"
+  }, {
+    title: "Building Thinking Classrooms",
+    shortName: "PL-Fall-2024",
+    presenterName: "Peter Liljedahl",
+    presenterShortName: "PL",
+    startDate: "10/29/2024",
+    endDate: "11/26/2024",
+    season: "Fall"
+  });
+
+  assert.equal(preview.summary.totalRows, 2);
+  assert.equal(preview.summary.validRows, 2);
+  assert.equal(preview.summary.warningRows, 1);
+  assert.equal(preview.rows[0].normalized.participantCount, 10);
+  assert.equal(preview.rows[0].normalized.participants.length, 2);
+  assert.match(preview.rows[0].warnings.join(" "), /REQUESTED/);
+  assert.equal(preview.rows[1].normalized.primaryContactEmail, "ggoulding@madeira.org");
+  assert.equal(preview.rows[1].normalized.participantCount, 1);
+});

@@ -576,6 +576,24 @@ async function queueSyncEvent(payload: CrmRegistrationWebhookPayload, eventType:
   return createSyncEvent(payload, eventType, registrationId, CrmSyncEventStatus.QUEUED);
 }
 
+export async function queueRegistrationToCrmWebhook(registrationId: string, eventType = "registration.updated") {
+  const registration = await registrationForCrm(registrationId);
+
+  if (!registration) {
+    return { status: "skipped" as const, results: [], error: "Registration not found." };
+  }
+
+  const totals = calculateCohortTotals(await cohortRegistrations(registration.cohortId));
+  const payloads = buildCrmRegistrationWebhookPayloads(registration, totals);
+  const results = [];
+
+  for (const payload of payloads) {
+    results.push(await queueSyncEvent(payload, eventType, registration.id));
+  }
+
+  return { status: "queued" as const, results };
+}
+
 async function updateSyncEvent(
   eventId: string | undefined,
   data: { status: CrmSyncEventStatus; attempts?: number; errorMessage?: string | null }

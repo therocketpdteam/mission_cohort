@@ -14,6 +14,7 @@ import {
 import { prisma } from "@/lib/prisma";
 import { parseRosterText, type ParsedRosterParticipant } from "@/lib/rosterParser";
 import { normalizeUsStateCode } from "@/modules/jotform";
+import { queueRegistrationToCrmWebhook } from "./crmRegistrationWebhookService";
 
 export type HistoricalImportMapping = Record<string, string>;
 
@@ -89,6 +90,7 @@ const supportedFields = [
   "primaryContactEmail",
   "primaryContactPhone",
   "primaryContactTitle",
+  "registrationStartFlag",
   "participantCount",
   "participantText",
   "participantNames",
@@ -129,6 +131,7 @@ const fieldLabels: Record<string, string> = {
   primaryContactEmail: "POC email",
   primaryContactPhone: "POC phone",
   primaryContactTitle: "POC title",
+  registrationStartFlag: "Registration start flag",
   participantCount: "Participant count",
   participantText: "Participant roster text",
   participantNames: "Participant names",
@@ -167,6 +170,7 @@ const suggestions: Record<string, RegExp[]> = {
   primaryContactEmail: [/poc.*email/, /contact.*email/, /registrant.*email/, /^email$/],
   primaryContactPhone: [/poc.*phone/, /contact.*phone/, /^phone$/],
   primaryContactTitle: [/poc.*title/, /contact.*title/, /^title$/],
+  registrationStartFlag: [/^primary contact$/, /^registration.*start/, /^poc marker$/, /^primary$/],
   participantCount: [/^participants$/, /^# participants$/, /participant.*count/, /roster.*count/, /seats?/, /qty|quantity/, /^#$/],
   participantText: [/participant.*list/, /roster/],
   participantNames: [/participant.*names?/],
@@ -281,6 +285,21 @@ function parseMoney(input: string) {
 function parseIntValue(input: string) {
   const value = Number(clean(input).replace(/[^0-9.-]/g, ""));
   return Number.isFinite(value) ? Math.max(Math.trunc(value), 0) : 0;
+}
+
+function parseParticipantCountValue(input: string) {
+  const raw = clean(input);
+  const packageMatch = raw.match(/^\s*(\d+)\s*(?:person|people|participant|participants|team|seat|seats|member|members)\b/i);
+  if (packageMatch) {
+    return Number(packageMatch[1]);
+  }
+
+  return parseIntValue(raw);
+}
+
+function looksLikeEmail(input: string) {
+  const raw = clean(input);
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw);
 }
 
 function parsePaymentStatus(input: string) {
@@ -404,6 +423,10 @@ function hasSingleCohortDetails(cohort?: HistoricalCohortImportDetails) {
 }
 
 function isRegistrationStartRow(row: CsvRow, mapping: HistoricalImportMapping) {
+  if (mapping.registrationStartFlag) {
+    return isMarked(value(row, mapping, "registrationStartFlag"));
+  }
+
   return Boolean(
     value(row, mapping, "organizationAddressLine1") ||
       value(row, mapping, "organizationCity") ||
@@ -426,6 +449,10 @@ function participantFromRow(row: CsvRow, mapping: HistoricalImportMapping) {
     return null;
   }
 
+  if (email && !looksLikeEmail(email)) {
+    return null;
+  }
+
   return {
     firstName: name.firstName,
     lastName: name.lastName,
@@ -445,6 +472,28 @@ function isMarked(value: string) {
 
 function isPocOnlyRow(row: CsvRow, mapping: HistoricalImportMapping) {
   return isMarked(value(row, mapping, "pocOnlyFlag"));
+}
+
+function invalidParticipantEmailWarnings(rows: CsvRow[], mapping: HistoricalImportMapping) {
+  const invalidRows = rows
+    .filter((row) => !isPocOnlyRow(row, mapping))
+    .map((row) => ({
+      rowNumber: row.rowNumber,
+      email: value(row, mapping, "primaryContactEmail")
+    }))
+    .filter((row) => row.email && !looksLikeEmail(row.email));
+
+  if (invalidRows.length === 0) {
+    return [];
+  }
+
+  const preview = invalidRows
+    .slice(0, 5)
+    .map((row) => `row ${row.rowNumber} (${row.email})`)
+    .join(", ");
+  const suffix = invalidRows.length > 5 ? `, plus ${invalidRows.length - 5} more` : "";
+
+  return [`Ignored ${invalidRows.length} row${invalidRows.length === 1 ? "" : "s"} with invalid participant email values: ${preview}${suffix}.`];
 }
 
 function buildGroupedHistoricalRows(csvText: string, inputMapping: HistoricalImportMapping | undefined, cohort: HistoricalCohortImportDetails) {
@@ -471,7 +520,7 @@ function buildGroupedHistoricalRows(csvText: string, inputMapping: HistoricalImp
       .map((row) => participantFromRow(row, mapping))
       .filter(isParsedParticipant);
     const primary = participantFromRow(startRow, mapping) ?? participants[0];
-    const participantCount = parseIntValue(value(startRow, mapping, "participantCount")) || participants.length || 1;
+    const participantCount = Math.max(parseParticipantCountValue(value(startRow, mapping, "participantCount")), participants.length, 1);
     const fallbackOrganizationName = [primary?.firstName, primary?.lastName].filter(Boolean).join(" ");
     const organizationName = value(startRow, mapping, "organizationName") || fallbackOrganizationName;
     const normalized: NormalizedHistoricalRow & { presenterId?: string } = {
@@ -520,6 +569,7 @@ function buildGroupedHistoricalRows(csvText: string, inputMapping: HistoricalImp
     ].filter(Boolean);
     const warnings = [
       !value(startRow, mapping, "organizationName") && fallbackOrganizationName ? "Organization was blank; using the POC name as the organization label." : "",
+      ...invalidParticipantEmailWarnings(group.rows, mapping),
       normalized.participantCount > 0 && normalized.participants.length > 0 && normalized.participants.length !== normalized.participantCount
         ? `Participant count is ${normalized.participantCount}, but ${normalized.participants.length} participant rows were parsed.`
         : ""
@@ -583,7 +633,7 @@ export function normalizeHistoricalImportRows(csvText: string, inputMapping?: Hi
     const participants = parseParticipants(row, mapping);
     const startDate = parseDateValue(value(row, mapping, "startDate"));
     const endDate = parseDateValue(value(row, mapping, "endDate")) ?? startDate;
-    const participantCount = parseIntValue(value(row, mapping, "participantCount")) || participants.participants.length;
+    const participantCount = parseParticipantCountValue(value(row, mapping, "participantCount")) || participants.participants.length;
     const normalized: NormalizedHistoricalRow = {
       cohortTitle: value(row, mapping, "cohortTitle"),
       cohortShortName: value(row, mapping, "cohortShortName") || undefined,
@@ -772,13 +822,39 @@ async function findOrCreateCohort(tx: Prisma.TransactionClient, row: NormalizedH
     suffix += 1;
   }
 
+  const sourceCohort = await tx.cohort.findFirst({
+    where: {
+      presenterId,
+      OR: [
+        { description: { not: null } },
+        { thumbnailUrl: { not: null } },
+        { guideUrl: { not: null } },
+        { podcastUrl: { not: null } }
+      ]
+    },
+    orderBy: { updatedAt: "desc" },
+    select: {
+      description: true,
+      guideTopic: true,
+      guideUrl: true,
+      podcastUrl: true,
+      prepResourcesOptional: true,
+      thumbnailUrl: true
+    }
+  });
+
   return tx.cohort.create({
     data: {
       title,
       shortName: row.cohortShortName,
       slug,
       presenterId,
-      description: row.season ? `Historical import: ${row.season}` : "Historical import.",
+      description: sourceCohort?.description || (row.season ? `Historical import: ${row.season}` : "Historical import."),
+      guideTopic: sourceCohort?.guideTopic,
+      guideUrl: sourceCohort?.guideUrl,
+      podcastUrl: sourceCohort?.podcastUrl,
+      prepResourcesOptional: sourceCohort?.prepResourcesOptional ?? true,
+      thumbnailUrl: sourceCohort?.thumbnailUrl,
       status: CohortStatus.COMPLETED,
       startDate: start,
       endDate: safeEnd,
@@ -870,7 +946,7 @@ export async function importHistoricalCsv(input: {
   const preview = normalizeHistoricalImportRows(input.csvText, input.mapping, input.cohort);
   const importableRows = preview.rows.filter((row) => row.errors.length === 0);
 
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const batch = await tx.historicalImportBatch.create({
       data: {
         fileName: input.fileName,
@@ -884,6 +960,7 @@ export async function importHistoricalCsv(input: {
       }
     });
     const entityCounts = { cohorts: new Set<string>(), registrations: 0, participants: 0, payments: 0 };
+    const importedRegistrationIds: string[] = [];
     const cohortSessionKeys = new Set<string>();
 
     for (const row of preview.rows) {
@@ -941,6 +1018,7 @@ export async function importHistoricalCsv(input: {
         }
       });
       entityCounts.registrations += 1;
+      importedRegistrationIds.push(registration.id);
 
       for (const participant of row.normalized.participants) {
         await tx.participant.create({
@@ -1011,6 +1089,16 @@ export async function importHistoricalCsv(input: {
       include: { rows: { orderBy: { rowNumber: "asc" } } }
     });
 
-    return { batch: completed, preview, importedRows: importableRows.length };
+    return { batch: completed, preview, importedRows: importableRows.length, importedRegistrationIds };
   }, { maxWait: 10000, timeout: 60000 });
+
+  let crmQueued = 0;
+  for (const registrationId of result.importedRegistrationIds) {
+    const queued = await queueRegistrationToCrmWebhook(registrationId, "historical_import.registration_imported").catch(() => null);
+    crmQueued += queued?.results.length ?? 0;
+  }
+
+  const { importedRegistrationIds, ...response } = result;
+  void importedRegistrationIds;
+  return { ...response, crmQueued };
 }
