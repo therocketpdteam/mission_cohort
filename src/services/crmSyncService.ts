@@ -289,10 +289,39 @@ function missionCohortCrmTarget() {
   };
 }
 
-export async function summarizeCrmSyncEvents(shortNames: string[] = []) {
+async function fetchReceiverDiagnostics(shortNames: string[]) {
+  const url = env.CRM_MISSION_COHORT_WEBHOOK_URL ?? env.CRM_REGISTRATION_WEBHOOK_URL;
+  const secret = env.CRM_MISSION_COHORT_WEBHOOK_SECRET ?? env.CRM_REGISTRATION_WEBHOOK_SECRET;
+  if (!url || !secret || shortNames.length === 0) {
+    return null;
+  }
+
+  const diagnosticUrl = new URL(url);
+  diagnosticUrl.pathname = "/api/debug/mission-cohort-sync";
+  diagnosticUrl.search = "";
+  diagnosticUrl.searchParams.set("shortNames", shortNames.join(","));
+
+  const response = await fetch(diagnosticUrl, {
+    method: "GET",
+    headers: crmRegistrationWebhookHeaders(secret, env.CRM_MISSION_COHORT_VERCEL_BYPASS_SECRET)
+  });
+
+  const body = await response.json().catch(() => null);
+  if (!response.ok) {
+    return {
+      success: false,
+      status: response.status,
+      error: body?.error ?? "CRM receiver diagnostic request failed."
+    };
+  }
+
+  return body;
+}
+
+export async function summarizeCrmSyncEvents(shortNames: string[] = [], includeReceiverDiagnostics = false) {
   const normalizedShortNames = shortNames.map((value) => value.trim()).filter(Boolean);
   const filter = shortNameFilter(normalizedShortNames);
-  const [summaryRows, unsentRows, sentSamples] = await Promise.all([
+  const [summaryRows, unsentRows, sentSamples, receiverDiagnostics] = await Promise.all([
     prisma.$queryRaw<CrmSyncSummaryRow[]>(Prisma.sql`
       SELECT
         payload->>'shortName' AS "shortName",
@@ -350,7 +379,8 @@ export async function summarizeCrmSyncEvents(shortNames: string[] = []) {
         ${filter}
       ORDER BY payload->>'shortName' ASC, "sentAt" DESC NULLS LAST
       LIMIT 50
-    `)
+    `),
+    includeReceiverDiagnostics ? fetchReceiverDiagnostics(normalizedShortNames) : Promise.resolve(null)
   ]);
 
   return {
@@ -360,6 +390,7 @@ export async function summarizeCrmSyncEvents(shortNames: string[] = []) {
       count: Number(row.count)
     })),
     unsent: unsentRows,
-    sentSamples
+    sentSamples,
+    receiverDiagnostics
   };
 }

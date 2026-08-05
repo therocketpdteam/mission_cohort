@@ -10,7 +10,7 @@ export async function GET(request: Request) {
     if (searchParams.get("summary") === "1") {
       await requireRole([Role.SUPER_ADMIN]);
       const shortNames = searchParams.get("shortNames")?.split(",") ?? [];
-      return ok(await summarizeCrmSyncEvents(shortNames));
+      return ok(await summarizeCrmSyncEvents(shortNames, searchParams.get("receiver") === "1"));
     }
 
     return ok(await listCrmSyncEvents());
