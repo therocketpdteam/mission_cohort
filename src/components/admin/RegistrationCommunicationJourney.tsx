@@ -60,12 +60,11 @@ function journeyGroupFor(communication: AdminRow): JourneyGroupKey {
     return eventType === "FAILED" || eventType === "BOUNCED";
   });
   const unreviewedIssueEvents = issueEvents.filter((event) => !event.reviewedAt);
-  const providerIssue = Boolean(communication.providerError) || status === "FAILED";
 
-  if (unreviewedIssueEvents.length > 0 || (providerIssue && issueEvents.length === 0)) return "needs_attention";
+  if (unreviewedIssueEvents.length > 0 || status === "FAILED") return "needs_attention";
+  if (issueEvents.length > 0) return "reviewed";
   if (status === "SCHEDULED" || status === "SENDING") return "scheduled";
   if (status === "SENT") return "sent";
-  if (providerIssue && issueEvents.length > 0) return "reviewed";
   if (status === "SKIPPED" || status === "CANCELLED") return "skipped";
   return "planned";
 }
