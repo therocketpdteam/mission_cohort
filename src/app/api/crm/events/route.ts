@@ -41,7 +41,13 @@ export async function POST(request: Request) {
       );
     }
 
-    return ok(await processCrmSyncEvents(body.limit), { status: 202 });
+    return ok(
+      await processCrmSyncEvents(body.limit, {
+        shortNames: Array.isArray(body.shortNames) ? body.shortNames : undefined,
+        eventTypes: Array.isArray(body.eventTypes) ? body.eventTypes : undefined
+      }),
+      { status: 202 }
+    );
   } catch (error) {
     return handleApiError(error);
   }

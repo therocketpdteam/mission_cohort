@@ -98,15 +98,36 @@ export async function queueParticipantCrmSync(participantId: string, eventType =
   });
 }
 
-export async function processCrmSyncEvents(limit = 25) {
+export async function processCrmSyncEvents(
+  limit = 25,
+  options: { shortNames?: string[]; eventTypes?: string[] } = {}
+) {
+  const shortNameSet = new Set(options.shortNames?.map((value) => value.trim()).filter(Boolean));
+  const eventTypeSet = new Set(options.eventTypes?.map((value) => value.trim()).filter(Boolean));
   const candidateLimit = Math.min(Math.max(limit * 100, limit), 5000);
   const candidates = await prisma.crmSyncEvent.findMany({
-    where: { status: { in: [CrmSyncEventStatus.QUEUED, CrmSyncEventStatus.FAILED] } },
+    where: {
+      status: { in: [CrmSyncEventStatus.QUEUED, CrmSyncEventStatus.FAILED] },
+      ...(eventTypeSet.size ? { eventType: { in: Array.from(eventTypeSet) } } : {})
+    },
     orderBy: { createdAt: "asc" },
     take: candidateLimit
   });
 
   const events = candidates
+    .filter((event) => {
+      if (shortNameSet.size === 0) {
+        return true;
+      }
+
+      const payload = event.payload;
+      return Boolean(
+        payload &&
+          typeof payload === "object" &&
+          !Array.isArray(payload) &&
+          shortNameSet.has(String((payload as { shortName?: unknown }).shortName ?? "").trim())
+      );
+    })
     .map((event) => ({
       event,
       missionPayload: isCrmRegistrationWebhookPayload(event.payload)
