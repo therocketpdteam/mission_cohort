@@ -230,16 +230,69 @@ type CrmSyncUnsentRow = {
   updatedAt: Date;
 };
 
+type CrmSyncSentSampleRow = {
+  id: string;
+  shortName: string | null;
+  eventType: string;
+  status: CrmSyncEventStatus;
+  missionCohortId: string | null;
+  missionRegistrationId: string | null;
+  missionParticipantId: string | null;
+  participantEmail: string | null;
+  participantName: string | null;
+  organizationName: string | null;
+  crmStatus: string | null;
+  createdAt: Date;
+  sentAt: Date | null;
+};
+
 function shortNameFilter(shortNames: string[]) {
   return shortNames.length > 0
     ? Prisma.sql`AND payload->>'shortName' IN (${Prisma.join(shortNames)})`
     : Prisma.empty;
 }
 
+function publicEndpoint(value?: string | null) {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    const url = new URL(value);
+    return {
+      origin: url.origin,
+      path: url.pathname
+    };
+  } catch {
+    return { origin: "invalid-url", path: "" };
+  }
+}
+
+function missionCohortCrmTarget() {
+  const url = env.CRM_MISSION_COHORT_WEBHOOK_URL ?? env.CRM_REGISTRATION_WEBHOOK_URL;
+  const secret = env.CRM_MISSION_COHORT_WEBHOOK_SECRET ?? env.CRM_REGISTRATION_WEBHOOK_SECRET;
+
+  return {
+    configured: Boolean(url && secret),
+    urlSource: env.CRM_MISSION_COHORT_WEBHOOK_URL
+      ? "CRM_MISSION_COHORT_WEBHOOK_URL"
+      : env.CRM_REGISTRATION_WEBHOOK_URL
+        ? "CRM_REGISTRATION_WEBHOOK_URL"
+        : null,
+    secretSource: env.CRM_MISSION_COHORT_WEBHOOK_SECRET
+      ? "CRM_MISSION_COHORT_WEBHOOK_SECRET"
+      : env.CRM_REGISTRATION_WEBHOOK_SECRET
+        ? "CRM_REGISTRATION_WEBHOOK_SECRET"
+        : null,
+    endpoint: publicEndpoint(url),
+    vercelBypassConfigured: Boolean(env.CRM_MISSION_COHORT_VERCEL_BYPASS_SECRET)
+  };
+}
+
 export async function summarizeCrmSyncEvents(shortNames: string[] = []) {
   const normalizedShortNames = shortNames.map((value) => value.trim()).filter(Boolean);
   const filter = shortNameFilter(normalizedShortNames);
-  const [summaryRows, unsentRows] = await Promise.all([
+  const [summaryRows, unsentRows, sentSamples] = await Promise.all([
     prisma.$queryRaw<CrmSyncSummaryRow[]>(Prisma.sql`
       SELECT
         payload->>'shortName' AS "shortName",
@@ -273,14 +326,40 @@ export async function summarizeCrmSyncEvents(shortNames: string[] = []) {
         ${filter}
       ORDER BY "createdAt" ASC
       LIMIT 100
+    `),
+    prisma.$queryRaw<CrmSyncSentSampleRow[]>(Prisma.sql`
+      SELECT
+        id,
+        payload->>'shortName' AS "shortName",
+        "eventType",
+        status,
+        payload->>'missionCohortId' AS "missionCohortId",
+        payload->>'missionRegistrationId' AS "missionRegistrationId",
+        payload->>'missionParticipantId' AS "missionParticipantId",
+        payload#>>'{participant,email}' AS "participantEmail",
+        trim(concat_ws(' ', payload#>>'{participant,firstName}', payload#>>'{participant,lastName}')) AS "participantName",
+        payload#>>'{organization,name}' AS "organizationName",
+        payload->>'status' AS "crmStatus",
+        "createdAt",
+        "sentAt"
+      FROM "CrmSyncEvent"
+      WHERE jsonb_typeof(payload) = 'object'
+        AND payload ? 'shortName'
+        AND status = 'SENT'::"CrmSyncEventStatus"
+        AND "eventType" = 'historical_import.registration_imported'
+        ${filter}
+      ORDER BY payload->>'shortName' ASC, "sentAt" DESC NULLS LAST
+      LIMIT 50
     `)
   ]);
 
   return {
+    target: missionCohortCrmTarget(),
     summary: summaryRows.map((row) => ({
       ...row,
       count: Number(row.count)
     })),
-    unsent: unsentRows
+    unsent: unsentRows,
+    sentSamples
   };
 }
