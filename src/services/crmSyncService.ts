@@ -246,6 +246,21 @@ type CrmSyncSentSampleRow = {
   sentAt: Date | null;
 };
 
+type CrmReplayCountRow = {
+  shortName: string | null;
+  eligibleCount: number | bigint;
+};
+
+type CrmReplaySourceRow = {
+  id: string;
+  registrationId: string | null;
+  participantId: string | null;
+  organizationId: string | null;
+  shortName: string | null;
+  participantEmail: string | null;
+  payload: Prisma.JsonValue;
+};
+
 function shortNameFilter(shortNames: string[]) {
   return shortNames.length > 0
     ? Prisma.sql`AND payload->>'shortName' IN (${Prisma.join(shortNames)})`
@@ -392,5 +407,197 @@ export async function summarizeCrmSyncEvents(shortNames: string[] = [], includeR
     unsent: unsentRows,
     sentSamples,
     receiverDiagnostics
+  };
+}
+
+function replayAuditFilter() {
+  return Prisma.sql`
+    AND NOT EXISTS (
+      SELECT 1
+      FROM "CrmSyncEvent" replay
+      WHERE replay."eventType" = 'historical_import.registration_replayed'
+        AND replay."entityType" = 'CrmSyncEvent'
+        AND replay."entityId" = "CrmSyncEvent".id
+        AND replay.status = 'SENT'::"CrmSyncEventStatus"
+    )
+  `;
+}
+
+export async function replayHistoricalCrmRegistrationEvents(input: {
+  shortNames: string[];
+  dryRun?: boolean;
+  limit?: number;
+}) {
+  const shortNames = input.shortNames.map((value) => value.trim()).filter(Boolean);
+  const dryRun = input.dryRun !== false;
+  const requestedLimit = Number(input.limit ?? 100);
+  const limit = Number.isFinite(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 500) : 100;
+  const url = env.CRM_MISSION_COHORT_WEBHOOK_URL ?? env.CRM_REGISTRATION_WEBHOOK_URL;
+  const secret = env.CRM_MISSION_COHORT_WEBHOOK_SECRET ?? env.CRM_REGISTRATION_WEBHOOK_SECRET;
+
+  if (shortNames.length === 0) {
+    return {
+      dryRun,
+      target: missionCohortCrmTarget(),
+      error: "At least one cohort short name is required."
+    };
+  }
+
+  if (!url || !secret) {
+    return {
+      dryRun,
+      target: missionCohortCrmTarget(),
+      error: "CRM Mission Cohort webhook is not configured."
+    };
+  }
+
+  const filter = shortNameFilter(shortNames);
+  const counts = await prisma.$queryRaw<CrmReplayCountRow[]>(Prisma.sql`
+    SELECT
+      payload->>'shortName' AS "shortName",
+      COUNT(*) AS "eligibleCount"
+    FROM "CrmSyncEvent"
+    WHERE jsonb_typeof(payload) = 'object'
+      AND payload ? 'shortName'
+      AND payload ? 'participant'
+      AND payload ? 'missionParticipantId'
+      AND "eventType" = 'historical_import.registration_imported'
+      AND status = 'SENT'::"CrmSyncEventStatus"
+      ${filter}
+      ${replayAuditFilter()}
+    GROUP BY payload->>'shortName'
+    ORDER BY payload->>'shortName' ASC
+  `);
+  const summary = counts.map((row) => ({
+    shortName: row.shortName,
+    eligibleCount: Number(row.eligibleCount)
+  }));
+  const totalEligible = summary.reduce((total, row) => total + row.eligibleCount, 0);
+
+  if (dryRun) {
+    return {
+      dryRun: true,
+      target: missionCohortCrmTarget(),
+      limit,
+      totalEligible,
+      summary
+    };
+  }
+
+  const rows = await prisma.$queryRaw<CrmReplaySourceRow[]>(Prisma.sql`
+    SELECT
+      id,
+      "registrationId",
+      "participantId",
+      "organizationId",
+      payload->>'shortName' AS "shortName",
+      payload#>>'{participant,email}' AS "participantEmail",
+      payload
+    FROM "CrmSyncEvent"
+    WHERE jsonb_typeof(payload) = 'object'
+      AND payload ? 'shortName'
+      AND payload ? 'participant'
+      AND payload ? 'missionParticipantId'
+      AND "eventType" = 'historical_import.registration_imported'
+      AND status = 'SENT'::"CrmSyncEventStatus"
+      ${filter}
+      ${replayAuditFilter()}
+    ORDER BY payload->>'shortName' ASC, "createdAt" ASC
+    LIMIT ${limit}
+  `);
+
+  const results = [];
+
+  for (const row of rows) {
+    if (!isCrmRegistrationWebhookPayload(row.payload)) {
+      results.push({
+        id: row.id,
+        shortName: row.shortName,
+        participantEmail: row.participantEmail,
+        status: "skipped",
+        error: "Stored payload is not a valid Mission Cohort CRM participant payload."
+      });
+      continue;
+    }
+
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: crmRegistrationWebhookHeaders(secret, env.CRM_MISSION_COHORT_VERCEL_BYPASS_SECRET),
+        body: JSON.stringify(row.payload)
+      });
+      const body = await response.json().catch(() => null);
+
+      if (!response.ok || body?.data?.skipped) {
+        const responseText = body ? JSON.stringify(body).slice(0, 300) : "";
+        throw new Error(
+          `CRM replay failed with status ${response.status}${responseText ? `: ${responseText}` : ""}`
+        );
+      }
+
+      await prisma.crmSyncEvent.create({
+        data: {
+          eventType: "historical_import.registration_replayed",
+          entityType: "CrmSyncEvent",
+          entityId: row.id,
+          registrationId: row.registrationId,
+          participantId: row.participantId,
+          organizationId: row.organizationId,
+          payload: JSON.parse(JSON.stringify(row.payload)),
+          status: CrmSyncEventStatus.SENT,
+          attempts: 1,
+          lastAttemptAt: new Date(),
+          sentAt: new Date()
+        }
+      });
+      results.push({
+        id: row.id,
+        shortName: row.shortName,
+        participantEmail: row.participantEmail,
+        status: "replayed"
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown CRM replay error";
+      await prisma.crmSyncEvent.create({
+        data: {
+          eventType: "historical_import.registration_replayed",
+          entityType: "CrmSyncEvent",
+          entityId: row.id,
+          registrationId: row.registrationId,
+          participantId: row.participantId,
+          organizationId: row.organizationId,
+          payload: JSON.parse(JSON.stringify(row.payload)),
+          status: CrmSyncEventStatus.FAILED,
+          attempts: 1,
+          lastAttemptAt: new Date(),
+          errorMessage
+        }
+      }).catch(() => undefined);
+      results.push({
+        id: row.id,
+        shortName: row.shortName,
+        participantEmail: row.participantEmail,
+        status: "failed",
+        error: errorMessage
+      });
+    }
+  }
+
+  const succeeded = results.filter((result) => result.status === "replayed").length;
+  const failed = results.filter((result) => result.status === "failed").length;
+  const skipped = results.filter((result) => result.status === "skipped").length;
+
+  return {
+    dryRun: false,
+    target: missionCohortCrmTarget(),
+    limit,
+    attempted: rows.length,
+    succeeded,
+    failed,
+    skipped,
+    totalEligibleBeforeRun: totalEligible,
+    remainingEstimate: Math.max(totalEligible - succeeded, 0),
+    summary,
+    results
   };
 }

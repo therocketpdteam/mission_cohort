@@ -1,7 +1,12 @@
 import { handleApiError, ok } from "@/lib/api";
 import { requireRole } from "@/lib/auth";
 import { Role } from "@prisma/client";
-import { listCrmSyncEvents, processCrmSyncEvents, summarizeCrmSyncEvents } from "@/services/crmSyncService";
+import {
+  listCrmSyncEvents,
+  processCrmSyncEvents,
+  replayHistoricalCrmRegistrationEvents,
+  summarizeCrmSyncEvents
+} from "@/services/crmSyncService";
 
 export async function GET(request: Request) {
   try {
@@ -21,7 +26,19 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    await requireRole([Role.SUPER_ADMIN]);
     const body = await request.json().catch(() => ({}));
+    if (body.action === "replayHistoricalRegistrations") {
+      return ok(
+        await replayHistoricalCrmRegistrationEvents({
+          shortNames: Array.isArray(body.shortNames) ? body.shortNames : [],
+          dryRun: body.dryRun !== false,
+          limit: body.limit
+        }),
+        { status: 202 }
+      );
+    }
+
     return ok(await processCrmSyncEvents(body.limit), { status: 202 });
   } catch (error) {
     return handleApiError(error);
