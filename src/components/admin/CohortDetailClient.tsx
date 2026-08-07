@@ -3575,7 +3575,7 @@ export function CohortDetailClient({ id }: { id: string }) {
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 0.5 }}>
             <Typography color="text.secondary">
-              This moves {selectedParticipantRows.length} individual participant{selectedParticipantRows.length === 1 ? "" : "s"} into a new comped registration in the target cohort. The original team registration stays in place with its payment, invoice, and QuickBooks history.
+              This moves {selectedParticipantRows.length} individual participant{selectedParticipantRows.length === 1 ? "" : "s"} into a split registration in the target cohort. The POC and billing details move with them, and paid value is split so reporting and invoices reflect the moved seats.
             </Typography>
             <Typography color="warning.main">
               Use Move Registrations when the whole team/order should move. Use this action only when specific people are changing cohorts.

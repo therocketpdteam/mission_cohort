@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ParticipantStatus } from "@prisma/client";
-import { summarizeBulkParticipantMove } from "../../src/services/participantService";
+import { ParticipantStatus, PaymentStatus } from "@prisma/client";
+import { calculatePartialParticipantMoveFinance, summarizeBulkParticipantMove } from "../../src/services/participantService";
 
 test("summarizes individual participant moves without treating whole registrations as moved", () => {
   const summary = summarizeBulkParticipantMove([
@@ -54,4 +54,42 @@ test("counts non-registered selected participants before individual moves", () =
 
   assert.equal(summary.movedCount, 1);
   assert.equal(summary.nonRegisteredCount, 1);
+});
+
+test("splits paid value into the target registration for partial participant moves", () => {
+  const finance = calculatePartialParticipantMoveFinance({
+    sourceTotalAmount: 1425,
+    sourcePaidAmount: 1425,
+    sourceParticipantCount: 5,
+    movedCount: 2,
+    targetUnitAmount: 295,
+    sourcePaymentStatus: PaymentStatus.PAID
+  });
+
+  assert.equal(finance.remainingCount, 3);
+  assert.equal(finance.targetTotalAmount, 590);
+  assert.equal(finance.targetPaidAmount, 590);
+  assert.equal(finance.targetPaymentStatus, PaymentStatus.PAID);
+  assert.equal(finance.sourceTotalAfter, 835);
+  assert.equal(finance.sourcePaidAfter, 835);
+  assert.equal(finance.sourcePaymentStatus, PaymentStatus.PAID);
+});
+
+test("keeps unpaid partial participant moves invoiceable instead of comped", () => {
+  const finance = calculatePartialParticipantMoveFinance({
+    sourceTotalAmount: 1180,
+    sourcePaidAmount: 0,
+    sourceParticipantCount: 4,
+    movedCount: 1,
+    targetUnitAmount: 295,
+    sourcePaymentStatus: PaymentStatus.INVOICED
+  });
+
+  assert.equal(finance.remainingCount, 3);
+  assert.equal(finance.targetTotalAmount, 295);
+  assert.equal(finance.targetPaidAmount, 0);
+  assert.equal(finance.targetPaymentStatus, PaymentStatus.INVOICED);
+  assert.equal(finance.sourceTotalAfter, 885);
+  assert.equal(finance.sourcePaidAfter, 0);
+  assert.equal(finance.sourcePaymentStatus, PaymentStatus.INVOICED);
 });

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { OperationsTaskCategory, OperationsTaskStatus, ParticipantListStatus, ParticipantStatus, PaymentMethod, PaymentStatus, RegistrationStatus, SupportingDocumentStatus } from "@prisma/client";
+import { InvoiceDraftStatus, OperationsTaskCategory, OperationsTaskStatus, ParticipantListStatus, ParticipantStatus, PaymentMethod, PaymentStatus, Prisma, RegistrationStatus, SupportingDocumentStatus } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { countParticipantsMissingTitles, deriveParticipantListStatus } from "@/lib/rosterStatus";
@@ -11,6 +11,7 @@ import { getRecipientCommunicationSummary } from "./communicationService";
 import { cancelParticipantJourneys, planRegistrationJourneys } from "./registrationJourneyService";
 import { shouldDeferRegistrationDelivery, stageParticipantAddition, stageParticipantRemoval } from "./registrationChangeService";
 import { syncFutureLinkedGoogleCalendarInvitesForCohort } from "./calendarService";
+import { createInvoiceDraft, generateInvoicePdf, updateInvoiceDraft } from "./invoiceService";
 
 type ParticipantMutationOptions = { deferNotifications?: boolean };
 type BulkMoveParticipantSummaryInput = Array<{
@@ -34,6 +35,176 @@ export function summarizeBulkParticipantMove(participants: BulkMoveParticipantSu
     organizationIds: Array.from(new Set(moving.map((participant) => participant.organizationId))).sort(),
     nonRegisteredCount: moving.filter((participant) => participant.status && participant.status !== ParticipantStatus.REGISTERED).length
   };
+}
+
+function moneyNumber(value: unknown) {
+  return Math.round(Number(value ?? 0) * 100) / 100;
+}
+
+function registrationPaidAmount(registration: { paymentRecords?: Array<{ amount: unknown; status: PaymentStatus | string }> }) {
+  return (registration.paymentRecords ?? [])
+    .filter((payment) => payment.status === PaymentStatus.PAID)
+    .reduce((sum, payment) => sum + moneyNumber(payment.amount), 0);
+}
+
+function paymentStatusForAmount(totalAmount: number, paidAmount: number, fallback: PaymentStatus = PaymentStatus.INVOICED) {
+  if (totalAmount <= 0) {
+    return PaymentStatus.PAID;
+  }
+  if (paidAmount >= totalAmount) {
+    return PaymentStatus.PAID;
+  }
+  if (paidAmount > 0) {
+    return PaymentStatus.PARTIALLY_PAID;
+  }
+  return fallback === PaymentStatus.PAID ? PaymentStatus.INVOICED : fallback;
+}
+
+function invoiceStatusForAmount(totalAmount: number, paidAmount: number) {
+  return totalAmount > 0 && paidAmount >= totalAmount ? InvoiceDraftStatus.PAID : InvoiceDraftStatus.DRAFT;
+}
+
+export function calculatePartialParticipantMoveFinance(input: {
+  sourceTotalAmount: unknown;
+  sourcePaidAmount: unknown;
+  sourceParticipantCount: unknown;
+  movedCount: number;
+  targetUnitAmount: unknown;
+  sourcePaymentStatus: PaymentStatus;
+}) {
+  const sourceTotalBefore = moneyNumber(input.sourceTotalAmount);
+  const sourcePaidBefore = moneyNumber(input.sourcePaidAmount);
+  const sourceCountBefore = Math.max(Number(input.sourceParticipantCount ?? 0), input.movedCount);
+  const remainingCount = Math.max(0, sourceCountBefore - input.movedCount);
+  const targetUnitAmount = moneyNumber(input.targetUnitAmount);
+  const targetTotalAmount = moneyNumber(targetUnitAmount * input.movedCount);
+  const targetPaidAmount = input.sourcePaymentStatus === PaymentStatus.PAID
+    ? Math.min(targetTotalAmount, sourcePaidBefore)
+    : 0;
+  const sourceTotalAfter = moneyNumber(Math.max(0, sourceTotalBefore - targetTotalAmount));
+  const sourcePaidAfter = moneyNumber(Math.max(0, sourcePaidBefore - targetPaidAmount));
+
+  return {
+    remainingCount,
+    targetUnitAmount,
+    targetTotalAmount,
+    targetPaidAmount,
+    targetPaymentStatus: paymentStatusForAmount(targetTotalAmount, targetPaidAmount),
+    sourceTotalAfter,
+    sourcePaidAfter,
+    sourcePaymentStatus: paymentStatusForAmount(sourceTotalAfter, sourcePaidAfter, input.sourcePaymentStatus)
+  };
+}
+
+async function reducePaidPaymentRecords(tx: Prisma.TransactionClient, records: Array<{ id: string; amount: unknown; status: PaymentStatus | string }>, reductionAmount: number) {
+  let remaining = moneyNumber(reductionAmount);
+
+  for (const record of records.filter((payment) => payment.status === PaymentStatus.PAID)) {
+    if (remaining <= 0) {
+      break;
+    }
+
+    const currentAmount = moneyNumber(record.amount);
+    const reduction = Math.min(currentAmount, remaining);
+    await tx.paymentRecord.update({
+      where: { id: record.id },
+      data: {
+        amount: moneyNumber(currentAmount - reduction),
+        notes: "Adjusted automatically after a partial participant move to another cohort."
+      }
+    });
+    remaining = moneyNumber(remaining - reduction);
+  }
+}
+
+async function prepareMovedRegistrationInvoice(registrationId: string) {
+  const registration = await prisma.registration.findUniqueOrThrow({
+    where: { id: registrationId },
+    include: {
+      organization: true,
+      invoiceDrafts: {
+        where: { status: { notIn: [InvoiceDraftStatus.VOIDED, InvoiceDraftStatus.CANCELLED] } },
+        orderBy: { updatedAt: "desc" },
+        include: { lineItems: true }
+      },
+      paymentRecords: true
+    }
+  });
+  const totalAmount = moneyNumber(registration.totalAmount);
+  const paidAmount = Math.min(totalAmount, registrationPaidAmount(registration));
+  const invoiceStatus = invoiceStatusForAmount(totalAmount, paidAmount);
+  const existingInvoice = registration.invoiceDrafts[0];
+  const invoice = existingInvoice
+    ? await updateInvoiceDraft(existingInvoice.id, {
+        cohortId: registration.cohortId,
+        registrationId: registration.id,
+        organizationId: registration.organizationId,
+        purchaseOrderNumber: registration.purchaseOrderNumber ?? undefined,
+        status: invoiceStatus,
+        paidAmount,
+        lineItems: existingInvoice.lineItems.length === 1
+          ? [{
+              description: existingInvoice.lineItems[0]!.description,
+              quantity: Math.max(registration.participantCount, 1),
+              unitAmount: registration.participantCount ? totalAmount / Math.max(registration.participantCount, 1) : 0
+            }]
+          : undefined
+      })
+    : await createInvoiceDraft({
+        cohortId: registration.cohortId,
+        registrationId: registration.id,
+        organizationId: registration.organizationId,
+        status: invoiceStatus,
+        paidAmount
+      });
+
+  const generated = await generateInvoicePdf(invoice.id, false);
+  await prisma.registration.update({
+    where: { id: registration.id },
+    data: { invoiceUrl: generated.pdfUrl ?? undefined }
+  });
+  return generated;
+}
+
+async function refreshSplitSourceInvoice(registrationId: string) {
+  const registration = await prisma.registration.findUnique({
+    where: { id: registrationId },
+    include: {
+      invoiceDrafts: {
+        where: { status: { notIn: [InvoiceDraftStatus.VOIDED, InvoiceDraftStatus.CANCELLED] } },
+        orderBy: { updatedAt: "desc" },
+        include: { lineItems: true }
+      },
+      paymentRecords: true
+    }
+  });
+  const invoice = registration?.invoiceDrafts[0];
+  if (!registration || !invoice || invoice.lineItems.length !== 1) {
+    return null;
+  }
+
+  const totalAmount = moneyNumber(registration.totalAmount);
+  const paidAmount = Math.min(totalAmount, registrationPaidAmount(registration));
+  const updated = await updateInvoiceDraft(invoice.id, {
+    cohortId: registration.cohortId,
+    registrationId: registration.id,
+    organizationId: registration.organizationId,
+    purchaseOrderNumber: registration.purchaseOrderNumber ?? undefined,
+    status: invoiceStatusForAmount(totalAmount, paidAmount),
+    paidAmount,
+    lineItems: [{
+      description: invoice.lineItems[0]!.description,
+      quantity: Math.max(registration.participantCount, 1),
+      unitAmount: registration.participantCount ? totalAmount / Math.max(registration.participantCount, 1) : 0
+    }]
+  });
+
+  const generated = await generateInvoicePdf(updated.id, false);
+  await prisma.registration.update({
+    where: { id: registration.id },
+    data: { invoiceUrl: generated.pdfUrl ?? undefined }
+  });
+  return generated;
 }
 
 function participantChangeRow(participant: { id: string; firstName: string; lastName: string; email: string }) {
@@ -190,11 +361,21 @@ export async function bulkMoveParticipantsToCohort(input: { ids: string[]; targe
   }
 
   const [targetCohort, participants] = await Promise.all([
-    prisma.cohort.findUnique({ where: { id: targetCohortId }, select: { id: true, title: true } }),
+    prisma.cohort.findUnique({ where: { id: targetCohortId }, select: { id: true, title: true, pricePerParticipant: true } }),
     prisma.participant.findMany({
       where: { id: { in: ids } },
       include: {
-        registration: { include: { cohort: true } },
+        registration: {
+          include: {
+            cohort: true,
+            paymentRecords: { orderBy: { createdAt: "desc" } },
+            invoiceDrafts: {
+              where: { status: { notIn: [InvoiceDraftStatus.VOIDED, InvoiceDraftStatus.CANCELLED] } },
+              orderBy: { updatedAt: "desc" },
+              include: { lineItems: true }
+            }
+          }
+        },
         organization: true
       }
     })
@@ -258,6 +439,21 @@ export async function bulkMoveParticipantsToCohort(input: { ids: string[]; targe
 
     for (const [sourceRegistrationId, group] of byRegistration.entries()) {
       const sourceRegistration = group[0]!.registration;
+      const sourceTotalBefore = moneyNumber(sourceRegistration.totalAmount);
+      const sourcePaidBefore = registrationPaidAmount(sourceRegistration);
+      const sourceCountBefore = Math.max(Number(sourceRegistration.participantCount ?? 0), group.length);
+      const configuredTargetUnitAmount = moneyNumber(targetCohort.pricePerParticipant);
+      const targetUnitAmount = configuredTargetUnitAmount > 0
+        ? configuredTargetUnitAmount
+        : moneyNumber(sourceCountBefore ? sourceTotalBefore / sourceCountBefore : 0);
+      const finance = calculatePartialParticipantMoveFinance({
+        sourceTotalAmount: sourceTotalBefore,
+        sourcePaidAmount: sourcePaidBefore,
+        sourceParticipantCount: sourceCountBefore,
+        movedCount: group.length,
+        targetUnitAmount,
+        sourcePaymentStatus: sourceRegistration.paymentStatus as PaymentStatus
+      });
       const targetRegistration = await tx.registration.create({
         data: {
           cohortId: targetCohortId,
@@ -269,20 +465,38 @@ export async function bulkMoveParticipantsToCohort(input: { ids: string[]; targe
           billingContactName: sourceRegistration.billingContactName,
           billingContactEmail: sourceRegistration.billingContactEmail,
           billingAddress: sourceRegistration.billingAddress,
-          paymentMethod: PaymentMethod.COMPED,
-          paymentStatus: PaymentStatus.PAID,
+          paymentMethod: finance.targetPaidAmount > 0 ? sourceRegistration.paymentMethod : PaymentMethod.INVOICE,
+          paymentStatus: finance.targetPaymentStatus,
           participantListStatus: ParticipantListStatus.COMPLETE,
           supportingDocumentStatus: SupportingDocumentStatus.READY,
           participantCount: group.length,
-          totalAmount: 0,
+          totalAmount: finance.targetTotalAmount,
           status: RegistrationStatus.CONFIRMED,
           source: "participant_move",
           notes: [
             `Created by moving ${group.length} participant${group.length === 1 ? "" : "s"} from ${sourceRegistration.cohort.title}.`,
-            `Finance and QuickBooks references remain on source registration ${sourceRegistrationId}.`
+            finance.targetPaidAmount > 0
+              ? `Moved ${finance.targetPaidAmount.toLocaleString("en-US", { style: "currency", currency: "USD" })} of paid value from source registration ${sourceRegistrationId}.`
+              : `Invoice value was split from source registration ${sourceRegistrationId}.`
           ].join(" ")
         }
       });
+
+      if (finance.targetPaidAmount > 0) {
+        await tx.paymentRecord.create({
+          data: {
+            registrationId: targetRegistration.id,
+            cohortId: targetCohortId,
+            organizationId: sourceRegistration.organizationId,
+            amount: finance.targetPaidAmount,
+            status: PaymentStatus.PAID,
+            method: sourceRegistration.paymentMethod,
+            paymentDate: new Date(),
+            notes: `Paid value moved from source registration ${sourceRegistrationId}.`
+          }
+        });
+        await reducePaidPaymentRecords(tx, sourceRegistration.paymentRecords, finance.targetPaidAmount);
+      }
 
       await tx.participant.updateMany({
         where: { id: { in: group.map((participant) => participant.id) } },
@@ -296,7 +510,9 @@ export async function bulkMoveParticipantsToCohort(input: { ids: string[]; targe
       await tx.registration.update({
         where: { id: sourceRegistrationId },
         data: {
-          participantCount: Math.max(0, Number(sourceRegistration.participantCount ?? 0) - group.length)
+          participantCount: finance.remainingCount,
+          totalAmount: finance.sourceTotalAfter,
+          paymentStatus: finance.sourcePaymentStatus
         }
       });
 
@@ -304,6 +520,10 @@ export async function bulkMoveParticipantsToCohort(input: { ids: string[]; targe
         id: targetRegistration.id,
         sourceRegistrationId,
         sourceCohortId: sourceRegistration.cohortId,
+        targetTotalAmount: finance.targetTotalAmount,
+        targetPaidAmount: finance.targetPaidAmount,
+        sourceTotalAfter: finance.sourceTotalAfter,
+        sourcePaidAfter: finance.sourcePaidAfter,
         movedParticipantIds: group.map((participant) => participant.id),
         movedParticipantEmails: group.map((participant) => participant.email)
       });
@@ -314,6 +534,7 @@ export async function bulkMoveParticipantsToCohort(input: { ids: string[]; targe
 
   for (const sourceRegistrationId of summary.sourceRegistrationIds) {
     await syncRegistrationParticipantListStatus(sourceRegistrationId);
+    await refreshSplitSourceInvoice(sourceRegistrationId);
     void queueRegistrationCrmSync(sourceRegistrationId, "participant.moved_out").catch(() => undefined);
     void syncRegistrationToCrm(sourceRegistrationId, { eventType: "participant.moved_out" }).catch(() => undefined);
   }
@@ -322,6 +543,7 @@ export async function bulkMoveParticipantsToCohort(input: { ids: string[]; targe
   const journeyResults = [];
   for (const targetRegistration of transactionResult.targetRegistrations) {
     await syncRegistrationParticipantListStatus(targetRegistration.id);
+    await prepareMovedRegistrationInvoice(targetRegistration.id);
     void queueRegistrationCrmSync(targetRegistration.id, "participant.moved_in").catch(() => undefined);
     void syncRegistrationToCrm(targetRegistration.id, { eventType: "participant.moved_in" }).catch(() => undefined);
     for (const participantId of targetRegistration.movedParticipantIds) {
@@ -340,11 +562,13 @@ export async function bulkMoveParticipantsToCohort(input: { ids: string[]; targe
       void queueParticipantCrmSync(participantId, "participant.moved").catch(() => undefined);
     }
     journeyResults.push(await planRegistrationJourneys(targetRegistration.id, {
-      sendPocConfirmation: false,
+      sendPocConfirmation: true,
       participantEmails: targetRegistration.movedParticipantEmails,
       retryFailed: true,
       participantConfirmationCohortScoped: true,
       participantConfirmationBatchKey: moveConfirmationBatchKey,
+      pocConfirmationCohortScoped: true,
+      pocConfirmationBatchKey: moveConfirmationBatchKey,
       bypassCohortStatusForImmediate: true,
       calendarSendUpdates: false
     }));
