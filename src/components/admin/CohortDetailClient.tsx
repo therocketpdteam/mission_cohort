@@ -1389,10 +1389,10 @@ export function CohortDetailClient({ id }: { id: string }) {
         adminApi<AdminRow[]>(`/api/cohorts/${id}/sessions`),
         adminApi<AdminRow[]>(`/api/cohorts/${id}/registrations`),
         adminApi<AdminRow[]>(`/api/cohorts/${id}/participants`),
-        adminApi<AdminRow[]>("/api/participants").catch(() => []),
+        adminApi<AdminRow[]>("/api/participants?summary=1").catch(() => []),
         adminApi<AdminRow[]>(`/api/communications?cohortId=${id}`).catch(() => []),
         adminApi<AdminRow[]>("/api/communications/templates").catch(() => []),
-        adminApi<AdminRow[]>("/api/payments").catch(() => []),
+        adminApi<AdminRow[]>(`/api/payments?cohortId=${id}`).catch(() => []),
         adminApi<AdminRow[]>(`/api/invoices?cohortId=${id}`).catch(() => []),
         adminApi<AdminRow>(`/api/distributions?cohortId=${id}`).catch(() => null),
         adminApi<AdminRow[]>(`/api/cohorts/${id}/tasks`).catch(() => []),
@@ -1409,7 +1409,7 @@ export function CohortDetailClient({ id }: { id: string }) {
     setAllParticipants(allParticipantRows);
     setCommunications(communicationRows);
     setTemplates(templateRows);
-    setPayments(paymentRows.filter((payment) => payment.cohortId === id));
+    setPayments(paymentRows);
     setInvoiceDrafts(invoiceRows);
     setDistribution(distributionData);
     setTasks(taskRows);

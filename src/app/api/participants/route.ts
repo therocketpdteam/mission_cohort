@@ -1,8 +1,13 @@
 import { fail, handleApiError, ok } from "@/lib/api";
-import { addParticipant, bulkMoveParticipantsToCohort, listParticipants, removeParticipant, updateParticipant } from "@/services/participantService";
+import { addParticipant, bulkMoveParticipantsToCohort, listParticipantHistorySummaries, listParticipants, removeParticipant, updateParticipant } from "@/services/participantService";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const params = new URL(request.url).searchParams;
+    if (params.get("summary") === "1" || params.get("summary") === "true") {
+      return ok(await listParticipantHistorySummaries());
+    }
+
     return ok(await listParticipants());
   } catch (error) {
     return handleApiError(error);

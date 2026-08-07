@@ -439,6 +439,19 @@ export async function bulkMoveParticipantsToCohort(input: { ids: string[]; targe
 
     for (const [sourceRegistrationId, group] of byRegistration.entries()) {
       const sourceRegistration = group[0]!.registration;
+      const existingTargetRegistration = await tx.registration.findFirst({
+        where: {
+          cohortId: targetCohortId,
+          organizationId: sourceRegistration.organizationId,
+          primaryContactEmail: { equals: sourceRegistration.primaryContactEmail, mode: "insensitive" },
+          source: "participant_move",
+          notes: { contains: sourceRegistrationId }
+        },
+        include: {
+          paymentRecords: { orderBy: { createdAt: "desc" } }
+        },
+        orderBy: { createdAt: "asc" }
+      });
       const sourceTotalBefore = moneyNumber(sourceRegistration.totalAmount);
       const sourcePaidBefore = registrationPaidAmount(sourceRegistration);
       const sourceCountBefore = Math.max(Number(sourceRegistration.participantCount ?? 0), group.length);
@@ -454,33 +467,50 @@ export async function bulkMoveParticipantsToCohort(input: { ids: string[]; targe
         targetUnitAmount,
         sourcePaymentStatus: sourceRegistration.paymentStatus as PaymentStatus
       });
-      const targetRegistration = await tx.registration.create({
-        data: {
-          cohortId: targetCohortId,
-          organizationId: sourceRegistration.organizationId,
-          primaryContactName: sourceRegistration.primaryContactName,
-          primaryContactEmail: sourceRegistration.primaryContactEmail,
-          primaryContactPhone: sourceRegistration.primaryContactPhone,
-          primaryContactTitle: sourceRegistration.primaryContactTitle,
-          billingContactName: sourceRegistration.billingContactName,
-          billingContactEmail: sourceRegistration.billingContactEmail,
-          billingAddress: sourceRegistration.billingAddress,
-          paymentMethod: finance.targetPaidAmount > 0 ? sourceRegistration.paymentMethod : PaymentMethod.INVOICE,
-          paymentStatus: finance.targetPaymentStatus,
-          participantListStatus: ParticipantListStatus.COMPLETE,
-          supportingDocumentStatus: SupportingDocumentStatus.READY,
-          participantCount: group.length,
-          totalAmount: finance.targetTotalAmount,
-          status: RegistrationStatus.CONFIRMED,
-          source: "participant_move",
-          notes: [
-            `Created by moving ${group.length} participant${group.length === 1 ? "" : "s"} from ${sourceRegistration.cohort.title}.`,
-            finance.targetPaidAmount > 0
-              ? `Moved ${finance.targetPaidAmount.toLocaleString("en-US", { style: "currency", currency: "USD" })} of paid value from source registration ${sourceRegistrationId}.`
-              : `Invoice value was split from source registration ${sourceRegistrationId}.`
-          ].join(" ")
-        }
-      });
+      const existingTargetPaid = existingTargetRegistration ? registrationPaidAmount(existingTargetRegistration) : 0;
+      const nextTargetTotal = moneyNumber(Number(existingTargetRegistration?.totalAmount ?? 0) + finance.targetTotalAmount);
+      const nextTargetPaid = moneyNumber(existingTargetPaid + finance.targetPaidAmount);
+      const targetRegistration = existingTargetRegistration
+        ? await tx.registration.update({
+            where: { id: existingTargetRegistration.id },
+            data: {
+              participantCount: Number(existingTargetRegistration.participantCount ?? 0) + group.length,
+              totalAmount: nextTargetTotal,
+              paymentMethod: nextTargetPaid > 0 ? sourceRegistration.paymentMethod : existingTargetRegistration.paymentMethod,
+              paymentStatus: paymentStatusForAmount(nextTargetTotal, nextTargetPaid, existingTargetRegistration.paymentStatus as PaymentStatus),
+              notes: [
+                existingTargetRegistration.notes,
+                `Added ${group.length} moved participant${group.length === 1 ? "" : "s"} from source registration ${sourceRegistrationId}.`
+              ].filter(Boolean).join(" ")
+            }
+          })
+        : await tx.registration.create({
+            data: {
+              cohortId: targetCohortId,
+              organizationId: sourceRegistration.organizationId,
+              primaryContactName: sourceRegistration.primaryContactName,
+              primaryContactEmail: sourceRegistration.primaryContactEmail,
+              primaryContactPhone: sourceRegistration.primaryContactPhone,
+              primaryContactTitle: sourceRegistration.primaryContactTitle,
+              billingContactName: sourceRegistration.billingContactName,
+              billingContactEmail: sourceRegistration.billingContactEmail,
+              billingAddress: sourceRegistration.billingAddress,
+              paymentMethod: finance.targetPaidAmount > 0 ? sourceRegistration.paymentMethod : PaymentMethod.INVOICE,
+              paymentStatus: finance.targetPaymentStatus,
+              participantListStatus: ParticipantListStatus.COMPLETE,
+              supportingDocumentStatus: SupportingDocumentStatus.READY,
+              participantCount: group.length,
+              totalAmount: finance.targetTotalAmount,
+              status: RegistrationStatus.CONFIRMED,
+              source: "participant_move",
+              notes: [
+                `Created by moving ${group.length} participant${group.length === 1 ? "" : "s"} from ${sourceRegistration.cohort.title}.`,
+                finance.targetPaidAmount > 0
+                  ? `Moved ${finance.targetPaidAmount.toLocaleString("en-US", { style: "currency", currency: "USD" })} of paid value from source registration ${sourceRegistrationId}.`
+                  : `Invoice value was split from source registration ${sourceRegistrationId}.`
+              ].join(" ")
+            }
+          });
 
       if (finance.targetPaidAmount > 0) {
         await tx.paymentRecord.create({
@@ -617,4 +647,20 @@ export async function listParticipants() {
     ...participant,
     emailSummary: summaries[participant.email.toLowerCase()]
   }));
+}
+
+export async function listParticipantHistorySummaries() {
+  return prisma.participant.findMany({
+    orderBy: [{ email: "asc" }, { createdAt: "desc" }],
+    select: {
+      id: true,
+      email: true,
+      firstName: true,
+      lastName: true,
+      status: true,
+      createdAt: true,
+      cohort: { select: { id: true, title: true, slug: true, shortName: true, status: true } },
+      organization: { select: { id: true, name: true } }
+    }
+  });
 }

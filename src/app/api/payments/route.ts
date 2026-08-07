@@ -9,8 +9,9 @@ import {
 
 export async function GET(request: Request) {
   try {
-    const pending = new URL(request.url).searchParams.get("pending");
-    return ok(pending === "true" ? await getPendingPayments() : await listPayments());
+    const params = new URL(request.url).searchParams;
+    const pending = params.get("pending");
+    return ok(pending === "true" ? await getPendingPayments() : await listPayments(params.get("cohortId")));
   } catch (error) {
     return handleApiError(error);
   }

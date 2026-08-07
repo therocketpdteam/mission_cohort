@@ -76,8 +76,9 @@ export async function updatePaymentRecord(id: string, input: z.input<typeof paym
   return payment;
 }
 
-export async function listPayments() {
+export async function listPayments(cohortId?: string | null) {
   const payments = await prisma.paymentRecord.findMany({
+    where: cohortId ? { cohortId } : undefined,
     orderBy: { createdAt: "desc" },
     include: { registration: true, cohort: true, organization: true }
   });
