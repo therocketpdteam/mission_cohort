@@ -298,6 +298,17 @@ function registrationCollectedAmount(registration: AdminRow, paymentRows?: Admin
   return String(registration.paymentStatus ?? "").toUpperCase() === "PAID" ? moneyNumber(registration.totalAmount) : 0;
 }
 
+function isWithdrawnFinancialRegistration(registration: AdminRow) {
+  const paymentStatus = String(registration.paymentStatus ?? "").toUpperCase();
+  const registrationStatus = String(registration.status ?? "").toUpperCase();
+
+  return registrationStatus === "CANCELLED" || ["CANCELLED", "REFUNDED"].includes(paymentStatus);
+}
+
+function registrationRevenueAmount(registration: AdminRow) {
+  return isWithdrawnFinancialRegistration(registration) ? 0 : moneyNumber(registration.totalAmount);
+}
+
 function registrationBillingStatus(registration: AdminRow, paymentRows?: AdminRow[], invoiceRows?: AdminRow[]) {
   const paymentStatus = String(registration.paymentStatus ?? "").toUpperCase();
   const registrationStatus = String(registration.status ?? "").toUpperCase();
@@ -305,6 +316,10 @@ function registrationBillingStatus(registration: AdminRow, paymentRows?: AdminRo
   const collected = registrationCollectedAmount(registration, paymentRows, invoiceRows);
 
   if (registration.archivedAt || registrationStatus === "CANCELLED") {
+    return "Withdrawn";
+  }
+
+  if (total <= 0 && ["CANCELLED", "REFUNDED"].includes(paymentStatus)) {
     return "Withdrawn";
   }
 
@@ -736,7 +751,7 @@ function ProjectReturnCard({ distribution }: { distribution: AdminRow }) {
       className="cohort-finance-wow-card distribution-card-main"
       style={{
         "--paid": `${paidRatio}%`,
-        "--pending": `${Math.min(100, paidRatio + Math.round(Number(distribution.distribution?.commissionPercent ?? 30)))}%`
+        "--pending": "100%"
       } as CSSProperties}
     >
       <div className="finance-wow-copy">
@@ -753,10 +768,9 @@ function ProjectReturnCard({ distribution }: { distribution: AdminRow }) {
       <div className="finance-wow-bars" aria-hidden="true">
         <span className="is-paid" />
         <span className="is-pending" />
-        <span className="is-open" />
       </div>
       <div className="finance-wow-values">
-        <DetailField label="Sold" value={money(distribution.totals?.soldAmount)} />
+        <DetailField label="Invoiced" value={money(distribution.totals?.soldAmount)} />
         <DetailField label="Paid In" value={money(distribution.totals?.paidAmount)} />
         <DetailField label="RPD Share" value={money(distribution.totals?.commissionAmount)} />
         <DetailField label="TL Share" value={money(distribution.totals?.tlShareAmount)} />
@@ -1707,8 +1721,9 @@ export function CohortDetailClient({ id }: { id: string }) {
   }, []);
 
   const totals = useMemo(() => {
-    const totalAmount = registrations.reduce((sum, registration) => sum + Number(registration.totalAmount ?? 0), 0);
-    const paidAmount = registrations.reduce((sum, registration) => sum + registrationCollectedAmount(registration, payments, invoiceDrafts), 0);
+    const financialRegistrations = registrations.filter((registration) => !isWithdrawnFinancialRegistration(registration));
+    const totalAmount = financialRegistrations.reduce((sum, registration) => sum + registrationRevenueAmount(registration), 0);
+    const paidAmount = financialRegistrations.reduce((sum, registration) => sum + registrationCollectedAmount(registration, payments, invoiceDrafts), 0);
     const invoicedAmount = Math.max(totalAmount - paidAmount, 0);
     const participantSeats = registrations.reduce((sum, registration) => sum + Number(registration.participantCount ?? 0), 0);
     const rosterComplete = registrations.filter((registration) => registrationRosterStatus(registration) === "COMPLETE").length;
@@ -2618,7 +2633,7 @@ export function CohortDetailClient({ id }: { id: string }) {
       field: "totalAmount",
       headerName: "Value",
       width: 112,
-      valueGetter: (_value, row) => Number(row.totalAmount ?? 0),
+      valueGetter: (_value, row) => registrationRevenueAmount(row),
       valueFormatter: (value) => money(value)
     },
     {
@@ -3397,7 +3412,7 @@ export function CohortDetailClient({ id }: { id: string }) {
                   <ProjectReturnCard distribution={distribution} />
                   <div className="distribution-grid">
                     {[
-                      ["Total Sold", money(distribution.totals?.soldAmount)],
+                      ["Invoiced", money(distribution.totals?.soldAmount)],
                       ["Paid In", money(distribution.totals?.paidAmount)],
                       ["RPD Commission", `${distribution.distribution?.commissionPercent ?? 30}% · ${money(distribution.totals?.commissionAmount)}`],
                       ["TL Share", `${distribution.distribution?.tlSharePercent ?? 70}% · ${money(distribution.totals?.tlShareAmount)}`],
@@ -3850,7 +3865,7 @@ export function CohortDetailClient({ id }: { id: string }) {
               <DetailField label="Phone" value={registrationDetail.primaryContactPhone} />
               <DetailField label="Organization" value={registrationDetail.organization?.name} proper />
               <DetailField label="Participants" value={registrationDetail.participantCount} />
-              <DetailField label="Value" value={money(registrationDetail.totalAmount)} />
+              <DetailField label="Value" value={money(registrationRevenueAmount(registrationDetail))} />
               <DetailField label="Collected" value={money(registrationCollectedAmount(registrationDetail, payments, invoiceDrafts))} />
               <DetailField label="Status" value={registrationBillingStatus(registrationDetail, payments, invoiceDrafts)} />
               <DetailField label="Roster" value={formatStatusLabel(registrationRosterStatus(registrationDetail))} />

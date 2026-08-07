@@ -70,6 +70,17 @@ function money(value: unknown) {
   return `$${Number(value ?? 0).toLocaleString()}`;
 }
 
+function registrationDisplayAmount(registration: AdminRow) {
+  const paymentStatus = String(registration.paymentStatus ?? "").toUpperCase();
+  const registrationStatus = String(registration.status ?? "").toUpperCase();
+
+  if (registration.archivedAt || registrationStatus === "CANCELLED" || ["CANCELLED", "REFUNDED"].includes(paymentStatus)) {
+    return 0;
+  }
+
+  return Number(registration.totalAmount ?? 0);
+}
+
 function splitName(name?: string | null) {
   const parts = String(name ?? "").trim().split(/\s+/).filter(Boolean);
   return {
@@ -1020,7 +1031,7 @@ function RegistrationDetailDialog({
           <div className="quick-view-grid">
             <DetailTile label="POC email" value={registration.primaryContactEmail} />
             <DetailTile label="POC phone" value={registration.primaryContactPhone ?? "-"} />
-            <DetailTile label="Payment" value={`${formatRegistrationPaymentStatus(registration)} · ${money(registration.totalAmount)}`} />
+            <DetailTile label="Payment" value={`${formatRegistrationPaymentStatus(registration)} · ${money(registrationDisplayAmount(registration))}`} />
             <DetailTile label="Roster" value={health?.helper ?? "-"} tone={health?.tone} />
             <DetailTile label="Invoice" value={registration.invoiceNumber ?? "No invoice"} />
             <DetailTile label="PO" value={registration.purchaseOrderNumber ?? "No PO"} />
@@ -1568,7 +1579,7 @@ export function RegistrationsClient() {
       renderCell: (params) => (
         <div className="app-table-status-stack">
           <StatusChip value={formatRegistrationPaymentStatus(params.row)} />
-          <span className="app-table-sub" title={money(params.row.totalAmount)}>{money(params.row.totalAmount)}</span>
+          <span className="app-table-sub" title={money(registrationDisplayAmount(params.row))}>{money(registrationDisplayAmount(params.row))}</span>
         </div>
       )
     },

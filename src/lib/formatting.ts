@@ -72,11 +72,21 @@ export function isCompedRegistration(input?: {
 export function formatRegistrationPaymentStatus(input?: {
   paymentMethod?: string | null;
   paymentStatus?: string | null;
+  status?: string | null;
+  archivedAt?: string | null;
   totalAmount?: number | string | null;
   amount?: number | string | null;
   participantCount?: number | string | null;
   participants?: number | string | null;
 }) {
+  const paymentStatus = String(input?.paymentStatus ?? "").toUpperCase();
+  const registrationStatus = String(input?.status ?? "").toUpperCase();
+  const totalAmount = Number(input?.totalAmount ?? input?.amount ?? 0);
+
+  if (input?.archivedAt || registrationStatus === "CANCELLED" || (totalAmount <= 0 && ["CANCELLED", "REFUNDED"].includes(paymentStatus))) {
+    return "Withdrawn";
+  }
+
   return isCompedRegistration(input) ? "Free" : formatStatusLabel(input?.paymentStatus);
 }
 

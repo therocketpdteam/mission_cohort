@@ -14,6 +14,10 @@ const openRosterStatuses = new Set<ParticipantListStatus>([
   ParticipantListStatus.PARTIAL
 ]);
 const internalReportColumns = new Set(["pocEmail", "pocPhone", "paymentMethod", "notes", "invoiceRefs", "participantNames"]);
+const excludedRevenuePaymentStatuses = new Set<PaymentStatus>([
+  PaymentStatus.CANCELLED,
+  PaymentStatus.REFUNDED
+]);
 type ReportGeography = { city: string; state: string; zip: string };
 type GeographyFallbackMap = Map<string, ReportGeography>;
 
@@ -54,6 +58,14 @@ function monthKey(value: Date) {
 
 function moneyNumber(value: unknown) {
   return Number(value ?? 0);
+}
+
+function reportRevenueAmount(registration: { status?: RegistrationStatus | null; paymentStatus?: PaymentStatus | null; totalAmount?: unknown }) {
+  if (registration.status === RegistrationStatus.CANCELLED || excludedRevenuePaymentStatuses.has(registration.paymentStatus as PaymentStatus)) {
+    return 0;
+  }
+
+  return moneyNumber(registration.totalAmount);
 }
 
 function sourceLabel(registration: { source?: string | null; utmSource?: string | null; utmCampaign?: string | null; externalSource?: string | null }) {
@@ -262,7 +274,7 @@ export async function getCohortReport(cohortId?: string) {
         byOrganization: participantCountByOrganization
       },
       paymentSummary: {
-        totalAmount: registrations.reduce((sum, registration) => sum + Number(registration.totalAmount ?? 0), 0),
+        totalAmount: registrations.reduce((sum, registration) => sum + reportRevenueAmount(registration), 0),
         pendingAmount: payments
           .filter((payment) => pendingPaymentStatuses.has(payment.status))
           .reduce((sum, payment) => sum + Number(payment.amount ?? 0), 0),
@@ -367,7 +379,7 @@ export async function getCohortRegistrationReport(input: CohortRegistrationRepor
   const registrations = cohort.registrations.filter(matchesLocation);
   const summary = registrations.reduce(
     (acc, registration) => {
-      const totalAmount = moneyNumber(registration.totalAmount);
+      const totalAmount = reportRevenueAmount(registration);
       const paidFromRecords = registration.paymentRecords
         .filter((payment) => payment.status === PaymentStatus.PAID)
         .reduce((sum, payment) => sum + moneyNumber(payment.amount), 0);
@@ -393,7 +405,7 @@ export async function getCohortRegistrationReport(input: CohortRegistrationRepor
     const key = monthKey(registration.createdAt);
     acc[key] = acc[key] ?? { label: key, registrations: 0, amount: 0 };
     acc[key].registrations += 1;
-    acc[key].amount += moneyNumber(registration.totalAmount);
+    acc[key].amount += reportRevenueAmount(registration);
     return acc;
   }, {}));
 
@@ -401,7 +413,7 @@ export async function getCohortRegistrationReport(input: CohortRegistrationRepor
     const key = sourceLabel(registration);
     acc[key] = acc[key] ?? { label: key, registrations: 0, amount: 0 };
     acc[key].registrations += 1;
-    acc[key].amount += moneyNumber(registration.totalAmount);
+    acc[key].amount += reportRevenueAmount(registration);
     return acc;
   }, {})).sort((a, b) => b.registrations - a.registrations);
 

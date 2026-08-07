@@ -1,4 +1,4 @@
-import { DistributionPayoutStatus, PaymentStatus } from "@prisma/client";
+import { DistributionPayoutStatus, PaymentStatus, RegistrationStatus } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { dateInput, moneyInput } from "@/lib/validators";
@@ -36,6 +36,11 @@ function percent(value: unknown) {
   return Number(value ?? 0) / 100;
 }
 
+const excludedRevenuePaymentStatuses = new Set<PaymentStatus>([
+  PaymentStatus.CANCELLED,
+  PaymentStatus.REFUNDED
+]);
+
 export async function getCohortDistribution(cohortId: string) {
   const [cohort, payments, registrations] = await Promise.all([
     prisma.cohort.findUnique({ where: { id: cohortId }, include: { presenter: true, distribution: true } }),
@@ -66,7 +71,11 @@ export async function getCohortDistribution(cohortId: string) {
     include: { payouts: { orderBy: { createdAt: "desc" }, include: { paymentRecord: true } } }
   });
 
-  const soldAmount = registrations.reduce((sum, registration) => sum + Number(registration.totalAmount ?? 0), 0);
+  const billableRegistrations = registrations.filter((registration) => (
+    registration.status !== RegistrationStatus.CANCELLED &&
+    !excludedRevenuePaymentStatuses.has(registration.paymentStatus)
+  ));
+  const soldAmount = billableRegistrations.reduce((sum, registration) => sum + Number(registration.totalAmount ?? 0), 0);
   const paidAmount = payments
     .filter((payment) => payment.status === PaymentStatus.PAID || payment.status === PaymentStatus.PARTIALLY_PAID)
     .reduce((sum, payment) => sum + Number(payment.amount ?? 0), 0);

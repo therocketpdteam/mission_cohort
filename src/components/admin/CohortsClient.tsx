@@ -181,7 +181,12 @@ function formatCohortDateRange(row: AdminRow) {
 }
 
 function cohortFinanceSummary(row: AdminRow) {
-  const totalSales = (row.registrations ?? []).reduce((sum: number, registration: AdminRow) => sum + Number(registration.totalAmount ?? 0), 0);
+  const billableRegistrations = (row.registrations ?? []).filter((registration: AdminRow) => {
+    const registrationStatus = String(registration.status ?? "").toUpperCase();
+    const paymentStatus = String(registration.paymentStatus ?? "").toUpperCase();
+    return registrationStatus !== "CANCELLED" && !["CANCELLED", "REFUNDED"].includes(paymentStatus);
+  });
+  const totalSales = billableRegistrations.reduce((sum: number, registration: AdminRow) => sum + Number(registration.totalAmount ?? 0), 0);
   const paidAmount = (row.paymentRecords ?? [])
     .filter((payment: AdminRow) => payment.status === "PAID")
     .reduce((sum: number, payment: AdminRow) => sum + Number(payment.amount ?? 0), 0);
