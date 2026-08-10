@@ -1344,7 +1344,7 @@ export function CohortDetailClient({ id }: { id: string }) {
   const [sendingRegistrationTaskId, setSendingRegistrationTaskId] = useState("");
   const [completingRegistrationTaskId, setCompletingRegistrationTaskId] = useState("");
   const [editingRegistrationParticipantId, setEditingRegistrationParticipantId] = useState("");
-  const [registrationParticipantEdit, setRegistrationParticipantEdit] = useState({ firstName: "", lastName: "", email: "", title: "", phone: "" });
+  const [registrationParticipantEdit, setRegistrationParticipantEdit] = useState({ firstName: "", lastName: "", email: "", title: "", phone: "", status: "REGISTERED" });
   const [savingRegistrationParticipantId, setSavingRegistrationParticipantId] = useState("");
   const [participantDetail, setParticipantDetail] = useState<AdminRow | null>(null);
   const [participantSelection, setParticipantSelection] = useState<GridRowSelectionModel>({ type: "include", ids: new Set() });
@@ -1442,7 +1442,7 @@ export function CohortDetailClient({ id }: { id: string }) {
   async function openRegistrationDetail(row: AdminRow) {
     setRegistrationDetail(row);
     setEditingRegistrationParticipantId("");
-    setRegistrationParticipantEdit({ firstName: "", lastName: "", email: "", title: "", phone: "" });
+    setRegistrationParticipantEdit({ firstName: "", lastName: "", email: "", title: "", phone: "", status: "REGISTERED" });
 
     try {
       setRegistrationDetail(await adminApi<AdminRow>(`/api/registrations?id=${row.id}`));
@@ -1597,7 +1597,8 @@ export function CohortDetailClient({ id }: { id: string }) {
       lastName: String(participant.lastName ?? ""),
       email: String(participant.email ?? ""),
       title: String(participant.title ?? ""),
-      phone: String(participant.phone ?? "")
+      phone: String(participant.phone ?? ""),
+      status: String(participant.status ?? "REGISTERED")
     });
   }
 
@@ -1619,11 +1620,12 @@ export function CohortDetailClient({ id }: { id: string }) {
           email: registrationParticipantEdit.email.trim(),
           title: registrationParticipantEdit.title.trim(),
           phone: registrationParticipantEdit.phone.trim(),
+          status: registrationParticipantEdit.status,
           deferNotifications: ["PUBLISHED", "ACTIVE"].includes(String(cohort?.derivedStatus ?? cohort?.status))
         }
       });
       setEditingRegistrationParticipantId("");
-      setRegistrationParticipantEdit({ firstName: "", lastName: "", email: "", title: "", phone: "" });
+      setRegistrationParticipantEdit({ firstName: "", lastName: "", email: "", title: "", phone: "", status: "REGISTERED" });
       notifySuccess("Participant updated.");
       if (registrationDetail?.id) {
         await openRegistrationDetail(registrationDetail);
@@ -1635,7 +1637,8 @@ export function CohortDetailClient({ id }: { id: string }) {
           lastName: registrationParticipantEdit.lastName.trim(),
           email: registrationParticipantEdit.email.trim(),
           title: registrationParticipantEdit.title.trim(),
-          phone: registrationParticipantEdit.phone.trim()
+          phone: registrationParticipantEdit.phone.trim(),
+          status: registrationParticipantEdit.status
         } : current);
       }
       await load();
@@ -1661,8 +1664,32 @@ export function CohortDetailClient({ id }: { id: string }) {
       lastName: name.lastName,
       email: String(registration.primaryContactEmail ?? ""),
       title: String(registration.primaryContactTitle ?? ""),
-      phone: String(registration.primaryContactPhone ?? "")
+      phone: String(registration.primaryContactPhone ?? ""),
+      status: String(participant.status ?? "REGISTERED")
     });
+  }
+
+  async function markParticipantCancelled(participant: AdminRow) {
+    try {
+      await adminApi("/api/participants", {
+        method: "PATCH",
+        body: {
+          id: participant.id,
+          status: "CANCELLED",
+          deferNotifications: ["PUBLISHED", "ACTIVE"].includes(String(cohort?.derivedStatus ?? cohort?.status))
+        }
+      });
+      notifySuccess("Participant cancelled.");
+      if (registrationDetail?.id && registrationDetail.participants?.some((row: AdminRow) => row.id === participant.id)) {
+        await openRegistrationDetail(registrationDetail);
+      }
+      if (participantDetail?.id === participant.id) {
+        setParticipantDetail((current) => current ? { ...current, status: "CANCELLED" } : current);
+      }
+      await load();
+    } catch (error) {
+      notifyError((error as Error).message);
+    }
   }
 
   useEffect(() => {
@@ -2733,6 +2760,7 @@ export function CohortDetailClient({ id }: { id: string }) {
             actions={[
               { label: "Quick view", onClick: () => setParticipantDetail(params.row) },
               { label: "Edit participant", icon: <EditOutlined fontSize="small" />, onClick: () => { setParticipantDetail(params.row); startRegistrationParticipantEdit(params.row); } },
+              { label: "Mark cancelled", icon: <CancelOutlined fontSize="small" />, color: "warning", onClick: () => void markParticipantCancelled(params.row) },
               { label: "Use registration POC", onClick: () => { setParticipantDetail(params.row); startParticipantPocRepair(params.row); } },
               { label: "Send message", icon: <SendOutlined fontSize="small" />, onClick: () => openParticipantMessageDialog([params.row]) }
             ]}
@@ -3942,6 +3970,9 @@ export function CohortDetailClient({ id }: { id: string }) {
                             <TextField label="Email" type="email" value={registrationParticipantEdit.email} onChange={(event) => setRegistrationParticipantEdit((current) => ({ ...current, email: event.target.value }))} />
                             <TextField label="Title" value={registrationParticipantEdit.title} onChange={(event) => setRegistrationParticipantEdit((current) => ({ ...current, title: event.target.value }))} />
                             <TextField label="Phone" value={registrationParticipantEdit.phone} onChange={(event) => setRegistrationParticipantEdit((current) => ({ ...current, phone: event.target.value }))} />
+                            <TextField select label="Status" value={registrationParticipantEdit.status} onChange={(event) => setRegistrationParticipantEdit((current) => ({ ...current, status: event.target.value }))}>
+                              {participantStatuses.map((value) => <MenuItem value={value} key={value}>{formatStatusLabel(value)}</MenuItem>)}
+                            </TextField>
                           </div>
                         ) : (
                           <div>
@@ -3960,6 +3991,7 @@ export function CohortDetailClient({ id }: { id: string }) {
                           ) : (
                             <>
                               <Button size="small" variant="outlined" startIcon={<EditOutlined />} onClick={() => startRegistrationParticipantEdit(participant)}>Edit</Button>
+                              <Button size="small" variant="text" color="warning" startIcon={<CancelOutlined />} onClick={() => void markParticipantCancelled(participant)}>Mark cancelled</Button>
                               <Button size="small" variant="text" color="error" startIcon={<DeleteOutline />} onClick={() => removeRegistrationParticipant(participant.id)}>Remove</Button>
                             </>
                           )}
@@ -4212,6 +4244,7 @@ export function CohortDetailClient({ id }: { id: string }) {
             ) : (
               <>
                 <Button variant="outlined" startIcon={<EditOutlined />} onClick={() => startRegistrationParticipantEdit(participantDetail)}>Edit</Button>
+                <Button variant="outlined" color="warning" startIcon={<CancelOutlined />} onClick={() => void markParticipantCancelled(participantDetail)}>Mark Cancelled</Button>
                 <Button variant="outlined" onClick={() => startParticipantPocRepair(participantDetail)}>Use POC Details</Button>
                 <Button startIcon={<SendOutlined />} onClick={() => openParticipantMessageDialog([participantDetail])}>Send Message</Button>
               </>
@@ -4228,6 +4261,9 @@ export function CohortDetailClient({ id }: { id: string }) {
                 <TextField label="Email" type="email" value={registrationParticipantEdit.email} onChange={(event) => setRegistrationParticipantEdit((current) => ({ ...current, email: event.target.value }))} />
                 <TextField label="Title" value={registrationParticipantEdit.title} onChange={(event) => setRegistrationParticipantEdit((current) => ({ ...current, title: event.target.value }))} />
                 <TextField label="Phone" value={registrationParticipantEdit.phone} onChange={(event) => setRegistrationParticipantEdit((current) => ({ ...current, phone: event.target.value }))} />
+                <TextField select label="Status" value={registrationParticipantEdit.status} onChange={(event) => setRegistrationParticipantEdit((current) => ({ ...current, status: event.target.value }))}>
+                  {participantStatuses.map((value) => <MenuItem value={value} key={value}>{formatStatusLabel(value)}</MenuItem>)}
+                </TextField>
               </div>
             ) : (
               <div className="quick-view-grid">

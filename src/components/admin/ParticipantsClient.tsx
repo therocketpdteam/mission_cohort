@@ -3,6 +3,7 @@
 import { DeleteOutline } from "@/components/ui/icons";
 import { ArrowRightLeftOutlined } from "@/components/ui/icons";
 import { ArticleOutlined } from "@/components/ui/icons";
+import { CancelOutlined } from "@/components/ui/icons";
 import { DoneAllOutlined } from "@/components/ui/icons";
 import { EditOutlined } from "@/components/ui/icons";
 import { SendOutlined } from "@/components/ui/icons";
@@ -712,6 +713,7 @@ export function ParticipantsClient() {
           <RowActionMenu
             actions={[
               { label: "Edit participant", icon: <EditOutlined fontSize="small" />, onClick: () => { setEditing(params.row); setDialogOpen(true); } },
+              { label: "Mark cancelled", icon: <CancelOutlined fontSize="small" />, color: "warning", onClick: () => patchParticipant({ id: params.row.id, status: "CANCELLED" }, "Participant cancelled") },
               { label: "Mark complete", icon: <DoneAllOutlined fontSize="small" />, color: "success", onClick: () => patchParticipant({ id: params.row.id, status: "COMPLETED" }, "Participant completed") },
               {
                 label: "Remove participant",
