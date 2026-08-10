@@ -1148,8 +1148,8 @@ export async function listCommunications(input: { cohortId?: string | null; limi
   }
 }
 
-export async function listCommunicationsByCohort(cohortId: string) {
-  return listCommunications({ cohortId });
+export async function listCommunicationsByCohort(cohortId: string, limit?: number) {
+  return listCommunications({ cohortId, limit });
 }
 
 export async function listUnreviewedCommunicationIssues(input: { cohortId?: string | null; limit?: number } = {}) {

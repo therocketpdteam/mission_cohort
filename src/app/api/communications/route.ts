@@ -32,7 +32,7 @@ export async function GET(request: Request) {
     const issueOnly = params.get("issueOnly") === "1" || params.get("issueOnly") === "true";
 
     if (cohortId) {
-      return ok(await listCommunicationsByCohort(cohortId));
+      return ok(await listCommunicationsByCohort(cohortId, limit));
     }
 
     return ok(await listCommunications({ limit, issueOnly }));
