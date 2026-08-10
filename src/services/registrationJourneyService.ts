@@ -835,6 +835,7 @@ export async function planRegistrationJourneys(
   options: {
     syncCalendar?: boolean;
     planPocConfirmation?: boolean;
+    sendParticipantConfirmation?: boolean;
     sendPocConfirmation?: boolean;
     participantEmails?: string[];
     retryFailed?: boolean;
@@ -962,7 +963,9 @@ export async function planRegistrationJourneys(
       retryFailed: options.retryFailed
     });
     planned.push(confirmation);
-    immediate.push(confirmation);
+    if (options.sendParticipantConfirmation !== false) {
+      immediate.push(confirmation);
+    }
 
     for (const milestone of milestones) {
       planned.push(await upsertJourneyCommunication({
@@ -1060,6 +1063,7 @@ export async function reconcileCohortParticipantJourneys(cohortId: string) {
     results.push(await planRegistrationJourneys(registration.id, {
       syncCalendar: false,
       planPocConfirmation: false,
+      sendParticipantConfirmation: false,
       sendPocConfirmation: false,
       retryFailed: true
     }));
