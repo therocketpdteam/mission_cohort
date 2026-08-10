@@ -554,7 +554,12 @@ export async function listRegistrations(cohortId?: string, options: { includeArc
       ...(options.includeArchived ? {} : { archivedAt: null })
     },
     orderBy: { createdAt: "desc" },
-    include: { cohort: true, organization: true, _count: { select: { participants: true } } }
+    include: {
+      cohort: true,
+      organization: true,
+      participants: { select: { firstName: true, lastName: true, email: true, status: true } },
+      _count: { select: { participants: true } }
+    }
   });
 }
 

@@ -1443,7 +1443,12 @@ export function RegistrationsClient() {
           row.organization?.name,
           row.invoiceNumber,
           row.purchaseOrderNumber,
-          row.externalSubmissionId
+          row.externalSubmissionId,
+          ...(row.participants ?? []).flatMap((participant: AdminRow) => [
+            participant.firstName,
+            participant.lastName,
+            participant.email
+          ])
         ]
           .join(" ")
           .toLowerCase()
