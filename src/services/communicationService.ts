@@ -1098,7 +1098,7 @@ async function legacyEmailEventsForRecipient(email: string) {
 }
 
 async function listCommunicationsLegacy(input: { cohortId?: string | null; limit?: number; issueOnly?: boolean } = {}) {
-  const take = Math.min(Math.max(Number(input.limit ?? 100), 1), 250);
+  const take = Math.min(Math.max(Number(input.limit ?? 100), 1), 1000);
   const communications = await prisma.cohortCommunication.findMany({
     where: input.cohortId ? { cohortId: input.cohortId } : {},
     orderBy: { createdAt: "desc" },
@@ -1124,7 +1124,7 @@ async function listCommunicationsLegacy(input: { cohortId?: string | null; limit
 }
 
 export async function listCommunications(input: { cohortId?: string | null; limit?: number; issueOnly?: boolean } = {}) {
-  const take = Math.min(Math.max(Number(input.limit ?? 100), 1), 250);
+  const take = Math.min(Math.max(Number(input.limit ?? 100), 1), 1000);
   try {
     const communications = await prisma.cohortCommunication.findMany({
       where: {
