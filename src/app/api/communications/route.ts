@@ -22,7 +22,7 @@ import {
   sendTemplateToParticipant,
   sendTemplateToRegistrations
 } from "@/services/communicationService";
-import { skipPocRegistrationConfirmationsForCohort } from "@/services/registrationJourneyService";
+import { reconcileCohortParticipantJourneys, skipPocRegistrationConfirmationsForCohort } from "@/services/registrationJourneyService";
 
 export async function GET(request: Request) {
   try {
@@ -108,6 +108,14 @@ export async function PATCH(request: Request) {
         body.cohortId,
         body.reason || "Skipped because POC confirmations were sent through the previous registration system."
       ));
+    }
+
+    if (body.action === "reconcileCohortParticipantJourneys") {
+      if (!body.cohortId) {
+        return fail("cohortId is required", "BAD_REQUEST", 400);
+      }
+
+      return ok(await reconcileCohortParticipantJourneys(body.cohortId));
     }
 
     if (body.action === "sendTemplateToParticipant") {

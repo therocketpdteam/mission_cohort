@@ -834,6 +834,7 @@ export async function planRegistrationJourneys(
   registrationId: string,
   options: {
     syncCalendar?: boolean;
+    planPocConfirmation?: boolean;
     sendPocConfirmation?: boolean;
     participantEmails?: string[];
     retryFailed?: boolean;
@@ -881,39 +882,43 @@ export async function planRegistrationJourneys(
   const planned = [];
   const immediate = [];
   const pocEmail = normalizeEmail(registration.primaryContactEmail);
-  const {
-    registration: registrationForDocuments,
-    readiness: pocDocumentReadiness
-  } = await prepareRegistrationConfirmationDocuments(registration, invoiceProfile.w9Url);
-  const poc = await upsertJourneyCommunication({
-    journeyKey: pocConfirmationJourneyKey({
+  let poc: Awaited<ReturnType<typeof upsertJourneyCommunication>> | null = null;
+  let attachmentCount = 0;
+  if (options.planPocConfirmation !== false) {
+    const {
+      registration: registrationForDocuments,
+      readiness: pocDocumentReadiness
+    } = await prepareRegistrationConfirmationDocuments(registration, invoiceProfile.w9Url);
+    poc = await upsertJourneyCommunication({
+      journeyKey: pocConfirmationJourneyKey({
+        registrationId: registration.id,
+        primaryContactEmail: pocEmail,
+        cohortId: options.pocConfirmationCohortScoped ? registration.cohortId : undefined,
+        batchKey: options.pocConfirmationBatchKey
+      }),
+      cohortId: registration.cohortId,
       registrationId: registration.id,
-      primaryContactEmail: pocEmail,
-      cohortId: options.pocConfirmationCohortScoped ? registration.cohortId : undefined,
-      batchKey: options.pocConfirmationBatchKey
-    }),
-    cohortId: registration.cohortId,
-    registrationId: registration.id,
-    template: template(journeyTemplateNames.pocConfirmation),
-    recipientEmail: pocEmail,
-    status: CommunicationStatus.DRAFT,
-    skippedReason: pocDocumentReadiness.reason ?? undefined,
-    retryFailed: options.retryFailed
-  });
-  const attachmentCount = await attachRegistrationDocuments(poc.id, registrationForDocuments, invoiceProfile.w9Url);
-  planned.push(poc);
-  if (options.sendPocConfirmation !== false && pocDocumentReadiness.ready) {
-    if ((!registrationForDocuments.w9Url && pocDocumentReadiness.w9Url) || (!registrationForDocuments.invoiceUrl && pocDocumentReadiness.invoiceUrl)) {
-      await prisma.registration.update({
-        where: { id: registration.id },
-        data: {
-          w9Url: registrationForDocuments.w9Url || pocDocumentReadiness.w9Url || undefined,
-          invoiceUrl: registrationForDocuments.invoiceUrl || pocDocumentReadiness.invoiceUrl || undefined,
-          supportingDocumentStatus: SupportingDocumentStatus.READY
-        }
-      });
+      template: template(journeyTemplateNames.pocConfirmation),
+      recipientEmail: pocEmail,
+      status: CommunicationStatus.DRAFT,
+      skippedReason: pocDocumentReadiness.reason ?? undefined,
+      retryFailed: options.retryFailed
+    });
+    attachmentCount = await attachRegistrationDocuments(poc.id, registrationForDocuments, invoiceProfile.w9Url);
+    planned.push(poc);
+    if (options.sendPocConfirmation !== false && pocDocumentReadiness.ready) {
+      if ((!registrationForDocuments.w9Url && pocDocumentReadiness.w9Url) || (!registrationForDocuments.invoiceUrl && pocDocumentReadiness.invoiceUrl)) {
+        await prisma.registration.update({
+          where: { id: registration.id },
+          data: {
+            w9Url: registrationForDocuments.w9Url || pocDocumentReadiness.w9Url || undefined,
+            invoiceUrl: registrationForDocuments.invoiceUrl || pocDocumentReadiness.invoiceUrl || undefined,
+            supportingDocumentStatus: SupportingDocumentStatus.READY
+          }
+        });
+      }
+      immediate.push(poc);
     }
-    immediate.push(poc);
   }
 
   const firstSession = registration.cohort.sessions[0];
@@ -991,7 +996,7 @@ export async function planRegistrationJourneys(
     }
   }
 
-  if (sent.some((communication) => communication.id === poc.id) && attachmentCount > 0) {
+  if (poc && sent.some((communication) => communication.id === poc.id) && attachmentCount > 0) {
     await prisma.registration.update({
       where: { id: registration.id },
       data: {
@@ -1034,10 +1039,41 @@ export async function activateCohortRegistrationJourneys(cohortId: string) {
   const results = [];
 
   for (const registration of registrations) {
-    results.push(await planRegistrationJourneys(registration.id, { syncCalendar: false }));
+    results.push(await planRegistrationJourneys(registration.id, {
+      syncCalendar: false,
+      planPocConfirmation: false,
+      sendPocConfirmation: false
+    }));
   }
 
   return { cohortId, registrations: results.length, results };
+}
+
+export async function reconcileCohortParticipantJourneys(cohortId: string) {
+  const registrations = await prisma.registration.findMany({
+    where: { cohortId, archivedAt: null, status: { not: RegistrationStatus.CANCELLED } },
+    select: { id: true }
+  });
+  const results = [];
+
+  for (const registration of registrations) {
+    results.push(await planRegistrationJourneys(registration.id, {
+      syncCalendar: false,
+      planPocConfirmation: false,
+      sendPocConfirmation: false,
+      retryFailed: true
+    }));
+  }
+
+  return {
+    cohortId,
+    registrations: results.length,
+    planned: results.reduce((sum, result) => sum + result.planned, 0),
+    sent: results.reduce((sum, result) => sum + result.sent, 0),
+    failed: results.reduce((sum, result) => sum + result.failed, 0),
+    skipped: results.reduce((sum, result) => sum + result.skipped, 0),
+    results
+  };
 }
 
 export async function skipPocRegistrationConfirmationsForCohort(cohortId: string, reason: string) {
