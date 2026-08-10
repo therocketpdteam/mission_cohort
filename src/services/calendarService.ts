@@ -80,6 +80,7 @@ async function getCohortCalendarAttendees(cohortId: string) {
       primaryContactEmail: true,
       primaryContactName: true,
       participantCount: true,
+      _count: { select: { participants: true } },
       participants: {
         where: { status: ParticipantStatus.REGISTERED },
         select: { email: true, firstName: true, lastName: true }
@@ -94,7 +95,7 @@ async function getCohortCalendarAttendees(cohortId: string) {
       }));
     }
 
-    return registration.participantCount <= 1
+    return registration.participantCount <= 1 && registration._count.participants === 0
       ? [{ email: registration.primaryContactEmail, displayName: registration.primaryContactName }]
       : [];
   });
