@@ -89,6 +89,14 @@ type PeopleSearchResult = {
   matchTypes: string[];
 };
 
+type PeopleSearchGroup = {
+  key: string;
+  primaryEmail?: string;
+  displayName: string;
+  matchTypes: string[];
+  registrations: PeopleSearchResult[];
+};
+
 const navItems: ReadonlyArray<{
   label: string;
   href: Route;
@@ -137,6 +145,61 @@ function participantName(participant: PeopleSearchResult["participants"][number]
   return formatProperDisplay([participant.firstName, participant.lastName].filter(Boolean).join(" ")) || participant.email;
 }
 
+function normalizedEmail(value?: string | null) {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function resultEmails(result: PeopleSearchResult) {
+  return Array.from(new Set([
+    normalizedEmail(result.primaryContactEmail),
+    normalizedEmail(result.billingContactEmail),
+    ...result.participants.map((participant) => normalizedEmail(participant.email))
+  ].filter(Boolean)));
+}
+
+function exactEmailQuery(value: string) {
+  const trimmed = normalizedEmail(value);
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed) ? trimmed : "";
+}
+
+function nameForEmail(result: PeopleSearchResult, email: string) {
+  const participant = result.participants.find((row) => normalizedEmail(row.email) === email);
+  if (participant) return participantName(participant);
+  if (normalizedEmail(result.primaryContactEmail) === email) return formatProperDisplay(result.primaryContactName) || result.primaryContactEmail;
+  if (normalizedEmail(result.billingContactEmail) === email) return formatProperDisplay(result.billingContactName ?? "") || result.billingContactEmail || email;
+  return email;
+}
+
+function groupSearchResults(results: PeopleSearchResult[], query: string): PeopleSearchGroup[] {
+  const emailQuery = exactEmailQuery(query);
+  const groups = new Map<string, PeopleSearchGroup>();
+
+  for (const result of results) {
+    const matchingEmail = emailQuery && resultEmails(result).includes(emailQuery) ? emailQuery : "";
+    const key = matchingEmail ? `email:${matchingEmail}` : `registration:${result.id}`;
+    const existing = groups.get(key);
+
+    if (existing) {
+      existing.registrations.push(result);
+      existing.matchTypes = Array.from(new Set([...existing.matchTypes, ...result.matchTypes]));
+      continue;
+    }
+
+    groups.set(key, {
+      key,
+      primaryEmail: matchingEmail || result.primaryContactEmail,
+      displayName: matchingEmail ? nameForEmail(result, matchingEmail) : formatProperDisplay(result.organization.name),
+      matchTypes: result.matchTypes,
+      registrations: [result]
+    });
+  }
+
+  return Array.from(groups.values()).map((group) => ({
+    ...group,
+    registrations: group.registrations.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+  }));
+}
+
 function GlobalPeopleSearch() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<PeopleSearchResult[]>([]);
@@ -158,7 +221,8 @@ function GlobalPeopleSearch() {
     setLoading(true);
 
     const timeout = window.setTimeout(() => {
-      adminApi<{ results: PeopleSearchResult[] }>(`/api/search/people?q=${encodeURIComponent(trimmed)}&limit=8`)
+      const searchLimit = exactEmailQuery(trimmed) ? 25 : 8;
+      adminApi<{ results: PeopleSearchResult[] }>(`/api/search/people?q=${encodeURIComponent(trimmed)}&limit=${searchLimit}`)
         .then((payload) => {
           if (cancelled) return;
           setResults(payload.results ?? []);
@@ -189,6 +253,7 @@ function GlobalPeopleSearch() {
   }
 
   const showPanel = open && query.trim().length >= 2;
+  const groupedResults = useMemo(() => groupSearchResults(results, query), [results, query]);
 
   return (
     <div className="global-people-search">
@@ -213,44 +278,74 @@ function GlobalPeopleSearch() {
       {showPanel && (
         <div className="global-people-search-panel">
           <div className="global-people-search-summary">
-            <strong>{loading ? "Searching..." : `${results.length} result${results.length === 1 ? "" : "s"}`}</strong>
+            <strong>{loading ? "Searching..." : `${groupedResults.length} result${groupedResults.length === 1 ? "" : "s"}`}</strong>
             <button type="button" onClick={closeSearch}>Close</button>
           </div>
           {error ? <p className="global-people-search-empty">{error}</p> : null}
-          {!loading && !error && results.length === 0 ? (
+          {!loading && !error && groupedResults.length === 0 ? (
             <p className="global-people-search-empty">No registration, participant, POC, invoice, or PO matches.</p>
           ) : null}
           <div className="global-people-search-results">
-            {results.map((result) => {
+            {groupedResults.map((group) => {
+              const result = group.registrations[0]!;
               const invoice = result.invoiceDrafts[0];
               const participants = result.participants.slice(0, 4);
+              const hasMultipleRegistrations = group.registrations.length > 1;
 
               return (
-                <article className="global-people-search-card" key={result.id}>
+                <article className="global-people-search-card" key={group.key}>
                   <div className="global-people-search-card-header">
                     <div>
-                      <strong>{formatProperDisplay(result.organization.name)}</strong>
-                      <span>{result.cohort.shortName || result.cohort.slug} · {formatStatusLabel(result.cohort.status)}</span>
+                      <strong>{group.displayName}</strong>
+                      <span>
+                        {group.primaryEmail}
+                        {hasMultipleRegistrations ? ` · ${group.registrations.length} registrations` : ` · ${result.cohort.shortName || result.cohort.slug} · ${formatStatusLabel(result.cohort.status)}`}
+                      </span>
                     </div>
                     <div className="global-people-search-tags">
-                      {result.matchTypes.map((match) => <span key={match}>{match}</span>)}
+                      {group.matchTypes.map((match) => <span key={match}>{match}</span>)}
+                      {hasMultipleRegistrations ? <span>History</span> : null}
                     </div>
                   </div>
-                  <div className="global-people-search-meta">
-                    <span>POC: {formatProperDisplay(result.primaryContactName)} · {result.primaryContactEmail}</span>
-                    <span>Registered: {formatShortDate(result.createdAt)}</span>
-                    <span>Registration: {formatStatusLabel(result.status)} · Roster {formatStatusLabel(result.participantListStatus)}</span>
-                    <span>Payment: {formatStatusLabel(result.paymentStatus)} · {formatCurrency(result.totalAmount)}</span>
-                    <span>Invoice: {invoice?.invoiceNumber ?? result.invoiceNumber ?? "-"} · {invoice ? formatStatusLabel(invoice.status) : "No draft"}{invoice?.quickBooksInvoiceRef ? " · QBO linked" : ""}</span>
-                    <span>PO: {invoice?.purchaseOrderNumber ?? result.purchaseOrderNumber ?? "-"}</span>
-                  </div>
-                  {participants.length > 0 && (
-                    <div className="global-people-search-team">
-                      {participants.map((participant) => (
-                        <span key={participant.id}>{participantName(participant)} · {participant.email}</span>
-                      ))}
-                      {result.participants.length > participants.length && <span>+{result.participants.length - participants.length} more</span>}
+                  {hasMultipleRegistrations ? (
+                    <div className="global-people-search-registration-list">
+                      {group.registrations.map((registration) => {
+                        const registrationInvoice = registration.invoiceDrafts[0];
+
+                        return (
+                          <div className="global-people-search-registration-row" key={registration.id}>
+                            <div>
+                              <strong>{registration.cohort.shortName || registration.cohort.slug}</strong>
+                              <span>{formatProperDisplay(registration.organization.name)} · {formatShortDate(registration.createdAt)}</span>
+                            </div>
+                            <div>
+                              <span>{formatStatusLabel(registration.status)} · {formatStatusLabel(registration.paymentStatus)} · {formatCurrency(registration.totalAmount)}</span>
+                              <span>Invoice {registrationInvoice?.invoiceNumber ?? registration.invoiceNumber ?? "-"}</span>
+                            </div>
+                            <Link href={registration.links.registration as Route} onClick={closeSearch}>Open</Link>
+                          </div>
+                        );
+                      })}
                     </div>
+                  ) : (
+                    <>
+                      <div className="global-people-search-meta">
+                        <span>POC: {formatProperDisplay(result.primaryContactName)} · {result.primaryContactEmail}</span>
+                        <span>Registered: {formatShortDate(result.createdAt)}</span>
+                        <span>Registration: {formatStatusLabel(result.status)} · Roster {formatStatusLabel(result.participantListStatus)}</span>
+                        <span>Payment: {formatStatusLabel(result.paymentStatus)} · {formatCurrency(result.totalAmount)}</span>
+                        <span>Invoice: {invoice?.invoiceNumber ?? result.invoiceNumber ?? "-"} · {invoice ? formatStatusLabel(invoice.status) : "No draft"}{invoice?.quickBooksInvoiceRef ? " · QBO linked" : ""}</span>
+                        <span>PO: {invoice?.purchaseOrderNumber ?? result.purchaseOrderNumber ?? "-"}</span>
+                      </div>
+                      {participants.length > 0 && (
+                        <div className="global-people-search-team">
+                          {participants.map((participant) => (
+                            <span key={participant.id}>{participantName(participant)} · {participant.email}</span>
+                          ))}
+                          {result.participants.length > participants.length && <span>+{result.participants.length - participants.length} more</span>}
+                        </div>
+                      )}
+                    </>
                   )}
                   <div className="global-people-search-actions">
                     <Link href={result.links.registration as Route} onClick={closeSearch}>Open registration</Link>

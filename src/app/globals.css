@@ -487,6 +487,47 @@ h6,
   font-weight: 800;
 }
 
+.global-people-search-registration-list {
+  display: grid;
+  gap: 8px;
+}
+
+.global-people-search-registration-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--color-slate-200);
+  border-radius: var(--radius-sm);
+  background: var(--color-white);
+  padding: 9px 10px;
+}
+
+.global-people-search-registration-row > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.global-people-search-registration-row strong {
+  color: var(--color-primary-900);
+  font-size: 0.8rem;
+  font-weight: 950;
+}
+
+.global-people-search-registration-row span {
+  color: var(--color-slate-600);
+  font-size: 0.72rem;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.global-people-search-registration-row a {
+  color: var(--color-primary-700);
+  font-size: 0.76rem;
+  font-weight: 950;
+}
+
 .global-people-search-actions {
   border-top: 1px solid var(--color-slate-200);
   padding-top: 9px;
@@ -501,17 +542,20 @@ h6,
 .app-shell.is-night .global-people-search-field,
 .app-shell.is-night .global-people-search-panel,
 .app-shell.is-night .global-people-search-card,
+.app-shell.is-night .global-people-search-registration-row,
 .app-shell.is-night .global-people-search-team span {
   border-color: rgba(197, 192, 253, 0.18);
   background: #151229;
 }
 
 .app-shell.is-night .global-people-search-field input,
-.app-shell.is-night .global-people-search-card-header strong {
+.app-shell.is-night .global-people-search-card-header strong,
+.app-shell.is-night .global-people-search-registration-row strong {
   color: #f4f1ff;
 }
 
 .app-shell.is-night .global-people-search-meta,
+.app-shell.is-night .global-people-search-registration-row span,
 .app-shell.is-night .global-people-search-team span {
   color: #e3dfff;
 }
@@ -8080,6 +8124,11 @@ h6,
     left: 0;
     right: auto;
     width: min(100%, calc(100vw - 28px));
+  }
+
+  .global-people-search-registration-row {
+    grid-template-columns: 1fr;
+    align-items: start;
   }
 
   .page-header,
