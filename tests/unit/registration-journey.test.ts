@@ -34,8 +34,12 @@ test("automatic registration journeys are plan-only before a cohort is live", ()
     sendPocConfirmation: false,
     sendParticipantConfirmation: false
   });
+  assert.deepEqual(automaticRegistrationJourneyOptions(CohortStatus.ACTIVE), {
+    syncCalendar: false,
+    sendPocConfirmation: false,
+    sendParticipantConfirmation: false
+  });
   assert.deepEqual(automaticRegistrationJourneyOptions(CohortStatus.PUBLISHED), {});
-  assert.deepEqual(automaticRegistrationJourneyOptions(CohortStatus.ACTIVE), {});
 });
 
 test("schedules both cohort milestones for an early registration", () => {

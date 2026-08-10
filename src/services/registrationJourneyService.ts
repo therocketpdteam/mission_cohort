@@ -168,7 +168,7 @@ function escapeHtml(value: string) {
 }
 
 function deliveryAuthorized(status: CohortStatus) {
-  return status === CohortStatus.PUBLISHED || status === CohortStatus.ACTIVE;
+  return status === CohortStatus.PUBLISHED;
 }
 
 export function automaticRegistrationJourneyOptions(status: CohortStatus) {

@@ -283,9 +283,9 @@ export async function assertCohortDeliveryAllowed(
 ) {
   const setup = provider === "SENDGRID" ? await getSendGridSetup() : await getGoogleCalendarSetup();
 
-  if (cohortStatus === "DRAFT" && setup.liveSendingEnabled) {
+  if (cohortStatus !== "PUBLISHED" && setup.liveSendingEnabled) {
     throw Object.assign(new Error(
-      "Draft cohorts cannot send live communications. Publish the cohort first, or use outbound safety mode with explicitly allowlisted test recipients."
+      "Only published cohorts can send live automated communications. Publish the cohort first, or use outbound safety mode with explicitly allowlisted test recipients."
     ), { code: "COHORT_NOT_PUBLISHED", status: 409 });
   }
 

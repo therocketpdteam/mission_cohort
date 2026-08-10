@@ -2601,7 +2601,7 @@ export async function processScheduledCommunications(limit = 25) {
     where: {
       status: CommunicationStatus.SCHEDULED,
       scheduledFor: { lte: new Date() },
-      ...(setup.liveSendingEnabled ? { cohort: { status: { in: [CohortStatus.PUBLISHED, CohortStatus.ACTIVE] } } } : {})
+      ...(setup.liveSendingEnabled ? { cohort: { status: CohortStatus.PUBLISHED } } : {})
     },
     include: { template: true, session: true },
     orderBy: { scheduledFor: "asc" },
