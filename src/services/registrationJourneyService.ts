@@ -171,6 +171,16 @@ function deliveryAuthorized(status: CohortStatus) {
   return status === CohortStatus.PUBLISHED || status === CohortStatus.ACTIVE;
 }
 
+export function automaticRegistrationJourneyOptions(status: CohortStatus) {
+  return deliveryAuthorized(status)
+    ? {}
+    : {
+        syncCalendar: false,
+        sendPocConfirmation: false,
+        sendParticipantConfirmation: false
+      };
+}
+
 async function upsertJourneyCommunication(input: {
   journeyKey: string;
   cohortId: string;

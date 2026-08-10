@@ -15,7 +15,7 @@ import { getDecryptedIntegrationConnection } from "@/services/integrationService
 import { listActiveJotformFormMappings } from "@/services/jotformMappingService";
 import { createDefaultRegistrationOperationsTasks } from "@/services/operationsTaskService";
 import { queueParticipantCrmSync, queueRegistrationCrmSync } from "@/services/crmSyncService";
-import { cancelParticipantJourneys, cancelRegistrationJourneys, planRegistrationJourneys } from "@/services/registrationJourneyService";
+import { automaticRegistrationJourneyOptions, cancelParticipantJourneys, cancelRegistrationJourneys, planRegistrationJourneys } from "@/services/registrationJourneyService";
 
 export async function recordWebhookEvent(input: {
   source: string;
@@ -172,6 +172,14 @@ export async function processRegistrationWebhook(payload: Record<string, any>, o
 
     if (!cohortId) {
       throw badWebhookPayload("registration.cohortId or registration.cohortSlug is required");
+    }
+    const cohortForDelivery = await prisma.cohort.findUnique({
+      where: { id: cohortId },
+      select: { status: true }
+    });
+
+    if (!cohortForDelivery) {
+      throw badWebhookPayload(`No cohort found for cohortId "${cohortId}"`);
     }
 
     if (!primaryContactName || !primaryContactEmail) {
@@ -392,7 +400,7 @@ export async function processRegistrationWebhook(payload: Record<string, any>, o
     }
     const journey = registration.status === RegistrationStatus.CANCELLED
       ? await cancelRegistrationJourneys(registration.id, "Registration cancelled by intake revision.")
-      : await planRegistrationJourneys(registration.id);
+      : await planRegistrationJourneys(registration.id, automaticRegistrationJourneyOptions(cohortForDelivery.status));
 
     return {
       eventId: event.id,

@@ -9,7 +9,7 @@ import { createDefaultRegistrationOperationsTasks } from "./operationsTaskServic
 import { queueParticipantCrmSync, queueRegistrationCrmSync } from "./crmSyncService";
 import { syncRegistrationToCrmWebhook } from "./crmRegistrationWebhookService";
 import { voidRegistrationQuickBooksInvoice } from "./quickBooksService";
-import { cancelRegistrationJourneys, planRegistrationJourneys } from "./registrationJourneyService";
+import { automaticRegistrationJourneyOptions, cancelRegistrationJourneys, planRegistrationJourneys } from "./registrationJourneyService";
 import { syncRegistrationParticipantListStatus } from "./participantService";
 import { syncPaymentRecordsToRegistrationStatus } from "./paymentService";
 import { shouldDeferRegistrationDelivery, stageParticipantAddition, stageRegistrationFieldChanges } from "./registrationChangeService";
@@ -99,6 +99,15 @@ async function ensureSingleSeatPrimaryContactParticipant(registration: {
   return { participant, created: true };
 }
 
+async function planAutomaticRegistrationJourney(registrationId: string, cohortId: string) {
+  const cohort = await prisma.cohort.findUniqueOrThrow({
+    where: { id: cohortId },
+    select: { status: true }
+  });
+
+  return planRegistrationJourneys(registrationId, automaticRegistrationJourneyOptions(cohort.status));
+}
+
 export async function createRegistration(input: z.input<typeof registrationCreateSchema>) {
   const data = registrationCreateSchema.parse(input);
   const registration = await prisma.registration.create({ data });
@@ -126,7 +135,7 @@ export async function createRegistration(input: z.input<typeof registrationCreat
   void syncRegistrationToCrmWebhook(registration.id, "registration.created").catch((error) => {
     console.error("CRM registration webhook scheduling failed", { registrationId: registration.id, error: error instanceof Error ? error.message : "Unknown error" });
   });
-  const journey = await planRegistrationJourneys(registration.id);
+  const journey = await planAutomaticRegistrationJourney(registration.id, registration.cohortId);
   return { ...registration, participantListStatus: roster?.status ?? registration.participantListStatus, journey };
 }
 
@@ -174,7 +183,7 @@ export async function updateRegistration(
   }
   const journey = registration.status === RegistrationStatus.CANCELLED
     ? await cancelRegistrationJourneys(registration.id, "Registration cancelled.")
-    : await planRegistrationJourneys(registration.id);
+    : await planAutomaticRegistrationJourney(registration.id, registration.cohortId);
   return { ...registration, participantListStatus: roster?.status ?? registration.participantListStatus, journey };
 }
 
@@ -269,7 +278,7 @@ export async function restoreRegistration(id: string) {
     metadata: { cohortId: registration.cohortId, organizationId: registration.organizationId }
   });
   void queueRegistrationCrmSync(registration.id, "registration.restored").catch(() => undefined);
-  const journey = await planRegistrationJourneys(registration.id);
+  const journey = await planAutomaticRegistrationJourney(registration.id, registration.cohortId);
   return { ...registration, journey };
 }
 
@@ -383,7 +392,10 @@ export async function bulkUpdateRegistrations(input: {
     if (input.action === "cancel" || input.action === "archive") {
       await cancelRegistrationJourneys(id, input.action === "cancel" ? "Registration cancelled." : "Registration archived.");
     } else if (input.action === "restore") {
-      await planRegistrationJourneys(id);
+      const registration = await prisma.registration.findUnique({ where: { id }, select: { cohortId: true } });
+      if (registration) {
+        await planAutomaticRegistrationJourney(id, registration.cohortId);
+      }
     }
   }
 
@@ -403,7 +415,7 @@ export async function bulkMoveRegistrationsToCohort(input: { ids: string[]; targ
   }
 
   const [targetCohort, registrations] = await Promise.all([
-    prisma.cohort.findUnique({ where: { id: targetCohortId }, select: { id: true, title: true } }),
+    prisma.cohort.findUnique({ where: { id: targetCohortId }, select: { id: true, title: true, status: true } }),
     prisma.registration.findMany({
       where: { id: { in: ids } },
       include: {
@@ -519,7 +531,8 @@ export async function bulkMoveRegistrationsToCohort(input: { ids: string[]; targ
       participantConfirmationCohortScoped: true,
       participantConfirmationBatchKey: moveConfirmationBatchKey,
       bypassCohortStatusForImmediate: true,
-      calendarSendUpdates: false
+      calendarSendUpdates: false,
+      ...automaticRegistrationJourneyOptions(targetCohort.status)
     }));
   }
 

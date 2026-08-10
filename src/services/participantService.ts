@@ -8,7 +8,7 @@ import { logAuditEventAsync } from "./auditService";
 import { queueParticipantCrmSync, queueRegistrationCrmSync } from "./crmSyncService";
 import { syncRegistrationToCrm, syncRemovedParticipantToCrm } from "./crmRegistrationWebhookService";
 import { getRecipientCommunicationSummary } from "./communicationService";
-import { cancelParticipantJourneys, planRegistrationJourneys } from "./registrationJourneyService";
+import { automaticRegistrationJourneyOptions, cancelParticipantJourneys, planRegistrationJourneys } from "./registrationJourneyService";
 import { shouldDeferRegistrationDelivery, stageParticipantAddition, stageParticipantRemoval } from "./registrationChangeService";
 import { syncFutureLinkedGoogleCalendarInvitesForCohort } from "./calendarService";
 import { createInvoiceDraft, generateInvoicePdf, updateInvoiceDraft } from "./invoiceService";
@@ -302,7 +302,7 @@ export async function addParticipant(input: z.input<typeof participantCreateSche
     await stageParticipantAddition(participant.registrationId, participantChangeRow(participant));
     return { ...participant, journey: { status: "pending_apply" as const } };
   }
-  const journey = await planRegistrationJourneys(participant.registrationId);
+  const journey = await planRegistrationJourneys(participant.registrationId, automaticRegistrationJourneyOptions(registration.cohort.status));
   return { ...participant, journey };
 }
 
@@ -330,7 +330,7 @@ export async function updateParticipant(id: string, input: z.input<typeof partic
     }
     return { ...participant, journey: { status: "pending_apply" as const } };
   }
-  const journey = await planRegistrationJourneys(participant.registrationId);
+  const journey = await planRegistrationJourneys(participant.registrationId, automaticRegistrationJourneyOptions(registration.cohort.status));
   return { ...participant, journey };
 }
 
@@ -361,7 +361,7 @@ export async function bulkMoveParticipantsToCohort(input: { ids: string[]; targe
   }
 
   const [targetCohort, participants] = await Promise.all([
-    prisma.cohort.findUnique({ where: { id: targetCohortId }, select: { id: true, title: true, pricePerParticipant: true } }),
+    prisma.cohort.findUnique({ where: { id: targetCohortId }, select: { id: true, title: true, status: true, pricePerParticipant: true } }),
     prisma.participant.findMany({
       where: { id: { in: ids } },
       include: {
@@ -600,7 +600,8 @@ export async function bulkMoveParticipantsToCohort(input: { ids: string[]; targe
       pocConfirmationCohortScoped: true,
       pocConfirmationBatchKey: moveConfirmationBatchKey,
       bypassCohortStatusForImmediate: true,
-      calendarSendUpdates: false
+      calendarSendUpdates: false,
+      ...automaticRegistrationJourneyOptions(targetCohort.status)
     }));
   }
 
@@ -624,7 +625,7 @@ export async function bulkMoveParticipantsToCohort(input: { ids: string[]; targe
 
 export async function listParticipantsByCohort(cohortId: string) {
   const participants = await prisma.participant.findMany({
-    where: { cohortId },
+    where: { cohortId, registration: { archivedAt: null } },
     orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
     include: { organization: true, registration: { include: { paymentRecords: true } } }
   });
@@ -638,6 +639,7 @@ export async function listParticipantsByCohort(cohortId: string) {
 
 export async function listParticipants() {
   const participants = await prisma.participant.findMany({
+    where: { registration: { archivedAt: null } },
     orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
     include: { cohort: true, organization: true, registration: { include: { paymentRecords: true } } }
   });

@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { CohortStatus } from "@prisma/client";
 import { registrationConfirmationDocumentReadiness } from "../../src/services/registrationDocumentReadiness";
 import {
+  automaticRegistrationJourneyOptions,
   buildRegistrationMilestones,
   calendarFilesJourneyKey,
   participantConfirmationJourneyKey,
@@ -15,6 +17,26 @@ import {
 } from "../../src/services/quickBooksService";
 
 const cohortStart = new Date("2026-08-15T14:00:00.000Z");
+
+test("automatic registration journeys are plan-only before a cohort is live", () => {
+  assert.deepEqual(automaticRegistrationJourneyOptions(CohortStatus.DRAFT), {
+    syncCalendar: false,
+    sendPocConfirmation: false,
+    sendParticipantConfirmation: false
+  });
+  assert.deepEqual(automaticRegistrationJourneyOptions(CohortStatus.COMPLETED), {
+    syncCalendar: false,
+    sendPocConfirmation: false,
+    sendParticipantConfirmation: false
+  });
+  assert.deepEqual(automaticRegistrationJourneyOptions(CohortStatus.CANCELLED), {
+    syncCalendar: false,
+    sendPocConfirmation: false,
+    sendParticipantConfirmation: false
+  });
+  assert.deepEqual(automaticRegistrationJourneyOptions(CohortStatus.PUBLISHED), {});
+  assert.deepEqual(automaticRegistrationJourneyOptions(CohortStatus.ACTIVE), {});
+});
 
 test("schedules both cohort milestones for an early registration", () => {
   const milestones = buildRegistrationMilestones(cohortStart, new Date("2026-07-01T14:00:00.000Z"));
