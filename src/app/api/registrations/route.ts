@@ -98,6 +98,17 @@ export async function PATCH(request: Request) {
       }), { status: 202 });
     }
 
+    if (body.action === "reconcileParticipantMilestones") {
+      return ok(await planRegistrationJourneys(body.id, {
+        syncCalendar: false,
+        planPocConfirmation: false,
+        sendPocConfirmation: false,
+        sendParticipantConfirmation: false,
+        participantEmails: Array.isArray(body.participantEmails) ? body.participantEmails : undefined,
+        retryFailed: true
+      }), { status: 202 });
+    }
+
     if (body.action === "sendPocConfirmation") {
       return ok(await planRegistrationJourneys(body.id, {
         syncCalendar: false,
