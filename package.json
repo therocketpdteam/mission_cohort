@@ -8,7 +8,7 @@
     "build": "prisma generate && next build",
     "postinstall": "prisma generate",
     "start": "next start",
-    "vercel:build": "pnpm prisma:generate && node scripts/apply-production-schema-patches.mjs && node scripts/ensure-storage-buckets.mjs && pnpm build",
+    "vercel:build": "pnpm prisma:generate && node scripts/validate-deployment-environment.mjs && node scripts/apply-production-schema-patches.mjs && node scripts/ensure-storage-buckets.mjs && pnpm build",
     "lint": "next lint",
     "typecheck": "next typegen && tsc --noEmit",
     "prisma:generate": "prisma generate",
@@ -29,6 +29,7 @@
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:report": "playwright show-report",
     "readiness": "node scripts/readiness-check.mjs",
+    "deployment:validate-env": "node scripts/validate-deployment-environment.mjs",
     "auth:create-admin": "tsx scripts/create-admin-user.ts"
   },
   "dependencies": {

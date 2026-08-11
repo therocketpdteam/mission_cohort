@@ -40,6 +40,8 @@ Staging also needs isolated values for:
 - `WEBHOOK_SECRET`
 - `CRON_SECRET`
 
+Use `.env.staging.example` as the checklist for branch-specific Preview values.
+
 Integrations should be omitted or pointed at test systems until explicitly approved:
 
 - `SENDGRID_API_KEY`
@@ -54,6 +56,7 @@ Integrations should be omitted or pointed at test systems until explicitly appro
 - Production displays `Production / Live data`.
 - Staging displays `Staging / Jobs off` unless `ALLOW_BACKGROUND_JOBS=true`.
 - Background job endpoints refuse to run outside Production unless `ALLOW_BACKGROUND_JOBS=true`.
+- Deployment fails fast if `APP_ENV=staging` points at the known Production Supabase project, the Production app URL, or has background jobs enabled.
 - Vercel cron jobs are configured at the project level and should only process the Production deployment.
 
 ## Recommended Workflow
