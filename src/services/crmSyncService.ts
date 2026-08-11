@@ -1,5 +1,6 @@
 import { CrmSyncEventStatus, Prisma } from "@prisma/client";
 import { env } from "@/lib/env";
+import { assertOutboundUnlocked } from "@/lib/outboundLock";
 import { prisma } from "@/lib/prisma";
 import {
   crmRegistrationWebhookHeaders,
@@ -169,6 +170,19 @@ export async function processCrmSyncEvents(
       continue;
     }
 
+    await assertOutboundUnlocked({
+      channel: "CRM",
+      action: "process CRM sync event",
+      entityType: "CrmSyncEvent",
+      entityId: event.id,
+      metadata: {
+        eventType: event.eventType,
+        entityType: event.entityType,
+        entityId: event.entityId,
+        missionPayload
+      }
+    });
+
     await prisma.crmSyncEvent.update({
       where: { id: event.id },
       data: { status: CrmSyncEventStatus.SENDING, lastAttemptAt: new Date() }
@@ -331,6 +345,12 @@ async function fetchReceiverDiagnostics(shortNames: string[]) {
   if (!url || !secret || shortNames.length === 0) {
     return null;
   }
+
+  await assertOutboundUnlocked({
+    channel: "CRM",
+    action: "fetch CRM receiver diagnostics",
+    metadata: { shortNames }
+  });
 
   const diagnosticUrl = new URL(url);
   diagnosticUrl.pathname = "/api/debug/mission-cohort-sync";
@@ -551,6 +571,16 @@ export async function replayHistoricalCrmRegistrationEvents(input: {
     }
 
     try {
+      await assertOutboundUnlocked({
+        channel: "CRM",
+        action: "replay CRM historical import event",
+        entityType: "CrmSyncEvent",
+        entityId: row.id,
+        metadata: {
+          shortName: row.shortName,
+          participantEmail: row.participantEmail
+        }
+      });
       const response = await fetch(url, {
         method: "POST",
         headers: crmRegistrationWebhookHeaders(secret, env.CRM_MISSION_COHORT_VERCEL_BYPASS_SECRET),

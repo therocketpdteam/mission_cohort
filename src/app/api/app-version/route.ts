@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { backgroundJobsAllowed, getAppEnvironmentKind, getAppEnvironmentLabel } from "@/lib/env";
+import { getOutboundLockState } from "@/lib/outboundLock";
 import packageJson from "../../../../package.json";
 
 function version() {
@@ -20,7 +21,8 @@ export async function GET() {
           kind: getAppEnvironmentKind(),
           label: getAppEnvironmentLabel(),
           vercelEnvironment: process.env.VERCEL_ENV || "local",
-          backgroundJobsAllowed: backgroundJobsAllowed()
+          backgroundJobsAllowed: backgroundJobsAllowed(),
+          outbound: getOutboundLockState()
         }
       }
     },

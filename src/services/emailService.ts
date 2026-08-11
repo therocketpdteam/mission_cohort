@@ -5,6 +5,7 @@ import {
   sendWithSendGrid,
   validateMergeFields as validateTemplateMergeFields
 } from "@/modules/email";
+import { assertOutboundUnlocked } from "@/lib/outboundLock";
 import { assertOutboundRecipientsAllowed } from "@/services/integrationSetupService";
 
 export async function sendEmail(input: {
@@ -17,6 +18,14 @@ export async function sendEmail(input: {
 }) {
   const recipients = Array.isArray(input.to) ? input.to : [input.to];
   await assertOutboundRecipientsAllowed("SENDGRID", recipients);
+  await assertOutboundUnlocked({
+    channel: "SENDGRID",
+    action: "send email",
+    metadata: {
+      recipientCount: recipients.length,
+      subject: input.subject
+    }
+  });
   const renderedHtml = renderTemplate(input.bodyHtml, input.context ?? {}).output;
   const renderedText = input.bodyText ? renderTemplate(input.bodyText, input.context ?? {}).output : undefined;
   const attachments = await resolveSendGridAttachments(input.attachments ?? []);

@@ -1,5 +1,6 @@
 import { CalendarInviteStatus, IntegrationConnectionStatus, IntegrationProvider, OperationsTaskCategory, OperationsTaskStatus, ParticipantStatus, RegistrationStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { assertOutboundUnlocked } from "@/lib/outboundLock";
 import { buildSessionCalendarDescription, deleteGoogleCalendarEvent, exchangeGoogleCalendarCode, generateSessionIcs, getGoogleCalendarConnectUrl, getGoogleCalendarEvent, listGoogleCalendars, refreshGoogleCalendarToken, uniqueCalendarAttendees, upsertGoogleCalendarEvent } from "@/modules/calendar";
 import { getDecryptedIntegrationConnection, upsertIntegrationConnection } from "@/services/integrationService";
 import { assertCohortDeliveryAllowed, assertOutboundRecipientsAllowed, resolveGoogleCalendarSetup } from "@/services/integrationSetupService";
@@ -140,6 +141,17 @@ export async function createCalendarInvitePlaceholder(sessionId?: string, mode: 
     if (mode === "google") {
       const attendees = await getCohortCalendarAttendees(session.cohortId);
       await assertCohortDeliveryAllowed("GOOGLE_CALENDAR", session.cohort.status, attendees.map((attendee) => attendee.email));
+      await assertOutboundUnlocked({
+        channel: "GOOGLE_CALENDAR",
+        action: options.sendUpdates === true ? "create/update calendar invite with attendee notifications" : "create/update calendar invite",
+        entityType: "CohortSession",
+        entityId: session.id,
+        metadata: {
+          cohortId: session.cohortId,
+          attendeeCount: attendees.length,
+          sendUpdates: options.sendUpdates === true
+        }
+      });
       const existing = await prisma.calendarEvent.findFirst({
         where: { sessionId: session.id, provider: "google" },
         orderBy: { createdAt: "desc" }
@@ -516,6 +528,17 @@ export async function cancelGoogleCalendarInvites(input: { sessionId?: string; c
   const { details, accessToken, calendarId } = await connectedGoogleEventDetails(sessionIds);
   const recipientEmails = details.flatMap(({ googleEvent }) => (googleEvent?.attendees ?? []).map((attendee) => attendee.email ?? ""));
   await assertOutboundRecipientsAllowed("GOOGLE_CALENDAR", recipientEmails);
+  await assertOutboundUnlocked({
+    channel: "GOOGLE_CALENDAR",
+    action: options.notifyAttendees ? "cancel calendar invites with attendee notifications" : "cancel calendar invites",
+    entityType: input.sessionId ? "CohortSession" : "Cohort",
+    entityId: input.sessionId ?? input.cohortId ?? "unknown",
+    metadata: {
+      sessionCount: sessionIds.length,
+      recipientCount: recipientEmails.filter(Boolean).length,
+      notifyAttendees: options.notifyAttendees
+    }
+  });
 
   for (const { record, googleEvent } of details) {
     if (googleEvent) {

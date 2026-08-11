@@ -41,6 +41,8 @@ const envSchema = z.object({
   NEXT_PUBLIC_APP_ENV: optionalString,
   NEXT_PUBLIC_ENV_LABEL: optionalString,
   ALLOW_BACKGROUND_JOBS: optionalString,
+  OUTBOUND_RELEASE_LOCK: optionalString,
+  OUTBOUND_RELEASE_REASON: optionalString,
   SUPABASE_PUBLIC_BUCKET: optionalString,
   SUPABASE_PRIVATE_BUCKET: optionalString
 });

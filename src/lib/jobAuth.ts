@@ -1,5 +1,6 @@
 import { fail } from "@/lib/api";
 import { backgroundJobsAllowed, env, getAppEnvironmentKind, getAppEnvironmentLabel } from "@/lib/env";
+import { getOutboundLockState, outboundLockedMessage } from "@/lib/outboundLock";
 
 export function validateJobSecret(request: Request) {
   if (!env.CRON_SECRET) {
@@ -27,6 +28,11 @@ export function validateJobRequest(request: Request) {
     );
   }
 
+  const outbound = getOutboundLockState();
+  if (outbound.locked) {
+    return fail(outboundLockedMessage("BACKGROUND_JOBS", "background job processing"), "FORBIDDEN", 423);
+  }
+
   return null;
 }
 
@@ -34,6 +40,7 @@ export function jobEnvironmentSnapshot() {
   return {
     environment: getAppEnvironmentKind(),
     label: getAppEnvironmentLabel(),
-    backgroundJobsAllowed: backgroundJobsAllowed()
+    backgroundJobsAllowed: backgroundJobsAllowed(),
+    outbound: getOutboundLockState()
   };
 }

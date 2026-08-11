@@ -112,6 +112,7 @@ SUPABASE_SERVICE_ROLE_KEY
 APP_BASE_URL=https://mission-cohort-six.vercel.app
 WEBHOOK_SECRET
 CRON_SECRET
+OUTBOUND_RELEASE_LOCK=locked
 ```
 
 Recommended go-live order:

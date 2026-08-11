@@ -617,6 +617,7 @@ export async function postCrmRegistrationWebhookPayload(
   payload: CrmRegistrationWebhookPayload,
   config: CrmRegistrationWebhookConfig & { eventType?: string; registrationId?: string } = {}
 ): Promise<CrmRegistrationSyncResult> {
+  const { assertOutboundUnlocked } = await import("@/lib/outboundLock");
   const url = crmWebhookUrl(config);
   const secret = crmWebhookSecret(config);
   const vercelBypassSecret = crmVercelBypassSecret(config);
@@ -628,6 +629,19 @@ export async function postCrmRegistrationWebhookPayload(
   if (!url || !secret) {
     return { status: "skipped", attempts: 0, permanent: true, error: "CRM Mission Cohort webhook is not configured." };
   }
+
+  await assertOutboundUnlocked({
+    channel: "CRM",
+    action: "send CRM registration webhook",
+    entityType: "Registration",
+    entityId: config.registrationId ?? payload.missionRegistrationId,
+    metadata: {
+      eventType: config.eventType ?? "registration.updated",
+      missionCohortId: payload.missionCohortId,
+      missionParticipantId: payload.missionParticipantId,
+      participantEmail: payload.participant.email
+    }
+  });
 
   const syncEvent = await createSyncEvent(payload, config.eventType ?? "registration.updated", config.registrationId).catch(() => null);
   syncEventId = syncEvent?.id;

@@ -9,6 +9,7 @@ import {
   WebhookProcessingStatus
 } from "@prisma/client";
 import { Prisma } from "@prisma/client";
+import { assertOutboundUnlocked } from "@/lib/outboundLock";
 import { prisma } from "@/lib/prisma";
 import {
   createQuickBooksBill,
@@ -282,6 +283,14 @@ export async function ensureCohortQuickBooksProject(cohortId: string) {
     throw Object.assign(new Error("Cohort short name is required to create a QuickBooks project."), { code: "BAD_REQUEST", status: 400 });
   }
 
+  await assertOutboundUnlocked({
+    channel: "QUICKBOOKS",
+    action: "create/reconcile QuickBooks project",
+    entityType: "Cohort",
+    entityId: cohort.id,
+    metadata: { projectName }
+  });
+
   const { setup, realmId, accessToken } = await quickBooksConnection();
   const parentCustomerRef = requireProjectSetup(setup);
 
@@ -341,6 +350,13 @@ async function markCohortQuickBooksProjectMissing(cohortId: string, projectRef?:
 }
 
 export async function reconcileCohortQuickBooksProject(cohortId: string) {
+  await assertOutboundUnlocked({
+    channel: "QUICKBOOKS",
+    action: "reconcile QuickBooks project",
+    entityType: "Cohort",
+    entityId: cohortId
+  });
+
   const cohort = await prisma.cohort.findUnique({ where: { id: cohortId } });
 
   if (!cohort) {
@@ -583,6 +599,18 @@ export async function createQuickBooksInvoiceFromDraft(invoiceDraftId: string) {
     throw Object.assign(new Error("Archived registrations cannot be sent to QuickBooks."), { code: "BAD_REQUEST", status: 400 });
   }
 
+  await assertOutboundUnlocked({
+    channel: "QUICKBOOKS",
+    action: "create QuickBooks invoice",
+    entityType: "InvoiceDraft",
+    entityId: invoice.id,
+    metadata: {
+      cohortId: invoice.cohortId,
+      registrationId: invoice.registrationId,
+      invoiceNumber: invoice.invoiceNumber
+    }
+  });
+
   const { setup, realmId, accessToken } = await quickBooksConnection();
   const serviceItemRef = requireInvoiceSetup(setup);
   const cohortProject = invoice.cohort.quickBooksProjectRef
@@ -726,6 +754,17 @@ export async function createQuickBooksBillFromPayout(payoutId: string) {
     throw Object.assign(new Error("QuickBooks expense account ref is required in Distribution Controls before creating a payout bill."), { code: "BAD_REQUEST", status: 400 });
   }
 
+  await assertOutboundUnlocked({
+    channel: "QUICKBOOKS",
+    action: "create QuickBooks payout bill",
+    entityType: "DistributionPayout",
+    entityId: payout.id,
+    metadata: {
+      cohortId: cohort.id,
+      amount: Number(payout.amount)
+    }
+  });
+
   const project = cohort.quickBooksProjectRef
     ? cohort
     : await ensureCohortQuickBooksProject(cohort.id);
@@ -834,6 +873,14 @@ async function markQuickBooksBillMissing(billId: string, realmId?: string) {
 }
 
 export async function syncQuickBooksBill(billId: string, realmId?: string) {
+  await assertOutboundUnlocked({
+    channel: "QUICKBOOKS",
+    action: "sync QuickBooks bill",
+    entityType: "QuickBooksBill",
+    entityId: billId,
+    metadata: { realmId }
+  });
+
   const connection = await getDecryptedIntegrationConnection(IntegrationProvider.QUICKBOOKS);
 
   if (!connection?.accessToken) {
@@ -878,6 +925,14 @@ export async function syncQuickBooksBill(billId: string, realmId?: string) {
 }
 
 export async function syncQuickBooksBillPayment(billPaymentId: string, realmId?: string) {
+  await assertOutboundUnlocked({
+    channel: "QUICKBOOKS",
+    action: "sync QuickBooks bill payment",
+    entityType: "QuickBooksBillPayment",
+    entityId: billPaymentId,
+    metadata: { realmId }
+  });
+
   const connection = await getDecryptedIntegrationConnection(IntegrationProvider.QUICKBOOKS);
 
   if (!connection?.accessToken) {
@@ -950,6 +1005,14 @@ async function markQuickBooksInvoiceMissing(invoiceId: string, realmId?: string)
 }
 
 export async function syncQuickBooksInvoice(invoiceId: string, realmId?: string) {
+  await assertOutboundUnlocked({
+    channel: "QUICKBOOKS",
+    action: "sync QuickBooks invoice",
+    entityType: "QuickBooksInvoice",
+    entityId: invoiceId,
+    metadata: { realmId }
+  });
+
   const connection = await quickBooksConnection();
   const resolvedRealmId = realmId ?? connection.realmId;
 
@@ -1014,6 +1077,12 @@ export async function syncQuickBooksInvoice(invoiceId: string, realmId?: string)
 }
 
 export async function reconcileOpenQuickBooksInvoices(limit = 50) {
+  await assertOutboundUnlocked({
+    channel: "QUICKBOOKS",
+    action: "reconcile open QuickBooks invoices",
+    metadata: { limit }
+  });
+
   const readiness = await getQuickBooksAutomationReadiness();
   if (!readiness.ready) {
     return {
@@ -1073,6 +1142,14 @@ export async function reconcileOpenQuickBooksInvoices(limit = 50) {
 }
 
 export async function syncQuickBooksPayment(paymentId: string, realmId?: string) {
+  await assertOutboundUnlocked({
+    channel: "QUICKBOOKS",
+    action: "sync QuickBooks payment",
+    entityType: "QuickBooksPayment",
+    entityId: paymentId,
+    metadata: { realmId }
+  });
+
   const payments = await prisma.paymentRecord.updateMany({
     where: { quickBooksPaymentRef: paymentId },
     data: {
@@ -1111,6 +1188,17 @@ export async function voidRegistrationQuickBooksInvoice(registrationId: string) 
       status: 400
     });
   }
+
+  await assertOutboundUnlocked({
+    channel: "QUICKBOOKS",
+    action: "void QuickBooks invoice",
+    entityType: "Registration",
+    entityId: registration.id,
+    metadata: {
+      invoiceId: registration.quickBooksInvoiceRef,
+      realmId: registration.quickBooksRealmId
+    }
+  });
 
   const connection = await getDecryptedIntegrationConnection(IntegrationProvider.QUICKBOOKS);
 

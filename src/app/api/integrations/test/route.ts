@@ -2,6 +2,7 @@ import { IntegrationConnectionStatus, IntegrationProvider } from "@prisma/client
 import { handleApiError, ok } from "@/lib/api";
 import { MUTATION_ROLES, requireRole } from "@/lib/auth";
 import { env, getEnvPresence } from "@/lib/env";
+import { assertOutboundUnlocked } from "@/lib/outboundLock";
 import { generateSessionIcs, upsertGoogleCalendarEvent } from "@/modules/calendar";
 import { sendWithSendGrid } from "@/modules/email";
 import { getDecryptedIntegrationConnection } from "@/services/integrationService";
@@ -31,6 +32,14 @@ export async function POST(request: Request) {
     const action = String(body.action ?? "");
 
     if (action === "sendgrid") {
+      await assertOutboundUnlocked({
+        channel: "SENDGRID",
+        action: "send SendGrid diagnostic email",
+        entityType: "User",
+        entityId: user.id,
+        metadata: { recipient: user.email }
+      });
+
       const result = await sendWithSendGrid({
         to: user.email,
         subject: "Mission Control SendGrid diagnostic",
@@ -61,6 +70,13 @@ export async function POST(request: Request) {
     }
 
     if (action === "googleCalendar") {
+      await assertOutboundUnlocked({
+        channel: "GOOGLE_CALENDAR",
+        action: "create Google Calendar diagnostic event",
+        entityType: "User",
+        entityId: user.id
+      });
+
       const setup = await resolveGoogleCalendarSetup();
       const presence = getEnvPresence();
 
