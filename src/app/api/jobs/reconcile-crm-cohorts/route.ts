@@ -1,5 +1,5 @@
-import { fail, handleApiError, ok } from "@/lib/api";
-import { validateJobSecret } from "@/lib/jobAuth";
+import { handleApiError, ok } from "@/lib/api";
+import { validateJobRequest } from "@/lib/jobAuth";
 import { reconcileActiveCohortsToCrm } from "@/services/crmReconciliationService";
 
 function readPositiveInt(value: string | null, fallback: number) {
@@ -10,9 +10,8 @@ function readPositiveInt(value: string | null, fallback: number) {
 
 async function processRequest(request: Request, body?: unknown) {
   try {
-    if (!validateJobSecret(request)) {
-      return fail("Invalid job secret", "FORBIDDEN", 403);
-    }
+    const blockedResponse = validateJobRequest(request);
+    if (blockedResponse) return blockedResponse;
 
     const searchParams = new URL(request.url).searchParams;
     const bodyRecord = body && typeof body === "object" && !Array.isArray(body) ? body as Record<string, unknown> : {};

@@ -1,12 +1,11 @@
-import { fail, handleApiError, ok } from "@/lib/api";
-import { validateJobSecret } from "@/lib/jobAuth";
+import { handleApiError, ok } from "@/lib/api";
+import { validateJobRequest } from "@/lib/jobAuth";
 import { processScheduledCommunications } from "@/services/communicationService";
 
 async function processRequest(request: Request, limit?: number) {
   try {
-    if (!validateJobSecret(request)) {
-      return fail("Invalid job secret", "FORBIDDEN", 403);
-    }
+    const blockedResponse = validateJobRequest(request);
+    if (blockedResponse) return blockedResponse;
 
     return ok(await processScheduledCommunications(limit), { status: 202 });
   } catch (error) {

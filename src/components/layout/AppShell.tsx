@@ -97,6 +97,13 @@ type PeopleSearchGroup = {
   registrations: PeopleSearchResult[];
 };
 
+type AppEnvironment = {
+  kind: "production" | "staging" | "local";
+  label: string;
+  vercelEnvironment: string;
+  backgroundJobsAllowed: boolean;
+};
+
 const navItems: ReadonlyArray<{
   label: string;
   href: Route;
@@ -371,12 +378,26 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [themeMode, setThemeMode] = useState<"normal" | "night">("normal");
   const [user, setUser] = useState<{ firstName?: string; lastName?: string; email?: string; role?: string } | null>(null);
   const [breadcrumbLabels, setBreadcrumbLabels] = useState<Record<string, string>>({});
+  const [environment, setEnvironment] = useState<AppEnvironment>({
+    kind: "local",
+    label: "Local",
+    vercelEnvironment: "local",
+    backgroundJobsAllowed: false
+  });
   const title = titleFromPath(pathname);
   const subtitle = subtitleFromPath(pathname);
   const crumbs = useMemo(() => breadcrumbsFor(pathname, breadcrumbLabels), [breadcrumbLabels, pathname]);
 
   useEffect(() => {
     if (pathname === "/login" || pathname.startsWith("/reports/share/")) return;
+
+    adminApi<{ environment?: AppEnvironment }>("/api/app-version")
+      .then((payload) => {
+        if (payload.environment) {
+          setEnvironment(payload.environment);
+        }
+      })
+      .catch(() => undefined);
 
     adminApi<{ firstName?: string; lastName?: string; email?: string; role?: string }>("/api/auth/me")
       .then(setUser)
@@ -439,6 +460,9 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="app-brand">
           <p className="app-brand-title">Mission Cohort</p>
           <p className="app-brand-subtitle">Internal Ops</p>
+          <span className={`app-environment-badge is-${environment.kind}`}>
+            {environment.label}
+          </span>
         </div>
         <nav className="app-nav" aria-label="Admin navigation">
           {navItems.map((item) => {
@@ -470,6 +494,10 @@ export function AppShell({ children }: { children: ReactNode }) {
                 ))}
               </div>
             )}
+          </div>
+          <div className={`app-environment-chip is-${environment.kind}`} title={`${environment.label} environment. Background jobs ${environment.backgroundJobsAllowed ? "enabled" : "disabled"}.`}>
+            <strong>{environment.label}</strong>
+            <span>{environment.kind === "production" ? "Live data" : environment.backgroundJobsAllowed ? "Test jobs on" : "Jobs off"}</span>
           </div>
           <GlobalPeopleSearch />
           <div className="app-view-controls" aria-label="View controls">

@@ -37,6 +37,10 @@ const envSchema = z.object({
   WEBHOOK_SECRET: optionalString,
   CRON_SECRET: optionalString,
   APP_BASE_URL: optionalString,
+  APP_ENV: optionalString,
+  NEXT_PUBLIC_APP_ENV: optionalString,
+  NEXT_PUBLIC_ENV_LABEL: optionalString,
+  ALLOW_BACKGROUND_JOBS: optionalString,
   SUPABASE_PUBLIC_BUCKET: optionalString,
   SUPABASE_PRIVATE_BUCKET: optionalString
 });
@@ -77,6 +81,30 @@ export function getEnvPresence() {
     appBaseUrlConfigured: Boolean(env.APP_BASE_URL),
     supabaseStorageConfigured: Boolean(env.NEXT_PUBLIC_SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY)
   };
+}
+
+export type AppEnvironmentKind = "production" | "staging" | "local";
+
+export function getAppEnvironmentKind(): AppEnvironmentKind {
+  const rawValue = (env.APP_ENV || env.NEXT_PUBLIC_APP_ENV || process.env.VERCEL_ENV || "local").trim().toLowerCase();
+
+  if (rawValue === "production" || rawValue === "prod") {
+    return "production";
+  }
+
+  if (rawValue === "staging" || rawValue === "stage" || rawValue === "preview") {
+    return "staging";
+  }
+
+  return "local";
+}
+
+export function getAppEnvironmentLabel() {
+  return env.NEXT_PUBLIC_ENV_LABEL || (getAppEnvironmentKind() === "production" ? "Production" : getAppEnvironmentKind() === "staging" ? "Staging" : "Local");
+}
+
+export function backgroundJobsAllowed() {
+  return getAppEnvironmentKind() === "production" || env.ALLOW_BACKGROUND_JOBS === "true";
 }
 
 export function requireRequiredEnv() {

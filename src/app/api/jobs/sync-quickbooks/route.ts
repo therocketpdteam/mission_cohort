@@ -1,12 +1,11 @@
-import { fail, handleApiError, ok } from "@/lib/api";
-import { validateJobSecret } from "@/lib/jobAuth";
+import { handleApiError, ok } from "@/lib/api";
+import { validateJobRequest } from "@/lib/jobAuth";
 import { syncQuickBooksInvoice } from "@/services/quickBooksService";
 
 export async function POST(request: Request) {
   try {
-    if (!validateJobSecret(request)) {
-      return fail("Invalid job secret", "FORBIDDEN", 403);
-    }
+    const blockedResponse = validateJobRequest(request);
+    if (blockedResponse) return blockedResponse;
 
     const body = await request.json().catch(() => ({}));
 

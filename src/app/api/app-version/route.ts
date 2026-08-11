@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { backgroundJobsAllowed, getAppEnvironmentKind, getAppEnvironmentLabel } from "@/lib/env";
 import packageJson from "../../../../package.json";
 
 function version() {
@@ -14,7 +15,13 @@ export async function GET() {
       data: {
         version: value,
         shortVersion: value.slice(0, 8),
-        source: process.env.VERCEL_GIT_COMMIT_SHA ? "vercel-git" : process.env.NEXT_PUBLIC_APP_VERSION ? "app-version" : "package"
+        source: process.env.VERCEL_GIT_COMMIT_SHA ? "vercel-git" : process.env.NEXT_PUBLIC_APP_VERSION ? "app-version" : "package",
+        environment: {
+          kind: getAppEnvironmentKind(),
+          label: getAppEnvironmentLabel(),
+          vercelEnvironment: process.env.VERCEL_ENV || "local",
+          backgroundJobsAllowed: backgroundJobsAllowed()
+        }
       }
     },
     {

@@ -249,6 +249,74 @@ h6,
   font-weight: 700;
 }
 
+.app-environment-badge,
+.app-environment-chip {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--color-slate-200);
+  border-radius: 999px;
+  font-family: var(--font-heading);
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.app-environment-badge {
+  width: fit-content;
+  margin-top: 12px;
+  padding: 7px 10px;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.app-environment-chip {
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  min-width: 108px;
+  min-height: 42px;
+  padding: 6px 12px;
+  text-align: center;
+}
+
+.app-environment-chip strong {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.app-environment-chip span {
+  color: var(--color-slate-600);
+  font-size: 0.72rem;
+}
+
+.app-environment-badge.is-production,
+.app-environment-chip.is-production {
+  border-color: rgba(21, 128, 61, 0.25);
+  background: #dcfce7;
+  color: #166534;
+}
+
+.app-environment-badge.is-staging,
+.app-environment-chip.is-staging {
+  border-color: rgba(217, 119, 6, 0.32);
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.app-environment-badge.is-local,
+.app-environment-chip.is-local {
+  border-color: rgba(71, 85, 105, 0.25);
+  background: var(--color-slate-100);
+  color: var(--color-slate-700);
+}
+
+.app-shell.is-night .app-environment-chip span {
+  color: inherit;
+  opacity: 0.74;
+}
+
 .app-nav {
   display: grid;
   gap: 6px;
@@ -8113,8 +8181,15 @@ h6,
     justify-content: flex-start;
   }
 
+  .app-environment-chip {
+    order: 1;
+    min-width: 96px;
+    min-height: 38px;
+    padding: 5px 10px;
+  }
+
   .global-people-search {
-    order: 2;
+    order: 4;
     width: 100%;
     max-width: none;
     flex-basis: 100%;
@@ -8262,10 +8337,16 @@ h6,
   }
 
   .app-view-controls,
+  .app-environment-chip,
   .global-people-search,
   .user-menu {
     grid-column: 1 / -1;
     width: 100%;
+  }
+
+  .app-environment-chip {
+    align-items: flex-start;
+    text-align: left;
   }
 
   .global-people-search {
