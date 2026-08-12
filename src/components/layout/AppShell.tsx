@@ -184,7 +184,7 @@ function nameForEmail(result: PeopleSearchResult, email: string) {
 }
 
 function accountName(result: PeopleSearchResult) {
-  return formatProperDisplay(result.organization.name) || "No account";
+  return String(result.organization.name ?? "").trim() || "No account";
 }
 
 function groupSearchResults(results: PeopleSearchResult[], query: string): PeopleSearchGroup[] {
