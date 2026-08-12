@@ -348,7 +348,6 @@ function GlobalPeopleSearch() {
                   ) : (
                     <>
                       <div className="global-people-search-meta">
-                        <span>Account: {accountName(result)}</span>
                         <span>POC: {formatProperDisplay(result.primaryContactName)} · {result.primaryContactEmail}</span>
                         <span>Registered: {formatShortDate(result.createdAt)}</span>
                         <span>Registration: {formatStatusLabel(result.status)} · Roster {formatStatusLabel(result.participantListStatus)}</span>
