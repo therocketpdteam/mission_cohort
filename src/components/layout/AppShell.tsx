@@ -183,6 +183,10 @@ function nameForEmail(result: PeopleSearchResult, email: string) {
   return email;
 }
 
+function accountName(result: PeopleSearchResult) {
+  return formatProperDisplay(result.organization.name) || "No account";
+}
+
 function groupSearchResults(results: PeopleSearchResult[], query: string): PeopleSearchGroup[] {
   const emailQuery = exactEmailQuery(query);
   const groups = new Map<string, PeopleSearchGroup>();
@@ -201,7 +205,7 @@ function groupSearchResults(results: PeopleSearchResult[], query: string): Peopl
     groups.set(key, {
       key,
       primaryEmail: matchingEmail || result.primaryContactEmail,
-      displayName: matchingEmail ? nameForEmail(result, matchingEmail) : formatProperDisplay(result.organization.name),
+      displayName: matchingEmail ? nameForEmail(result, matchingEmail) : accountName(result),
       matchTypes: result.matchTypes,
       registrations: [result]
     });
@@ -314,6 +318,7 @@ function GlobalPeopleSearch() {
                         {group.primaryEmail}
                         {hasMultipleRegistrations ? ` · ${group.registrations.length} registrations` : ` · ${result.cohort.shortName || result.cohort.slug} · ${formatStatusLabel(result.cohort.status)}`}
                       </span>
+                      <span>Account: {accountName(result)}</span>
                     </div>
                     <div className="global-people-search-tags">
                       {group.matchTypes.map((match) => <span key={match}>{match}</span>)}
@@ -329,7 +334,7 @@ function GlobalPeopleSearch() {
                           <div className="global-people-search-registration-row" key={registration.id}>
                             <div>
                               <strong>{registration.cohort.shortName || registration.cohort.slug}</strong>
-                              <span>{formatProperDisplay(registration.organization.name)} · {formatShortDate(registration.createdAt)}</span>
+                              <span>Account: {accountName(registration)} · {formatShortDate(registration.createdAt)}</span>
                             </div>
                             <div>
                               <span>{formatStatusLabel(registration.status)} · {formatStatusLabel(registration.paymentStatus)} · {formatCurrency(registration.totalAmount)}</span>
@@ -343,6 +348,7 @@ function GlobalPeopleSearch() {
                   ) : (
                     <>
                       <div className="global-people-search-meta">
+                        <span>Account: {accountName(result)}</span>
                         <span>POC: {formatProperDisplay(result.primaryContactName)} · {result.primaryContactEmail}</span>
                         <span>Registered: {formatShortDate(result.createdAt)}</span>
                         <span>Registration: {formatStatusLabel(result.status)} · Roster {formatStatusLabel(result.participantListStatus)}</span>
