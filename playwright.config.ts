@@ -21,6 +21,9 @@ const auditBaseURL = process.env.APP_BASE_URL ?? readEnvValue("APP_BASE_URL");
 const configuredBaseURL = process.env.PLAYWRIGHT_BASE_URL ?? (isUiAudit ? auditBaseURL : undefined);
 const baseURL = configuredBaseURL ?? `http://127.0.0.1:${process.env.PORT ?? "3000"}`;
 const storageState = process.env.E2E_STORAGE_STATE || process.env.PLAYWRIGHT_STORAGE_STATE;
+const vercelBypassSecret = process.env.VERCEL_AUTOMATION_BYPASS_SECRET
+  ?? process.env.CRM_MISSION_COHORT_VERCEL_BYPASS_SECRET
+  ?? readEnvValue("CRM_MISSION_COHORT_VERCEL_BYPASS_SECRET");
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -35,6 +38,12 @@ export default defineConfig({
   use: {
     baseURL,
     storageState: storageState || undefined,
+    extraHTTPHeaders: vercelBypassSecret
+      ? {
+          "x-vercel-protection-bypass": vercelBypassSecret,
+          "x-vercel-set-bypass-cookie": "true"
+        }
+      : undefined,
     trace: "on-first-retry",
     screenshot: "only-on-failure",
     video: "retain-on-failure"
