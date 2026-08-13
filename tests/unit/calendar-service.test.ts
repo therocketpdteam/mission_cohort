@@ -4,6 +4,7 @@ import { uniqueCalendarAttendees } from "../../src/modules/calendar/attendees";
 import { buildSessionCalendarDescription } from "../../src/modules/calendar/description";
 import { generateSessionIcs } from "../../src/modules/calendar/icsGenerator";
 import { upsertGoogleCalendarEvent } from "../../src/modules/calendar/googleCalendarProvider";
+import { filterCalendarAttendeesForRemoval } from "../../src/services/calendarService";
 
 test("normalizes and deduplicates calendar attendees", () => {
   const attendees = uniqueCalendarAttendees([
@@ -165,4 +166,53 @@ test("google calendar event updates can suppress attendee notifications", async 
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("google calendar event updates can explicitly request no attendee notifications", async () => {
+  const originalFetch = globalThis.fetch;
+  let requestUrl = "";
+  globalThis.fetch = (async (url) => {
+    requestUrl = String(url);
+    return new Response(JSON.stringify({ id: "event_123", htmlLink: "https://calendar.google.com/event" }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" }
+    });
+  }) as typeof fetch;
+
+  try {
+    await upsertGoogleCalendarEvent({
+      title: "Session 1",
+      description: "Calendar body",
+      startTime: "2026-10-29T22:30:00.000Z",
+      endTime: "2026-10-30T00:30:00.000Z",
+      timezone: "America/New_York",
+      meetingUrl: "https://zoom.us/j/123",
+      accessToken: "token",
+      calendarId: "support@rocketpd.com",
+      providerEventId: "event_123",
+      attendees: [{ email: "remaining@example.com", displayName: "Remaining Participant" }],
+      sendUpdates: "none"
+    });
+
+    assert.match(requestUrl, /sendUpdates=none/);
+    assert.doesNotMatch(requestUrl, /sendUpdates=all/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("filters only selected calendar attendees while preserving remaining RSVP metadata", () => {
+  const attendees = [
+    { email: "keep@example.com", displayName: "Keep Me", responseStatus: "accepted", optional: true, comment: "Still attending" },
+    { email: " Remove@Example.com ", displayName: "Remove Me", responseStatus: "tentative" },
+    { email: "other@example.com", displayName: "Other", responseStatus: "needsAction", additionalGuests: 1 }
+  ];
+
+  const result = filterCalendarAttendeesForRemoval(attendees, ["remove@example.com"]);
+
+  assert.deepEqual(result.removed, ["remove@example.com"]);
+  assert.deepEqual(result.preserved, [
+    { email: "keep@example.com", displayName: "Keep Me", responseStatus: "accepted", optional: true, comment: "Still attending" },
+    { email: "other@example.com", displayName: "Other", responseStatus: "needsAction", additionalGuests: 1 }
+  ]);
 });

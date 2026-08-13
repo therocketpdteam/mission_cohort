@@ -15,8 +15,12 @@ export type GoogleCalendarEventInput = {
     email: string;
     displayName?: string;
     responseStatus?: string;
+    optional?: boolean;
+    comment?: string;
+    additionalGuests?: number;
+    resource?: boolean;
   }>;
-  sendUpdates?: boolean;
+  sendUpdates?: boolean | "all" | "externalOnly" | "none";
   guestsCanInviteOthers?: boolean;
   guestsCanModify?: boolean;
   guestsCanSeeOtherGuests?: boolean;
@@ -167,7 +171,11 @@ export async function upsertGoogleCalendarEvent(input: GoogleCalendarEventInput)
     attendees: input.attendees?.map((attendee) => ({
       email: attendee.email,
       displayName: attendee.displayName || undefined,
-      responseStatus: attendee.responseStatus || undefined
+      responseStatus: attendee.responseStatus || undefined,
+      optional: attendee.optional,
+      comment: attendee.comment || undefined,
+      additionalGuests: attendee.additionalGuests,
+      resource: attendee.resource
     }))
   };
   const eventUrl = input.providerEventId
@@ -175,8 +183,8 @@ export async function upsertGoogleCalendarEvent(input: GoogleCalendarEventInput)
     : `https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events`;
   const url = new URL(eventUrl);
 
-  if (input.sendUpdates && input.attendees?.length) {
-    url.searchParams.set("sendUpdates", "all");
+  if (input.sendUpdates) {
+    url.searchParams.set("sendUpdates", input.sendUpdates === true ? "all" : input.sendUpdates);
   }
   if (input.attendees?.length) {
     url.searchParams.set("maxAttendees", String(input.attendees.length + 5));
@@ -201,7 +209,7 @@ export async function upsertGoogleCalendarEvent(input: GoogleCalendarEventInput)
   return response.json() as Promise<{
     id: string;
     htmlLink?: string;
-    attendees?: Array<{ email?: string; displayName?: string; responseStatus?: string }>;
+    attendees?: Array<{ email?: string; displayName?: string; responseStatus?: string; optional?: boolean; comment?: string; additionalGuests?: number; resource?: boolean }>;
     attendeesOmitted?: boolean;
   }>;
 }
@@ -230,7 +238,7 @@ export async function getGoogleCalendarEvent(input: { accessToken?: string; cale
   return response.json() as Promise<{
     id: string;
     htmlLink?: string;
-    attendees?: Array<{ email?: string; displayName?: string; responseStatus?: string }>;
+    attendees?: Array<{ email?: string; displayName?: string; responseStatus?: string; optional?: boolean; comment?: string; additionalGuests?: number; resource?: boolean }>;
     attendeesOmitted?: boolean;
   }>;
 }

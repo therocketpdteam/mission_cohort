@@ -10,7 +10,7 @@ import { syncRegistrationToCrm, syncRemovedParticipantToCrm } from "./crmRegistr
 import { getRecipientCommunicationSummary } from "./communicationService";
 import { automaticRegistrationJourneyOptions, cancelParticipantJourneys, planRegistrationJourneys } from "./registrationJourneyService";
 import { shouldDeferRegistrationDelivery, stageParticipantAddition, stageParticipantRemoval } from "./registrationChangeService";
-import { syncFutureLinkedGoogleCalendarInvitesForCohort } from "./calendarService";
+import { removeFutureGoogleCalendarAttendees, syncFutureLinkedGoogleCalendarInvitesForCohort } from "./calendarService";
 import { createInvoiceDraft, generateInvoicePdf, updateInvoiceDraft } from "./invoiceService";
 
 type ParticipantMutationOptions = { deferNotifications?: boolean };
@@ -308,7 +308,20 @@ export async function addParticipant(input: z.input<typeof participantCreateSche
 
 export async function updateParticipant(id: string, input: z.input<typeof participantUpdateSchema>, options: ParticipantMutationOptions = {}) {
   const data = participantUpdateSchema.parse(input);
-  const existing = await prisma.participant.findUniqueOrThrow({ where: { id } });
+  const existing = await prisma.participant.findUniqueOrThrow({
+    where: { id },
+    include: { registration: { select: { cohortId: true } } }
+  });
+  const emailChanged = typeof data.email === "string" && existing.email.toLowerCase() !== data.email.toLowerCase();
+  const noLongerRegistered = data.status ? data.status !== ParticipantStatus.REGISTERED : false;
+  if (existing.status === ParticipantStatus.REGISTERED && (emailChanged || noLongerRegistered)) {
+    await removeFutureGoogleCalendarAttendees({
+      cohortId: existing.registration.cohortId,
+      participantIds: [id],
+      emails: [existing.email],
+      reason: noLongerRegistered ? "Participant is no longer registered." : "Participant email changed."
+    });
+  }
   const participant = await prisma.participant.update({ where: { id }, data });
   await syncRegistrationParticipantListStatus(participant.registrationId);
   void queueParticipantCrmSync(participant.id, "participant.updated").catch(() => undefined);
@@ -336,6 +349,14 @@ export async function updateParticipant(id: string, input: z.input<typeof partic
 
 export async function removeParticipant(id: string, options: ParticipantMutationOptions = {}) {
   const existing = await prisma.participant.findUniqueOrThrow({ where: { id }, include: { registration: { include: { cohort: true } } } });
+  if (existing.status === ParticipantStatus.REGISTERED) {
+    await removeFutureGoogleCalendarAttendees({
+      cohortId: existing.registration.cohortId,
+      participantIds: [id],
+      emails: [existing.email],
+      reason: "Participant removed from registration."
+    });
+  }
   await cancelParticipantJourneys([id], "Participant removed from registration.");
   const participant = await prisma.participant.delete({ where: { id } });
   await syncRegistrationParticipantListStatus(participant.registrationId);

@@ -13,7 +13,7 @@ import { automaticRegistrationJourneyOptions, cancelRegistrationJourneys, planRe
 import { syncRegistrationParticipantListStatus } from "./participantService";
 import { syncPaymentRecordsToRegistrationStatus } from "./paymentService";
 import { shouldDeferRegistrationDelivery, stageParticipantAddition, stageRegistrationFieldChanges } from "./registrationChangeService";
-import { syncFutureLinkedGoogleCalendarInvitesForCohort } from "./calendarService";
+import { removeFutureGoogleCalendarAttendees, syncFutureLinkedGoogleCalendarInvitesForCohort } from "./calendarService";
 
 type BulkMoveRegistrationSummaryInput = Array<{
   id: string;
@@ -230,6 +230,12 @@ export async function confirmRegistration(id: string) {
 }
 
 export async function cancelRegistration(id: string) {
+  const existing = await prisma.registration.findUniqueOrThrow({ where: { id }, select: { cohortId: true } });
+  await removeFutureGoogleCalendarAttendees({
+    cohortId: existing.cohortId,
+    registrationId: id,
+    reason: "Registration cancelled."
+  });
   const registration = await updateRegistration(id, { status: RegistrationStatus.CANCELLED });
 
   if (registration.quickBooksInvoiceRef) {
@@ -241,6 +247,12 @@ export async function cancelRegistration(id: string) {
 }
 
 export async function archiveRegistration(id: string, reason?: string) {
+  const existing = await prisma.registration.findUniqueOrThrow({ where: { id }, select: { cohortId: true } });
+  await removeFutureGoogleCalendarAttendees({
+    cohortId: existing.cohortId,
+    registrationId: id,
+    reason: reason?.trim() || "Registration archived."
+  });
   const registration = await prisma.registration.update({
     where: { id },
     data: {
@@ -318,6 +330,11 @@ export async function deleteRegistration(id: string) {
     });
   }
 
+  await removeFutureGoogleCalendarAttendees({
+    cohortId: registration.cohortId,
+    registrationId: id,
+    reason: "Registration permanently deleted."
+  });
   await cancelRegistrationJourneys(id, "Registration permanently deleted.");
   await prisma.registration.delete({ where: { id } });
 
@@ -355,9 +372,15 @@ export async function bulkUpdateRegistrations(input: {
   if (input.action === "confirm") {
     await prisma.registration.updateMany({ where: { id: { in: ids } }, data: { status: RegistrationStatus.CONFIRMED } });
   } else if (input.action === "cancel") {
-    await prisma.registration.updateMany({ where: { id: { in: ids } }, data: { status: RegistrationStatus.CANCELLED } });
+    for (const id of ids) {
+      await cancelRegistration(id);
+    }
+    return { count: ids.length };
   } else if (input.action === "archive") {
-    await prisma.registration.updateMany({ where: { id: { in: ids } }, data: { archivedAt: new Date() } });
+    for (const id of ids) {
+      await archiveRegistration(id, "Registration archived from bulk action.");
+    }
+    return { count: ids.length };
   } else if (input.action === "restore") {
     await prisma.registration.updateMany({ where: { id: { in: ids } }, data: { archivedAt: null, archivedReason: null } });
   } else {
@@ -389,9 +412,7 @@ export async function bulkUpdateRegistrations(input: {
     void syncRegistrationToCrmWebhook(id, "registration.bulk_updated").catch((error) => {
       console.error("CRM registration webhook scheduling failed", { registrationId: id, error: error instanceof Error ? error.message : "Unknown error" });
     });
-    if (input.action === "cancel" || input.action === "archive") {
-      await cancelRegistrationJourneys(id, input.action === "cancel" ? "Registration cancelled." : "Registration archived.");
-    } else if (input.action === "restore") {
+    if (input.action === "restore") {
       const registration = await prisma.registration.findUnique({ where: { id }, select: { cohortId: true } });
       if (registration) {
         await planAutomaticRegistrationJourney(id, registration.cohortId);

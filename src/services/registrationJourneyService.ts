@@ -1010,12 +1010,21 @@ export async function planRegistrationJourneys(
   }
 
   if (poc && sent.some((communication) => communication.id === poc.id) && attachmentCount > 0) {
+    const sentAt = new Date();
     await prisma.registration.update({
       where: { id: registration.id },
       data: {
-        confirmationDocsSentAt: new Date(),
+        confirmationDocsSentAt: sentAt,
         supportingDocumentStatus: SupportingDocumentStatus.SENT
       }
+    });
+    await prisma.invoiceDraft.updateMany({
+      where: {
+        registrationId: registration.id,
+        status: InvoiceDraftStatus.DRAFT,
+        pdfUrl: { not: null }
+      },
+      data: { status: InvoiceDraftStatus.SENT }
     });
   }
 

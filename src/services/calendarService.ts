@@ -4,6 +4,7 @@ import { assertOutboundUnlocked } from "@/lib/outboundLock";
 import { buildSessionCalendarDescription, deleteGoogleCalendarEvent, exchangeGoogleCalendarCode, generateSessionIcs, getGoogleCalendarConnectUrl, getGoogleCalendarEvent, listGoogleCalendars, refreshGoogleCalendarToken, uniqueCalendarAttendees, upsertGoogleCalendarEvent } from "@/modules/calendar";
 import { getDecryptedIntegrationConnection, upsertIntegrationConnection } from "@/services/integrationService";
 import { assertCohortDeliveryAllowed, assertOutboundRecipientsAllowed, resolveGoogleCalendarSetup } from "@/services/integrationSetupService";
+import { logAuditEvent } from "@/services/auditService";
 
 async function googleSetupWithEnvFallback() {
   const setup = await resolveGoogleCalendarSetup();
@@ -117,6 +118,270 @@ function missingCalendarAttendees(
   return expected
     .map((attendee) => attendee.email.trim().toLowerCase())
     .filter((email) => email && !actualEmails.has(email));
+}
+
+function normalizeCalendarEmail(email?: string | null) {
+  return String(email ?? "").trim().toLowerCase();
+}
+
+function uniqueNormalizedEmails(emails: Array<string | null | undefined>) {
+  return Array.from(new Set(emails.map(normalizeCalendarEmail).filter((email) => email.includes("@"))));
+}
+
+function assertCompleteGoogleAttendeeList(attendeesOmitted?: boolean | null) {
+  if (!attendeesOmitted) {
+    return;
+  }
+
+  throw Object.assign(
+    new Error("Google Calendar omitted attendees. Targeted attendee cleanup was stopped to avoid changing an incomplete guest list."),
+    { code: "BAD_REQUEST", status: 400 }
+  );
+}
+
+export function filterCalendarAttendeesForRemoval<T extends { email?: string | null }>(attendees: T[], emailsToRemove: string[]) {
+  const removeSet = new Set(uniqueNormalizedEmails(emailsToRemove));
+  const removed = [];
+  const preserved = [];
+
+  for (const attendee of attendees) {
+    const email = normalizeCalendarEmail(attendee.email);
+    if (email && removeSet.has(email)) {
+      removed.push(email);
+    } else {
+      preserved.push(attendee);
+    }
+  }
+
+  return { removed, preserved };
+}
+
+async function futureLinkedGoogleSessions(cohortId: string) {
+  return prisma.cohortSession.findMany({
+    where: {
+      cohortId,
+      startTime: { gt: new Date() },
+      calendarEvents: { some: { provider: "google", providerEventId: { not: null } } }
+    },
+    orderBy: { sessionNumber: "asc" },
+    include: {
+      cohort: { include: { presenter: true } },
+      calendarEvents: {
+        where: { provider: "google", providerEventId: { not: null } },
+        orderBy: { updatedAt: "desc" },
+        take: 1
+      }
+    }
+  });
+}
+
+export async function removeFutureGoogleCalendarAttendees(input: {
+  cohortId: string;
+  registrationId?: string;
+  participantIds?: string[];
+  emails?: string[];
+  reason?: string;
+}) {
+  const requestedEmails = uniqueNormalizedEmails(input.emails ?? []);
+
+  if (input.registrationId) {
+    const registration = await prisma.registration.findUnique({
+      where: { id: input.registrationId },
+      select: {
+        primaryContactEmail: true,
+        participantCount: true,
+        participants: { select: { email: true } }
+      }
+    });
+    if (registration) {
+      requestedEmails.push(...uniqueNormalizedEmails([
+        ...registration.participants.map((participant) => participant.email),
+        registration.participantCount <= 1 && registration.participants.length === 0 ? registration.primaryContactEmail : null
+      ]));
+    }
+  }
+
+  if (input.participantIds?.length) {
+    const participants = await prisma.participant.findMany({
+      where: { id: { in: input.participantIds } },
+      select: { email: true }
+    });
+    requestedEmails.push(...uniqueNormalizedEmails(participants.map((participant) => participant.email)));
+  }
+
+  const emailsToRemove = uniqueNormalizedEmails(requestedEmails);
+  if (emailsToRemove.length === 0) {
+    return {
+      cohortId: input.cohortId,
+      registrationId: input.registrationId ?? null,
+      participantIds: input.participantIds ?? [],
+      emailsToRemove,
+      sessionsScanned: 0,
+      sessionsUpdated: 0,
+      attendeesRemoved: 0,
+      attendeesPreserved: 0,
+      details: []
+    };
+  }
+
+  const sessions = await futureLinkedGoogleSessions(input.cohortId);
+  if (sessions.length === 0) {
+    return {
+      cohortId: input.cohortId,
+      registrationId: input.registrationId ?? null,
+      participantIds: input.participantIds ?? [],
+      emailsToRemove,
+      sessionsScanned: 0,
+      sessionsUpdated: 0,
+      attendeesRemoved: 0,
+      attendeesPreserved: 0,
+      details: []
+    };
+  }
+
+  const [accessToken, setup] = await Promise.all([
+    getConnectedGoogleCalendarAccessToken(),
+    googleSetupWithEnvFallback()
+  ]);
+  const details = [];
+  let sessionsUpdated = 0;
+  let attendeesRemoved = 0;
+  let attendeesPreserved = 0;
+
+  for (const session of sessions) {
+    const calendarRecord = session.calendarEvents[0];
+    if (!calendarRecord?.providerEventId) {
+      continue;
+    }
+
+    const googleEvent = await getGoogleCalendarEvent({
+      accessToken,
+      calendarId: setup.calendarId,
+      providerEventId: calendarRecord.providerEventId,
+      maxAttendees: 2500
+    });
+
+    assertCompleteGoogleAttendeeList(googleEvent?.attendeesOmitted);
+    const attendees = googleEvent?.attendees ?? [];
+    const { removed, preserved } = filterCalendarAttendeesForRemoval(attendees, emailsToRemove);
+
+    if (removed.length === 0) {
+      details.push({
+        sessionId: session.id,
+        sessionNumber: session.sessionNumber,
+        title: session.title,
+        providerEventId: calendarRecord.providerEventId,
+        removed: [],
+        preservedCount: preserved.filter((attendee) => attendee.email).length,
+        status: "unchanged"
+      });
+      attendeesPreserved += preserved.filter((attendee) => attendee.email).length;
+      continue;
+    }
+
+    await assertOutboundUnlocked({
+      channel: "GOOGLE_CALENDAR",
+      action: "silently remove selected calendar attendees",
+      entityType: input.registrationId ? "Registration" : "Participant",
+      entityId: input.registrationId ?? input.participantIds?.join(",") ?? input.cohortId,
+      metadata: {
+        cohortId: input.cohortId,
+        sessionId: session.id,
+        removed,
+        sendUpdates: "none",
+        reason: input.reason ?? null
+      }
+    });
+
+    await upsertGoogleCalendarEvent({
+      title: session.title,
+      description: buildSessionCalendarDescription({
+        session,
+        cohort: {
+          title: session.cohort.title,
+          description: session.cohort.description,
+          presenterName: [session.cohort.presenter.firstName, session.cohort.presenter.lastName].filter(Boolean).join(" ")
+        }
+      }),
+      startTime: session.startTime,
+      endTime: session.endTime,
+      timezone: session.timezone,
+      meetingUrl: session.meetingUrl,
+      location: session.location,
+      accessToken,
+      calendarId: setup.calendarId,
+      providerEventId: calendarRecord.providerEventId,
+      attendees: preserved.map((attendee) => ({
+        email: attendee.email ?? "",
+        displayName: attendee.displayName,
+        responseStatus: attendee.responseStatus,
+        optional: attendee.optional,
+        comment: attendee.comment,
+        additionalGuests: attendee.additionalGuests,
+        resource: attendee.resource
+      })).filter((attendee) => attendee.email),
+      sendUpdates: "none"
+    });
+
+    const verifiedGoogleEvent = await getGoogleCalendarEvent({
+      accessToken,
+      calendarId: setup.calendarId,
+      providerEventId: calendarRecord.providerEventId,
+      maxAttendees: 2500
+    });
+    assertCompleteGoogleAttendeeList(verifiedGoogleEvent?.attendeesOmitted);
+    const verification = filterCalendarAttendeesForRemoval(verifiedGoogleEvent?.attendees ?? [], removed);
+    if (verification.removed.length > 0) {
+      throw Object.assign(
+        new Error(`Google Calendar attendee cleanup did not remove: ${verification.removed.join(", ")}`),
+        { code: "BAD_REQUEST", status: 400 }
+      );
+    }
+
+    sessionsUpdated += 1;
+    attendeesRemoved += removed.length;
+    attendeesPreserved += verification.preserved.filter((attendee) => attendee.email).length;
+    details.push({
+      sessionId: session.id,
+      sessionNumber: session.sessionNumber,
+      title: session.title,
+      providerEventId: calendarRecord.providerEventId,
+      removed,
+      preservedCount: verification.preserved.filter((attendee) => attendee.email).length,
+      status: "updated"
+    });
+  }
+
+  await logAuditEvent({
+    entityType: input.registrationId ? "Registration" : "Participant",
+    entityId: input.registrationId ?? input.participantIds?.join(",") ?? input.cohortId,
+    action: "CALENDAR_ATTENDEES_REMOVED",
+    description: "Selected future Google Calendar attendees removed silently",
+    metadata: {
+      cohortId: input.cohortId,
+      registrationId: input.registrationId ?? null,
+      participantIds: input.participantIds ?? [],
+      emailsToRemove,
+      reason: input.reason ?? null,
+      sessionsScanned: sessions.length,
+      sessionsUpdated,
+      attendeesRemoved,
+      attendeesPreserved,
+      sendUpdates: "none"
+    }
+  });
+
+  return {
+    cohortId: input.cohortId,
+    registrationId: input.registrationId ?? null,
+    participantIds: input.participantIds ?? [],
+    emailsToRemove,
+    sessionsScanned: sessions.length,
+    sessionsUpdated,
+    attendeesRemoved,
+    attendeesPreserved,
+    details
+  };
 }
 
 export async function listConnectedGoogleCalendars() {
