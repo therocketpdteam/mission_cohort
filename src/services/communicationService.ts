@@ -1097,10 +1097,71 @@ async function legacyEmailEventsForRecipient(email: string) {
   `;
 }
 
-async function listCommunicationsLegacy(input: { cohortId?: string | null; limit?: number; issueOnly?: boolean } = {}) {
+type ListCommunicationsInput = {
+  cohortId?: string | null;
+  limit?: number;
+  issueOnly?: boolean;
+  search?: string | null;
+};
+
+function communicationSearchWhere(search?: string | null): Prisma.CohortCommunicationWhereInput | null {
+  const query = String(search ?? "").trim();
+
+  if (!query) {
+    return null;
+  }
+
+  const normalized = normalizeEmail(query);
+  const exactEmailFilters: Prisma.CohortCommunicationWhereInput[] = query.includes("@")
+    ? [
+        { recipientEmails: { array_contains: [query] } },
+        { recipientEmails: { array_contains: [normalized] } },
+        { emailEvents: { some: { recipientEmail: { equals: normalized, mode: "insensitive" } } } }
+      ]
+    : [];
+
+  return {
+    OR: [
+      ...exactEmailFilters,
+      { subject: { contains: query, mode: "insensitive" } },
+      { providerError: { contains: query, mode: "insensitive" } },
+      { cohort: { title: { contains: query, mode: "insensitive" } } },
+      { cohort: { shortName: { contains: query, mode: "insensitive" } } },
+      { session: { title: { contains: query, mode: "insensitive" } } },
+      { template: { name: { contains: query, mode: "insensitive" } } },
+      { emailEvents: { some: { recipientEmail: { contains: query, mode: "insensitive" } } } }
+    ]
+  };
+}
+
+function communicationListWhere(input: ListCommunicationsInput, options: { includeIssueFilter: boolean } = { includeIssueFilter: true }) {
+  const searchWhere = communicationSearchWhere(input.search);
+  const where: Prisma.CohortCommunicationWhereInput = {};
+  const and: Prisma.CohortCommunicationWhereInput[] = [];
+
+  if (input.cohortId) {
+    and.push({ cohortId: input.cohortId });
+  }
+
+  if (searchWhere) {
+    and.push(searchWhere);
+  }
+
+  if (input.issueOnly && options.includeIssueFilter) {
+    and.push({ emailEvents: { some: { eventType: { in: [EmailEventType.BOUNCED, EmailEventType.FAILED] }, reviewedAt: null } } });
+  }
+
+  if (and.length > 0) {
+    where.AND = and;
+  }
+
+  return where;
+}
+
+async function listCommunicationsLegacy(input: ListCommunicationsInput = {}) {
   const take = Math.min(Math.max(Number(input.limit ?? 100), 1), 1000);
   const communications = await prisma.cohortCommunication.findMany({
-    where: input.cohortId ? { cohortId: input.cohortId } : {},
+    where: communicationListWhere(input, { includeIssueFilter: false }),
     orderBy: { createdAt: "desc" },
     take,
     include: { cohort: true, template: true, session: true, createdBy: true, attachments: true }
@@ -1123,16 +1184,11 @@ async function listCommunicationsLegacy(input: { cohortId?: string | null; limit
   return input.issueOnly ? enriched.filter((communication) => communication.issueRows.length > 0) : enriched;
 }
 
-export async function listCommunications(input: { cohortId?: string | null; limit?: number; issueOnly?: boolean } = {}) {
+export async function listCommunications(input: ListCommunicationsInput = {}) {
   const take = Math.min(Math.max(Number(input.limit ?? 100), 1), 1000);
   try {
     const communications = await prisma.cohortCommunication.findMany({
-      where: {
-        ...(input.cohortId ? { cohortId: input.cohortId } : {}),
-        ...(input.issueOnly
-          ? { emailEvents: { some: { eventType: { in: [EmailEventType.BOUNCED, EmailEventType.FAILED] }, reviewedAt: null } } }
-          : {})
-      },
+      where: communicationListWhere(input),
       orderBy: { createdAt: "desc" },
       take,
       include: { cohort: true, template: true, session: true, createdBy: true, emailEvents: { include: { reviewedBy: true }, orderBy: { createdAt: "desc" } }, attachments: true }

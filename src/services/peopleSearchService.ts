@@ -68,6 +68,24 @@ function matchTypesForRegistration(registration: RegistrationSearchMatch, query:
   return Array.from(matches);
 }
 
+function communicationSearchTarget(registration: RegistrationSearchMatch, query: string) {
+  const participant = registration.participants.find((entry) => (
+    includesQuery(entry.email, query) ||
+    includesQuery(entry.firstName, query) ||
+    includesQuery(entry.lastName, query)
+  ));
+
+  if (participant?.email) {
+    return participant.email;
+  }
+
+  if (includesQuery(registration.billingContactEmail, query) && registration.billingContactEmail) {
+    return registration.billingContactEmail;
+  }
+
+  return registration.primaryContactEmail;
+}
+
 export async function searchPeople(input: { query?: string | null; limit?: number }) {
   const query = cleanQuery(input.query);
   const requestedLimit = Number(input.limit ?? SEARCH_LIMIT);
@@ -182,6 +200,7 @@ export async function searchPeople(input: { query?: string | null; limit?: numbe
   });
 
   const results = registrations.map((registration) => {
+    const communicationsSearch = communicationSearchTarget(registration, query);
     const result = {
       id: registration.id,
       status: registration.status,
@@ -216,7 +235,7 @@ export async function searchPeople(input: { query?: string | null; limit?: numbe
       links: {
         registration: `/registrations?id=${registration.id}`,
         cohort: `/cohorts/${registration.cohortId}`,
-        communications: `/communications?search=${encodeURIComponent(registration.primaryContactEmail)}`
+        communications: `/communications?search=${encodeURIComponent(communicationsSearch)}`
       }
     };
 

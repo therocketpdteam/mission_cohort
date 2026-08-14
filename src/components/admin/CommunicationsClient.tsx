@@ -751,7 +751,7 @@ export function CommunicationsClient() {
   const [communicationHealthWarnings, setCommunicationHealthWarnings] = useState<string[]>([]);
   const { notifySuccess, notifyError, snackbar } = useNotifier();
 
-  async function load(nextCohortId = selectedCohortId) {
+  async function load(nextCohortId = selectedCohortId, nextMessageSearch = messageSearch) {
     const [templateRows, cohortRows] = await Promise.all([
       adminApi<AdminRow[]>("/api/communications/templates"),
       adminApi<AdminRow[]>("/api/cohorts")
@@ -764,12 +764,16 @@ export function CommunicationsClient() {
     if (nextCohortId) {
       params.set("cohortId", nextCohortId);
     }
+    if (nextMessageSearch.trim()) {
+      params.set("search", nextMessageSearch.trim());
+    }
     setCommunications(await adminApi<AdminRow[]>(`/api/communications?${params.toString()}`));
     setLoading(false);
   }
 
   useEffect(() => {
     const search = new URLSearchParams(window.location.search).get("search");
+    const initialSearch = search ?? "";
     if (search) {
       setMessageSearch(search);
     }
@@ -783,7 +787,7 @@ export function CommunicationsClient() {
         );
       })
       .catch(() => setCommunicationHealthWarnings([]));
-    load("").catch((error) => {
+    load("", initialSearch).catch((error) => {
       notifyError(error.message);
       setLoading(false);
     });
@@ -830,6 +834,9 @@ export function CommunicationsClient() {
   const filteredMessages = communications.filter((row) => {
     const matchStatus = statusFilter ? row.status === statusFilter : true;
     const matchSearch = [
+      row.recipientEmail,
+      ...(Array.isArray(row.recipientEmails) ? row.recipientEmails : []),
+      ...(Array.isArray(row.emailEvents) ? row.emailEvents.map((event: AdminRow) => event.recipientEmail) : []),
       row.subject,
       row.template?.name,
       row.recipientScope,

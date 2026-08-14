@@ -9,7 +9,6 @@ import {
   createDefaultSessionCommunications,
   createPlannedSessionReminders,
   listCommunications,
-  listCommunicationsByCohort,
   removeCommunicationAttachment,
   reviewRecipientIssue,
   processScheduledCommunications,
@@ -30,12 +29,9 @@ export async function GET(request: Request) {
     const cohortId = params.get("cohortId");
     const limit = Number(params.get("limit") ?? 100);
     const issueOnly = params.get("issueOnly") === "1" || params.get("issueOnly") === "true";
+    const search = params.get("search");
 
-    if (cohortId) {
-      return ok(await listCommunicationsByCohort(cohortId, limit));
-    }
-
-    return ok(await listCommunications({ limit, issueOnly }));
+    return ok(await listCommunications({ cohortId, limit, issueOnly, search }));
   } catch (error) {
     return handleApiError(error);
   }
