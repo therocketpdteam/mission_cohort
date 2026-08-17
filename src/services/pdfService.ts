@@ -81,7 +81,10 @@ export function invoiceDescriptionParts(description: string, cohortTitle?: strin
     "rocketpd cohort registration seats"
   ]);
 
-  if (cleanCohortTitle && genericSeatDescriptions.has(cleanDescription.toLowerCase())) {
+  if (
+    cleanCohortTitle &&
+    (genericSeatDescriptions.has(cleanDescription.toLowerCase()) || cleanDescription.toLowerCase().endsWith(" cohort seats"))
+  ) {
     return {
       title: cleanCohortTitle,
       detail: cleanCohortDescription

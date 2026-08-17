@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/primitives";
 import { GridColDef } from "./common";
 import type { CSSProperties, PointerEvent, ReactNode, SyntheticEvent } from "react";
+import { Fragment } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { adminApi, uploadAdminFile } from "@/lib/adminApi";
 import { formatProperDisplay, formatRegistrationPaymentStatus, formatRegistrationSource, formatStatusLabel, isCompedRegistration } from "@/lib/formatting";
@@ -975,8 +976,58 @@ function invoiceLineTotal(item: InvoiceLineItemState) {
   return Number(item.quantity ?? 0) * Number(item.unitAmount ?? 0);
 }
 
+function invoiceLineDescription(cohort?: AdminRow | null) {
+  const title = String(cohort?.title ?? "").trim();
+  const description = String(cohort?.description ?? "").trim();
+
+  return [title || "Cohort registration seats", description].filter(Boolean).join(" - ");
+}
+
+function invoiceLinePreviewParts(description: string, cohort?: AdminRow | null) {
+  const cleanDescription = description.trim();
+  const cleanCohortTitle = String(cohort?.title ?? "").trim();
+  const cleanCohortDescription = String(cohort?.description ?? "").trim();
+  const genericSeatDescriptions = new Set([
+    "cohort registration seats",
+    "rocketpd cohort seats",
+    "rocketpd cohort registration seats"
+  ]);
+
+  if (
+    cleanCohortTitle &&
+    (genericSeatDescriptions.has(cleanDescription.toLowerCase()) || cleanDescription.toLowerCase().endsWith(" cohort seats"))
+  ) {
+    return { title: cleanCohortTitle, detail: cleanCohortDescription };
+  }
+
+  if (cleanCohortTitle && cleanDescription === cleanCohortTitle) {
+    return { title: cleanCohortTitle, detail: cleanCohortDescription };
+  }
+
+  if (cleanCohortTitle && cleanDescription.startsWith(`${cleanCohortTitle} - `)) {
+    return {
+      title: cleanCohortTitle,
+      detail: cleanCohortDescription || cleanDescription.slice(cleanCohortTitle.length + 3).trim()
+    };
+  }
+
+  if (cleanCohortDescription && cleanDescription.endsWith(` - ${cleanCohortDescription}`)) {
+    return {
+      title: cleanDescription.slice(0, -cleanCohortDescription.length - 3).trim(),
+      detail: cleanCohortDescription
+    };
+  }
+
+  const [title, ...rest] = cleanDescription.split(" - ");
+  return {
+    title: title?.trim() || cleanDescription,
+    detail: rest.join(" - ").trim()
+  };
+}
+
 function InvoiceEditorDialog({
   cohortId,
+  cohort,
   invoice,
   seedRegistration,
   registrations,
@@ -986,6 +1037,7 @@ function InvoiceEditorDialog({
   onError
 }: {
   cohortId: string;
+  cohort: AdminRow | null;
   invoice: AdminRow | null;
   seedRegistration: AdminRow | null;
   registrations: AdminRow[];
@@ -1043,12 +1095,12 @@ function InvoiceEditorDialog({
             unitAmount: numericInputValue(item.unitAmount)
           }))
         : [{
-            description: seed ? `${seed.organization?.name ?? "Organization"} cohort seats` : "Cohort registration seats",
+            description: invoiceLineDescription(cohort),
             quantity: numericInputValue(seed?.participantCount) || 1,
             unitAmount: seed?.participantCount ? numericInputValue(seed.totalAmount) / Math.max(numericInputValue(seed.participantCount), 1) : 0
           }]
     );
-  }, [invoice, seedRegistration, open]);
+  }, [cohort, invoice, seedRegistration, open]);
 
   function updateLineItem(index: number, field: keyof InvoiceLineItemState, value: string) {
     setLineItems((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, [field]: field === "description" ? value : Number(value) } : item));
@@ -1146,7 +1198,7 @@ function InvoiceEditorDialog({
           </div>
           {lineItems.map((item, index) => (
             <div className="invoice-line-row" key={`${index}-${item.description}`}>
-              <TextField label="Description" value={item.description} onChange={(event) => updateLineItem(index, "description", event.target.value)} />
+              <TextField multiline minRows={3} label="Description" value={item.description} onChange={(event) => updateLineItem(index, "description", event.target.value)} />
               <TextField label="Qty" type="number" value={item.quantity} onChange={(event) => updateLineItem(index, "quantity", event.target.value)} />
               <TextField label="Unit" type="number" value={item.unitAmount} onChange={(event) => updateLineItem(index, "unitAmount", event.target.value)} />
               <DetailField label="Line total" value={money(invoiceLineTotal(item))} />
@@ -1160,6 +1212,34 @@ function InvoiceEditorDialog({
               </Button>
             </div>
           ))}
+          <div className="invoice-wysiwyg-preview" aria-label="Invoice line item preview">
+            <div className="invoice-wysiwyg-preview-heading">
+              <Typography variant="subtitle2">PDF line item preview</Typography>
+              <Typography variant="body2" color="text.secondary">This is how the item description will appear on the generated invoice.</Typography>
+            </div>
+            <div className="invoice-wysiwyg-table">
+              <span>Items</span>
+              <span>Description</span>
+              <span>Quantity</span>
+              <span>Price</span>
+              <span>Amount</span>
+              {lineItems.map((item, index) => {
+                const parts = invoiceLinePreviewParts(item.description, cohort);
+                return (
+                  <Fragment key={`preview-${index}-${item.description}`}>
+                    <strong>{`Item ${index + 1}`}</strong>
+                    <div>
+                      <strong>{parts.title || "Line item"}</strong>
+                      {parts.detail ? <p>{parts.detail}</p> : null}
+                    </div>
+                    <strong>{Math.max(1, Number(item.quantity ?? 1))}</strong>
+                    <strong>{money(item.unitAmount)}</strong>
+                    <strong>{money(invoiceLineTotal(item))}</strong>
+                  </Fragment>
+                );
+              })}
+            </div>
+          </div>
         </div>
         <div className="invoice-accounting-panel">
           <div>
@@ -3798,6 +3878,7 @@ export function CohortDetailClient({ id }: { id: string }) {
       />
       <InvoiceEditorDialog
         cohortId={id}
+        cohort={cohort}
         invoice={editingInvoice}
         seedRegistration={invoiceSeedRegistration}
         registrations={registrations}

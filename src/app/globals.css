@@ -5734,6 +5734,62 @@ h6,
   align-items: end;
 }
 
+.invoice-wysiwyg-preview {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--color-outline-variant);
+  border-radius: 10px;
+  background: var(--color-white);
+  padding: 12px;
+}
+
+.invoice-wysiwyg-preview-heading {
+  display: grid;
+  gap: 2px;
+}
+
+.invoice-wysiwyg-table {
+  display: grid;
+  grid-template-columns: 80px minmax(240px, 1fr) 96px 112px 112px;
+  align-items: start;
+  gap: 12px;
+  overflow-x: auto;
+}
+
+.invoice-wysiwyg-table > span {
+  color: var(--color-primary-900);
+  font-size: 0.76rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.invoice-wysiwyg-table > strong {
+  color: var(--color-on-surface);
+  font-size: 0.88rem;
+  font-weight: 850;
+}
+
+.invoice-wysiwyg-table > div {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.invoice-wysiwyg-table > div > strong {
+  color: var(--color-on-surface);
+  font-size: 0.95rem;
+  font-weight: 900;
+  line-height: 1.25;
+}
+
+.invoice-wysiwyg-table > div > p {
+  margin: 0;
+  color: var(--color-on-surface-variant);
+  font-size: 0.86rem;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
 .invoice-accounting-panel {
   display: grid;
   gap: 10px;
