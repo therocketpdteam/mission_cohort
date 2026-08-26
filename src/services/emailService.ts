@@ -30,13 +30,25 @@ export async function sendEmail(input: {
   const renderedText = input.bodyText ? renderTemplate(input.bodyText, input.context ?? {}).output : undefined;
   const attachments = await resolveSendGridAttachments(input.attachments ?? []);
 
-  return sendWithSendGrid({
+  const renderedSubject = renderTemplate(input.subject, input.context ?? {}).output;
+  const result = await sendWithSendGrid({
     to: input.to,
-    subject: renderTemplate(input.subject, input.context ?? {}).output,
+    subject: renderedSubject,
     html: renderedHtml,
     text: renderedText,
     attachments
   });
+
+  return {
+    ...result,
+    renderedSubject,
+    renderedBodyHtml: renderedHtml,
+    renderedBodyText: renderedText,
+    renderedAttachments: attachments.map((attachment) => ({
+      fileName: attachment.filename,
+      contentType: attachment.type
+    }))
+  };
 }
 
 async function resolveSendGridAttachments(attachments: Array<{ fileName: string; contentType?: string | null; url?: string | null; content?: string | Buffer | null }>) {

@@ -614,7 +614,13 @@ async function sendRegistrationCalendarFiles(
           recipientEmail: recipient.email,
           provider: "sendgrid",
           providerMessageId: sendResult.providerMessageId,
-          eventType: EmailEventType.SENT
+          eventType: EmailEventType.SENT,
+          eventPayload: {
+            renderedSubject: sendResult.renderedSubject ?? null,
+            renderedBodyHtml: sendResult.renderedBodyHtml ?? null,
+            renderedBodyText: sendResult.renderedBodyText ?? null,
+            attachments: sendResult.renderedAttachments ?? []
+          }
         }
       });
       await prisma.cohortCommunication.update({
@@ -750,7 +756,13 @@ async function sendCalendarFallbacks(
           recipientEmail: email,
           provider: "sendgrid",
           providerMessageId: sendResult.providerMessageId,
-          eventType: EmailEventType.SENT
+          eventType: EmailEventType.SENT,
+          eventPayload: {
+            renderedSubject: sendResult.renderedSubject ?? null,
+            renderedBodyHtml: sendResult.renderedBodyHtml ?? null,
+            renderedBodyText: sendResult.renderedBodyText ?? null,
+            attachments: sendResult.renderedAttachments ?? []
+          }
         }
       });
       await prisma.cohortCommunication.update({

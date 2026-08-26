@@ -88,6 +88,38 @@ const sessionFields: FieldConfig[] = [
   { name: "location", label: "Location (optional)", placeholder: "Online, room name, or physical address" }
 ];
 
+function CollapsibleSectionCard({
+  title,
+  children,
+  action,
+  defaultOpen = false,
+  alertCount = 0
+}: {
+  title: string;
+  children: ReactNode;
+  action?: ReactNode;
+  defaultOpen?: boolean;
+  alertCount?: number;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+
+  return (
+    <details className={`section-card collapsible-section-card ${alertCount ? "has-alert" : ""}`} open={open} onToggle={(event) => setOpen(event.currentTarget.open)}>
+      <summary className="collapsible-section-summary">
+        <div className="collapsible-section-title">
+          <h2 className="section-card-title">{title}</h2>
+          {alertCount ? <span className="collapsible-section-alert">! {alertCount}</span> : null}
+        </div>
+        <div className="collapsible-section-actions" onClick={(event) => event.stopPropagation()}>
+          {action}
+          <span className="collapsible-section-caret" aria-hidden="true">v</span>
+        </div>
+      </summary>
+      <div className="collapsible-section-content">{children}</div>
+    </details>
+  );
+}
+
 const participantMessageMergeFields = mergeFields.filter((field) => (
   field.startsWith("participant.") ||
   field.startsWith("registration.") ||
@@ -4014,6 +4046,12 @@ export function CohortDetailClient({ id }: { id: string }) {
                         </div>
                         <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap justifyContent="flex-end" className="invoice-quick-actions">
                           <StatusChip value={invoice.status} />
+                          {invoice.pdfUrl ? (
+                            <Button href={String(invoice.pdfUrl)} target="_blank" rel="noreferrer" variant="outlined" size="small">Invoice PDF</Button>
+                          ) : null}
+                          {invoice.receiptUrl ? (
+                            <Button href={String(invoice.receiptUrl)} target="_blank" rel="noreferrer" variant="outlined" size="small">Receipt PDF</Button>
+                          ) : null}
                           <RowActionMenu
                             actions={[
                               { label: "Edit invoice", onClick: () => openInvoiceEditor(invoice, registrationDetail) },
@@ -4036,7 +4074,7 @@ export function CohortDetailClient({ id }: { id: string }) {
                 );
               })()}
             </SectionCard>
-            <SectionCard title="Team Roster">
+            <CollapsibleSectionCard title="Team Roster" alertCount={(registrationDetail.operationsTasks ?? []).filter((task: AdminRow) => task.category === "PARTICIPANT_LIST" && task.status !== "COMPLETED").length}>
               {(registrationDetail.participants ?? []).length > 0 ? (
                 <div className="quick-view-list" style={{ marginBottom: 12 }}>
                   {(registrationDetail.participants ?? []).map((participant: AdminRow) => {
@@ -4089,8 +4127,8 @@ export function CohortDetailClient({ id }: { id: string }) {
                 onAddPrimaryContact={addRegistrationPocToRoster}
                 onRemoveParticipant={removeRegistrationParticipant}
               />
-            </SectionCard>
-            <SectionCard title="Open Follow-Ups">
+            </CollapsibleSectionCard>
+            <CollapsibleSectionCard title="Open Follow-Ups" alertCount={(registrationDetail.operationsTasks ?? []).filter((task: AdminRow) => task.status !== "COMPLETED").length}>
               {(registrationDetail.operationsTasks ?? []).filter((task: AdminRow) => task.status !== "COMPLETED").length > 0 ? (
                 <div className="quick-view-list">
                   {(registrationDetail.operationsTasks ?? [])
@@ -4120,8 +4158,8 @@ export function CohortDetailClient({ id }: { id: string }) {
               ) : (
                 <Typography color="text.secondary">No open follow-ups for this registration.</Typography>
               )}
-            </SectionCard>
-            <SectionCard title="Registration Communication Journey">
+            </CollapsibleSectionCard>
+            <CollapsibleSectionCard title="Registration Communication Journey" alertCount={(registrationDetail.communications ?? []).filter((communication: AdminRow) => String(communication.status ?? "").toUpperCase() === "FAILED" || (communication.emailEvents ?? []).some((event: AdminRow) => ["FAILED", "BOUNCED"].includes(String(event.eventType ?? "").toUpperCase()) && !event.reviewedAt)).length}>
               <RegistrationCommunicationJourney
                 communications={registrationDetail.communications}
                 pocEmail={registrationDetail.primaryContactEmail}
@@ -4132,9 +4170,10 @@ export function CohortDetailClient({ id }: { id: string }) {
                   await load();
                 }}
               />
-            </SectionCard>
-            <SectionCard
+            </CollapsibleSectionCard>
+            <CollapsibleSectionCard
               title="POC Email Summary"
+              alertCount={registrationThread.reduce((total, communication: AdminRow) => total + Number(communication.emailSummary?.unreviewedIssueCount ?? 0), 0)}
               action={registrationDetail.primaryContactEmail ? (
                 <Button href={`/communications?search=${encodeURIComponent(registrationDetail.primaryContactEmail)}`} variant="outlined" size="small">
                   Open in Communications
@@ -4146,7 +4185,7 @@ export function CohortDetailClient({ id }: { id: string }) {
                 communications={registrationThread}
                 pocEmail={registrationDetail.primaryContactEmail}
               />
-            </SectionCard>
+            </CollapsibleSectionCard>
           </>
         )}
       </QuickViewDrawer>

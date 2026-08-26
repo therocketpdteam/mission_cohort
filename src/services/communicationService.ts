@@ -36,6 +36,23 @@ type ManualCustomEmailParticipantInput = {
   } | null;
 };
 
+type SentEmailSnapshot = {
+  renderedSubject?: string;
+  renderedBodyHtml?: string;
+  renderedBodyText?: string;
+  renderedAttachments?: Array<{ fileName?: string; contentType?: string | null }>;
+};
+
+function sentEmailEventPayload(sendResult: SentEmailSnapshot, extra: Record<string, unknown> = {}) {
+  return {
+    ...extra,
+    renderedSubject: sendResult.renderedSubject ?? null,
+    renderedBodyHtml: sendResult.renderedBodyHtml ?? null,
+    renderedBodyText: sendResult.renderedBodyText ?? null,
+    attachments: sendResult.renderedAttachments ?? []
+  };
+}
+
 type ManualEmailTarget = {
   cohortId: string;
   recipientEmail: string;
@@ -1523,7 +1540,8 @@ export async function sendCommunication(id: string, options?: { recipients?: str
             recipientEmail: target.recipientEmail,
             provider: "sendgrid",
             providerMessageId: result.providerMessageId,
-            eventType: EmailEventType.SENT
+            eventType: EmailEventType.SENT,
+            eventPayload: sentEmailEventPayload(result)
           }
         });
       }
@@ -1554,7 +1572,8 @@ export async function sendCommunication(id: string, options?: { recipients?: str
         recipientEmail,
         provider: "sendgrid",
         providerMessageId: result.providerMessageId,
-        eventType: EmailEventType.SENT
+        eventType: EmailEventType.SENT,
+        eventPayload: sentEmailEventPayload(result)
       }))
     });
 
@@ -1948,7 +1967,8 @@ export async function sendManualTemplateToParticipants(input: { templateId: stri
           recipientEmail: target.recipientEmail,
           provider: "sendgrid",
           providerMessageId: sendResult.providerMessageId,
-          eventType: EmailEventType.SENT
+          eventType: EmailEventType.SENT,
+          eventPayload: sentEmailEventPayload(sendResult)
         }
       });
 
@@ -2109,7 +2129,8 @@ export async function sendManualCustomEmail(input: {
           recipientEmail: target.recipientEmail,
           provider: "sendgrid",
           providerMessageId: sendResult.providerMessageId,
-          eventType: EmailEventType.SENT
+          eventType: EmailEventType.SENT,
+          eventPayload: sentEmailEventPayload(sendResult)
         }
       });
 
@@ -2285,10 +2306,10 @@ export async function sendCohortPublishExperienceTest(input: { cohortId: string;
           provider: "sendgrid",
           providerMessageId: sendResult.providerMessageId,
           eventType: EmailEventType.SENT,
-          eventPayload: {
+          eventPayload: sentEmailEventPayload(sendResult, {
             testSend: "publish_experience",
             label: message.label
-          }
+          })
         }
       });
 

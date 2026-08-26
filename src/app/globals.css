@@ -851,6 +851,97 @@ h6,
   padding: 14px;
 }
 
+
+.collapsible-section-card {
+  padding: 0;
+  overflow: hidden;
+}
+
+.collapsible-section-card[open] .collapsible-section-caret {
+  transform: rotate(180deg);
+}
+
+.collapsible-section-card.has-alert {
+  border-color: rgba(220, 38, 38, 0.28);
+}
+
+.collapsible-section-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  padding: 18px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.app-shell.is-compact .collapsible-section-summary {
+  padding: 14px;
+}
+
+.collapsible-section-summary::-webkit-details-marker,
+.registration-journey-group-header::-webkit-details-marker,
+.registration-journey-row::-webkit-details-marker,
+.poc-history-row::-webkit-details-marker {
+  display: none;
+}
+
+.collapsible-section-title,
+.collapsible-section-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.collapsible-section-title {
+  flex: 1;
+}
+
+.collapsible-section-actions {
+  flex-shrink: 0;
+}
+
+.collapsible-section-alert {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: var(--color-danger-100);
+  color: var(--color-danger-600);
+  font-size: 0.72rem;
+  font-weight: 840;
+}
+
+.collapsible-section-caret {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: var(--color-blue-100);
+  color: var(--color-blue-600);
+  font-size: 0.72rem;
+  font-weight: 900;
+  transition: transform 0.16s ease;
+}
+
+.collapsible-section-content {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  border-top: 1px solid rgba(120, 118, 128, 0.16);
+  padding: 0 18px 18px;
+}
+
+.app-shell.is-compact .collapsible-section-content {
+  padding: 0 14px 14px;
+}
+
 .section-card-header {
   display: flex;
   align-items: center;
@@ -6288,6 +6379,146 @@ h6,
 .registration-journey-group.is-scheduled .registration-journey-row {
   border-color: rgba(124, 58, 237, 0.2);
   background: rgba(237, 224, 255, 0.26);
+}
+
+
+.registration-journey-group,
+.registration-journey-message,
+.poc-history-message {
+  min-width: 0;
+}
+
+.registration-journey-group-header,
+.registration-journey-row,
+.poc-history-row {
+  cursor: pointer;
+  list-style: none;
+}
+
+.registration-journey-group-header > span {
+  width: auto;
+  padding: 0 10px;
+  white-space: nowrap;
+}
+
+.registration-journey-message[open] .registration-journey-row,
+.poc-history-message[open] .poc-history-row {
+  border-bottom-right-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.registration-journey-message.is-alert .registration-journey-row,
+.poc-history-message.is-alert .poc-history-row {
+  border-color: rgba(220, 38, 38, 0.28);
+  background: rgba(254, 226, 226, 0.36);
+}
+
+.registration-journey-detail,
+.poc-history-detail {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid var(--color-slate-200);
+  border-top: 0;
+  border-bottom-right-radius: 10px;
+  border-bottom-left-radius: 10px;
+  background: var(--color-surface-container-lowest);
+  padding: 10px;
+}
+
+.registration-recipient-list {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.registration-recipient-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  border-top: 1px solid rgba(120, 118, 128, 0.14);
+  padding-top: 8px;
+}
+
+.registration-recipient-row > div:first-child {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.registration-recipient-row strong,
+.registration-recipient-row span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.registration-recipient-row strong {
+  color: var(--color-primary-900);
+  font-size: 0.78rem;
+  font-weight: 820;
+}
+
+.registration-recipient-row span {
+  color: var(--color-slate-500);
+  font-size: 0.72rem;
+}
+
+.registration-journey-attachments,
+.poc-history-detail-block {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.registration-journey-attachments strong,
+.poc-history-detail-block strong {
+  color: var(--color-primary-900);
+  font-size: 0.76rem;
+  font-weight: 820;
+}
+
+.registration-journey-attachments span,
+.poc-history-attachment-list span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--color-slate-600);
+  font-size: 0.74rem;
+}
+
+.poc-history-messages,
+.poc-history-attachment-list {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.poc-history-detail-block p,
+.poc-history-body {
+  margin: 0;
+  color: var(--color-slate-600);
+  font-size: 0.76rem;
+  line-height: 1.48;
+  white-space: pre-wrap;
+}
+
+.poc-history-body {
+  max-height: 360px;
+  overflow: auto;
+  border: 1px dashed rgba(120, 118, 128, 0.22);
+  border-radius: 10px;
+  background: var(--color-slate-50);
+  padding: 10px;
+}
+
+.registration-journey-chips .is-alert-chip,
+.poc-history-chips .is-alert-chip {
+  border-color: rgba(220, 38, 38, 0.24);
+  background: var(--color-danger-100);
+  color: var(--color-danger-600);
 }
 
 .comms-summary-grid {
