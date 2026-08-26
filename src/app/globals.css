@@ -4510,7 +4510,7 @@ h6,
 .registration-report-filter-summary strong {
   color: var(--color-on-surface);
   font-size: 0.82rem;
-  letter-spacing: 0.04em;
+  letter-spacing: 0;
   text-transform: uppercase;
 }
 
@@ -5472,8 +5472,10 @@ h6,
 }
 
 .readiness-metric-card.needs-work::before {
-  content: "";
+  content: "MC";
   position: absolute;
+  display: grid;
+  place-items: center;
   inset: 0 auto 0 0;
   width: 4px;
   background: var(--color-danger-600);
@@ -9238,7 +9240,7 @@ h6,
   color: var(--dashboard-muted);
   font-size: 0.68rem;
   font-weight: 700;
-  letter-spacing: 0.04em;
+  letter-spacing: 0;
   text-transform: uppercase;
 }
 
@@ -9415,4 +9417,443 @@ button.dashboard-activity-item {
     grid-template-columns: 1fr;
     gap: 10px;
   }
+}
+
+/* Stitch-inspired operations polish: calmer surfaces, crisper density, and quieter hierarchy. */
+:root {
+  --color-primary-300: #c4b5fd;
+  --color-primary-500: #8b5cf6;
+  --color-slate-400: #94a3b8;
+  --color-slate-600: #475569;
+  --color-outline-variant: #d8d0e6;
+  --stroke-soft: #e2e8f0;
+  --shadow-soft: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-panel: 0 12px 32px rgba(15, 23, 42, 0.12);
+}
+
+.app-shell {
+  grid-template-columns: 244px minmax(0, 1fr);
+}
+
+.app-shell.is-compact {
+  grid-template-columns: 220px minmax(0, 1fr);
+}
+
+.app-sidebar {
+  border-right: 1px solid var(--stroke-soft);
+  background: var(--color-surface-container-low);
+  color: var(--color-on-surface);
+}
+
+.app-brand {
+  position: relative;
+  display: grid;
+  gap: 2px;
+  padding: 18px 16px;
+  border-bottom: 1px solid var(--stroke-soft);
+}
+
+.app-brand::before {
+  content: "MC";
+  position: absolute;
+  display: grid;
+  place-items: center;
+  left: 16px;
+  top: 20px;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: var(--color-primary-fixed);
+  box-shadow: inset 0 0 0 1px rgba(124, 58, 237, 0.16);
+  color: var(--color-primary-700);
+  font-size: 0.72rem;
+  font-weight: 850;
+  letter-spacing: 0;
+}
+
+.app-brand-title,
+.app-brand-subtitle,
+.app-environment-badge {
+  margin-left: 46px;
+}
+
+.app-brand-title {
+  color: var(--color-primary-900);
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.app-brand-subtitle {
+  color: var(--color-slate-500);
+  font-size: 0.74rem;
+  font-weight: 650;
+}
+
+.app-environment-badge {
+  margin-top: 8px;
+  padding: 5px 8px;
+  font-size: 0.66rem;
+  font-weight: 750;
+  letter-spacing: 0;
+}
+
+.app-nav {
+  gap: 4px;
+  padding: 12px 10px;
+}
+
+.app-nav-item {
+  min-height: 38px;
+  gap: 10px;
+  border-left: 0;
+  border-radius: 8px;
+  color: var(--color-slate-600);
+  font-size: 0.86rem;
+  font-weight: 650;
+}
+
+.app-nav-item:hover,
+.app-nav-item.is-active {
+  background: var(--color-primary-fixed);
+  color: var(--color-primary-700);
+}
+
+.app-nav-item.is-active {
+  box-shadow: inset 0 0 0 1px rgba(124, 58, 237, 0.16);
+}
+
+.app-topbar {
+  min-height: 64px;
+  padding: 10px 22px;
+  background: rgba(255, 255, 255, 0.84);
+}
+
+.app-topbar-title h1 {
+  color: var(--color-on-surface);
+  font-size: 1.04rem;
+  font-weight: 760;
+  letter-spacing: 0;
+}
+
+.app-breadcrumbs,
+.app-topbar-subtitle {
+  color: var(--color-slate-500);
+  font-size: 0.72rem;
+}
+
+.app-content {
+  padding: 22px 22px 36px;
+}
+
+.page-stack {
+  gap: 16px;
+  max-width: 1480px;
+}
+
+.page-header {
+  border-radius: 12px;
+  padding: 16px 18px;
+}
+
+.page-header h1 {
+  color: var(--color-on-surface);
+  font-size: 1.34rem;
+  font-weight: 760;
+  letter-spacing: 0;
+}
+
+.page-header p {
+  color: var(--color-slate-600);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.ui-card,
+.section-card,
+.ui-paper,
+.compact-filter-bar,
+.page-header {
+  border: 1px solid var(--stroke-soft);
+  border-radius: 12px;
+  background: var(--color-surface-container-lowest);
+  box-shadow: var(--shadow-soft);
+}
+
+.section-card {
+  padding: 16px;
+}
+
+.section-card-header {
+  margin-bottom: 12px;
+}
+
+.section-card-title,
+.ui-text-h3 {
+  color: var(--color-on-surface);
+  font-size: 0.95rem;
+  font-weight: 760;
+  letter-spacing: 0;
+}
+
+.ui-text-h1 {
+  color: var(--color-on-surface);
+  font-size: 1.42rem;
+  font-weight: 780;
+  letter-spacing: 0;
+}
+
+.ui-text-h2 {
+  color: var(--color-on-surface);
+  font-size: 1.14rem;
+  font-weight: 760;
+  letter-spacing: 0;
+}
+
+.ui-text-h4 {
+  color: var(--color-on-surface);
+  font-weight: 730;
+}
+
+.ui-button,
+.ui-icon-button {
+  border-radius: 8px;
+  font-weight: 700;
+}
+
+.ui-button:hover {
+  background: var(--color-primary-800);
+  color: var(--color-white);
+}
+
+.ui-button-outlined {
+  border-color: var(--stroke-soft);
+  background: var(--color-surface-container-lowest);
+  color: var(--color-primary-700);
+}
+
+.ui-button-outlined:hover,
+.ui-button-text:hover,
+.ui-icon-button:hover {
+  border-color: var(--color-primary-300);
+  background: var(--color-primary-fixed);
+  color: var(--color-primary-700);
+}
+
+.ui-button-text {
+  color: var(--color-primary-700);
+}
+
+.ui-input {
+  min-height: 36px;
+  border-color: var(--stroke-soft);
+  border-radius: 8px;
+  background: var(--color-surface-container-lowest);
+  font-size: 0.88rem;
+}
+
+.ui-input:focus {
+  border-color: var(--color-primary-500);
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.14);
+}
+
+.ui-label {
+  color: var(--color-slate-600);
+  font-size: 0.72rem;
+  font-weight: 680;
+}
+
+.ui-select-menu,
+.row-action-menu,
+.user-popover,
+.ui-menu,
+.ui-modal {
+  border-color: var(--stroke-soft);
+  border-radius: 12px;
+  box-shadow: var(--shadow-panel);
+}
+
+.ui-select-option,
+.row-action-item,
+.ui-menu-item {
+  border-radius: 7px;
+  font-size: 0.84rem;
+}
+
+.ui-select-option:hover,
+.ui-select-option.is-selected,
+.row-action-item:hover,
+.ui-menu-item:hover {
+  background: var(--color-primary-fixed);
+  color: var(--color-primary-700);
+}
+
+.ui-modal {
+  border-radius: 14px;
+}
+
+.ui-modal-header {
+  padding: 16px 18px;
+  color: var(--color-on-surface);
+  font-size: 1rem;
+  font-weight: 760;
+}
+
+.ui-modal-body {
+  padding: 16px 18px;
+}
+
+.ui-modal-footer {
+  padding: 12px 18px;
+}
+
+.quick-view-drawer {
+  border-left: 1px solid var(--stroke-soft);
+  box-shadow: -16px 0 42px rgba(15, 23, 42, 0.12);
+}
+
+.quick-view-header h2 {
+  color: var(--color-on-surface);
+  font-weight: 760;
+  letter-spacing: 0;
+}
+
+.app-table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.app-table th {
+  background: var(--color-surface);
+  color: var(--color-slate-600);
+  font-size: 0.7rem;
+  font-weight: 720;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.app-table td {
+  height: 48px;
+  font-size: 0.82rem;
+}
+
+.app-table tr:hover td {
+  background: #fafbfc;
+}
+
+.app-table-main,
+.app-table-metric strong,
+.registration-roster-cell strong,
+.global-people-search-card-header strong,
+.global-people-search-registration-row strong {
+  color: var(--color-on-surface);
+  font-weight: 700;
+}
+
+.app-table-sub,
+.registration-roster-cell span:not(.registration-health-dot) {
+  color: var(--color-slate-600);
+  font-weight: 500;
+}
+
+.ui-chip,
+.status-chip,
+.metadata-pill {
+  min-height: 22px;
+  padding: 3px 8px;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.global-people-search-field {
+  height: 38px;
+  border-color: var(--stroke-soft);
+  border-radius: 10px;
+  box-shadow: none;
+}
+
+.global-people-search-field:focus-within {
+  border-color: var(--color-primary-500);
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.14);
+}
+
+.global-people-search-panel,
+.global-people-search-card,
+.global-people-search-registration-row {
+  border-color: var(--stroke-soft);
+}
+
+.global-people-search-card {
+  background: var(--color-surface-container-lowest);
+}
+
+.global-people-search-tags span,
+.global-people-search-team span {
+  font-weight: 700;
+}
+
+.compact-filter-bar {
+  padding: 10px 12px;
+}
+
+.collapsible-section-summary {
+  padding: 16px;
+}
+
+.collapsible-section-content {
+  border-top-color: var(--stroke-soft);
+  padding: 0 16px 16px;
+}
+
+.collapsible-section-alert,
+.collapsible-section-caret,
+.dashboard-activity-icon,
+.dashboard-metric-icon,
+.readiness-card-icon,
+.readiness-metric-icon,
+.cohort-overview-resource-icon,
+.cohort-overview-card-icon,
+.overview-card-icon,
+.prep-resource-icon,
+.metric-icon {
+  display: inline-grid;
+  place-items: center;
+}
+
+.collapsible-section-caret {
+  background: var(--color-primary-fixed);
+  color: var(--color-primary-700);
+}
+
+.dashboard-page .dashboard-panel,
+.dashboard-page .dashboard-metric-card,
+.cohort-metric-card,
+.cohort-revenue-card,
+.cohort-overview-resource-card,
+.readiness-metric-card,
+.registration-detail-section,
+.registration-detail-tile,
+.poc-history-message,
+.registration-journey-group,
+.registration-journey-message,
+.registration-report-builder,
+.registration-report-columns,
+.registration-report-tile {
+  border-color: var(--stroke-soft);
+  box-shadow: var(--shadow-soft);
+}
+
+.app-shell.is-night .app-sidebar {
+  background: #151329;
+  color: #f4f1ff;
+}
+
+.app-shell.is-night .app-nav-item {
+  color: #d8d4ea;
+}
+
+.app-shell.is-night .app-nav-item:hover,
+.app-shell.is-night .app-nav-item.is-active {
+  background: rgba(124, 58, 237, 0.2);
+  color: #f4f1ff;
 }
