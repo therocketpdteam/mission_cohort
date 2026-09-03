@@ -37,6 +37,26 @@ function uniqueStrings(values: Array<string | null | undefined>) {
   return Array.from(new Set(values.map((value) => String(value ?? "").trim()).filter(Boolean)));
 }
 
+function emailsForCommunication(communication: AdminRow, fallbackEmail?: string | null) {
+  const participantEmail = communication.participant?.email ? [String(communication.participant.email)] : [];
+  const eventEmails = ((communication.emailEvents ?? []) as AdminRow[]).map((event) => event.recipientEmail as string | undefined);
+  const recipients = Array.isArray(communication.recipientEmails)
+    ? communication.recipientEmails.map((email) => typeof email === "string" ? email : "").filter(Boolean)
+    : [];
+  const fallback = fallbackEmail ? [fallbackEmail] : [];
+
+  return uniqueStrings([...participantEmail, ...eventEmails, ...recipients, ...fallback]);
+}
+
+function participantDisplayName(participant?: AdminRow | null) {
+  if (!participant) return "";
+  return formatProperDisplay(`${participant.firstName ?? ""} ${participant.lastName ?? ""}`.trim());
+}
+
+function recipientCountFor(group: MessageGroup) {
+  return Math.max(group.recipients.length, group.rows.length);
+}
+
 function deliverySummary(communication: AdminRow) {
   const events = ((communication.emailEvents ?? []) as AdminRow[]).map((event) => String(event.eventType ?? "").toUpperCase());
   const opened = events.filter((event) => event === "OPENED").length;
@@ -104,25 +124,31 @@ function journeyGroupFor(communication: AdminRow): JourneyGroupKey {
 }
 
 function recipientContext(communication: AdminRow, fallbackEmail?: string | null) {
+  const emails = emailsForCommunication(communication, fallbackEmail);
+
   if (communication.participant) {
-    const name = formatProperDisplay(`${communication.participant.firstName ?? ""} ${communication.participant.lastName ?? ""}`.trim());
-    const email = communication.participant.email ? [String(communication.participant.email)] : [];
+    const name = participantDisplayName(communication.participant);
+    const detailParts = uniqueStrings([
+      emails.join(", "),
+      communication.participant.title ? formatProperDisplay(String(communication.participant.title)) : "",
+      formatStatusLabel(communication.participant.status)
+    ]);
+
     return {
       type: "Participant",
-      label: [name, communication.participant.email].filter(Boolean).join(" · "),
-      emails: email
+      label: name || emails[0] || "Participant not assigned",
+      detail: detailParts.join(" · ") || "No participant contact details recorded",
+      emails
     };
   }
 
-  const eventEmails = ((communication.emailEvents ?? []) as AdminRow[]).map((event) => event.recipientEmail as string | undefined);
-  const recipients = Array.isArray(communication.recipientEmails) ? communication.recipientEmails.filter(Boolean) : [];
-  const fallback = fallbackEmail ? [fallbackEmail] : [];
-  const emails = uniqueStrings([...eventEmails, ...recipients, ...fallback]);
   const scope = String(communication.recipientScope ?? "").toUpperCase();
+  const type = scope === "PARTICIPANTS" ? "Participant" : scope === "CUSTOM" ? "Custom" : "POC";
 
   return {
-    type: scope === "PARTICIPANTS" ? "Participant" : scope === "CUSTOM" ? "Custom" : "POC",
-    label: emails.join(", ") || "Recipient not assigned",
+    type,
+    label: emails[0] || "Recipient not assigned",
+    detail: emails.length > 1 ? emails.slice(1).join(", ") : type,
     emails
   };
 }
@@ -287,7 +313,7 @@ export function RegistrationCommunicationJourney({
     skipped: [],
     planned: []
   });
-  const counts = Object.fromEntries(journeyGroups.map((group) => [group.key, grouped[group.key].reduce((total, item) => total + item.recipients.length, 0)])) as Record<JourneyGroupKey, number>;
+  const counts = Object.fromEntries(journeyGroups.map((group) => [group.key, grouped[group.key].reduce((total, item) => total + recipientCountFor(item), 0)])) as Record<JourneyGroupKey, number>;
   const issueCount = grouped.needs_attention.reduce((total, item) => total + Math.max(item.issueRecipients.length, 1), 0);
 
   return (
@@ -319,7 +345,7 @@ export function RegistrationCommunicationJourney({
         {journeyGroups.map((group) => {
           const groupRows = grouped[group.key];
           if (groupRows.length === 0) return null;
-          const groupRecipientCount = groupRows.reduce((total, item) => total + item.recipients.length, 0);
+          const groupRecipientCount = groupRows.reduce((total, item) => total + recipientCountFor(item), 0);
           const hasIssues = groupRows.some((item) => item.issueRecipients.length > 0 || item.key === "needs_attention");
 
           return (
@@ -382,8 +408,10 @@ export function RegistrationCommunicationJourney({
                           return (
                             <div className="registration-recipient-row" key={communication.id}>
                               <div>
-                                <strong>{recipient.label}</strong>
-                                {communication.providerError ? <span>{communication.providerError}</span> : null}
+                                <strong title={recipient.label}>{recipient.label}</strong>
+                                <span title={[recipient.detail, communication.providerError].filter(Boolean).join(" · ") || undefined}>
+                                  {[recipient.detail, communication.providerError].filter(Boolean).join(" · ") || "No recipient details recorded"}
+                                </span>
                               </div>
                               <div className="registration-journey-actions">
                                 {canResend ? (
