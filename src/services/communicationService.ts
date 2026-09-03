@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { isMissingEmailReviewColumn, migrationRequiredResult } from "@/lib/prismaCompatibility";
 import {
   communicationDraftCreateSchema,
+  communicationDraftUpdateSchema,
   communicationScheduleSchema,
   communicationTemplateCreateSchema,
   communicationTemplateUpdateSchema
@@ -1063,6 +1064,66 @@ export async function sendCommunicationTest(input: {
 export async function createCommunicationDraft(input: z.input<typeof communicationDraftCreateSchema>) {
   const data = communicationDraftCreateSchema.parse(input);
   return prisma.cohortCommunication.create({ data });
+}
+
+export async function updateCommunicationDraft(input: z.input<typeof communicationDraftUpdateSchema>) {
+  const data = communicationDraftUpdateSchema.parse(input);
+  const existing = await prisma.cohortCommunication.findUnique({ where: { id: data.id } });
+
+  if (!existing) {
+    throw Object.assign(new Error("Communication not found"), { code: "NOT_FOUND", status: 404 });
+  }
+
+  if (existing.status !== CommunicationStatus.DRAFT || existing.sentAt) {
+    throw Object.assign(new Error("Only unsent draft communications can be edited."), { code: "BAD_REQUEST", status: 400 });
+  }
+
+  const { id, ...updates } = data;
+  const updateData: Prisma.CohortCommunicationUncheckedUpdateInput = updates;
+  const updated = await prisma.cohortCommunication.update({
+    where: { id },
+    data: updateData
+  });
+
+  logAuditEventAsync({
+    entityType: "CohortCommunication",
+    entityId: updated.id,
+    action: "UPDATE_DRAFT_COMMUNICATION",
+    description: "Draft communication updated: " + updated.subject + ".",
+    metadata: { cohortId: updated.cohortId, sessionId: updated.sessionId }
+  });
+
+  return updated;
+}
+
+export async function deleteCommunicationDraft(id: string) {
+  const existing = await prisma.cohortCommunication.findUnique({ where: { id }, include: { attachments: true, emailEvents: true } });
+
+  if (!existing) {
+    throw Object.assign(new Error("Communication not found"), { code: "NOT_FOUND", status: 404 });
+  }
+
+  if (existing.status !== CommunicationStatus.DRAFT || existing.sentAt || existing.emailEvents.length > 0) {
+    throw Object.assign(new Error("Only unsent draft communications with no delivery events can be deleted."), { code: "BAD_REQUEST", status: 400 });
+  }
+
+  for (const attachment of existing.attachments) {
+    if (attachment.fileKey && attachment.provider === "supabase" && !attachment.fileKey.startsWith("resource:")) {
+      await deletePrivateAppFile(attachment.fileKey).catch(() => null);
+    }
+  }
+
+  const deleted = await prisma.cohortCommunication.delete({ where: { id } });
+
+  logAuditEventAsync({
+    entityType: "CohortCommunication",
+    entityId: deleted.id,
+    action: "DELETE_DRAFT_COMMUNICATION",
+    description: "Draft communication deleted: " + deleted.subject + ".",
+    metadata: { cohortId: deleted.cohortId, sessionId: deleted.sessionId }
+  });
+
+  return deleted;
 }
 
 export async function addCommunicationAttachment(input: {

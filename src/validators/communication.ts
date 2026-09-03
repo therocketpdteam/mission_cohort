@@ -27,6 +27,10 @@ export const communicationDraftCreateSchema = z.object({
   createdById: z.string().min(1)
 });
 
+export const communicationDraftUpdateSchema = communicationDraftCreateSchema.omit({ createdById: true }).partial().extend({
+  id: z.string().min(1)
+});
+
 export const communicationScheduleSchema = z.object({
   communicationId: z.string().min(1),
   scheduledFor: dateInput

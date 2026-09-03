@@ -594,6 +594,7 @@ function ComposeMessageDialog({
   cohorts,
   templates,
   defaultCohortId,
+  editingMessage,
   onClose,
   onSubmit
 }: {
@@ -601,6 +602,7 @@ function ComposeMessageDialog({
   cohorts: AdminRow[];
   templates: AdminRow[];
   defaultCohortId?: string;
+  editingMessage?: AdminRow | null;
   onClose: () => void;
   onSubmit: (values: AdminRow, action: "draft" | "schedule" | "send" | "test") => Promise<void>;
 }) {
@@ -638,7 +640,21 @@ function ComposeMessageDialog({
 
   useEffect(() => {
     if (open) {
-      setValues({
+      const draftRecipientEmails = Array.isArray(editingMessage?.recipientEmails)
+        ? editingMessage.recipientEmails.join("\n")
+        : "";
+      setValues(editingMessage ? {
+        id: editingMessage.id,
+        cohortId: editingMessage.cohortId ?? defaultCohortId ?? "",
+        sessionId: editingMessage.sessionId ?? "",
+        templateId: editingMessage.templateId ?? "",
+        recipientScope: editingMessage.recipientScope ?? "ALL_PARTICIPANTS",
+        recipientEmailsText: draftRecipientEmails,
+        subject: editingMessage.subject ?? "",
+        bodyText: templateText(editingMessage),
+        scheduledFor: editingMessage.scheduledFor ?? "",
+        testRecipientEmail: ""
+      } : {
         cohortId: defaultCohortId ?? "",
         sessionId: "",
         templateId: "",
@@ -649,9 +665,14 @@ function ComposeMessageDialog({
         scheduledFor: "",
         testRecipientEmail: ""
       });
+      setActiveField("bodyText");
+      selectionRef.current = {
+        subject: { start: String(editingMessage?.subject ?? "").length, end: String(editingMessage?.subject ?? "").length },
+        bodyText: { start: String(editingMessage ? templateText(editingMessage) : "").length, end: String(editingMessage ? templateText(editingMessage) : "").length }
+      };
       setSavingAction(null);
     }
-  }, [defaultCohortId, open]);
+  }, [defaultCohortId, editingMessage, open]);
 
   function setValue(field: string, value: unknown) {
     setValues((current) => ({ ...current, [field]: value }));
@@ -700,6 +721,31 @@ function ComposeMessageDialog({
     replaceSelection(activeField, `{{${field}}}`);
   }
 
+  function formatBody(style: "bold" | "italic" | "bullet" | "link") {
+    const currentValue = bodyText;
+    const selection = selectionRef.current.bodyText ?? { start: currentValue.length, end: currentValue.length };
+    const start = Math.min(selection.start, currentValue.length);
+    const end = Math.min(selection.end, currentValue.length);
+    const selected = currentValue.slice(start, end);
+
+    if (style === "bullet") {
+      const bulletText = selected
+        ? selected.split("\n").map((line) => line.trim() ? "- " + line.replace(/^[-*]\s+/, "") : line).join("\n")
+        : "- Bullet item";
+      replaceSelection("bodyText", bulletText);
+      return;
+    }
+
+    if (style === "link") {
+      const label = selected || "Link text";
+      replaceSelection("bodyText", "[" + label + "](https://example.com)");
+      return;
+    }
+
+    const wrappers = style === "bold" ? ["**", "**"] : ["*", "*"];
+    replaceSelection("bodyText", wrappers[0] + (selected || "text") + wrappers[1]);
+  }
+
   async function submit(action: "draft" | "schedule" | "send" | "test") {
     setSavingAction(action);
     try {
@@ -725,7 +771,7 @@ function ComposeMessageDialog({
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="lg">
-      <DialogTitle>Create message</DialogTitle>
+      <DialogTitle>{editingMessage ? "Edit draft message" : "Create message"}</DialogTitle>
       <DialogContent>
         <div className="compose-message-editor">
           <div className="compose-message-form">
@@ -788,7 +834,9 @@ function ComposeMessageDialog({
               label="Subject"
               value={values.subject ?? ""}
               onChange={(event) => setValue("subject", event.target.value)}
+              onClick={(event: SyntheticEvent<HTMLInputElement>) => rememberSelection("subject", event)}
               onFocus={(event: SyntheticEvent<HTMLInputElement>) => rememberSelection("subject", event)}
+              onKeyUp={(event: SyntheticEvent<HTMLInputElement>) => rememberSelection("subject", event)}
               onSelect={(event: SyntheticEvent<HTMLInputElement>) => rememberSelection("subject", event)}
               required
             />
@@ -798,11 +846,22 @@ function ComposeMessageDialog({
               minRows={8}
               value={bodyText}
               onChange={(event) => setValue("bodyText", event.target.value)}
+              onClick={(event: SyntheticEvent<HTMLTextAreaElement>) => rememberSelection("bodyText", event)}
               onFocus={(event: SyntheticEvent<HTMLTextAreaElement>) => rememberSelection("bodyText", event)}
+              onKeyUp={(event: SyntheticEvent<HTMLTextAreaElement>) => rememberSelection("bodyText", event)}
               onSelect={(event: SyntheticEvent<HTMLTextAreaElement>) => rememberSelection("bodyText", event)}
               helperText={selectedTemplate ? `Started from ${selectedTemplate.name}. Edits here affect only this message.` : "Write the message like a normal email."}
               required
             />
+            <div className="template-format-toolbar compose-format-toolbar" aria-label="Email body formatting tools">
+              <button type="button" onClick={() => formatBody("bold")} title="Bold selected text"><strong>B</strong></button>
+              <button type="button" onClick={() => formatBody("italic")} title="Italic selected text"><em>I</em></button>
+              <button type="button" onClick={() => formatBody("bullet")} title="Add bullet points">List</button>
+              <button type="button" onClick={() => formatBody("link")} title="Add hyperlink">Link</button>
+            </div>
+            <p className="template-format-hint compose-format-hint">
+              Use the buttons to insert <code>**bold**</code>, <code>*italic*</code>, <code>- bullet</code>, or <code>[text](link)</code> formatting.
+            </p>
             <TextField
               label="Schedule for"
               type="datetime-local"
@@ -879,7 +938,7 @@ function ComposeMessageDialog({
       <DialogActions>
         <Button variant="outlined" onClick={onClose} disabled={Boolean(savingAction)}>Cancel</Button>
         <Button variant="outlined" onClick={() => submit("draft")} disabled={!canSave || Boolean(savingAction)}>
-          {savingAction === "draft" ? "Saving" : "Save draft"}
+          {savingAction === "draft" ? "Saving" : editingMessage ? "Save changes" : "Save draft"}
         </Button>
         <Button variant="outlined" onClick={() => submit("schedule")} disabled={!canSchedule || Boolean(savingAction)}>
           {savingAction === "schedule" ? "Scheduling" : "Schedule"}
@@ -903,6 +962,7 @@ export function CommunicationsClient() {
   const [messageSearch, setMessageSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [composeOpen, setComposeOpen] = useState(false);
+  const [editingMessage, setEditingMessage] = useState<AdminRow | null>(null);
   const [mergeFieldsOpen, setMergeFieldsOpen] = useState(false);
   const [editing, setEditing] = useState<AdminRow | null>(null);
   const [previewTemplate, setPreviewTemplate] = useState<AdminRow | null>(null);
@@ -1157,11 +1217,32 @@ export function CommunicationsClient() {
     }
   }
 
+  function openDraftEditor(message: AdminRow) {
+    setEditingMessage(message);
+    setComposeOpen(true);
+    setMessageDetail(null);
+  }
+
+  async function deleteDraftMessage(message: AdminRow) {
+    if (!window.confirm(`Delete draft message "${message.subject || "Untitled message"}"?`)) {
+      return;
+    }
+
+    try {
+      await adminApi("/api/communications", { method: "PATCH", body: { action: "deleteDraft", id: message.id } });
+      notifySuccess("Draft deleted");
+      setMessageDetail((current) => current?.id === message.id ? null : current);
+      await load(selectedCohortId);
+    } catch (error) {
+      notifyError((error as Error).message);
+    }
+  }
+
   async function createMessage(values: AdminRow, action: "draft" | "schedule" | "send" | "test") {
     const bodyText = String(values.bodyText ?? "").trim();
     const scheduledFor = values.scheduledFor ? new Date(String(values.scheduledFor)).toISOString() : undefined;
     const recipientScope = String(values.recipientScope ?? "ALL_PARTICIPANTS");
-    const recipientEmails = recipientScope === "CUSTOM" ? parseRecipientEmails(String(values.recipientEmailsText ?? "")) : undefined;
+    const recipientEmails = recipientScope === "CUSTOM" ? parseRecipientEmails(String(values.recipientEmailsText ?? "")) : [];
 
     try {
       if (action === "test") {
@@ -1187,30 +1268,43 @@ export function CommunicationsClient() {
         return;
       }
 
-      const communication = await adminApi<AdminRow>("/api/communications", {
-        method: "POST",
-        body: {
-          cohortId: values.cohortId,
-          sessionId: values.sessionId || undefined,
-          templateId: values.templateId || undefined,
-          subject: String(values.subject ?? "").trim(),
-          bodyHtml: textToEmailHtml(bodyText),
-          bodyText,
-          scheduledFor: action === "schedule" ? scheduledFor : undefined,
-          status: action === "schedule" ? "SCHEDULED" : "DRAFT",
-          recipientScope,
-          recipientEmails
-        }
-      });
+      const payload = {
+        cohortId: values.cohortId,
+        sessionId: values.sessionId || undefined,
+        templateId: values.templateId || undefined,
+        subject: String(values.subject ?? "").trim(),
+        bodyHtml: textToEmailHtml(bodyText),
+        bodyText,
+        scheduledFor: action === "schedule" ? scheduledFor : undefined,
+        status: action === "schedule" ? "SCHEDULED" : "DRAFT",
+        recipientScope,
+        recipientEmails
+      };
+      const communication = values.id
+        ? await adminApi<AdminRow>("/api/communications", {
+            method: "PATCH",
+            body: {
+              action: "updateDraft",
+              id: values.id,
+              ...payload,
+              status: action === "schedule" ? "SCHEDULED" : "DRAFT",
+              scheduledFor: action === "schedule" ? scheduledFor : undefined
+            }
+          })
+        : await adminApi<AdminRow>("/api/communications", {
+            method: "POST",
+            body: payload
+          });
 
       if (action === "send") {
         await adminApi("/api/communications", { method: "PATCH", body: { id: communication.id, action: "send" } });
         notifySuccess("Message created and sent");
       } else {
-        notifySuccess(action === "schedule" ? "Message scheduled" : "Draft created");
+        notifySuccess(action === "schedule" ? "Message scheduled" : values.id ? "Draft updated" : "Draft created");
       }
 
       await load(selectedCohortId);
+      setEditingMessage(null);
       setActiveTab(0);
       setStatusFilter("");
     } catch (error) {
@@ -1295,6 +1389,10 @@ export function CommunicationsClient() {
         <Box onClick={(event) => event.stopPropagation()}>
           <RowActionMenu
             actions={[
+              ...(params.row.status === "DRAFT" ? [
+                { label: "Edit draft", icon: <EditOutlined fontSize="small" />, onClick: () => openDraftEditor(params.row) },
+                { label: "Delete draft", icon: <DeleteOutline fontSize="small" />, onClick: () => deleteDraftMessage(params.row) }
+              ] : []),
               {
                 label: params.row.sentAt ? "Resend message" : "Send message",
                 icon: <SendOutlined fontSize="small" />,
@@ -1449,7 +1547,7 @@ export function CommunicationsClient() {
         action={
           <ActionGroup>
             <Button variant="outlined" startIcon={<EmailOutlined />} onClick={() => setMergeFieldsOpen(true)}>Merge Fields</Button>
-            <ToolbarButton onClick={() => setComposeOpen(true)}>Create Message</ToolbarButton>
+            <ToolbarButton onClick={() => { setEditingMessage(null); setComposeOpen(true); }}>Create Message</ToolbarButton>
             <ToolbarButton onClick={() => { setEditing(null); setDialogOpen(true); }}>Create Template</ToolbarButton>
           </ActionGroup>
         }
@@ -1544,6 +1642,12 @@ export function CommunicationsClient() {
         onClose={() => setMessageDetail(null)}
         actions={messageDetail ? (
           <ActionGroup>
+            {messageDetail.status === "DRAFT" ? (
+              <>
+                <Button variant="outlined" startIcon={<EditOutlined />} onClick={() => openDraftEditor(messageDetail)}>Edit draft</Button>
+                <Button variant="outlined" color="error" startIcon={<DeleteOutline />} onClick={() => deleteDraftMessage(messageDetail)}>Delete draft</Button>
+              </>
+            ) : null}
             <label className="ui-button ui-button-outlined ui-button-small">
               <input type="file" hidden onChange={attachFile} disabled={uploadingAttachment} />
               <span>{uploadingAttachment ? "Uploading" : "Attach file"}</span>
@@ -1796,7 +1900,8 @@ export function CommunicationsClient() {
         cohorts={cohorts}
         templates={templates}
         defaultCohortId={selectedCohortId}
-        onClose={() => setComposeOpen(false)}
+        editingMessage={editingMessage}
+        onClose={() => { setComposeOpen(false); setEditingMessage(null); }}
         onSubmit={createMessage}
       />
       <Box>{snackbar}</Box>

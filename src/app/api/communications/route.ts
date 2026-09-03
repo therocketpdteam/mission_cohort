@@ -6,6 +6,7 @@ import {
   cancelCommunication,
   createDefaultCohortSessionCommunications,
   createCommunicationDraft,
+  deleteCommunicationDraft,
   createDefaultSessionCommunications,
   createPlannedSessionReminders,
   listCommunications,
@@ -20,7 +21,8 @@ import {
   sendManualCustomEmail,
   sendManualTemplateToParticipants,
   sendTemplateToParticipant,
-  sendTemplateToRegistrations
+  sendTemplateToRegistrations,
+  updateCommunicationDraft
 } from "@/services/communicationService";
 import { reconcileCohortParticipantJourneys, skipPocRegistrationConfirmationsForCohort } from "@/services/registrationJourneyService";
 
@@ -70,6 +72,22 @@ export async function PATCH(request: Request) {
       }
 
       return ok(await removeCommunicationAttachment(body.attachmentId));
+    }
+
+    if (body.action === "updateDraft") {
+      if (!body.id) {
+        return fail("id is required", "BAD_REQUEST", 400);
+      }
+
+      return ok(await updateCommunicationDraft(body));
+    }
+
+    if (body.action === "deleteDraft") {
+      if (!body.id) {
+        return fail("id is required", "BAD_REQUEST", 400);
+      }
+
+      return ok(await deleteCommunicationDraft(body.id));
     }
 
     if (body.action === "schedule") {
