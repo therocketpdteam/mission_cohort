@@ -96,6 +96,7 @@ export const sampleMergeContext: MergeFieldContext = {
     description: "A practical session on leadership routines.",
     startTime: "May 12, 2026 at 10:00 AM",
     endTime: "May 12, 2026 at 11:30 AM",
+    timezone: "America/New_York",
     meetingUrl: "https://zoom.us/j/123456789",
     location: "Zoom",
     recordingUrl: "https://learn.rocketpd.com/recordings",
@@ -144,6 +145,51 @@ export const sampleMergeContext: MergeFieldContext = {
   }
 };
 
+function formatSessionDateTime(value: unknown, timezone: unknown) {
+  if (!value) {
+    return "";
+  }
+
+  const rawValue = String(value);
+  const isDateObject = value instanceof Date;
+  const isIsoDateTime = /^\d{4}-\d{2}-\d{2}T/.test(rawValue);
+
+  if (!isDateObject && !isIsoDateTime) {
+    return rawValue;
+  }
+
+  const date = isDateObject ? value : new Date(rawValue);
+  if (!Number.isFinite(date.getTime())) {
+    return rawValue;
+  }
+
+  const timeZone = typeof timezone === "string" && timezone.trim()
+    ? timezone.trim()
+    : "America/New_York";
+
+  try {
+    return new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      timeZoneName: "longGeneric"
+    }).format(date);
+  } catch {
+    return new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/New_York",
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      timeZoneName: "longGeneric"
+    }).format(date);
+  }
+}
+
 function getPathValue(context: MergeFieldContext, path: string) {
   const [namespace, key] = path.split(".");
   const scope = context[namespace as keyof MergeFieldContext] ?? (
@@ -157,6 +203,10 @@ function getPathValue(context: MergeFieldContext, path: string) {
 
   if (namespace === "registration" && key === "invoiceUrl" && !value && Array.isArray(scope?.invoiceDrafts)) {
     value = (scope.invoiceDrafts as Array<Record<string, unknown>>).find((invoice) => invoice.pdfUrl)?.pdfUrl;
+  }
+
+  if (namespace === "session" && (key === "startTime" || key === "endTime")) {
+    return formatSessionDateTime(value, scope?.timezone ?? context.cohort?.defaultTimezone);
   }
 
   if (value instanceof Date) {

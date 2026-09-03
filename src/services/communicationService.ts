@@ -530,11 +530,10 @@ You will receive a calendar invitation with a link to access the session and rem
 
 Want to start your learning early?
 
-Here are three steps you can take to prepare for your cohort experience:
+Here are two ways you can start preparing for your cohort experience:
 
 1. [Download our free guide on {{cohort.guideTopic}}]({{cohort.guideUrl}}).
 2. [{{cohort.presenterName}} on The RocketPD Podcast]({{cohort.podcastUrl}}).
-3. Set up your profile on the RocketPD Learning Portal - this is where you’ll access related recordings and resources during the cohort.
 
 Expect more information and resources from us one week prior to the first live cohort session.
 
@@ -649,6 +648,9 @@ const defaultCopyRefreshMatchers: Record<string, (bodyText: string) => boolean> 
     bodyText.includes("- Payment status: {{registration.paymentStatus}}") ||
     bodyText.includes("- Payment status: **{{registration.paymentStatus}}**") ||
     bodyText.includes("If you registered a team and already shared participant information"),
+  "Three Weeks Before Cohort": (bodyText) =>
+    bodyText.includes("Set up your profile on the RocketPD Learning Portal") ||
+    bodyText.includes("Here are three steps you can take to prepare for your cohort experience"),
   "Participant List Request": (bodyText) =>
     bodyText.includes("Hello {{registration.primaryContactName}}") ||
     bodyText.includes("participant names and work email addresses so every participant receives"),
