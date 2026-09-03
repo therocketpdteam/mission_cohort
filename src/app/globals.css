@@ -6822,7 +6822,8 @@ h6,
 
 .compose-message-context,
 .compose-distribution-panel,
-.compose-recipient-summary {
+.compose-recipient-summary,
+.compose-test-panel {
   display: grid;
   gap: 4px;
   min-width: 0;
@@ -6834,7 +6835,8 @@ h6,
 
 .compose-message-context span,
 .compose-distribution-panel > span,
-.compose-recipient-summary span {
+.compose-recipient-summary span,
+.compose-test-panel > span {
   color: var(--color-slate-500);
   font-size: 0.72rem;
   font-weight: 820;
@@ -6871,6 +6873,15 @@ h6,
 
 .compose-distribution-panel > strong {
   font-size: 1.28rem;
+}
+
+.compose-test-panel {
+  gap: 10px;
+}
+
+.compose-test-panel .ui-button {
+  justify-content: center;
+  width: 100%;
 }
 
 .compose-distribution-panel > p {
@@ -6911,9 +6922,9 @@ h6,
 
 .compose-audience-picker button {
   display: grid;
-  gap: 3px;
+  gap: 5px;
   min-width: 0;
-  min-height: 74px;
+  min-height: 86px;
   align-content: start;
   border: 1px solid var(--color-slate-200);
   border-radius: 10px;
@@ -6952,7 +6963,7 @@ h6,
   font-size: 0.72rem;
   line-height: 1.28;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 3;
 }
 
 .compose-recipient-chips {
@@ -7477,6 +7488,7 @@ h6,
 .app-shell.is-night .compose-message-side,
 .app-shell.is-night .compose-message-context,
 .app-shell.is-night .compose-distribution-panel,
+.app-shell.is-night .compose-test-panel,
 .app-shell.is-night .compose-audience-picker button,
 .app-shell.is-night .compose-recipient-summary,
 .app-shell.is-night .compose-recipient-chips em,
@@ -7618,6 +7630,7 @@ h6,
 .app-shell.is-night .compose-audience-picker span,
 .app-shell.is-night .compose-message-context span,
 .app-shell.is-night .compose-message-context p,
+.app-shell.is-night .compose-test-panel > span,
 .app-shell.is-night .compose-recipient-summary span,
 .app-shell.is-night .comms-material-row span,
 .app-shell.is-night .comms-attachment-row span,

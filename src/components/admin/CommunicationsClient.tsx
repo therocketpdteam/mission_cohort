@@ -52,15 +52,15 @@ const simpleEmailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const recipientScopeCopy: Record<string, { label: string; helper: string }> = {
   ALL_PARTICIPANTS: {
     label: "All participants",
-    helper: "Everyone saved on the cohort roster."
+    helper: "Roster participants only. POCs are excluded unless they are also participants."
   },
   PRIMARY_CONTACTS: {
     label: "Primary contacts",
-    helper: "POCs for active registrations."
+    helper: "Registration POCs only. Use this for invoice or team-owner messages."
   },
   BILLING_CONTACTS: {
     label: "Billing contacts",
-    helper: "Billing email when available, otherwise the POC."
+    helper: "Billing email when available, otherwise the registration POC."
   },
   CUSTOM: {
     label: "Custom list",
@@ -512,7 +512,7 @@ function ComposeMessageDialog({
   templates: AdminRow[];
   defaultCohortId?: string;
   onClose: () => void;
-  onSubmit: (values: AdminRow, action: "draft" | "schedule" | "send") => Promise<void>;
+  onSubmit: (values: AdminRow, action: "draft" | "schedule" | "send" | "test") => Promise<void>;
 }) {
   const [values, setValues] = useState<AdminRow>({
     cohortId: "",
@@ -522,9 +522,15 @@ function ComposeMessageDialog({
     recipientEmailsText: "",
     subject: "",
     bodyText: "",
-    scheduledFor: ""
+    scheduledFor: "",
+    testRecipientEmail: ""
   });
-  const [savingAction, setSavingAction] = useState<"draft" | "schedule" | "send" | null>(null);
+  const [savingAction, setSavingAction] = useState<"draft" | "schedule" | "send" | "test" | null>(null);
+  const [activeField, setActiveField] = useState<"subject" | "bodyText">("bodyText");
+  const selectionRef = useRef<Record<"subject" | "bodyText", { start: number; end: number }>>({
+    subject: { start: 0, end: 0 },
+    bodyText: { start: 0, end: 0 }
+  });
   const selectedCohort = cohorts.find((cohort) => cohort.id === values.cohortId);
   const selectedTemplate = templates.find((template) => template.id === values.templateId);
   const bodyText = String(values.bodyText ?? "");
@@ -550,7 +556,8 @@ function ComposeMessageDialog({
         recipientEmailsText: "",
         subject: "",
         bodyText: "",
-        scheduledFor: ""
+        scheduledFor: "",
+        testRecipientEmail: ""
       });
       setSavingAction(null);
     }
@@ -570,21 +577,60 @@ function ComposeMessageDialog({
     }));
   }
 
-  async function submit(action: "draft" | "schedule" | "send") {
+  function rememberSelection(field: "subject" | "bodyText", event: SyntheticEvent<HTMLInputElement | HTMLTextAreaElement>) {
+    const element = event.currentTarget;
+    selectionRef.current[field] = {
+      start: element.selectionStart ?? element.value.length,
+      end: element.selectionEnd ?? element.value.length
+    };
+    setActiveField(field);
+  }
+
+  function replaceSelection(field: "subject" | "bodyText", replacement: string) {
+    const currentValue = String(values[field] ?? "");
+    const selection = selectionRef.current[field] ?? { start: currentValue.length, end: currentValue.length };
+    const start = Math.min(selection.start, currentValue.length);
+    const end = Math.min(selection.end, currentValue.length);
+    const before = currentValue.slice(0, start);
+    const after = currentValue.slice(end);
+    const leadingSpace = before && !/\s$/.test(before) ? " " : "";
+    const trailingSpace = after && !/^\s/.test(after) ? " " : "";
+    const nextValue = `${before}${leadingSpace}${replacement}${trailingSpace}${after}`;
+    setValue(field, nextValue);
+    selectionRef.current[field] = {
+      start: start + leadingSpace.length + replacement.length,
+      end: start + leadingSpace.length + replacement.length
+    };
+  }
+
+  function insertMergeField(field: string) {
+    if (!field) {
+      return;
+    }
+    replaceSelection(activeField, `{{${field}}}`);
+  }
+
+  async function submit(action: "draft" | "schedule" | "send" | "test") {
     setSavingAction(action);
     try {
       await onSubmit(values, action);
-      onClose();
+      if (action !== "test") {
+        onClose();
+      }
     } finally {
       setSavingAction(null);
     }
   }
 
-  const canSave =
+  const messageReady =
     Boolean(values.cohortId) &&
     Boolean(String(values.subject ?? "").trim()) &&
-    Boolean(bodyText.trim()) &&
+    Boolean(bodyText.trim());
+  const canSave =
+    messageReady &&
     (values.recipientScope !== "CUSTOM" || (customEmails.length > 0 && invalidCustomEmails.length === 0));
+  const testRecipientEmail = String(values.testRecipientEmail ?? "").trim();
+  const canTest = messageReady && simpleEmailPattern.test(testRecipientEmail);
   const canSchedule = canSave && Boolean(values.scheduledFor);
 
   return (
@@ -606,12 +652,13 @@ function ComposeMessageDialog({
               </TextField>
             </div>
             <div className="compose-message-grid">
-              <TextField select label="Audience" value={recipientScope} onChange={(event) => setValue("recipientScope", event.target.value)}>
-                {recipientScopes.map((scope) => <MenuItem value={scope} key={scope}>{recipientScopeLabel(scope)}</MenuItem>)}
-              </TextField>
               <TextField select label="Template" value={values.templateId ?? ""} onChange={(event) => applyTemplate(event.target.value)}>
                 <MenuItem value="">No template</MenuItem>
                 {templates.filter((template) => template.active).map((template) => <MenuItem value={template.id} key={template.id}>{template.name}</MenuItem>)}
+              </TextField>
+              <TextField select label="Insert merge field" value="" onChange={(event) => insertMergeField(String(event.target.value ?? ""))} helperText={`Inserts into ${activeField === "subject" ? "subject" : "email body"}.`}>
+                <MenuItem value="">Choose field</MenuItem>
+                {mergeFields.map((field) => <MenuItem value={field} key={field}>{field}</MenuItem>)}
               </TextField>
             </div>
             <div className="compose-audience-picker" aria-label="Email audience options">
@@ -639,13 +686,22 @@ function ComposeMessageDialog({
                 required
               />
             )}
-            <TextField label="Subject" value={values.subject ?? ""} onChange={(event) => setValue("subject", event.target.value)} required />
+            <TextField
+              label="Subject"
+              value={values.subject ?? ""}
+              onChange={(event) => setValue("subject", event.target.value)}
+              onFocus={(event: SyntheticEvent<HTMLInputElement>) => rememberSelection("subject", event)}
+              onSelect={(event: SyntheticEvent<HTMLInputElement>) => rememberSelection("subject", event)}
+              required
+            />
             <TextField
               label="Email body"
               multiline
               minRows={8}
               value={bodyText}
               onChange={(event) => setValue("bodyText", event.target.value)}
+              onFocus={(event: SyntheticEvent<HTMLTextAreaElement>) => rememberSelection("bodyText", event)}
+              onSelect={(event: SyntheticEvent<HTMLTextAreaElement>) => rememberSelection("bodyText", event)}
               helperText={selectedTemplate ? `Started from ${selectedTemplate.name}. Edits here affect only this message.` : "Write the message like a normal email."}
               required
             />
@@ -677,11 +733,22 @@ function ComposeMessageDialog({
               </Alert>
             )}
             <div className="compose-message-context">
-              <span>Context</span>
-              <strong title={selectedCohort?.title ?? ""}>{selectedCohort ? cohortDropdownLabel(selectedCohort) : "Choose a cohort"}</strong>
-              <p title={selectedTemplate?.name ?? ""}>
-                {[selectedTemplate?.name, recipientScopeLabel(recipientScope)].filter(Boolean).join(" · ") || "Template and audience will appear here."}
-              </p>
+              <span>Audience</span>
+              <strong>{recipientScopeLabel(recipientScope)}</strong>
+              <p title={recipientScopeHelper(recipientScope)}>{recipientScopeHelper(recipientScope)}</p>
+            </div>
+            <div className="compose-test-panel">
+              <span>Send test</span>
+              <TextField
+                label="Test recipient"
+                value={values.testRecipientEmail ?? ""}
+                onChange={(event) => setValue("testRecipientEmail", event.target.value)}
+                helperText="Sends one rendered copy only to this address."
+                error={Boolean(testRecipientEmail) && !simpleEmailPattern.test(testRecipientEmail)}
+              />
+              <Button variant="outlined" startIcon={<SendOutlined />} onClick={() => submit("test")} disabled={!canTest || Boolean(savingAction)}>
+                {savingAction === "test" ? "Sending test" : "Send test"}
+              </Button>
             </div>
             <div className="template-preview">
               <span>Preview</span>
@@ -992,13 +1059,36 @@ export function CommunicationsClient() {
     }
   }
 
-  async function createMessage(values: AdminRow, action: "draft" | "schedule" | "send") {
+  async function createMessage(values: AdminRow, action: "draft" | "schedule" | "send" | "test") {
     const bodyText = String(values.bodyText ?? "").trim();
     const scheduledFor = values.scheduledFor ? new Date(String(values.scheduledFor)).toISOString() : undefined;
     const recipientScope = String(values.recipientScope ?? "ALL_PARTICIPANTS");
     const recipientEmails = recipientScope === "CUSTOM" ? parseRecipientEmails(String(values.recipientEmailsText ?? "")) : undefined;
 
     try {
+      if (action === "test") {
+        const result = await adminApi<AdminRow>("/api/communications", {
+          method: "PATCH",
+          body: {
+            action: "sendCommunicationTest",
+            cohortId: values.cohortId,
+            sessionId: values.sessionId || undefined,
+            recipientScope,
+            recipientEmails,
+            recipientEmail: String(values.testRecipientEmail ?? "").trim(),
+            subject: String(values.subject ?? "").trim(),
+            bodyText
+          }
+        });
+        if (result?.status === "FAILED") {
+          notifyError(String(result.providerError ?? result.error ?? "Test send failed."));
+          return;
+        }
+        notifySuccess(`Test sent to ${String(values.testRecipientEmail ?? "").trim()}`);
+        await load(selectedCohortId);
+        return;
+      }
+
       const communication = await adminApi<AdminRow>("/api/communications", {
         method: "POST",
         body: {

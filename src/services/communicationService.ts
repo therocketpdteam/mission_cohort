@@ -547,11 +547,10 @@ You will receive a calendar invitation with a link to access the session and rem
 
 Want to start your learning early?
 
-Here are three steps you can take to prepare for your cohort experience:
+Here are two ways you can start preparing for your cohort experience:
 
 1. [Download our free guide on {{cohort.guideTopic}}]({{cohort.guideUrl}}).
 2. [{{cohort.presenterName}} on The RocketPD Podcast]({{cohort.podcastUrl}}).
-3. Set up your profile on the RocketPD Learning Portal - this is where you’ll access related recordings and resources during the cohort.
 
 Expect more information and resources from us one week prior to the first live cohort session.
 
@@ -666,6 +665,9 @@ const defaultCopyRefreshMatchers: Record<string, (bodyText: string) => boolean> 
     bodyText.includes("- Payment status: {{registration.paymentStatus}}") ||
     bodyText.includes("- Payment status: **{{registration.paymentStatus}}**") ||
     bodyText.includes("If you registered a team and already shared participant information"),
+  "Three Weeks Before Cohort": (bodyText) =>
+    bodyText.includes("Set up your profile on the RocketPD Learning Portal") ||
+    bodyText.includes("Here are three steps you can take to prepare for your cohort experience"),
   "Participant List Request": (bodyText) =>
     bodyText.includes("Hello {{registration.primaryContactName}}") ||
     bodyText.includes("participant names and work email addresses so every participant receives"),
@@ -881,6 +883,169 @@ export async function updateTemplate(id: string, input: z.input<typeof communica
   return prisma.communicationTemplate.update({ where: { id }, data });
 }
 
+async function communicationTestContext(input: { cohortId: string; sessionId?: string; recipientScope: RecipientScope }) {
+  const [cohort, session] = await Promise.all([
+    prisma.cohort.findUnique({ where: { id: input.cohortId }, include: { presenter: true } }),
+    input.sessionId ? prisma.cohortSession.findFirst({ where: { id: input.sessionId, cohortId: input.cohortId } }) : Promise.resolve(null)
+  ]);
+
+  if (!cohort) {
+    throw Object.assign(new Error("Cohort not found"), { code: "NOT_FOUND", status: 404 });
+  }
+
+  const activeRegistrationWhere = {
+    cohortId: input.cohortId,
+    archivedAt: null,
+    status: { not: RegistrationStatus.CANCELLED }
+  };
+  let participant: Record<string, any> | null = null;
+  let registration: Record<string, any> | null = null;
+
+  if (input.recipientScope === RecipientScope.ALL_PARTICIPANTS || input.recipientScope === RecipientScope.CUSTOM) {
+    participant = await prisma.participant.findFirst({
+      where: {
+        cohortId: input.cohortId,
+        status: ParticipantStatus.REGISTERED,
+        registration: { archivedAt: null, status: { not: RegistrationStatus.CANCELLED } }
+      },
+      include: {
+        organization: true,
+        registration: {
+          include: {
+            organization: true,
+            participants: { where: { status: ParticipantStatus.REGISTERED } },
+            invoiceDrafts: { orderBy: { updatedAt: "desc" } }
+          }
+        }
+      },
+      orderBy: { createdAt: "asc" }
+    });
+    registration = participant?.registration ?? null;
+  }
+
+  if (!registration) {
+    registration = await prisma.registration.findFirst({
+      where: activeRegistrationWhere,
+      include: {
+        organization: true,
+        participants: { where: { status: ParticipantStatus.REGISTERED }, orderBy: { createdAt: "asc" } },
+        invoiceDrafts: { orderBy: { updatedAt: "desc" } }
+      },
+      orderBy: { createdAt: "asc" }
+    });
+  }
+
+  if (!participant && registration?.participants?.[0]) {
+    participant = {
+      ...registration.participants[0],
+      organization: registration.organization,
+      registration
+    };
+  }
+
+  return {
+    cohort: cohortMergeContext(cohort),
+    session: session ?? undefined,
+    participant: participantMergeContext(participant ?? undefined),
+    registration: registrationMergeContext(registration ?? undefined),
+    organization: participant?.organization ?? registration?.organization ?? undefined
+  };
+}
+
+export async function sendCommunicationTest(input: {
+  cohortId: string;
+  sessionId?: string;
+  recipientScope: RecipientScope;
+  recipientEmails?: string[];
+  recipientEmail: string;
+  subject: string;
+  bodyText: string;
+  createdById: string;
+}) {
+  const recipientEmail = normalizeEmail(String(input.recipientEmail ?? ""));
+  const subject = String(input.subject ?? "").trim();
+  const bodyText = String(input.bodyText ?? "").trim();
+  const recipientScope = input.recipientScope ?? RecipientScope.ALL_PARTICIPANTS;
+
+  if (!recipientEmail || !/^\S+@\S+\.\S+$/.test(recipientEmail)) {
+    throw Object.assign(new Error("Enter a valid test recipient email."), { code: "BAD_REQUEST", status: 400 });
+  }
+
+  if (!subject || !bodyText) {
+    throw Object.assign(new Error("Subject and message body are required."), { code: "BAD_REQUEST", status: 400 });
+  }
+
+  const bodyHtml = textToEmailHtml(bodyText);
+  const context = await communicationTestContext({ cohortId: input.cohortId, sessionId: input.sessionId, recipientScope });
+  const communication = await prisma.cohortCommunication.create({
+    data: {
+      cohortId: input.cohortId,
+      sessionId: input.sessionId,
+      subject,
+      bodyHtml,
+      bodyText,
+      recipientScope: RecipientScope.CUSTOM,
+      recipientEmails: [recipientEmail],
+      createdById: input.createdById,
+      status: CommunicationStatus.SENDING
+    }
+  });
+
+  try {
+    const sendResult = await sendEmail({
+      to: recipientEmail,
+      subject,
+      bodyHtml,
+      bodyText,
+      context
+    });
+
+    await prisma.emailEvent.create({
+      data: {
+        communicationId: communication.id,
+        recipientEmail,
+        provider: "sendgrid",
+        providerMessageId: sendResult.providerMessageId,
+        eventType: EmailEventType.SENT,
+        eventPayload: sentEmailEventPayload(sendResult, {
+          testSend: true,
+          previewRecipientScope: recipientScope,
+          previewRecipientEmails: input.recipientEmails ?? []
+        })
+      }
+    });
+
+    const sent = await prisma.cohortCommunication.update({
+      where: { id: communication.id },
+      data: {
+        status: CommunicationStatus.SENT,
+        sentAt: new Date(),
+        providerMessageId: sendResult.providerMessageId,
+        providerError: null
+      }
+    });
+
+    logAuditEventAsync({
+      entityType: "CohortCommunication",
+      entityId: sent.id,
+      action: "MANUAL_TEST_SEND",
+      description: "Manual communication test sent to " + recipientEmail + ".",
+      metadata: { cohortId: input.cohortId, sessionId: input.sessionId ?? null, recipientScope }
+    });
+
+    return { ...sent, recipientCount: 1 };
+  } catch (error) {
+    await recordFailedEmailEvents(communication.id, [recipientEmail], error);
+    const failed = await prisma.cohortCommunication.update({
+      where: { id: communication.id },
+      data: {
+        status: CommunicationStatus.FAILED,
+        providerError: error instanceof Error ? error.message : "Unknown SendGrid error"
+      }
+    });
+    return { ...failed, recipientCount: 1, error: failed.providerError };
+  }
+}
 export async function createCommunicationDraft(input: z.input<typeof communicationDraftCreateSchema>) {
   const data = communicationDraftCreateSchema.parse(input);
   return prisma.cohortCommunication.create({ data });
@@ -1231,7 +1396,7 @@ export async function listUnreviewedCommunicationIssues(input: { cohortId?: stri
 }
 
 function emailValues(values: Array<string | null | undefined>) {
-  return values.filter((value): value is string => Boolean(value?.trim()));
+  return Array.from(new Set(values.map((value) => normalizeEmail(value ?? "")).filter(Boolean)));
 }
 
 async function resolveCommunicationRecipients(communication: {
@@ -1261,7 +1426,7 @@ async function resolveCommunicationRecipients(communication: {
   }
 
   if (communication.recipientScope === RecipientScope.BILLING_CONTACTS) {
-    return emailValues(cohort.registrations.map((registration) => registration.billingContactEmail));
+    return emailValues(cohort.registrations.map((registration) => registration.billingContactEmail || registration.primaryContactEmail));
   }
 
   if (communication.recipientScope === RecipientScope.CUSTOM) {

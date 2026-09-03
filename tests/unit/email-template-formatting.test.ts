@@ -129,6 +129,27 @@ test("supporting documents request describes attachments and greets the POC by f
   assert.doesNotMatch(template.bodyText, /Hello \{\{registration\.primaryContactName\}\}/);
 });
 
+test("session date merge fields render in the session timezone", () => {
+  const result = renderMergeFields("Starts {{session.startTime}}", {
+    session: {
+      startTime: new Date("2026-09-24T19:30:00.000Z"),
+      timezone: "America/New_York"
+    }
+  });
+
+  assert.equal(result.output, "Starts September 24, 2026 at 3:30 PM Eastern Time");
+  assert.deepEqual(result.warnings, []);
+});
+
+test("three weeks before cohort omits the portal profile step", () => {
+  const template = defaultTemplates.find((item) => item.name === "Three Weeks Before Cohort");
+
+  assert.ok(template);
+  assert.doesNotMatch(template.bodyText, /Set up your profile on the RocketPD Learning Portal/);
+  assert.match(template.bodyText, /Here are two ways you can start preparing/);
+  assert.doesNotMatch(template.bodyText, /Here are three steps/);
+});
+
 test("default communication templates only use registered merge fields", () => {
   const warnings = defaultTemplates.flatMap((template) => [
     ...renderMergeFields(template.subject, sampleMergeContext, true).warnings,

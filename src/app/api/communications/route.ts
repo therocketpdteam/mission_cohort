@@ -16,6 +16,7 @@ import {
   sendCommunicationToRecipient,
   sendCommunicationPlaceholder,
   sendCohortPublishExperienceTest,
+  sendCommunicationTest,
   sendManualCustomEmail,
   sendManualTemplateToParticipants,
   sendTemplateToParticipant,
@@ -150,6 +151,23 @@ export async function PATCH(request: Request) {
       return ok(await sendManualCustomEmail({
         participantIds: body.participantIds,
         recipientMode: body.recipientMode,
+        subject: body.subject,
+        bodyText: body.bodyText,
+        createdById: user.id
+      }));
+    }
+
+    if (body.action === "sendCommunicationTest") {
+      if (!body.cohortId || !body.recipientEmail) {
+        return fail("cohortId and recipientEmail are required", "BAD_REQUEST", 400);
+      }
+
+      return ok(await sendCommunicationTest({
+        cohortId: body.cohortId,
+        sessionId: body.sessionId || undefined,
+        recipientScope: body.recipientScope,
+        recipientEmails: Array.isArray(body.recipientEmails) ? body.recipientEmails : undefined,
+        recipientEmail: body.recipientEmail,
         subject: body.subject,
         bodyText: body.bodyText,
         createdById: user.id
