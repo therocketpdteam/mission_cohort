@@ -1,9 +1,11 @@
 import { fail, handleApiError, ok } from "@/lib/api";
 import { createTemplate, listTemplates, updateTemplate } from "@/services/communicationService";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    return ok(await listTemplates());
+    const url = new URL(request.url);
+    const includeLegacy = url.searchParams.get("includeLegacy") === "true";
+    return ok(await listTemplates({ includeLegacy }));
   } catch (error) {
     return handleApiError(error);
   }

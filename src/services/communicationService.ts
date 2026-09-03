@@ -856,6 +856,20 @@ export function buildRecipientDeliveryRows(events: EventSummaryInput[], relatedB
 
 export async function createTemplate(input: z.input<typeof communicationTemplateCreateSchema>) {
   const data = communicationTemplateCreateSchema.parse(input);
+  const existing = await prisma.communicationTemplate.findFirst({
+    where: {
+      type: data.type,
+      name: { equals: data.name, mode: "insensitive" }
+    }
+  });
+
+  if (existing) {
+    throw Object.assign(new Error("A template with this name and type already exists. Edit the existing template or use a unique name."), {
+      code: "DUPLICATE_TEMPLATE",
+      status: 409
+    });
+  }
+
   return prisma.communicationTemplate.create({ data });
 }
 
@@ -2743,12 +2757,37 @@ export async function markCommunicationScheduled(id: string, scheduledFor: Date)
   });
 }
 
-export async function listTemplates() {
+export async function listTemplates(options: { includeLegacy?: boolean } = {}) {
   await ensureDefaultCommunicationTemplates();
 
-  return prisma.communicationTemplate.findMany({
-    orderBy: { name: "asc" }
+  const templates = await prisma.communicationTemplate.findMany({
+    orderBy: [{ name: "asc" }, { updatedAt: "desc" }]
   });
+
+  if (options.includeLegacy) {
+    return templates;
+  }
+
+  const groups = new Map<string, typeof templates>();
+  for (const template of templates) {
+    const key = `${template.type}:${template.name.trim().toLowerCase()}`;
+    groups.set(key, [...(groups.get(key) ?? []), template]);
+  }
+
+  return Array.from(groups.values())
+    .map((group) => {
+      const sorted = [...group].sort((a, b) => {
+        if (a.active !== b.active) return a.active ? -1 : 1;
+        return b.updatedAt.getTime() - a.updatedAt.getTime();
+      });
+      const [canonical] = sorted;
+      return {
+        ...canonical,
+        legacyDuplicateCount: Math.max(sorted.length - 1, 0),
+        hiddenInactiveDuplicateCount: sorted.slice(1).filter((template) => !template.active).length
+      };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export async function createPlannedSessionReminders(sessionId: string, createdById: string) {
