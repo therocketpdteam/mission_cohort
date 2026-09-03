@@ -6813,6 +6813,39 @@ h6,
   gap: 12px;
 }
 
+.compose-message-grid--level {
+  align-items: start;
+}
+
+.merge-field-option {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  text-align: left;
+}
+
+.merge-field-option strong {
+  color: var(--color-slate-900);
+  font-size: 0.82rem;
+  line-height: 1.2;
+}
+
+.merge-field-option code {
+  overflow: hidden;
+  color: var(--color-primary-700);
+  font-size: 0.68rem;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compose-merge-hint {
+  margin-top: -4px;
+  color: var(--color-slate-500);
+  font-size: 0.74rem;
+  font-weight: 720;
+}
+
 .compose-message-side {
   border: 1px solid var(--color-slate-200);
   border-radius: 14px;

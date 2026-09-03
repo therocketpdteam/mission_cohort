@@ -68,6 +68,96 @@ const recipientScopeCopy: Record<string, { label: string; helper: string }> = {
   }
 };
 
+const mergeFieldLabelOverrides: Record<string, string> = {
+  "cohort.title": "Cohort name",
+  "cohort.shortName": "Cohort short code",
+  "cohort.description": "Cohort description",
+  "cohort.guideTopic": "Guide topic",
+  "cohort.guideUrl": "Guide download link",
+  "cohort.podcastUrl": "Podcast link",
+  "cohort.startDate": "Cohort start date",
+  "cohort.endDate": "Cohort end date",
+  "cohort.defaultTimezone": "Cohort timezone",
+  "cohort.pricePerParticipant": "Price per participant",
+  "cohort.presenterName": "Presenter full name",
+  "cohort.presenterFirstName": "Presenter first name",
+  "cohort.presenterLastName": "Presenter last name",
+  "cohort.presenterEmail": "Presenter email",
+  "session.sessionNumber": "Session number",
+  "session.title": "Session name",
+  "session.description": "Session description",
+  "session.startTime": "Session start date and time",
+  "session.endTime": "Session end date and time",
+  "session.timezone": "Session timezone",
+  "session.meetingUrl": "Zoom link",
+  "session.location": "Session location",
+  "session.recordingUrl": "Recording link",
+  "session.slidesUrl": "Slides link",
+  "session.resourcesUrl": "Resources link",
+  "participant.fullName": "Participant full name",
+  "participant.firstName": "Participant first name",
+  "participant.lastName": "Participant last name",
+  "participant.email": "Participant email",
+  "organization.name": "Organization name",
+  "organization.addressLine1": "Organization address line 1",
+  "organization.addressLine2": "Organization address line 2",
+  "organization.city": "Organization city",
+  "organization.state": "Organization state",
+  "organization.zip": "Organization ZIP",
+  "organization.phone": "Organization phone",
+  "registration.primaryContactFirstName": "Primary contact first name",
+  "registration.primaryContactName": "Primary contact full name",
+  "registration.primaryContactEmail": "Primary contact email",
+  "registration.primaryContactPhone": "Primary contact phone",
+  "registration.billingContactName": "Billing contact name",
+  "registration.billingContactEmail": "Billing contact email",
+  "registration.invoiceNumber": "Invoice number",
+  "registration.invoiceSentDate": "Invoice sent date",
+  "registration.purchaseOrderNumber": "Purchase order number",
+  "registration.purchaseOrderLine": "Purchase order line",
+  "registration.purchaseOrderBullet": "Purchase order bullet",
+  "registration.paymentMethod": "Payment method",
+  "registration.paymentStatus": "Payment status",
+  "registration.participantCount": "Participant count",
+  "registration.participantRosterNextStep": "Roster next step",
+  "registration.totalAmount": "Total amount",
+  "registration.w9Url": "W-9 link",
+  "registration.invoiceUrl": "Invoice link",
+  "support.email": "Support email",
+  "support.phone": "Support phone",
+  "support.teamName": "Support team name"
+};
+
+const mergeFieldNamespaceLabels: Record<string, string> = {
+  cohort: "Cohort",
+  session: "Session",
+  participant: "Participant",
+  organization: "Organization",
+  registration: "Registration",
+  support: "Support"
+};
+
+function humanizeMergeFieldPart(value: string) {
+  return value
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/url/gi, "URL")
+    .replace(/id/gi, "ID")
+    .replace(/poc/gi, "POC")
+    .replace(/w9/gi, "W-9")
+    .replace(/po(?![a-z])/gi, "PO")
+    .replace(/^./, (char) => char.toUpperCase());
+}
+
+function mergeFieldLabel(field: string) {
+  const explicitLabel = mergeFieldLabelOverrides[field];
+  if (explicitLabel) return explicitLabel;
+
+  const [namespace, ...rest] = field.split(".");
+  const namespaceLabel = mergeFieldNamespaceLabels[namespace] ?? humanizeMergeFieldPart(namespace);
+  const fieldLabel = humanizeMergeFieldPart(rest.join(" ") || field);
+  return `${namespaceLabel}: ${fieldLabel}`;
+}
+
 function templateText(template?: AdminRow | null) {
   return String(template?.bodyText || htmlToTemplateText(String(template?.bodyHtml ?? "")) || "");
 }
@@ -651,16 +741,24 @@ function ComposeMessageDialog({
                 ))}
               </TextField>
             </div>
-            <div className="compose-message-grid">
+            <div className="compose-message-grid compose-message-grid--level">
               <TextField select label="Template" value={values.templateId ?? ""} onChange={(event) => applyTemplate(event.target.value)}>
                 <MenuItem value="">No template</MenuItem>
                 {templates.filter((template) => template.active).map((template) => <MenuItem value={template.id} key={template.id}>{template.name}</MenuItem>)}
               </TextField>
-              <TextField select label="Insert merge field" value="" onChange={(event) => insertMergeField(String(event.target.value ?? ""))} helperText={`Inserts into ${activeField === "subject" ? "subject" : "email body"}.`}>
+              <TextField select label="Insert merge field" value="" onChange={(event) => insertMergeField(String(event.target.value ?? ""))}>
                 <MenuItem value="">Choose field</MenuItem>
-                {mergeFields.map((field) => <MenuItem value={field} key={field}>{field}</MenuItem>)}
+                {mergeFields.map((field) => (
+                  <MenuItem value={field} key={field}>
+                    <span className="merge-field-option">
+                      <strong>{mergeFieldLabel(field)}</strong>
+                      <code>{`{{${field}}}`}</code>
+                    </span>
+                  </MenuItem>
+                ))}
               </TextField>
             </div>
+            <div className="compose-merge-hint">Merge fields insert into the {activeField === "subject" ? "subject" : "email body"}.</div>
             <div className="compose-audience-picker" aria-label="Email audience options">
               {recipientScopes.map((scope) => (
                 <button
