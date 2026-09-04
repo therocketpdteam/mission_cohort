@@ -909,13 +909,21 @@ h6,
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 24px;
+  gap: 3px;
+  min-width: 30px;
   height: 24px;
+  padding: 0 8px;
   border-radius: 999px;
   background: var(--color-danger-100);
   color: var(--color-danger-600);
   font-size: 0.72rem;
   font-weight: 840;
+}
+
+.collapsible-section-alert svg,
+.collapsible-section-caret svg {
+  display: block;
+  flex-shrink: 0;
 }
 
 .collapsible-section-caret {
@@ -937,11 +945,11 @@ h6,
   gap: 12px;
   min-width: 0;
   border-top: 1px solid rgba(120, 118, 128, 0.16);
-  padding: 0 18px 18px;
+  padding: 14px 18px 18px;
 }
 
 .app-shell.is-compact .collapsible-section-content {
-  padding: 0 14px 14px;
+  padding: 12px 14px 14px;
 }
 
 .section-card-header {
@@ -6233,9 +6241,24 @@ h6,
 }
 
 .registration-journey-group-header h4 {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
   color: var(--color-primary-900);
   font-size: 0.86rem;
   font-weight: 840;
+}
+
+.registration-journey-group-header h4 svg {
+  color: var(--color-danger-600);
+  flex-shrink: 0;
+}
+
+.registration-journey-group-header h4 span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .registration-journey-group-header p {
@@ -9850,7 +9873,7 @@ button.dashboard-activity-item {
 
 .collapsible-section-content {
   border-top-color: var(--stroke-soft);
-  padding: 0 16px 16px;
+  padding: 12px 16px 16px;
 }
 
 .collapsible-section-alert,
@@ -9866,6 +9889,11 @@ button.dashboard-activity-item {
 .metric-icon {
   display: inline-grid;
   place-items: center;
+}
+
+.collapsible-section-alert,
+.collapsible-section-caret {
+  display: inline-flex;
 }
 
 .collapsible-section-caret {

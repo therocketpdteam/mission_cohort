@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { WarningAmberOutlined } from "@/components/ui/icons";
 import { Button } from "@/components/ui/primitives";
 import { adminApi } from "@/lib/adminApi";
 import { formatProperDisplay, formatStatusLabel } from "@/lib/formatting";
@@ -353,7 +354,7 @@ export function RegistrationCommunicationJourney({
             <details className={`registration-journey-group is-${group.key}`} key={group.key}>
               <summary className="registration-journey-group-header">
                 <div>
-                  <h4>{hasIssues ? "! " : ""}{group.title}</h4>
+                  <h4>{hasIssues ? <WarningAmberOutlined fontSize="small" /> : null}<span>{group.title}</span></h4>
                   <p>{group.description}</p>
                 </div>
                 <span>{groupRows.length} message{groupRows.length === 1 ? "" : "s"} · {groupContactCount} contact{groupContactCount === 1 ? "" : "s"}</span>

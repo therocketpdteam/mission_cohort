@@ -29,6 +29,7 @@ import {
   Settings,
   Sun,
   Trash2,
+  TriangleAlert,
   UserCircle,
   UserRoundX,
   Users,
@@ -83,3 +84,4 @@ export const SendOutlined = icon(Send);
 export const SettingsOutlined = icon(Settings);
 export const SunOutlined = icon(Sun);
 export const VisibilityOutlined = icon(Eye);
+export const WarningAmberOutlined = icon(TriangleAlert);

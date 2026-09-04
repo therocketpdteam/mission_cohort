@@ -8,6 +8,7 @@ import { DeleteOutline } from "@/components/ui/icons";
 import { EditOutlined } from "@/components/ui/icons";
 import { ExpandMoreOutlined } from "@/components/ui/icons";
 import { HelpOutline } from "@/components/ui/icons";
+import { WarningAmberOutlined } from "@/components/ui/icons";
 import {
   Alert,
   Autocomplete,
@@ -87,11 +88,11 @@ function CollapsibleSectionCard({
       <summary className="collapsible-section-summary">
         <div className="collapsible-section-title">
           <h2 className="section-card-title">{title}</h2>
-          {alertCount ? <span className="collapsible-section-alert">! {alertCount}</span> : null}
+          {alertCount ? <span className="collapsible-section-alert"><WarningAmberOutlined fontSize="small" />{alertCount}</span> : null}
         </div>
         <div className="collapsible-section-actions" onClick={(event) => event.stopPropagation()}>
           {action}
-          <span className="collapsible-section-caret" aria-hidden="true">v</span>
+          <span className="collapsible-section-caret" aria-hidden="true"><ExpandMoreOutlined fontSize="small" /></span>
         </div>
       </summary>
       <div className="collapsible-section-content">{children}</div>
