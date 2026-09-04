@@ -379,9 +379,9 @@ h6,
 .global-people-search {
   position: relative;
   z-index: 35;
-  flex: 0 1 460px;
-  width: min(460px, 34vw);
-  min-width: 280px;
+  flex: 0 1 560px;
+  width: min(560px, 40vw);
+  min-width: 300px;
 }
 
 .global-people-search-field {
@@ -424,7 +424,7 @@ h6,
   right: 0;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  width: min(720px, calc(100vw - 320px));
+  width: min(920px, calc(100vw - 320px));
   max-height: min(72vh, 680px);
   min-height: 0;
   overflow: hidden;
@@ -562,13 +562,13 @@ h6,
 
 .global-people-search-registration-row {
   display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr) auto;
+  grid-template-columns: minmax(150px, 0.95fr) minmax(220px, 1.2fr) minmax(170px, 0.8fr) auto;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   border: 1px solid var(--color-slate-200);
   border-radius: var(--radius-sm);
   background: var(--color-white);
-  padding: 9px 10px;
+  padding: 10px 12px;
 }
 
 .global-people-search-registration-row > div {
@@ -591,9 +591,11 @@ h6,
 }
 
 .global-people-search-registration-row a {
+  justify-self: end;
   color: var(--color-primary-700);
   font-size: 0.76rem;
   font-weight: 950;
+  white-space: nowrap;
 }
 
 .global-people-search-actions {

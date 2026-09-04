@@ -29,7 +29,7 @@ import {
   Typography
 } from "@/components/ui/primitives";
 import { GridColDef, GridRowParams, GridRowSelectionModel } from "./common";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
 import { pricePerParticipantForCohort, registrationTotalForCohort, sessionCountForPricing } from "@/config/cohortPricing";
 import { formatProperDisplay, formatRegistrationPaymentStatus, formatRegistrationSource, formatStatusLabel } from "@/lib/formatting";
@@ -1377,6 +1377,8 @@ export function RegistrationsClient() {
   const [editing, setEditing] = useState<AdminRow | null>(null);
   const [detail, setDetail] = useState<AdminRow | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const detailRequestRef = useRef(0);
   const [search, setSearch] = useState("");
   const [paymentStatus, setPaymentStatus] = useState("");
   const [rosterStatus, setRosterStatus] = useState("");
@@ -1402,15 +1404,74 @@ export function RegistrationsClient() {
     setLoading(false);
   }
 
-  async function openDetail(id: string) {
+  const closeDetail = useCallback(() => {
+    detailRequestRef.current += 1;
+    setDetailOpen(false);
+    setDetailLoading(false);
+    setDetail(null);
+
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      if (url.searchParams.has("id")) {
+        url.searchParams.delete("id");
+        window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+      }
+    }
+  }, []);
+
+  const openDetail = useCallback(async (id: string, options: { syncUrl?: boolean } = {}) => {
+    const registrationId = String(id ?? "").trim();
+    if (!registrationId) {
+      return;
+    }
+
+    const requestId = detailRequestRef.current + 1;
+    detailRequestRef.current = requestId;
     setDetailOpen(true);
-    setDetail(await adminApi<AdminRow>(`/api/registrations?id=${id}`));
-  }
+    setDetailLoading(true);
+    setDetail(null);
+
+    if (options.syncUrl !== false && typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.set("id", registrationId);
+      window.history.pushState({}, "", `${url.pathname}${url.search}${url.hash}`);
+    }
+
+    try {
+      const nextDetail = await adminApi<AdminRow>(`/api/registrations?id=${encodeURIComponent(registrationId)}`);
+      if (detailRequestRef.current === requestId) {
+        setDetail(nextDetail);
+      }
+    } catch (error) {
+      if (detailRequestRef.current === requestId) {
+        setDetailOpen(false);
+        setDetail(null);
+        notifyError((error as Error).message);
+      }
+    } finally {
+      if (detailRequestRef.current === requestId) {
+        setDetailLoading(false);
+      }
+    }
+  }, [notifyError]);
 
   async function reloadDetail() {
     if (detail?.id) {
+      const registrationId = detail.id;
+      const requestId = detailRequestRef.current + 1;
+      detailRequestRef.current = requestId;
+      setDetailLoading(true);
       await load();
-      setDetail(await adminApi<AdminRow>(`/api/registrations?id=${detail.id}`));
+      try {
+        const nextDetail = await adminApi<AdminRow>(`/api/registrations?id=${encodeURIComponent(registrationId)}`);
+        if (detailRequestRef.current === requestId) {
+          setDetail(nextDetail);
+        }
+      } finally {
+        if (detailRequestRef.current === requestId) {
+          setDetailLoading(false);
+        }
+      }
     }
   }
 
@@ -1422,14 +1483,34 @@ export function RegistrationsClient() {
   }, [notifyError, visibility]);
 
   useEffect(() => {
-    const registrationId = new URLSearchParams(window.location.search).get("id");
+    const openFromLocation = () => {
+      const registrationId = new URLSearchParams(window.location.search).get("id");
+      if (registrationId) {
+        openDetail(registrationId, { syncUrl: false });
+      } else {
+        detailRequestRef.current += 1;
+        setDetailOpen(false);
+        setDetailLoading(false);
+        setDetail(null);
+      }
+    };
 
-    if (!registrationId || detail?.id === registrationId) {
-      return;
-    }
+    const openFromSearch = (event: Event) => {
+      const registrationId = (event as CustomEvent<{ id?: string }>).detail?.id;
+      if (registrationId) {
+        openDetail(registrationId);
+      }
+    };
 
-    openDetail(registrationId).catch((error) => notifyError(error.message));
-  }, [detail?.id, notifyError]);
+    openFromLocation();
+    window.addEventListener("popstate", openFromLocation);
+    window.addEventListener("mission-open-registration", openFromSearch);
+
+    return () => {
+      window.removeEventListener("popstate", openFromLocation);
+      window.removeEventListener("mission-open-registration", openFromSearch);
+    };
+  }, [openDetail]);
 
   const filteredRows = useMemo(
     () =>
@@ -1707,9 +1788,9 @@ export function RegistrationsClient() {
       />
       <RegistrationDetailDialog
         open={detailOpen}
-        registration={detail}
+        registration={detailLoading ? null : detail}
         templates={templates}
-        onClose={() => { setDetailOpen(false); setDetail(null); }}
+        onClose={closeDetail}
         onChanged={reloadDetail}
         onSuccess={notifySuccess}
         onError={notifyError}
@@ -1724,8 +1805,7 @@ export function RegistrationsClient() {
           const removedId = pendingLifecycleAction?.row.id;
           setSelectedIds((current) => current.filter((id) => id !== removedId));
           if (detail?.id === removedId && pendingLifecycleAction?.action !== "restore") {
-            setDetailOpen(false);
-            setDetail(null);
+            closeDetail();
           }
           await load();
         }}

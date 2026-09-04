@@ -21,7 +21,7 @@ import { formatCurrency, formatProperDisplay, formatStatusLabel } from "@/lib/fo
 import type { Route } from "next";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import type { ReactNode } from "react";
+import type { MouseEvent, ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
 import { NewVersionPrompt } from "./NewVersionPrompt";
@@ -154,6 +154,14 @@ function formatShortDate(value?: string | null) {
   return new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
+function compactDate(value?: string | null) {
+  if (!value) {
+    return "-";
+  }
+
+  return new Date(value).toLocaleDateString("en-US", { month: "numeric", day: "numeric", year: "2-digit" });
+}
+
 function participantName(participant: PeopleSearchResult["participants"][number]) {
   return formatProperDisplay([participant.firstName, participant.lastName].filter(Boolean).join(" ")) || participant.email;
 }
@@ -187,6 +195,39 @@ function accountName(result: PeopleSearchResult) {
   return String(result.organization.name ?? "").trim() || "No account";
 }
 
+function latestInvoice(result: PeopleSearchResult) {
+  return result.invoiceDrafts[0] ?? null;
+}
+
+function collectedAmount(result: PeopleSearchResult) {
+  const invoicePaid = result.invoiceDrafts.reduce((sum, invoice) => sum + Number(invoice.paidAmount ?? 0), 0);
+  const paymentTotal = result.paymentRecords.reduce((sum, payment) => sum + Number(payment.amount ?? 0), 0);
+  return Math.max(invoicePaid, paymentTotal);
+}
+
+function matchedParticipants(result: PeopleSearchResult, query: string) {
+  const normalizedQuery = query.trim().toLowerCase();
+  const emailQuery = exactEmailQuery(query);
+
+  if (!normalizedQuery) {
+    return [];
+  }
+
+  return result.participants.filter((participant) => {
+    const participantEmail = normalizedEmail(participant.email);
+    if (emailQuery) {
+      return participantEmail === emailQuery;
+    }
+
+    return [participant.email, participant.firstName, participant.lastName, participant.title]
+      .some((value) => String(value ?? "").toLowerCase().includes(normalizedQuery));
+  });
+}
+
+function registrationLabel(result: PeopleSearchResult) {
+  return result.cohort.shortName || result.cohort.slug || result.cohort.title;
+}
+
 function groupSearchResults(results: PeopleSearchResult[], query: string): PeopleSearchGroup[] {
   const emailQuery = exactEmailQuery(query);
   const groups = new Map<string, PeopleSearchGroup>();
@@ -218,6 +259,7 @@ function groupSearchResults(results: PeopleSearchResult[], query: string): Peopl
 }
 
 function GlobalPeopleSearch() {
+  const pathname = usePathname();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<PeopleSearchResult[]>([]);
   const [loading, setLoading] = useState(false);
@@ -267,6 +309,18 @@ function GlobalPeopleSearch() {
 
   function closeSearch() {
     setOpen(false);
+  }
+
+  function openRegistrationFromSearch(event: MouseEvent<HTMLAnchorElement>, registration: PeopleSearchResult) {
+    closeSearch();
+
+    if (pathname !== "/registrations" || typeof window === "undefined") {
+      return;
+    }
+
+    event.preventDefault();
+    window.history.pushState({}, "", registration.links.registration);
+    window.dispatchEvent(new CustomEvent("mission-open-registration", { detail: { id: registration.id } }));
   }
 
   const showPanel = open && query.trim().length >= 2;
@@ -328,19 +382,31 @@ function GlobalPeopleSearch() {
                   {hasMultipleRegistrations ? (
                     <div className="global-people-search-registration-list">
                       {group.registrations.map((registration) => {
-                        const registrationInvoice = registration.invoiceDrafts[0];
+                        const registrationInvoice = latestInvoice(registration);
+                        const participantMatches = matchedParticipants(registration, query);
+                        const displayedMatches = participantMatches.slice(0, 2);
+                        const collected = collectedAmount(registration);
 
                         return (
                           <div className="global-people-search-registration-row" key={registration.id}>
                             <div>
-                              <strong>{registration.cohort.shortName || registration.cohort.slug}</strong>
-                              <span>Account: {accountName(registration)} · {formatShortDate(registration.createdAt)}</span>
+                              <strong>{registrationLabel(registration)}</strong>
+                              <span>{registration.cohort.title}</span>
+                              <span>Created {compactDate(registration.createdAt)} · {formatStatusLabel(registration.status)}</span>
                             </div>
                             <div>
-                              <span>{formatStatusLabel(registration.status)} · {formatStatusLabel(registration.paymentStatus)} · {formatCurrency(registration.totalAmount)}</span>
+                              <span>Account: {accountName(registration)}</span>
+                              <span>POC: {formatProperDisplay(registration.primaryContactName) || registration.primaryContactEmail}</span>
+                              {displayedMatches.length > 0 ? (
+                                <span>Match: {displayedMatches.map((participant) => participantName(participant)).join(", ")}{participantMatches.length > displayedMatches.length ? " +" + (participantMatches.length - displayedMatches.length) : ""}</span>
+                              ) : null}
+                            </div>
+                            <div>
+                              <span>{Number(registration.participantCount ?? 0)} seats · {Number(registration.savedParticipantCount ?? 0)} saved</span>
+                              <span>{formatStatusLabel(registration.paymentStatus)} · {formatCurrency(collected)} / {formatCurrency(registration.totalAmount)}</span>
                               <span>Invoice {registrationInvoice?.invoiceNumber ?? registration.invoiceNumber ?? "-"}</span>
                             </div>
-                            <Link href={registration.links.registration as Route} onClick={closeSearch}>Open</Link>
+                            <Link href={registration.links.registration as Route} onClick={(event) => openRegistrationFromSearch(event, registration)}>Open</Link>
                           </div>
                         );
                       })}
@@ -366,7 +432,7 @@ function GlobalPeopleSearch() {
                     </>
                   )}
                   <div className="global-people-search-actions">
-                    <Link href={result.links.registration as Route} onClick={closeSearch}>Open registration</Link>
+                    <Link href={result.links.registration as Route} onClick={(event) => openRegistrationFromSearch(event, result)}>Open registration</Link>
                     <Link href={result.links.cohort as Route} onClick={closeSearch}>Open cohort</Link>
                     <Link href={result.links.communications as Route} onClick={closeSearch}>Email history</Link>
                   </div>
