@@ -416,6 +416,21 @@ function taskTemplateName(task: AdminRow) {
   return "Participant List Request";
 }
 
+function isSupportingDocumentsTask(task: AdminRow) {
+  return String(task.category ?? "").toUpperCase() === "SUPPORTING_DOCUMENTS" ||
+    String(task.title ?? "").trim().toLowerCase() === "send supporting documents";
+}
+
+function openRegistrationFollowUpTasks(registration: AdminRow) {
+  return (registration.operationsTasks ?? [])
+    .filter((task: AdminRow) => task.status !== "COMPLETED" && !isSupportingDocumentsTask(task));
+}
+
+function participantListFollowUpCount(registration: AdminRow) {
+  return (registration.operationsTasks ?? [])
+    .filter((task: AdminRow) => task.category === "PARTICIPANT_LIST" && task.status !== "COMPLETED").length;
+}
+
 function resourceHref(resource: AdminRow) {
   if (resource.url) {
     return resource.url;
@@ -4074,7 +4089,7 @@ export function CohortDetailClient({ id }: { id: string }) {
                 );
               })()}
             </SectionCard>
-            <CollapsibleSectionCard title="Team Roster" alertCount={(registrationDetail.operationsTasks ?? []).filter((task: AdminRow) => task.category === "PARTICIPANT_LIST" && task.status !== "COMPLETED").length}>
+            <CollapsibleSectionCard title="Team Roster" alertCount={participantListFollowUpCount(registrationDetail)} defaultOpen={registrationRosterStatus(registrationDetail) !== "COMPLETE" || participantListFollowUpCount(registrationDetail) > 0}>
               {(registrationDetail.participants ?? []).length > 0 ? (
                 <div className="quick-view-list" style={{ marginBottom: 12 }}>
                   {(registrationDetail.participants ?? []).map((participant: AdminRow) => {
@@ -4128,12 +4143,10 @@ export function CohortDetailClient({ id }: { id: string }) {
                 onRemoveParticipant={removeRegistrationParticipant}
               />
             </CollapsibleSectionCard>
-            <CollapsibleSectionCard title="Open Follow-Ups" alertCount={(registrationDetail.operationsTasks ?? []).filter((task: AdminRow) => task.status !== "COMPLETED").length}>
-              {(registrationDetail.operationsTasks ?? []).filter((task: AdminRow) => task.status !== "COMPLETED").length > 0 ? (
+            <CollapsibleSectionCard title="Open Follow-Ups" alertCount={openRegistrationFollowUpTasks(registrationDetail).length} defaultOpen={openRegistrationFollowUpTasks(registrationDetail).length > 0}>
+              {openRegistrationFollowUpTasks(registrationDetail).length > 0 ? (
                 <div className="quick-view-list">
-                  {(registrationDetail.operationsTasks ?? [])
-                    .filter((task: AdminRow) => task.status !== "COMPLETED")
-                    .map((task: AdminRow) => (
+                  {openRegistrationFollowUpTasks(registrationDetail).map((task: AdminRow) => (
                       <div className="quick-view-list-row" key={task.id}>
                         <div>
                           <strong>{task.title}</strong>

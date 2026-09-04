@@ -53,8 +53,8 @@ function participantDisplayName(participant?: AdminRow | null) {
   return formatProperDisplay(`${participant.firstName ?? ""} ${participant.lastName ?? ""}`.trim());
 }
 
-function recipientCountFor(group: MessageGroup) {
-  return Math.max(group.recipients.length, group.rows.length);
+function recipientContactCountFor(groups: MessageGroup[]) {
+  return uniqueStrings(groups.flatMap((group) => group.recipients.map((email) => email.toLowerCase()))).length;
 }
 
 function deliverySummary(communication: AdminRow) {
@@ -313,8 +313,9 @@ export function RegistrationCommunicationJourney({
     skipped: [],
     planned: []
   });
-  const counts = Object.fromEntries(journeyGroups.map((group) => [group.key, grouped[group.key].reduce((total, item) => total + recipientCountFor(item), 0)])) as Record<JourneyGroupKey, number>;
-  const issueCount = grouped.needs_attention.reduce((total, item) => total + Math.max(item.issueRecipients.length, 1), 0);
+  const counts = Object.fromEntries(journeyGroups.map((group) => [group.key, recipientContactCountFor(grouped[group.key])])) as Record<JourneyGroupKey, number>;
+  const issueRecipientCount = uniqueStrings(grouped.needs_attention.flatMap((item) => (item.issueRecipients.length ? item.issueRecipients : item.recipients).map((email) => email.toLowerCase()))).length;
+  const issueCount = issueRecipientCount || grouped.needs_attention.length;
 
   return (
     <div className="registration-journey">
@@ -345,7 +346,7 @@ export function RegistrationCommunicationJourney({
         {journeyGroups.map((group) => {
           const groupRows = grouped[group.key];
           if (groupRows.length === 0) return null;
-          const groupRecipientCount = groupRows.reduce((total, item) => total + recipientCountFor(item), 0);
+          const groupContactCount = recipientContactCountFor(groupRows);
           const hasIssues = groupRows.some((item) => item.issueRecipients.length > 0 || item.key === "needs_attention");
 
           return (
@@ -355,7 +356,7 @@ export function RegistrationCommunicationJourney({
                   <h4>{hasIssues ? "! " : ""}{group.title}</h4>
                   <p>{group.description}</p>
                 </div>
-                <span>{groupRows.length} message{groupRows.length === 1 ? "" : "s"} · {groupRecipientCount} recipient{groupRecipientCount === 1 ? "" : "s"}</span>
+                <span>{groupRows.length} message{groupRows.length === 1 ? "" : "s"} · {groupContactCount} contact{groupContactCount === 1 ? "" : "s"}</span>
               </summary>
               <div className="registration-journey-group-rows">
                 {groupRows.map((message) => (
@@ -368,14 +369,14 @@ export function RegistrationCommunicationJourney({
                       </div>
                       <div className="registration-journey-meta">
                         <span className="registration-recipient-pill">{message.recipientTypes.join(" + ")}</span>
-                        <span className="registration-recipient-pill">{message.recipients.length} recipient{message.recipients.length === 1 ? "" : "s"}</span>
+                        <span className="registration-recipient-pill">{message.recipients.length} contact{message.recipients.length === 1 ? "" : "s"}</span>
                         <StatusChip value={message.status} />
                         <DateBadge value={message.timing} />
                       </div>
                       <div className="registration-journey-chips">
                         {uniqueStrings(message.rows.flatMap(deliverySummary)).map((chip) => <span key={chip}>{chip}</span>)}
                         {message.attachments.length ? <span>{message.attachments.length} attachment{message.attachments.length === 1 ? "" : "s"}</span> : null}
-                        {message.issueRecipients.length ? <span className="is-alert-chip">{message.issueRecipients.length} issue recipient{message.issueRecipients.length === 1 ? "" : "s"}</span> : null}
+                        {message.issueRecipients.length ? <span className="is-alert-chip">{message.issueRecipients.length} issue contact{message.issueRecipients.length === 1 ? "" : "s"}</span> : null}
                       </div>
                     </summary>
                     <div className="registration-journey-detail">

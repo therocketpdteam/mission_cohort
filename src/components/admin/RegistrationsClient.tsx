@@ -29,6 +29,7 @@ import {
   Typography
 } from "@/components/ui/primitives";
 import { GridColDef, GridRowParams, GridRowSelectionModel } from "./common";
+import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
 import { pricePerParticipantForCohort, registrationTotalForCohort, sessionCountForPricing } from "@/config/cohortPricing";
@@ -65,6 +66,38 @@ const visibilityOptions = [
   { value: "archived", label: "Archived registrations" },
   { value: "all", label: "All registrations" }
 ];
+
+function CollapsibleSectionCard({
+  title,
+  children,
+  action,
+  defaultOpen = false,
+  alertCount = 0
+}: {
+  title: string;
+  children: ReactNode;
+  action?: ReactNode;
+  defaultOpen?: boolean;
+  alertCount?: number;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+
+  return (
+    <details className={`section-card collapsible-section-card ${alertCount ? "has-alert" : ""}`} open={open} onToggle={(event) => setOpen(event.currentTarget.open)}>
+      <summary className="collapsible-section-summary">
+        <div className="collapsible-section-title">
+          <h2 className="section-card-title">{title}</h2>
+          {alertCount ? <span className="collapsible-section-alert">! {alertCount}</span> : null}
+        </div>
+        <div className="collapsible-section-actions" onClick={(event) => event.stopPropagation()}>
+          {action}
+          <span className="collapsible-section-caret" aria-hidden="true">v</span>
+        </div>
+      </summary>
+      <div className="collapsible-section-content">{children}</div>
+    </details>
+  );
+}
 
 function money(value: unknown) {
   return `$${Number(value ?? 0).toLocaleString()}`;
@@ -139,6 +172,30 @@ function taskTemplateName(task: AdminRow) {
   }
 
   return "Participant List Request";
+}
+
+function isSupportingDocumentsTask(task: AdminRow) {
+  return String(task.category ?? "").toUpperCase() === "SUPPORTING_DOCUMENTS" ||
+    String(task.title ?? "").trim().toLowerCase() === "send supporting documents";
+}
+
+function openFollowUpTasks(registration: AdminRow) {
+  return (registration.operationsTasks ?? [])
+    .filter((task: AdminRow) => task.status !== "COMPLETED" && !isSupportingDocumentsTask(task));
+}
+
+function participantListFollowUpCount(registration: AdminRow) {
+  return (registration.operationsTasks ?? [])
+    .filter((task: AdminRow) => task.category === "PARTICIPANT_LIST" && task.status !== "COMPLETED").length;
+}
+
+function registrationCommunicationIssueCount(registration: AdminRow) {
+  return (registration.communications ?? []).filter((communication: AdminRow) =>
+    String(communication.status ?? "").toUpperCase() === "FAILED" ||
+    (communication.emailEvents ?? []).some((event: AdminRow) =>
+      ["FAILED", "BOUNCED"].includes(String(event.eventType ?? "").toUpperCase()) && !event.reviewedAt
+    )
+  ).length;
 }
 
 function organizationProfileFromRow(organization?: AdminRow | null) {
@@ -895,6 +952,11 @@ function RegistrationDetailDialog({
 
   const health = registration ? rosterHealth(registration) : null;
   const participantTotal = registration?.participants?.length ?? 0;
+  const registrationFollowUpTasks = registration ? openFollowUpTasks(registration) : [];
+  const rosterAlertCount = registration ? participantListFollowUpCount(registration) : 0;
+  const communicationIssueCount = registration ? registrationCommunicationIssueCount(registration) : 0;
+  const pocIssueCount = thread.reduce((total, communication: AdminRow) => total + Number(communication.emailSummary?.unreviewedIssueCount ?? 0), 0);
+  const rosterComplete = registration ? rosterStatusFromCounts(registration) === "COMPLETE" : false;
 
   async function addPocAsParticipant() {
     if (!registration?.primaryContactEmail) {
@@ -1041,58 +1103,53 @@ function RegistrationDetailDialog({
 
           {registration.quickBooksSyncError && <Alert severity="error">{registration.quickBooksSyncError}</Alert>}
 
-          <section className="registration-detail-section">
+          <CollapsibleSectionCard title="Open Follow-Ups" alertCount={registrationFollowUpTasks.length} defaultOpen={registrationFollowUpTasks.length > 0}>
             <div className="registration-section-heading">
               <div>
-                <h3>Open Follow-Ups</h3>
-                <p>Operational tasks created from intake, roster, payment, and document readiness.</p>
+                <p>Operational tasks created from intake, roster, and payment readiness.</p>
               </div>
             </div>
-            {(registration.operationsTasks ?? []).filter((task: AdminRow) => task.status !== "COMPLETED").length > 0 ? (
+            {registrationFollowUpTasks.length > 0 ? (
               <div className="quick-view-list">
-                {(registration.operationsTasks ?? [])
-                  .filter((task: AdminRow) => task.status !== "COMPLETED")
-                  .map((task: AdminRow) => (
-                    <div className="quick-view-list-row" key={task.id}>
-                      <div>
-                        <strong>{task.title}</strong>
-                        <span>
-                          {[formatStatusLabel(task.category), task.description, task.dueDate ? new Date(task.dueDate).toLocaleDateString("en-US") : ""]
-                            .filter(Boolean)
-                            .join(" · ")}
-                        </span>
-                      </div>
-                      <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap justifyContent="flex-end">
-                        <StatusChip value={task.priority ?? task.status} />
-                        <Button size="small" variant="outlined" onClick={() => sendFollowUp(task)} disabled={Boolean(sendingTaskId || completingTaskId)}>
-                          {sendingTaskId === task.id ? "Sending" : "Send POC"}
-                        </Button>
-                        <Button size="small" variant="text" onClick={() => completeFollowUp(task)} disabled={Boolean(sendingTaskId || completingTaskId)}>
-                          {completingTaskId === task.id ? "Saving" : "Complete"}
-                        </Button>
-                      </Stack>
+                {registrationFollowUpTasks.map((task: AdminRow) => (
+                  <div className="quick-view-list-row" key={task.id}>
+                    <div>
+                      <strong>{task.title}</strong>
+                      <span>
+                        {[formatStatusLabel(task.category), task.description, task.dueDate ? new Date(task.dueDate).toLocaleDateString("en-US") : ""]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </span>
                     </div>
-                  ))}
+                    <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap justifyContent="flex-end">
+                      <StatusChip value={task.priority ?? task.status} />
+                      <Button size="small" variant="outlined" onClick={() => sendFollowUp(task)} disabled={Boolean(sendingTaskId || completingTaskId)}>
+                        {sendingTaskId === task.id ? "Sending" : "Send POC"}
+                      </Button>
+                      <Button size="small" variant="text" onClick={() => completeFollowUp(task)} disabled={Boolean(sendingTaskId || completingTaskId)}>
+                        {completingTaskId === task.id ? "Saving" : "Complete"}
+                      </Button>
+                    </Stack>
+                  </div>
+                ))}
               </div>
             ) : (
-              <EmptyState title="No open follow-ups" description="Roster, payment, and document follow-ups attached to this registration will appear here." />
+              <EmptyState title="No open follow-ups" description="Roster and payment follow-ups attached to this registration will appear here." />
             )}
-          </section>
+          </CollapsibleSectionCard>
 
-          <section className="registration-detail-section">
+          <CollapsibleSectionCard title="Registration Communication Journey" alertCount={communicationIssueCount}>
             <div className="registration-section-heading">
               <div>
-                <h3>Registration Communication Journey</h3>
                 <p>POC and participant confirmations, upcoming milestones, and skipped messages.</p>
               </div>
             </div>
             <RegistrationCommunicationJourney communications={registration.communications} pocEmail={registration.primaryContactEmail} onChanged={onChanged} />
-          </section>
+          </CollapsibleSectionCard>
 
-          <section className="registration-detail-section">
+          <CollapsibleSectionCard title="Team Roster" alertCount={rosterAlertCount} defaultOpen={!rosterComplete || rosterAlertCount > 0}>
             <div className="registration-section-heading">
               <div>
-                <h3>Team Roster</h3>
                 <p>{health?.label} · {health?.helper}</p>
               </div>
             </div>
@@ -1152,27 +1209,28 @@ function RegistrationDetailDialog({
               onImport={importRoster}
               onAddPrimaryContact={addPocAsParticipant}
             />
-          </section>
+          </CollapsibleSectionCard>
 
-          <section className="registration-detail-section">
+          <CollapsibleSectionCard
+            title="POC Email Summary"
+            alertCount={pocIssueCount}
+            action={registration.primaryContactEmail ? (
+              <Button href={`/communications?search=${encodeURIComponent(registration.primaryContactEmail)}`} variant="outlined" size="small">
+                Open in Communications
+              </Button>
+            ) : null}
+          >
             <div className="registration-section-heading">
               <div>
-                <h3>POC Email Summary</h3>
-                <p>High-level delivery status for this contact. Full provider history lives in Communications.</p>
+                <p>High-level delivery status for this POC. Full provider history lives in Communications.</p>
               </div>
-              {registration.primaryContactEmail ? (
-                <Button href={`/communications?search=${encodeURIComponent(registration.primaryContactEmail)}`} variant="outlined" size="small">
-                  Open in Communications
-                </Button>
-              ) : null}
             </div>
             <PocCommunicationHistory
               loading={threadLoading}
               communications={thread}
               pocEmail={registration.primaryContactEmail}
             />
-          </section>
-
+          </CollapsibleSectionCard>
           <section className="registration-detail-section">
             <div className="registration-section-heading">
               <div>

@@ -103,16 +103,6 @@ export async function createDefaultRegistrationOperationsTasks(input: {
     });
   }
 
-  if (!input.hasSupportingDocs) {
-    tasks.push({
-      cohortId: input.cohortId,
-      registrationId: input.registrationId,
-      title: "Send supporting documents",
-      description: "Attach or confirm W-9 and invoice links for the registration confirmation workflow.",
-      category: OperationsTaskCategory.SUPPORTING_DOCUMENTS,
-      priority: OperationsTaskPriority.MEDIUM
-    });
-  }
 
   const results = await Promise.allSettled(tasks.map((task) => createOperationsTask(task)));
   const failures = results.filter((result) => result.status === "rejected");
