@@ -250,4 +250,9 @@ async function main() {
   console.table(result.map((item) => ({ cohort: item.shortName, status: item.status, ...item._count })));
 }
 
-main().finally(() => prisma.$disconnect());
+main()
+  .catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  })
+  .finally(() => prisma.$disconnect());
