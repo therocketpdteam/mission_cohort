@@ -63,9 +63,10 @@ export function buildEmailDelivery(input: {
   subject: string;
   html: string;
   text?: string;
-}) {
-  const captureEmail = String(env.STAGING_OUTBOUND_CAPTURE_EMAIL ?? "").trim().toLowerCase();
-  const captured = getAppEnvironmentKind() === "staging" && Boolean(captureEmail);
+}, override?: { environment: ReturnType<typeof getAppEnvironmentKind>; captureEmail?: string }) {
+  const environment = override?.environment ?? getAppEnvironmentKind();
+  const captureEmail = String(override?.captureEmail ?? env.STAGING_OUTBOUND_CAPTURE_EMAIL ?? "").trim().toLowerCase();
+  const captured = environment === "staging" && Boolean(captureEmail);
 
   if (!captured) {
     return { to: input.recipients, subject: input.subject, html: input.html, text: input.text, captured: false };

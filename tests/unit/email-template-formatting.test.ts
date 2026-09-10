@@ -88,6 +88,38 @@ test("leaves delivery unchanged when staging capture is not configured", () => {
   assert.deepEqual(delivery.to, ["participant@example.com"]);
 });
 
+test("routes staging email only to the configured capture mailbox", () => {
+  const delivery = buildEmailDelivery({
+    recipients: ["participant@example.com", "poc@example.com"],
+    subject: "Welcome",
+    html: "<p>Hello</p>",
+    text: "Hello"
+  }, {
+    environment: "staging",
+    captureEmail: "gerardo@rocketpd.com"
+  });
+
+  assert.equal(delivery.captured, true);
+  assert.equal(delivery.to, "gerardo@rocketpd.com");
+  assert.match(delivery.subject, /participant@example\.com, poc@example\.com/);
+  assert.match(delivery.html, /STAGING CAPTURE/);
+  assert.match(delivery.html, /Originally intended for: participant@example\.com, poc@example\.com/);
+});
+
+test("never applies staging capture in production", () => {
+  const delivery = buildEmailDelivery({
+    recipients: ["participant@example.com"],
+    subject: "Welcome",
+    html: "<p>Hello</p>"
+  }, {
+    environment: "production",
+    captureEmail: "gerardo@rocketpd.com"
+  });
+
+  assert.equal(delivery.captured, false);
+  assert.deepEqual(delivery.to, ["participant@example.com"]);
+});
+
 test("POC registration confirmation describes invoice and W-9 as attachments", () => {
   const template = defaultTemplates.find((item) => item.name === "POC Registration Confirmation");
 
