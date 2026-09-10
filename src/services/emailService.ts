@@ -5,6 +5,7 @@ import {
   sendWithSendGrid,
   validateMergeFields as validateTemplateMergeFields
 } from "@/modules/email";
+import { env, getAppEnvironmentKind } from "@/lib/env";
 import { assertOutboundUnlocked } from "@/lib/outboundLock";
 import { assertOutboundRecipientsAllowed } from "@/services/integrationSetupService";
 
@@ -17,30 +18,36 @@ export async function sendEmail(input: {
   attachments?: Array<{ fileName: string; contentType?: string | null; url?: string | null; content?: string | Buffer | null }>;
 }) {
   const recipients = Array.isArray(input.to) ? input.to : [input.to];
-  await assertOutboundRecipientsAllowed("SENDGRID", recipients);
-  await assertOutboundUnlocked({
-    channel: "SENDGRID",
-    action: "send email",
-    metadata: {
-      recipientCount: recipients.length,
-      subject: input.subject
-    }
-  });
   const renderedHtml = renderTemplate(input.bodyHtml, input.context ?? {}).output;
   const renderedText = input.bodyText ? renderTemplate(input.bodyText, input.context ?? {}).output : undefined;
   const attachments = await resolveSendGridAttachments(input.attachments ?? []);
-
   const renderedSubject = renderTemplate(input.subject, input.context ?? {}).output;
+  const delivery = buildEmailDelivery({ recipients, subject: renderedSubject, html: renderedHtml, text: renderedText });
+
+  if (!delivery.captured) {
+    await assertOutboundRecipientsAllowed("SENDGRID", recipients);
+    await assertOutboundUnlocked({
+      channel: "SENDGRID",
+      action: "send email",
+      metadata: {
+        recipientCount: recipients.length,
+        subject: input.subject
+      }
+    });
+  }
+
   const result = await sendWithSendGrid({
-    to: input.to,
-    subject: renderedSubject,
-    html: renderedHtml,
-    text: renderedText,
+    to: delivery.to,
+    subject: delivery.subject,
+    html: delivery.html,
+    text: delivery.text,
     attachments
   });
 
   return {
     ...result,
+    intendedRecipients: recipients,
+    captured: delivery.captured,
     renderedSubject,
     renderedBodyHtml: renderedHtml,
     renderedBodyText: renderedText,
@@ -49,6 +56,42 @@ export async function sendEmail(input: {
       contentType: attachment.type
     }))
   };
+}
+
+export function buildEmailDelivery(input: {
+  recipients: string[];
+  subject: string;
+  html: string;
+  text?: string;
+}) {
+  const captureEmail = String(env.STAGING_OUTBOUND_CAPTURE_EMAIL ?? "").trim().toLowerCase();
+  const captured = getAppEnvironmentKind() === "staging" && Boolean(captureEmail);
+
+  if (!captured) {
+    return { to: input.recipients, subject: input.subject, html: input.html, text: input.text, captured: false };
+  }
+
+  const intended = input.recipients.join(", ");
+  const banner = `<div style="margin:0 0 20px;padding:12px 16px;border:1px solid #f59e0b;background:#fffbeb;color:#78350f;font-family:Arial,sans-serif;font-size:14px;"><strong>STAGING CAPTURE</strong><br>Originally intended for: ${escapeHtml(intended)}</div>`;
+  const textBanner = `STAGING CAPTURE\nOriginally intended for: ${intended}\n\n`;
+
+  return {
+    to: captureEmail,
+    subject: `[STAGING QA to ${intended}] ${input.subject}`,
+    html: `${banner}${input.html}`,
+    text: `${textBanner}${input.text ?? input.html.replace(/<[^>]+>/g, " ")}`,
+    captured: true
+  };
+}
+
+function escapeHtml(value: string) {
+  return value.replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;"
+  })[character] ?? character);
 }
 
 async function resolveSendGridAttachments(attachments: Array<{ fileName: string; contentType?: string | null; url?: string | null; content?: string | Buffer | null }>) {

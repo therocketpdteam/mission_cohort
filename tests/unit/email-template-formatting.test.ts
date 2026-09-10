@@ -3,6 +3,7 @@ import test from "node:test";
 import { renderMergeFields, sampleMergeContext, textToEmailHtml } from "../../src/modules/email";
 import { buildSendGridMailPayload, normalizeSendGridApiKey } from "../../src/modules/email/sendgridProvider";
 import { defaultTemplates } from "../../src/services/communicationService";
+import { buildEmailDelivery } from "../../src/services/emailService";
 
 test("renders email body formatting into safe HTML", () => {
   const html = textToEmailHtml([
@@ -73,6 +74,18 @@ test("builds SendGrid file attachments from resolved content", () => {
     type: "application/pdf",
     disposition: "attachment"
   }]);
+});
+
+test("leaves delivery unchanged when staging capture is not configured", () => {
+  const delivery = buildEmailDelivery({
+    recipients: ["participant@example.com"],
+    subject: "Welcome",
+    html: "<p>Hello</p>",
+    text: "Hello"
+  });
+
+  assert.equal(delivery.captured, false);
+  assert.deepEqual(delivery.to, ["participant@example.com"]);
 });
 
 test("POC registration confirmation describes invoice and W-9 as attachments", () => {

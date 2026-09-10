@@ -43,6 +43,7 @@ const envSchema = z.object({
   ALLOW_BACKGROUND_JOBS: optionalString,
   OUTBOUND_RELEASE_LOCK: optionalString,
   OUTBOUND_RELEASE_REASON: optionalString,
+  STAGING_OUTBOUND_CAPTURE_EMAIL: optionalString,
   SUPABASE_PUBLIC_BUCKET: optionalString,
   SUPABASE_PRIVATE_BUCKET: optionalString
 });
