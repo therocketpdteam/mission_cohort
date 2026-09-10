@@ -53,10 +53,13 @@ function invoiceReadiness(registration: AdminRow, invoiceRelevant: boolean) {
     };
   }
   if (!invoice) {
+    const isBillable = String(registration.paymentMethod ?? "") !== "COMPED" && Number(registration.totalAmount ?? 0) > 0;
     return {
-      tone: "No invoice",
-      title: "No invoice draft",
-      detail: "Apply still sends the POC summary, but no invoice PDF will be attached."
+      tone: isBillable ? "PDF generate" : "No invoice",
+      title: isBillable ? "Invoice PDF will be created" : "No invoice required",
+      detail: isBillable
+        ? "Apply will create the invoice using the latest PO, seats, and total, then attach its PDF to the POC summary."
+        : "This is a comped or zero-dollar registration, so Apply will not create an invoice."
     };
   }
 

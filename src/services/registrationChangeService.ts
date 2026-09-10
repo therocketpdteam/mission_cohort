@@ -4,7 +4,8 @@ import {
   CommunicationStatus,
   InvoiceDraftStatus,
   Prisma,
-  RecipientScope
+  RecipientScope,
+  SupportingDocumentStatus
 } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { createCalendarInvitePlaceholder } from "./calendarService";
@@ -14,7 +15,7 @@ import {
   getSystemUserId,
   sendCommunication
 } from "./communicationService";
-import { generateInvoicePdf, updateInvoiceDraft } from "./invoiceService";
+import { createInvoiceDraft, generateInvoicePdf, updateInvoiceDraft } from "./invoiceService";
 import { planRegistrationJourneys } from "./registrationJourneyService";
 
 export type PendingParticipantChange = {
@@ -250,9 +251,19 @@ async function refreshSimpleInvoice(
   registration: Awaited<ReturnType<typeof registrationForApply>>,
   pending: RegistrationPendingChanges
 ) {
-  const invoice = registration.invoiceDrafts[0];
+  let invoice = registration.invoiceDrafts[0];
   if (!invoice) {
-    return null;
+    const isBillable = registration.paymentMethod !== "COMPED" && Number(registration.totalAmount ?? 0) > 0;
+    if (!isBillable) {
+      return null;
+    }
+    invoice = await createInvoiceDraft({
+      cohortId: registration.cohortId,
+      registrationId: registration.id,
+      organizationId: registration.organizationId,
+      invoiceNumber: registration.invoiceNumber ?? undefined,
+      purchaseOrderNumber: registration.purchaseOrderNumber ?? undefined
+    });
   }
   const amountChanged = Boolean(pending.fields.participantCount || pending.fields.totalAmount);
   if (amountChanged && invoice.lineItems.length !== 1) {
@@ -415,6 +426,23 @@ export async function applyRegistrationChanges(registrationId: string) {
   }
   if (communication.status !== CommunicationStatus.SENT) {
     communication = await sendCommunication(communication.id);
+  }
+
+  if (invoice?.pdfUrl) {
+    await prisma.$transaction([
+      prisma.invoiceDraft.updateMany({
+        where: { id: invoice.id, status: InvoiceDraftStatus.DRAFT },
+        data: { status: InvoiceDraftStatus.SENT }
+      }),
+      prisma.registration.update({
+        where: { id: registrationId },
+        data: {
+          invoiceUrl: invoice.pdfUrl,
+          confirmationDocsSentAt: new Date(),
+          supportingDocumentStatus: SupportingDocumentStatus.SENT
+        }
+      })
+    ]);
   }
 
   await prisma.registration.update({
