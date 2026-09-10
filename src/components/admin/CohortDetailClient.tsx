@@ -1463,6 +1463,8 @@ export function CohortDetailClient({ id }: { id: string }) {
   const [updatingBulkRegistrations, setUpdatingBulkRegistrations] = useState(false);
   const [paymentDetail, setPaymentDetail] = useState<AdminRow | null>(null);
   const [registrationDetail, setRegistrationDetail] = useState<AdminRow | null>(null);
+  const [registrationDetailLoading, setRegistrationDetailLoading] = useState(false);
+  const registrationDetailRequestRef = useRef(0);
   const [registrationRemovalAction, setRegistrationRemovalAction] = useState<{ action: "archive" | "delete"; row: AdminRow } | null>(null);
   const [registrationDialogOpen, setRegistrationDialogOpen] = useState(false);
   const [editingRegistration, setEditingRegistration] = useState<AdminRow | null>(null);
@@ -1567,16 +1569,67 @@ export function CohortDetailClient({ id }: { id: string }) {
   }, [id, notifyError]);
 
   async function openRegistrationDetail(row: AdminRow) {
+    const requestId = registrationDetailRequestRef.current + 1;
+    registrationDetailRequestRef.current = requestId;
     setRegistrationDetail(row);
+    setRegistrationDetailLoading(true);
     setEditingRegistrationParticipantId("");
     setRegistrationParticipantEdit({ firstName: "", lastName: "", email: "", title: "", phone: "", status: "REGISTERED" });
 
     try {
-      setRegistrationDetail(await adminApi<AdminRow>(`/api/registrations?id=${row.id}`));
+      const detail = await adminApi<AdminRow>(`/api/registrations?id=${encodeURIComponent(String(row.id))}`);
+      if (registrationDetailRequestRef.current === requestId) {
+        setRegistrationDetail(detail);
+      }
     } catch (error) {
-      notifyError((error as Error).message);
+      if (registrationDetailRequestRef.current === requestId) {
+        setRegistrationDetail(null);
+        notifyError((error as Error).message);
+      }
+    } finally {
+      if (registrationDetailRequestRef.current === requestId) {
+        setRegistrationDetailLoading(false);
+      }
     }
   }
+
+  function closeRegistrationDetail() {
+    registrationDetailRequestRef.current += 1;
+    setRegistrationDetailLoading(false);
+    setRegistrationDetail(null);
+    setRegistrationThread([]);
+    setRegistrationThreadLoading(false);
+  }
+
+  useEffect(() => {
+    const email = String(registrationDetail?.primaryContactEmail ?? "").trim();
+    if (!registrationDetail?.id || registrationDetailLoading || !email) {
+      if (!registrationDetail?.id || !email) {
+        setRegistrationThread([]);
+      }
+      return;
+    }
+
+    let cancelled = false;
+    setRegistrationThreadLoading(true);
+    adminApi<AdminRow[]>(`/api/communications/thread?email=${encodeURIComponent(email)}`)
+      .then((rows) => {
+        if (!cancelled) setRegistrationThread(rows);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setRegistrationThread([]);
+          notifyError((error as Error).message);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setRegistrationThreadLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [registrationDetail?.id, registrationDetail?.primaryContactEmail, registrationDetailLoading, notifyError]);
 
   function openRegistrationEditor(row?: AdminRow | null) {
     setEditingRegistration(row ?? null);
@@ -3982,7 +4035,7 @@ export function CohortDetailClient({ id }: { id: string }) {
       <QuickViewDrawer
         title="Registration Detail"
         open={Boolean(registrationDetail)}
-        onClose={() => setRegistrationDetail(null)}
+        onClose={closeRegistrationDetail}
         className="registration-detail-drawer"
         actions={registrationDetail ? (
           <div className="section-action-row">
@@ -4003,7 +4056,9 @@ export function CohortDetailClient({ id }: { id: string }) {
           </div>
         ) : null}
       >
-        {registrationDetail && (
+        {registrationDetailLoading ? (
+          <Typography color="text.secondary">Loading complete registration details...</Typography>
+        ) : registrationDetail && (
           <>
             <RegistrationPendingChangesPanel
               registration={registrationDetail}
@@ -4222,7 +4277,7 @@ export function CohortDetailClient({ id }: { id: string }) {
             try {
               setRegistrationDetail(await adminApi<AdminRow>(`/api/registrations?id=${registrationDetail.id}`));
             } catch {
-              setRegistrationDetail(null);
+              closeRegistrationDetail();
             }
           }
         }}
@@ -4235,7 +4290,7 @@ export function CohortDetailClient({ id }: { id: string }) {
         onClose={() => setRegistrationRemovalAction(null)}
         onRemoved={async () => {
           if (registrationDetail?.id === registrationRemovalAction?.row.id) {
-            setRegistrationDetail(null);
+            closeRegistrationDetail();
           }
           await load();
         }}
