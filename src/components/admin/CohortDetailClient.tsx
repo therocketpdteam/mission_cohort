@@ -43,6 +43,7 @@ import { RegistrationPendingChangesPanel } from "./RegistrationPendingChangesPan
 import { RegistrationDeliveryPreflight } from "./RegistrationDeliveryPreflight";
 import { PocCommunicationHistory } from "./PocCommunicationHistory";
 import { RegistrationCommunicationJourney } from "./RegistrationCommunicationJourney";
+import { RegistrationDocuments } from "./RegistrationDocuments";
 import { RegistrationEditor, RegistrationRemovalDialog } from "./RegistrationsClient";
 import type { ParsedRosterParticipant } from "@/lib/rosterParser";
 import {
@@ -4088,6 +4089,14 @@ export function CohortDetailClient({ id }: { id: string }) {
             <SectionCard title="Notes">
               <Typography color="text.secondary">{registrationDetail.notes ?? "No notes captured yet."}</Typography>
             </SectionCard>
+            <RegistrationDocuments
+              registration={registrationDetail}
+              onChanged={async () => {
+                await openRegistrationDetail(registrationDetail);
+                await load();
+              }}
+              onError={notifyError}
+            />
             <SectionCard
               title="Invoices And Receipts"
               action={<Button variant="outlined" size="small" onClick={() => openInvoiceEditor(null, registrationDetail)}>Create invoice</Button>}

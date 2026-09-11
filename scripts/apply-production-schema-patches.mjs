@@ -42,6 +42,16 @@ const prisma = new PrismaClient({
 
 const patches = [
   {
+    name: "registration payment documents",
+    sql: `
+      ALTER TABLE "Registration" ADD COLUMN IF NOT EXISTS "purchaseOrderFileKey" TEXT;
+      ALTER TABLE "Registration" ADD COLUMN IF NOT EXISTS "purchaseOrderFileName" TEXT;
+      ALTER TABLE "Registration" ADD COLUMN IF NOT EXISTS "checkPaymentFileKey" TEXT;
+      ALTER TABLE "Registration" ADD COLUMN IF NOT EXISTS "checkPaymentFileName" TEXT;
+      ALTER TABLE "Registration" ADD COLUMN IF NOT EXISTS "checkPaymentContentType" TEXT;
+    `
+  },
+  {
     name: "finance enums",
     sql: `
       DO $$

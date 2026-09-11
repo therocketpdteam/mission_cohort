@@ -2,7 +2,7 @@ import { env } from "@/lib/env";
 import { createSupabaseAdminClient } from "@/lib/supabase";
 import { randomUUID } from "node:crypto";
 
-export type UploadPurpose = "cohort-thumbnail" | "organization-logo" | "invoice" | "receipt" | "material" | "email-attachment" | "payout-proof";
+export type UploadPurpose = "cohort-thumbnail" | "organization-logo" | "invoice" | "receipt" | "material" | "email-attachment" | "payout-proof" | "purchase-order" | "check-payment";
 
 const publicPurposes = new Set<UploadPurpose>(["cohort-thumbnail", "organization-logo"]);
 
@@ -13,7 +13,9 @@ const acceptedTypes: Record<UploadPurpose, RegExp> = {
   receipt: /^application\/pdf$/i,
   material: /^(application\/pdf|image\/|video\/|text\/|application\/vnd\.openxmlformats-officedocument|application\/msword)/i,
   "email-attachment": /^(application\/pdf|image\/|text\/|application\/vnd\.openxmlformats-officedocument|application\/msword)/i,
-  "payout-proof": /^(application\/pdf|image\/|text\/|application\/vnd\.openxmlformats-officedocument|application\/msword)/i
+  "payout-proof": /^(application\/pdf|image\/|text\/|application\/vnd\.openxmlformats-officedocument|application\/msword)/i,
+  "purchase-order": /^(application\/pdf|image\/)/i,
+  "check-payment": /^(application\/pdf|image\/)/i
 };
 
 const maxBytes: Record<UploadPurpose, number> = {
@@ -23,7 +25,9 @@ const maxBytes: Record<UploadPurpose, number> = {
   receipt: 10 * 1024 * 1024,
   material: 20 * 1024 * 1024,
   "email-attachment": 20 * 1024 * 1024,
-  "payout-proof": 20 * 1024 * 1024
+  "payout-proof": 20 * 1024 * 1024,
+  "purchase-order": 10 * 1024 * 1024,
+  "check-payment": 10 * 1024 * 1024
 };
 
 const bucketLimits = {
@@ -128,4 +132,19 @@ export async function deletePrivateAppFile(fileKey: string) {
   }
 
   return { deleted: true };
+}
+
+export async function createPrivateAppFileUrl(fileKey: string, expiresInSeconds = 60 * 10) {
+  const supabase = createSupabaseAdminClient();
+  const bucket = env.SUPABASE_PRIVATE_BUCKET ?? "mission-control-private";
+  const signed = await supabase.storage.from(bucket).createSignedUrl(fileKey, expiresInSeconds);
+
+  if (signed.error || !signed.data?.signedUrl) {
+    throw Object.assign(new Error(signed.error?.message ?? "Document download link could not be created."), {
+      code: "BAD_REQUEST",
+      status: 400
+    });
+  }
+
+  return signed.data.signedUrl;
 }

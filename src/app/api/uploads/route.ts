@@ -1,7 +1,7 @@
 import { handleApiError, ok } from "@/lib/api";
 import { uploadAppFile, type UploadPurpose } from "@/services/storageService";
 
-const purposes = new Set<UploadPurpose>(["cohort-thumbnail", "organization-logo", "invoice", "receipt", "material", "email-attachment", "payout-proof"]);
+const purposes = new Set<UploadPurpose>(["cohort-thumbnail", "organization-logo", "invoice", "receipt", "material", "email-attachment", "payout-proof", "purchase-order", "check-payment"]);
 
 export async function POST(request: Request) {
   try {

@@ -493,6 +493,11 @@ model Registration {
   paymentStatus         PaymentStatus      @default(PENDING)
   invoiceNumber         String?
   purchaseOrderNumber   String?
+  purchaseOrderFileKey  String?
+  purchaseOrderFileName String?
+  checkPaymentFileKey   String?
+  checkPaymentFileName  String?
+  checkPaymentContentType String?
   participantListStatus ParticipantListStatus    @default(NEEDED)
   supportingDocumentStatus SupportingDocumentStatus @default(NOT_READY)
   w9Url                 String?

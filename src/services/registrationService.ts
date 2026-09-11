@@ -14,6 +14,7 @@ import { syncRegistrationParticipantListStatus } from "./participantService";
 import { syncPaymentRecordsToRegistrationStatus } from "./paymentService";
 import { shouldDeferRegistrationDelivery, stageParticipantAddition, stageRegistrationFieldChanges } from "./registrationChangeService";
 import { removeFutureGoogleCalendarAttendees, syncFutureLinkedGoogleCalendarInvitesForCohort } from "./calendarService";
+import { deletePrivateAppFile } from "./storageService";
 
 type BulkMoveRegistrationSummaryInput = Array<{
   id: string;
@@ -618,4 +619,50 @@ export async function getRegistrationById(id: string) {
       }
     }
   });
+}
+
+export async function updateRegistrationDocuments(id: string, input: {
+  type: "purchaseOrder" | "checkPayment";
+  fileKey?: string | null;
+  fileName?: string | null;
+  contentType?: string | null;
+}) {
+  if (!(["purchaseOrder", "checkPayment"] as const).includes(input.type)) {
+    throw Object.assign(new Error("Unsupported registration document type."), { code: "BAD_REQUEST", status: 400 });
+  }
+  const expectedPrefix = input.type === "purchaseOrder" ? "purchase-order/" : "check-payment/";
+  if (input.fileKey && !input.fileKey.startsWith(expectedPrefix)) {
+    throw Object.assign(new Error("Registration document does not match its upload type."), { code: "BAD_REQUEST", status: 400 });
+  }
+
+  const previous = await prisma.registration.findUniqueOrThrow({ where: { id } });
+  const isPurchaseOrder = input.type === "purchaseOrder";
+  const previousFileKey = isPurchaseOrder ? previous.purchaseOrderFileKey : previous.checkPaymentFileKey;
+  const registration = await prisma.registration.update({
+    where: { id },
+    data: isPurchaseOrder
+      ? {
+          purchaseOrderFileKey: input.fileKey || null,
+          purchaseOrderFileName: input.fileName || null
+        }
+      : {
+          checkPaymentFileKey: input.fileKey || null,
+          checkPaymentFileName: input.fileName || null,
+          checkPaymentContentType: input.contentType || null
+        }
+  });
+
+  if (previousFileKey && previousFileKey !== input.fileKey) {
+    await deletePrivateAppFile(previousFileKey).catch(() => undefined);
+  }
+
+  logAuditEventAsync({
+    entityType: "Registration",
+    entityId: id,
+    action: input.fileKey ? "DOCUMENT_UPLOADED" : "DOCUMENT_REMOVED",
+    description: `${isPurchaseOrder ? "Purchase order" : "Check payment proof"} ${input.fileKey ? "saved" : "removed"}`,
+    metadata: { type: input.type, fileName: input.fileName ?? null }
+  });
+
+  return registration;
 }

@@ -40,6 +40,7 @@ import { RegistrationPendingChangesPanel } from "./RegistrationPendingChangesPan
 import { RegistrationDeliveryPreflight } from "./RegistrationDeliveryPreflight";
 import { PocCommunicationHistory } from "./PocCommunicationHistory";
 import { RegistrationCommunicationJourney } from "./RegistrationCommunicationJourney";
+import { RegistrationDocuments } from "./RegistrationDocuments";
 import type { ParsedRosterParticipant } from "@/lib/rosterParser";
 import {
   AdminRow,
@@ -1103,6 +1104,15 @@ function RegistrationDetailDialog({
           </div>
 
           {registration.quickBooksSyncError && <Alert severity="error">{registration.quickBooksSyncError}</Alert>}
+
+          <RegistrationDocuments
+            registration={registration}
+            onChanged={onChanged}
+            onError={(message) => {
+              setError(message);
+              onError(message);
+            }}
+          />
 
           <CollapsibleSectionCard title="Open Follow-Ups" alertCount={registrationFollowUpTasks.length} defaultOpen={registrationFollowUpTasks.length > 0}>
             <div className="registration-section-heading">

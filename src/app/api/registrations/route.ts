@@ -12,7 +12,8 @@ import {
   listRegistrations,
   restoreRegistration,
   syncRegistrationRosterStatuses,
-  updateRegistration
+  updateRegistration,
+  updateRegistrationDocuments
 } from "@/services/registrationService";
 import { applyRegistrationChanges, discardRegistrationChanges } from "@/services/registrationChangeService";
 import { syncRegistrationToCrm } from "@/services/crmRegistrationWebhookService";
@@ -107,6 +108,15 @@ export async function PATCH(request: Request) {
         participantEmails: Array.isArray(body.participantEmails) ? body.participantEmails : undefined,
         retryFailed: true
       }), { status: 202 });
+    }
+
+    if (body.action === "updateDocument") {
+      return ok(await updateRegistrationDocuments(body.id, {
+        type: body.type,
+        fileKey: body.fileKey,
+        fileName: body.fileName,
+        contentType: body.contentType
+      }));
     }
 
     if (body.action === "sendPocConfirmation") {
