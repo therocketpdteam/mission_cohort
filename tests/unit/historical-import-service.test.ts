@@ -95,7 +95,7 @@ test("groups single-cohort roster CSV rows into registrations with the first row
   assert.equal(preview.rows[0].normalized.participants.length, 3);
   assert.equal(preview.rows[0].normalized.participantCount, 3);
   assert.equal(preview.rows[0].normalized.totalAmount, 2385);
-  assert.equal(preview.rows[0].normalized.paymentMethod, PaymentMethod.INVOICE);
+  assert.equal(preview.rows[0].normalized.paymentMethod, PaymentMethod.CHECK);
   assert.equal(preview.rows[1].normalized.organizationState, "ME");
   assert.equal(preview.supportedFields.some((field) => field.field === "cohortTitle"), false);
 });

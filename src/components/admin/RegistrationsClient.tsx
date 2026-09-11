@@ -60,7 +60,7 @@ import {
   useNotifier
 } from "./common";
 
-const paymentMethods = ["CREDIT_CARD", "PURCHASE_ORDER", "INVOICE", "COMPED", "UNKNOWN"];
+const paymentMethods = ["CREDIT_CARD", "CHECK", "PURCHASE_ORDER", "INVOICE", "COMPED", "UNKNOWN"];
 const paymentStatuses = ["PENDING", "INVOICED", "PARTIALLY_PAID", "PAID", "REFUNDED", "CANCELLED"];
 const rosterStatuses = ["NOT_REQUESTED", "NEEDED", "PARTIAL", "COMPLETE"];
 const visibilityOptions = [

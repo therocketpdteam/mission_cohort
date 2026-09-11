@@ -58,6 +58,7 @@ enum RegistrationStatus {
 
 enum PaymentMethod {
   CREDIT_CARD
+  CHECK
   PURCHASE_ORDER
   INVOICE
   COMPED

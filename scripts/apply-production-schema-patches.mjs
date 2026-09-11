@@ -44,6 +44,7 @@ const patches = [
   {
     name: "registration payment documents",
     sql: `
+      ALTER TYPE "PaymentMethod" ADD VALUE IF NOT EXISTS 'CHECK' AFTER 'CREDIT_CARD';
       ALTER TABLE "Registration" ADD COLUMN IF NOT EXISTS "purchaseOrderFileKey" TEXT;
       ALTER TABLE "Registration" ADD COLUMN IF NOT EXISTS "purchaseOrderFileName" TEXT;
       ALTER TABLE "Registration" ADD COLUMN IF NOT EXISTS "checkPaymentFileKey" TEXT;

@@ -318,7 +318,8 @@ function parsePaymentMethod(input: string) {
   if (/credit|card/.test(raw)) return PaymentMethod.CREDIT_CARD;
   if (/visa|master|mast|amex|discover/.test(raw)) return PaymentMethod.CREDIT_CARD;
   if (/purchase|po/.test(raw)) return PaymentMethod.PURCHASE_ORDER;
-  if (/invoice|check/.test(raw)) return PaymentMethod.INVOICE;
+  if (/check/.test(raw)) return PaymentMethod.CHECK;
+  if (/invoice/.test(raw)) return PaymentMethod.INVOICE;
   if (/comp/.test(raw)) return PaymentMethod.COMPED;
   return PaymentMethod.UNKNOWN;
 }
