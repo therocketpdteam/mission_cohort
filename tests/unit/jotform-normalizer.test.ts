@@ -425,3 +425,58 @@ test("keeps multi-person no-roster Jotform registrations open for roster follow-
   assert.equal(normalized.registration.participantCount, 3);
   assert.equal(normalized.participants.length, 0);
 });
+
+test("uses the highest credible participant count when a saved mapping points at a one-seat helper field", () => {
+  const mapping = {
+    ...urlMapping,
+    fieldMapJson: {
+      ...urlMapping.fieldMapJson,
+      participantCount: "hiddenPaymentField"
+    }
+  } as any;
+  const normalized = normalizeJotformRegistrationPayload(
+    {
+      formID: "12345",
+      submissionID: "sub-mapped-count-helper",
+      Name: "Zahra Hussain",
+      Email: "zhussain@cranbrook.edu",
+      "Name of Organization": "Cranbrook Schools",
+      hiddenPaymentField: "1",
+      q20_howMany: "6",
+      "Total Cost": "$4,770.00",
+      "Get Page URL": "https://rocketpd.com/cohorts/summer-leadership"
+    },
+    [mapping]
+  );
+
+  assert.equal(normalized.registration.participantCount, 6);
+  assert.equal(normalized.participants.length, 0);
+});
+
+test("infers participant count from Jotform payment quantity when the mapped count is wrong", () => {
+  const mapping = {
+    ...urlMapping,
+    sessionCount: 5,
+    fieldMapJson: {
+      ...urlMapping.fieldMapJson,
+      participantCount: "hiddenPaymentField"
+    }
+  } as any;
+  const normalized = normalizeJotformRegistrationPayload(
+    {
+      formID: "12345",
+      submissionID: "sub-payment-quantity",
+      Name: "Zahra Hussain",
+      Email: "zhussain@cranbrook.edu",
+      "Name of Organization": "Cranbrook Schools",
+      hiddenPaymentField: "1",
+      paymentSummary: "{\"products\":[{\"name\":\"5 Session Cohort\",\"quantity\":\"6\"}]}",
+      "Total Cost": "$4,770.00",
+      "Get Page URL": "https://rocketpd.com/cohorts/summer-leadership"
+    },
+    [mapping]
+  );
+
+  assert.equal(normalized.registration.participantCount, 6);
+  assert.equal(normalized.participants.length, 0);
+});
