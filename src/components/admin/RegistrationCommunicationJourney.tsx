@@ -396,34 +396,37 @@ export function RegistrationCommunicationJourney({
                         </div>
                       ) : null}
                       <div className="registration-recipient-list">
-                        {message.rows.map((communication) => {
+                        {message.rows.flatMap((communication) => {
                           const recipient = recipientContext(communication, pocEmail);
                           const groupKey = journeyGroupFor(communication);
-                          const firstRecipient = recipient.emails[0] ?? "";
-                          const canResend = Boolean(firstRecipient) && ["needs_attention", "sent"].includes(groupKey);
                           const canCancel = ["DRAFT", "SCHEDULED", "FAILED"].includes(String(communication.status ?? "").toUpperCase()) && !communication.sentAt;
-                          const canReview = groupKey === "needs_attention" && Boolean(firstRecipient);
-                          const openHref = firstRecipient
-                            ? `/communications?search=${encodeURIComponent(firstRecipient)}`
-                            : `/communications?search=${encodeURIComponent(message.title)}`;
+                          const rowEmails = recipient.emails.length ? recipient.emails : [""];
 
-                          return (
-                            <div className="registration-recipient-row" key={communication.id}>
+                          return rowEmails.map((recipientEmail) => {
+                            const canResend = Boolean(recipientEmail) && ["needs_attention", "sent"].includes(groupKey);
+                            const canReview = groupKey === "needs_attention" && Boolean(recipientEmail);
+                            const openHref = recipientEmail
+                              ? `/communications?search=${encodeURIComponent(recipientEmail)}`
+                              : `/communications?search=${encodeURIComponent(message.title)}`;
+                            const isSingleRecipient = recipient.emails.length === 1;
+
+                            return (
+                            <div className="registration-recipient-row" key={`${communication.id}:${recipientEmail || "unassigned"}`}>
                               <div>
-                                <strong title={recipient.label}>{recipient.label}</strong>
+                                <strong title={isSingleRecipient ? recipient.label : recipientEmail}>{isSingleRecipient ? recipient.label : recipientEmail}</strong>
                                 <span title={[recipient.detail, communication.providerError].filter(Boolean).join(" · ") || undefined}>
-                                  {[recipient.detail, communication.providerError].filter(Boolean).join(" · ") || "No recipient details recorded"}
+                                  {[isSingleRecipient ? recipient.detail : recipient.type, communication.providerError].filter(Boolean).join(" · ") || "No recipient details recorded"}
                                 </span>
                               </div>
                               <div className="registration-journey-actions">
                                 {canResend ? (
-                                  <Button variant="outlined" size="small" disabled={Boolean(busyId)} onClick={() => resendToRecipient(communication, firstRecipient)}>
-                                    {busyId === `${communication.id}:resend:${firstRecipient}` ? "Sending" : "Resend"}
+                                  <Button variant="outlined" size="small" disabled={Boolean(busyId)} onClick={() => resendToRecipient(communication, recipientEmail)}>
+                                    {busyId === `${communication.id}:resend:${recipientEmail}` ? "Sending" : "Resend"}
                                   </Button>
                                 ) : null}
                                 {canReview ? (
-                                  <Button variant="outlined" size="small" disabled={Boolean(busyId)} onClick={() => runAction(communication, "review", firstRecipient)}>
-                                    {busyId === `${communication.id}:review:${firstRecipient}` ? "Saving" : "Mark reviewed"}
+                                  <Button variant="outlined" size="small" disabled={Boolean(busyId)} onClick={() => runAction(communication, "review", recipientEmail)}>
+                                    {busyId === `${communication.id}:review:${recipientEmail}` ? "Saving" : "Mark reviewed"}
                                   </Button>
                                 ) : null}
                                 {canCancel ? (
@@ -434,7 +437,8 @@ export function RegistrationCommunicationJourney({
                                 <Button href={openHref} variant="text" size="small">Open</Button>
                               </div>
                             </div>
-                          );
+                            );
+                          });
                         })}
                       </div>
                     </div>

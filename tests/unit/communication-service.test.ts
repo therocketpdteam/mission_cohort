@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { EmailEventType } from "@prisma/client";
-import { buildManualCustomEmailRecipientGroups, buildRecipientDeliveryRows, emailEventSummary, sessionTemplateTypesForSession } from "../../src/services/communicationService";
+import { buildManualCustomEmailRecipientGroups, buildRecipientDeliveryRows, emailEventSummary, isolatedResendRecipients, sessionTemplateTypesForSession } from "../../src/services/communicationService";
 
 test("summarizes unreviewed failed and bounced email events", () => {
   const summary = emailEventSummary([
@@ -82,6 +82,25 @@ test("manual custom email recipient grouping does not filter by cohort lifecycle
 
   assert.deepEqual(groups.map((group) => group.cohortId), ["draft-cohort", "completed-cohort", "active-cohort"]);
   assert.deepEqual(groups.flatMap((group) => group.recipientEmails), ["draft@example.com", "completed@example.com", "active@example.com"]);
+});
+
+test("isolates a resend to the selected recipient from a multi-person communication", () => {
+  const recipients = isolatedResendRecipients({
+    selectedEmail: " Second.Teacher@example.com ",
+    recipientEmails: ["first.teacher@example.com", "second.teacher@example.com"],
+    eventRecipientEmails: ["first.teacher@example.com", "second.teacher@example.com"]
+  });
+
+  assert.deepEqual(recipients, ["second.teacher@example.com"]);
+});
+
+test("rejects a resend address that was not on the original communication", () => {
+  const recipients = isolatedResendRecipients({
+    selectedEmail: "unrelated@example.com",
+    recipientEmails: ["first.teacher@example.com", "second.teacher@example.com"]
+  });
+
+  assert.deepEqual(recipients, []);
 });
 
 test("uses the one-week session reminder only for the first session", () => {

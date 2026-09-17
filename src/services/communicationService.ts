@@ -1533,6 +1533,22 @@ function emailValues(values: Array<string | null | undefined>) {
   return Array.from(new Set(values.map((value) => normalizeEmail(value ?? "")).filter(Boolean)));
 }
 
+export function isolatedResendRecipients(input: {
+  selectedEmail: string;
+  recipientEmails?: unknown;
+  eventRecipientEmails?: Array<string | null | undefined>;
+}) {
+  const selectedEmail = normalizeEmail(input.selectedEmail);
+  const recordedRecipients = emailValues([
+    ...(Array.isArray(input.recipientEmails)
+      ? input.recipientEmails.map((email) => typeof email === "string" ? email : "")
+      : []),
+    ...(input.eventRecipientEmails ?? [])
+  ]);
+
+  return selectedEmail && recordedRecipients.includes(selectedEmail) ? [selectedEmail] : [];
+}
+
 async function resolveCommunicationRecipients(communication: {
   cohortId: string;
   recipientScope: RecipientScope;
@@ -1899,13 +1915,77 @@ export async function sendCommunication(id: string, options?: { recipients?: str
 }
 
 export async function sendCommunicationToRecipient(input: { communicationId: string; recipientEmail: string }) {
-  const recipientEmail = input.recipientEmail.trim();
+  const recipientEmail = input.recipientEmail.trim().toLowerCase();
 
   if (!recipientEmail) {
     throw Object.assign(new Error("recipientEmail is required"), { code: "BAD_REQUEST", status: 400 });
   }
 
-  return sendCommunication(input.communicationId, { recipients: [recipientEmail] });
+  const original = await prisma.cohortCommunication.findUnique({
+    where: { id: input.communicationId },
+    include: {
+      attachments: true,
+      emailEvents: { select: { recipientEmail: true } }
+    }
+  });
+
+  if (!original) {
+    throw Object.assign(new Error("Communication not found"), { code: "NOT_FOUND", status: 404 });
+  }
+
+  const resendRecipients = isolatedResendRecipients({
+    selectedEmail: recipientEmail,
+    recipientEmails: original.recipientEmails,
+    eventRecipientEmails: original.emailEvents.map((event) => event.recipientEmail)
+  });
+
+  if (resendRecipients.length !== 1) {
+    throw Object.assign(new Error("The selected email was not a recipient of this communication."), {
+      code: "BAD_REQUEST",
+      status: 400
+    });
+  }
+
+  const participant = await prisma.participant.findFirst({
+    where: {
+      cohortId: original.cohortId,
+      email: { equals: recipientEmail, mode: "insensitive" },
+      ...(original.registrationId ? { registrationId: original.registrationId } : {})
+    },
+    select: { id: true, registrationId: true }
+  });
+  const registrationId = participant?.registrationId ?? original.registrationId;
+  const resend = await prisma.cohortCommunication.create({
+    data: {
+      cohortId: original.cohortId,
+      sessionId: original.sessionId,
+      registrationId,
+      participantId: participant?.id,
+      templateId: original.templateId,
+      subject: original.subject,
+      bodyHtml: original.bodyHtml,
+      bodyText: original.bodyText,
+      status: CommunicationStatus.DRAFT,
+      recipientScope: RecipientScope.CUSTOM,
+      recipientEmails: [recipientEmail],
+      createdById: original.createdById,
+      attachments: original.attachments.length
+        ? {
+            create: original.attachments.map((attachment) => ({
+              templateId: attachment.templateId,
+              fileName: attachment.fileName,
+              contentType: attachment.contentType,
+              fileSize: attachment.fileSize,
+              provider: attachment.provider,
+              fileKey: attachment.fileKey,
+              url: attachment.url
+            }))
+          }
+        : undefined
+    }
+  });
+
+  return sendCommunication(resend.id, { recipients: [recipientEmail] });
 }
 
 export async function cancelCommunication(input: { id: string }) {
