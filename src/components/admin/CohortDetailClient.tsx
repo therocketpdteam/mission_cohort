@@ -38,6 +38,7 @@ import { buildSessionCalendarDescription } from "@/modules/calendar/description"
 import { mergeFields, renderMergeFields, sampleMergeContext } from "@/modules/email/mergeFields";
 import { textToEmailHtml } from "@/modules/email/templateFormatting";
 import { exportParticipantsCsv } from "@/lib/participantCsv";
+import { registrationTotalAfterSeatChange } from "@/config/cohortPricing";
 import { RosterWorkbench } from "./RosterWorkbench";
 import { RegistrationPendingChangesPanel } from "./RegistrationPendingChangesPanel";
 import { RegistrationDeliveryPreflight } from "./RegistrationDeliveryPreflight";
@@ -1714,6 +1715,7 @@ export function CohortDetailClient({ id }: { id: string }) {
           body: {
             id: registrationDetail.id,
             participantCount: projectedCount,
+            totalAmount: registrationTotalAfterSeatChange(cohort, registrationDetail, projectedCount),
             deferNotifications: ["PUBLISHED", "ACTIVE"].includes(String(cohort?.derivedStatus ?? cohort?.status))
           }
         });
@@ -1748,6 +1750,18 @@ export function CohortDetailClient({ id }: { id: string }) {
           deferNotifications: ["PUBLISHED", "ACTIVE"].includes(String(cohort?.derivedStatus ?? cohort?.status))
         }
       });
+      const projectedCount = (registrationDetail.participants?.length ?? 0) + 1;
+      if (projectedCount > Number(registrationDetail.participantCount ?? 0)) {
+        await adminApi("/api/registrations", {
+          method: "PATCH",
+          body: {
+            id: registrationDetail.id,
+            participantCount: projectedCount,
+            totalAmount: registrationTotalAfterSeatChange(cohort, registrationDetail, projectedCount),
+            deferNotifications: ["PUBLISHED", "ACTIVE"].includes(String(cohort?.derivedStatus ?? cohort?.status))
+          }
+        });
+      }
       notifySuccess("POC added to the participant roster.");
       await openRegistrationDetail(registrationDetail);
       await load();
@@ -2903,7 +2917,7 @@ export function CohortDetailClient({ id }: { id: string }) {
           <RowActionMenu
             actions={[
               { label: "Quick view", onClick: () => void openRegistrationDetail(params.row) },
-              { label: "Edit registration", icon: <EditOutlined fontSize="small" />, onClick: () => openRegistrationEditor(params.row) },
+              { label: "Edit POC & billing", icon: <EditOutlined fontSize="small" />, onClick: () => openRegistrationEditor(params.row) },
               { label: "Create invoice", onClick: () => openInvoiceEditor(null, params.row) },
               { label: "Remove registration", icon: <ArchiveOutlined fontSize="small" />, onClick: () => setRegistrationRemovalAction({ action: "archive", row: params.row }) },
               { label: "Delete permanently", icon: <DeleteOutline fontSize="small" />, color: "error", onClick: () => setRegistrationRemovalAction({ action: "delete", row: params.row }) }
@@ -4041,7 +4055,7 @@ export function CohortDetailClient({ id }: { id: string }) {
         actions={registrationDetail ? (
           <div className="section-action-row">
             <Button variant="outlined" onClick={() => openRegistrationEditor(registrationDetail)}>
-              Edit Registration
+              Edit POC & Billing
             </Button>
             <Button variant="outlined" onClick={() => openInvoiceEditor(null, registrationDetail)}>
               Create Invoice
