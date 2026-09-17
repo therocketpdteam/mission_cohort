@@ -28,3 +28,25 @@ export function pricePerParticipantForCohort(cohort?: {
 export function registrationTotalForCohort(cohort: Parameters<typeof pricePerParticipantForCohort>[0], participantCount: unknown) {
   return pricePerParticipantForCohort(cohort) * Math.max(0, Number(participantCount ?? 0));
 }
+
+export function registrationTotalAfterSeatChange(
+  cohort: Parameters<typeof pricePerParticipantForCohort>[0],
+  registration: { participantCount?: unknown; totalAmount?: unknown; paymentMethod?: unknown },
+  nextParticipantCount: unknown
+) {
+  const nextCount = Math.max(0, Number(nextParticipantCount ?? 0));
+  if (String(registration.paymentMethod ?? "").toUpperCase() === "COMPED") {
+    return 0;
+  }
+
+  const currentCount = Math.max(0, Number(registration.participantCount ?? 0));
+  const currentTotal = Math.max(0, Number(registration.totalAmount ?? 0));
+  const cohortUnitPrice = pricePerParticipantForCohort(cohort);
+  const standardCurrentTotal = cohortUnitPrice * currentCount;
+  const hasCustomRate = currentCount > 0
+    && currentTotal > 0
+    && Math.abs(currentTotal - standardCurrentTotal) > 0.009;
+  const unitPrice = hasCustomRate ? currentTotal / currentCount : cohortUnitPrice;
+
+  return Math.round(unitPrice * nextCount * 100) / 100;
+}

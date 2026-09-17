@@ -33,7 +33,7 @@ import { GridColDef, GridRowParams, GridRowSelectionModel } from "./common";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
-import { pricePerParticipantForCohort, registrationTotalForCohort, sessionCountForPricing } from "@/config/cohortPricing";
+import { pricePerParticipantForCohort, registrationTotalAfterSeatChange, registrationTotalForCohort, sessionCountForPricing } from "@/config/cohortPricing";
 import { formatProperDisplay, formatRegistrationPaymentStatus, formatRegistrationSource, formatStatusLabel } from "@/lib/formatting";
 import { RosterWorkbench } from "./RosterWorkbench";
 import { RegistrationPendingChangesPanel } from "./RegistrationPendingChangesPanel";
@@ -462,7 +462,7 @@ export function RegistrationEditor({
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="lg">
-      <DialogTitle>{editing ? "Edit Registration" : "Add Registration"}</DialogTitle>
+      <DialogTitle>{editing ? "Edit POC & Billing" : "Add Registration"}</DialogTitle>
       <DialogContent>
         {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
         <Grid container spacing={2} sx={{ mt: 0.5 }}>
@@ -773,6 +773,18 @@ function RegistrationDetailDialog({
           deferNotifications: ["PUBLISHED", "ACTIVE"].includes(String(registration.cohort?.derivedStatus ?? registration.cohort?.status))
         }
       });
+      const projectedCount = (registration.participants?.length ?? 0) + 1;
+      if (projectedCount > Number(registration.participantCount ?? 0)) {
+        await adminApi("/api/registrations", {
+          method: "PATCH",
+          body: {
+            id: registration.id,
+            participantCount: projectedCount,
+            totalAmount: registrationTotalAfterSeatChange(registration.cohort, registration, projectedCount),
+            deferNotifications: ["PUBLISHED", "ACTIVE"].includes(String(registration.cohort?.derivedStatus ?? registration.cohort?.status))
+          }
+        });
+      }
       setParticipant({ firstName: "", lastName: "", email: "", title: "", phone: "" });
       await onChanged();
     } catch (addError) {
@@ -806,6 +818,7 @@ function RegistrationDetailDialog({
           body: {
             id: registration.id,
             participantCount: projectedCount,
+            totalAmount: registrationTotalAfterSeatChange(registration.cohort, registration, projectedCount),
             deferNotifications: ["PUBLISHED", "ACTIVE"].includes(String(registration.cohort?.derivedStatus ?? registration.cohort?.status))
           }
         });
@@ -1753,7 +1766,7 @@ export function RegistrationsClient() {
         <Box onClick={(event) => event.stopPropagation()}>
           <RowActionMenu
             actions={[
-              { label: "Edit registration", icon: <EditOutlined fontSize="small" />, onClick: () => { setEditing(params.row); setDialogOpen(true); } },
+              { label: "Edit POC & billing", icon: <EditOutlined fontSize="small" />, onClick: () => { setEditing(params.row); setDialogOpen(true); } },
               { label: "Confirm registration", icon: <CheckCircleOutline fontSize="small" />, color: "success", onClick: () => mutate({ id: params.row.id, action: "confirm" }, "Registration confirmed") },
               { label: "Cancel registration", icon: <CancelOutlined fontSize="small" />, color: "warning", onClick: () => mutate({ id: params.row.id, action: "cancel" }, "Registration cancelled") },
               params.row.archivedAt

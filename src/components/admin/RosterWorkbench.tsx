@@ -51,6 +51,7 @@ export function RosterWorkbench({
   const newMissingTitleCount = newParticipants.filter((participant) => !participant.title?.trim()).length;
   const savedStatus = rosterStatusFromCounts(expected, existingParticipants.length);
   const projectedStatus = rosterStatusFromCounts(expected, projectedTotal);
+  const addsPurchasedSeats = projectedTotal > expected;
   const savedComplete = savedStatus === "COMPLETE";
   const savedPartial = expected > 0 && existingParticipants.length > 0 && existingParticipants.length < expected;
   const primaryContactEmail = String(registration.primaryContactEmail ?? "").toLowerCase();
@@ -97,6 +98,11 @@ export function RosterWorkbench({
       {savedPartial && (
         <div className="roster-workbench-state is-partial">
           Roster partial at {existingParticipants.length}/{expected} participants. The participant-list follow-up stays open until the count is complete.
+        </div>
+      )}
+      {addsPurchasedSeats && (
+        <div className="roster-workbench-state is-partial">
+          Team growth: adding this roster updates the registration from {expected} to {projectedTotal} seats and recalculates the total at the registration&apos;s current per-seat rate. Seat count and pricing are saved together.
         </div>
       )}
       {existingMissingTitleCount > 0 && (
