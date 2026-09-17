@@ -1,5 +1,6 @@
 import { OrganizationType, PaymentMethod, PaymentStatus, RegistrationStatus } from "@prisma/client";
 import type { JotformFormMapping } from "@prisma/client";
+import { cohortPricingMatrix } from "@/config/cohortPricing";
 import { parseRosterText } from "@/lib/rosterParser";
 
 type UnknownRecord = Record<string, unknown>;
@@ -141,6 +142,15 @@ const usStateAbbreviations = [
 const usStateAbbreviationSet = new Set(usStateAbbreviations);
 const usStateCodeByName = new Map(usStateNames.map((name, index) => [name.toLowerCase(), usStateAbbreviations[index]]));
 const streetSuffixPattern = /\b(?:street|st|road|rd|avenue|ave|boulevard|blvd|drive|dr|lane|ln|way|circle|cir|court|ct|place|pl|parkway|pkwy|highway|hwy|terrace|ter|trail|trl|loop|plaza|square|sq)\b\.?/i;
+const participantCountAliases = [
+  "participantCount",
+  "How many participants will be joining?",
+  "Please select how many participants will be joining?",
+  "q20_howMany",
+  "numberOfParticipants",
+  "participantsCount"
+];
+const totalAmountAliases = ["paymentAmount", "totalAmount", "q56_totalCost56", "amount", "total", "CC - Total", "Total Cost"];
 
 export const jotformTargetFields: JotformTargetField[] = [
   { target: "formId", label: "Jotform form ID", category: "Form", aliases: ["formID", "formId", "form_id", "form ID"] },
@@ -428,6 +438,101 @@ function readParticipantCount(value: unknown): number {
   }
 
   return readNumber(value);
+}
+
+function positiveInteger(value: number) {
+  return Number.isFinite(value) && value > 0 ? Math.round(value) : 0;
+}
+
+function readQuantityCandidates(value: unknown, depth = 0): number[] {
+  if (depth > 4 || value == null) {
+    return [];
+  }
+
+  if (typeof value === "number") {
+    return positiveInteger(value) ? [positiveInteger(value)] : [];
+  }
+
+  if (typeof value === "string") {
+    const candidates = Array.from(value.matchAll(/(?:special\s+quantity|quantity|qty)\s*["']?\s*[:=]\s*["']?(\d+)/gi))
+      .map((match) => positiveInteger(Number(match[1])))
+      .filter(Boolean);
+    const parsed = parseJsonObject(value);
+    return [
+      ...candidates,
+      ...(Object.keys(parsed).length > 0 ? readQuantityCandidates(parsed, depth + 1) : [])
+    ];
+  }
+
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => readQuantityCandidates(item, depth + 1));
+  }
+
+  if (typeof value === "object") {
+    return Object.entries(value as UnknownRecord).flatMap(([key, item]) => {
+      const normalizedKey = normalizeKey(key);
+      const directValue = /^(qty|quantity|specialquantity)$/.test(normalizedKey)
+        ? positiveInteger(readNumber(item))
+        : 0;
+
+      return [
+        directValue,
+        ...readQuantityCandidates(item, depth + 1)
+      ].filter(Boolean);
+    });
+  }
+
+  return [];
+}
+
+function inferParticipantCountFromTotal(totalAmount: number, sessionCount: number | null | undefined) {
+  const price = cohortPricingMatrix[Number(sessionCount ?? 0)] ?? 0;
+
+  if (!price || !totalAmount) {
+    return 0;
+  }
+
+  const quotient = totalAmount / price;
+  const rounded = Math.round(quotient);
+
+  return Math.abs(quotient - rounded) < 0.01 ? rounded : 0;
+}
+
+function resolveParticipantCount(input: {
+  flat: UnknownRecord;
+  registration: UnknownRecord;
+  fieldMap: FieldMap;
+  mapping?: JotformFormMapping;
+  normalizedParticipantCount: number;
+  totalAmount: number;
+}) {
+  const mappedCount = readParticipantCount(mappedFirstValue(input.flat, input.registration, input.fieldMap, "participantCount", participantCountAliases));
+  const autoDetectedCount = readParticipantCount(firstValue(input.registration, participantCountAliases));
+  const quantityCount = Math.max(0, ...Object.entries(input.flat).flatMap(([key, value]) => {
+    const normalizedKey = normalizeKey(key);
+
+    if (!/(participant|people|howmany|quantity|qty)/.test(normalizedKey)) {
+      return [];
+    }
+
+    return [
+      readParticipantCount(value),
+      ...readQuantityCandidates(value)
+    ];
+  }));
+  const paymentQuantityCount = Math.max(0, ...Object.entries(input.flat)
+    .filter(([key]) => /(payment|product|summary|selected)/.test(normalizeKey(key)))
+    .flatMap(([, value]) => readQuantityCandidates(value)));
+  const totalInferredCount = inferParticipantCountFromTotal(input.totalAmount, input.mapping?.sessionCount);
+
+  return Math.max(
+    mappedCount,
+    autoDetectedCount,
+    quantityCount,
+    paymentQuantityCount,
+    totalInferredCount,
+    input.normalizedParticipantCount
+  );
 }
 
 function firstUrlFromText(value: unknown): string {
@@ -1098,14 +1203,15 @@ export function normalizeJotformRegistrationPayload(payload: UnknownRecord, mapp
   const organizationState = readString(mappedFirstValue(flat, organization, fieldMap, "organizationState", ["organizationState", "districtState", "schoolState", "state", "State"])) || parsedOrganizationAddress.state;
   const organizationZip = readString(mappedFirstValue(flat, organization, fieldMap, "organizationZip", ["organizationZip", "organizationPostalCode", "districtZip", "schoolZip", "zip", "Zip", "Zip Code", "postal", "postalCode"])) || parsedOrganizationAddress.zip;
   const organizationBillingAddress = readString(organizationAddressCandidate) || formatParsedAddress(parsedOrganizationAddress);
-  const declaredParticipantCount = readParticipantCount(mappedFirstValue(flat, registration, fieldMap, "participantCount", [
-    "participantCount",
-    "q20_howMany",
-    "numberOfParticipants",
-    "participantsCount",
-    "How many participants will be joining?",
-    "Please select how many participants will be joining?"
-  ]));
+  const totalAmount = readNumber(mappedFirstValue(flat, payment, fieldMap, "totalAmount", totalAmountAliases));
+  const declaredParticipantCount = resolveParticipantCount({
+    flat,
+    registration,
+    fieldMap,
+    mapping: existingMapping,
+    normalizedParticipantCount: participants.length,
+    totalAmount
+  });
   const fallbackParticipant = participants.length === 0
     ? primaryContactAsParticipant({
         participantCount: declaredParticipantCount,
@@ -1160,7 +1266,7 @@ export function normalizeJotformRegistrationPayload(payload: UnknownRecord, mapp
       purchaseOrderNumber: readString(mappedFirstValue(flat, payment, fieldMap, "purchaseOrderNumber", ["purchaseOrderNumber", "poNumber", "purchaseOrder"])),
       quickBooksCustomerRef: readString(firstValue(payment, ["quickBooksCustomerRef", "quickbooksCustomerId"])),
       quickBooksInvoiceRef: readString(firstValue(payment, ["quickBooksInvoiceRef", "quickbooksInvoiceId"])),
-      totalAmount: readNumber(mappedFirstValue(flat, payment, fieldMap, "totalAmount", ["totalAmount", "q56_totalCost56", "amount", "total", "CC - Total", "Total Cost"])),
+      totalAmount,
       participantCount,
       status: readEnumValue(RegistrationStatus, firstValue(registration, ["registrationStatus"]), RegistrationStatus.NEW),
       notes: readString(mappedFirstValue(flat, registration, fieldMap, "notes", ["notes", "additionalNotes", "How did you hear about us?"])),
@@ -1177,7 +1283,7 @@ export function normalizeJotformRegistrationPayload(payload: UnknownRecord, mapp
     },
     participants: normalizedParticipants,
     payment: {
-      amount: readNumber(mappedFirstValue(flat, payment, fieldMap, "totalAmount", ["paymentAmount", "q56_totalCost56", "amount", "totalAmount", "total", "CC - Total", "Total Cost"])),
+      amount: totalAmount,
       method: readPaymentMethod(mappedFirstValue(flat, payment, fieldMap, "paymentMethod", ["paymentMethod", "q46_preferredMethod", "method", "Preferred method of payment?"])),
       status: readPaymentStatus(
         mappedFirstValue(flat, payment, fieldMap, "paymentStatus", ["paymentStatus", "status"]),
