@@ -1,0 +1,21 @@
+services:
+  mission-cohort-db:
+    image: postgres:16-alpine
+    container_name: mission-cohort-local-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: mission_cohort
+      POSTGRES_USER: mission_cohort
+      POSTGRES_PASSWORD: mission_cohort_local
+    ports:
+      - "54329:5432"
+    volumes:
+      - mission_cohort_local_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mission_cohort -d mission_cohort"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  mission_cohort_local_db:

@@ -37,7 +37,8 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    return ok(await createRegistration(await request.json()), { status: 201 });
+    const body = await request.json();
+    return ok(await createRegistration(body, { participants: Array.isArray(body.participants) ? body.participants : undefined }), { status: 201 });
   } catch (error) {
     return handleApiError(error);
   }

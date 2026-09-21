@@ -46,6 +46,7 @@ import { PocCommunicationHistory } from "./PocCommunicationHistory";
 import { RegistrationCommunicationJourney } from "./RegistrationCommunicationJourney";
 import { RegistrationDocuments } from "./RegistrationDocuments";
 import { RegistrationEditor, RegistrationRemovalDialog } from "./RegistrationsClient";
+import { cohortEditFields } from "./CohortsClient";
 import type { ParsedRosterParticipant } from "@/lib/rosterParser";
 import {
   AdminRow,
@@ -1430,6 +1431,8 @@ export function CohortDetailClient({ id }: { id: string }) {
   const [tab, setTab] = useState(0);
   const [loading, setLoading] = useState(true);
   const [cohort, setCohort] = useState<AdminRow | null>(null);
+  const [presenters, setPresenters] = useState<AdminRow[]>([]);
+  const [cohortEditOpen, setCohortEditOpen] = useState(false);
   const [allCohorts, setAllCohorts] = useState<AdminRow[]>([]);
   const [organizations, setOrganizations] = useState<AdminRow[]>([]);
   const [allParticipants, setAllParticipants] = useState<AdminRow[]>([]);
@@ -1465,6 +1468,7 @@ export function CohortDetailClient({ id }: { id: string }) {
   const [updatingBulkRegistrations, setUpdatingBulkRegistrations] = useState(false);
   const [paymentDetail, setPaymentDetail] = useState<AdminRow | null>(null);
   const [registrationDetail, setRegistrationDetail] = useState<AdminRow | null>(null);
+  const [registrationDetailOpen, setRegistrationDetailOpen] = useState(false);
   const [registrationDetailLoading, setRegistrationDetailLoading] = useState(false);
   const registrationDetailRequestRef = useRef(0);
   const [registrationRemovalAction, setRegistrationRemovalAction] = useState<{ action: "archive" | "delete"; row: AdminRow } | null>(null);
@@ -1526,10 +1530,11 @@ export function CohortDetailClient({ id }: { id: string }) {
   const { notifySuccess, notifyError, snackbar } = useNotifier();
 
   async function load() {
-    const [cohortData, cohortRows, organizationRows, sessionRows, registrationRows, participantRows, allParticipantRows, communicationRows, templateRows, paymentRows, invoiceRows, distributionData, taskRows, resourceRows, activityRows] =
+    const [cohortData, cohortRows, presenterRows, organizationRows, sessionRows, registrationRows, participantRows, allParticipantRows, communicationRows, templateRows, paymentRows, invoiceRows, distributionData, taskRows, resourceRows, activityRows] =
       await Promise.all([
         adminApi<AdminRow>(`/api/cohorts/${id}`),
         adminApi<AdminRow[]>("/api/cohorts").catch(() => []),
+        adminApi<AdminRow[]>("/api/presenters").catch(() => []),
         adminApi<AdminRow[]>("/api/organizations").catch(() => []),
         adminApi<AdminRow[]>(`/api/cohorts/${id}/sessions`),
         adminApi<AdminRow[]>(`/api/cohorts/${id}/registrations`),
@@ -1547,6 +1552,7 @@ export function CohortDetailClient({ id }: { id: string }) {
 
     setCohort(cohortData);
     setAllCohorts(cohortRows);
+    setPresenters(presenterRows);
     setOrganizations(organizationRows);
     setSessions(sessionRows);
     setRegistrations(registrationRows);
@@ -1573,7 +1579,8 @@ export function CohortDetailClient({ id }: { id: string }) {
   async function openRegistrationDetail(row: AdminRow) {
     const requestId = registrationDetailRequestRef.current + 1;
     registrationDetailRequestRef.current = requestId;
-    setRegistrationDetail(row);
+    setRegistrationDetailOpen(true);
+    setRegistrationDetail(null);
     setRegistrationDetailLoading(true);
     setEditingRegistrationParticipantId("");
     setRegistrationParticipantEdit({ firstName: "", lastName: "", email: "", title: "", phone: "", status: "REGISTERED" });
@@ -1585,6 +1592,7 @@ export function CohortDetailClient({ id }: { id: string }) {
       }
     } catch (error) {
       if (registrationDetailRequestRef.current === requestId) {
+        setRegistrationDetailOpen(false);
         setRegistrationDetail(null);
         notifyError((error as Error).message);
       }
@@ -1597,6 +1605,7 @@ export function CohortDetailClient({ id }: { id: string }) {
 
   function closeRegistrationDetail() {
     registrationDetailRequestRef.current += 1;
+    setRegistrationDetailOpen(false);
     setRegistrationDetailLoading(false);
     setRegistrationDetail(null);
     setRegistrationThread([]);
@@ -1985,6 +1994,10 @@ export function CohortDetailClient({ id }: { id: string }) {
 
     return String(a.primaryContactName ?? a.organization?.name ?? "").localeCompare(String(b.primaryContactName ?? b.organization?.name ?? ""));
   }), [registrationPaymentFilter, registrationRosterFilter, registrations]);
+  const registrationEditorCohorts = useMemo(
+    () => cohort ? [cohort, ...allCohorts.filter((row) => row.id !== cohort.id)] : allCohorts,
+    [allCohorts, cohort]
+  );
 
   const selectedParticipantRows = useMemo(
     () => participants.filter((participant) => participantSelection.ids.has(participant.id)),
@@ -3122,11 +3135,28 @@ export function CohortDetailClient({ id }: { id: string }) {
     }
   }
 
+  async function saveCohortEdit(values: AdminRow) {
+    try {
+      await adminApi(`/api/cohorts/${id}`, { method: "PATCH", body: values });
+      notifySuccess("Cohort updated");
+      setCohortEditOpen(false);
+      await load();
+    } catch (error) {
+      notifyError((error as Error).message);
+      throw error;
+    }
+  }
+
   return (
     <PageStack>
       <PageHeader
         title={cohort?.title ?? "Cohort Detail"}
         description="Cohort command center for readiness, delivery, registration, communication, and distribution."
+        action={cohort ? (
+          <Button variant="outlined" startIcon={<EditOutlined />} onClick={() => setCohortEditOpen(true)}>
+            Edit cohort
+          </Button>
+        ) : null}
       />
       <Tabs value={tab} onChange={(_event, value) => setTab(value)} variant="scrollable" scrollButtons="auto">
         {detailTabs.map((label) => (
@@ -4049,7 +4079,7 @@ export function CohortDetailClient({ id }: { id: string }) {
       />
       <QuickViewDrawer
         title="Registration Detail"
-        open={Boolean(registrationDetail)}
+        open={registrationDetailOpen}
         onClose={closeRegistrationDetail}
         className="registration-detail-drawer"
         actions={registrationDetail ? (
@@ -4074,7 +4104,7 @@ export function CohortDetailClient({ id }: { id: string }) {
         {registrationDetailLoading ? (
           <Typography color="text.secondary">Loading complete registration details...</Typography>
         ) : registrationDetail && (
-          <>
+          <div className="registration-detail">
             <RegistrationPendingChangesPanel
               registration={registrationDetail}
               onApplied={async (message) => {
@@ -4277,13 +4307,13 @@ export function CohortDetailClient({ id }: { id: string }) {
                 pocEmail={registrationDetail.primaryContactEmail}
               />
             </CollapsibleSectionCard>
-          </>
+          </div>
         )}
       </QuickViewDrawer>
       <RegistrationEditor
         open={registrationDialogOpen}
         editing={editingRegistration}
-        cohorts={cohort ? [cohort, ...allCohorts.filter((row) => row.id !== cohort.id)] : allCohorts}
+        cohorts={registrationEditorCohorts}
         organizations={organizations}
         registrations={registrations}
         defaultCohortId={id}
@@ -4304,6 +4334,14 @@ export function CohortDetailClient({ id }: { id: string }) {
             }
           }
         }}
+      />
+      <MutationDialog
+        title="Edit Cohort"
+        open={cohortEditOpen}
+        fields={cohortEditFields(presenters)}
+        initialValues={cohort ?? undefined}
+        onClose={() => setCohortEditOpen(false)}
+        onSubmit={saveCohortEdit}
       />
       <RegistrationRemovalDialog
         open={Boolean(registrationRemovalAction)}

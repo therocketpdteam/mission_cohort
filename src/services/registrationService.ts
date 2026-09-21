@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { CommunicationStatus, ParticipantListStatus, PaymentStatus, Prisma, RegistrationStatus, SupportingDocumentStatus } from "@prisma/client";
+import { CommunicationStatus, ParticipantListStatus, ParticipantStatus, PaymentStatus, Prisma, RegistrationStatus, SupportingDocumentStatus } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { shouldDefaultPrimaryContactParticipant } from "@/lib/rosterStatus";
@@ -109,10 +109,47 @@ async function planAutomaticRegistrationJourney(registrationId: string, cohortId
   return planRegistrationJourneys(registrationId, automaticRegistrationJourneyOptions(cohort.status));
 }
 
-export async function createRegistration(input: z.input<typeof registrationCreateSchema>) {
+const manualParticipantSchema = z.object({
+  firstName: z.string().trim().min(1),
+  lastName: z.string().trim().min(1),
+  email: z.string().trim().email(),
+  title: z.string().trim().optional(),
+  phone: z.string().trim().optional()
+});
+
+export async function createRegistration(
+  input: z.input<typeof registrationCreateSchema>,
+  options: { participants?: z.input<typeof manualParticipantSchema>[] } = {}
+) {
   const data = registrationCreateSchema.parse(input);
-  const registration = await prisma.registration.create({ data });
-  await ensureSingleSeatPrimaryContactParticipant(registration);
+  const participants = z.array(manualParticipantSchema).parse(options.participants ?? []);
+  const normalizedEmails = participants.map((participant) => participant.email.toLowerCase());
+  if (new Set(normalizedEmails).size !== normalizedEmails.length) {
+    throw Object.assign(new Error("Participant emails must be unique within the registration roster."), { code: "CONFLICT", status: 409 });
+  }
+
+  const registration = await prisma.$transaction(async (tx) => {
+    const created = await tx.registration.create({ data });
+    if (participants.length > 0) {
+      await tx.participant.createMany({
+        data: participants.map((participant) => ({
+          registrationId: created.id,
+          cohortId: created.cohortId,
+          organizationId: created.organizationId,
+          firstName: participant.firstName,
+          lastName: participant.lastName,
+          email: participant.email.toLowerCase(),
+          title: participant.title || null,
+          phone: participant.phone || null,
+          status: ParticipantStatus.REGISTERED
+        }))
+      });
+    }
+    return created;
+  });
+  if (participants.length === 0) {
+    await ensureSingleSeatPrimaryContactParticipant(registration);
+  }
   const roster = await syncRegistrationParticipantListStatus(registration.id);
   logAuditEventAsync({
     entityType: "Registration",

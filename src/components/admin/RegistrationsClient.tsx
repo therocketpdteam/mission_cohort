@@ -41,7 +41,7 @@ import { RegistrationDeliveryPreflight } from "./RegistrationDeliveryPreflight";
 import { PocCommunicationHistory } from "./PocCommunicationHistory";
 import { RegistrationCommunicationJourney } from "./RegistrationCommunicationJourney";
 import { RegistrationDocuments } from "./RegistrationDocuments";
-import type { ParsedRosterParticipant } from "@/lib/rosterParser";
+import { parseRosterText, type ParsedRosterParticipant } from "@/lib/rosterParser";
 import {
   AdminRow,
   AppDataGrid,
@@ -291,6 +291,9 @@ export function RegistrationEditor({
   const [attributionOpen, setAttributionOpen] = useState(false);
   const [compedHelpOpen, setCompedHelpOpen] = useState(false);
   const [creatingOrganization, setCreatingOrganization] = useState(false);
+  const [creationStep, setCreationStep] = useState<"edit" | "review">("edit");
+  const [manualRosterText, setManualRosterText] = useState("");
+  const [manualParticipants, setManualParticipants] = useState<ParsedRosterParticipant[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -307,6 +310,9 @@ export function RegistrationEditor({
       setOrganizationProfile(organizationProfileFromRow(selectedOrganization));
       setLastAutoTotal(registrationTotalForCohort(selectedCohort, nextValues.participantCount));
       setAttributionOpen(Boolean(editing?.utmSource || editing?.utmMedium || editing?.utmCampaign || editing?.utmContent || editing?.utmTerm || editing?.landingPageUrl || editing?.referrerUrl));
+      setCreationStep("edit");
+      setManualRosterText("");
+      setManualParticipants([]);
       setError(null);
     }
   }, [cohorts, defaultCohortId, editing, open, organizations]);
@@ -318,7 +324,12 @@ export function RegistrationEditor({
   const pricePerParticipant = pricePerParticipantForCohort(cohort);
   const sessionCount = sessionCountForPricing(cohort);
   const suggestedTotal = registrationTotalForCohort(cohort, values.participantCount);
+  const participantCount = Math.max(Number(values.participantCount ?? 0), 0);
+  const registrationTotal = Math.max(Number(values.totalAmount ?? 0), 0);
+  const effectiveUnitAmount = participantCount > 0 ? registrationTotal / participantCount : 0;
+  const parsedManualRoster = useMemo(() => parseRosterText(manualRosterText), [manualRosterText]);
   const isCompedRegistration = values.paymentMethod === "COMPED";
+  const manualDeliveryWillSend = !editing && String(cohort?.status ?? cohort?.derivedStatus ?? "").toUpperCase() === "PUBLISHED";
   const organizationName = organizationSearch.trim();
   const hasExactOrganizationMatch = organizations.some((item) => String(item.name ?? "").trim().toLowerCase() === organizationName.toLowerCase());
   const organizationOptions = organizationName && !hasExactOrganizationMatch
@@ -418,9 +429,53 @@ export function RegistrationEditor({
     }
   }
 
+  function addManualRosterParticipants() {
+    const existingEmails = new Set(manualParticipants.map((participant) => participant.email.toLowerCase()));
+    const additions = parsedManualRoster.participants.filter((participant) => !existingEmails.has(participant.email.toLowerCase()));
+    const nextParticipants = [...manualParticipants, ...additions];
+    setManualParticipants(nextParticipants);
+    setManualRosterText("");
+    setValues((current) => ({
+      ...current,
+      participantCount: nextParticipants.length,
+      totalAmount: isCompedRegistration ? 0 : registrationTotalForCohort(cohort, nextParticipants.length)
+    }));
+  }
+
+  function addPrimaryContactToManualRoster() {
+    const email = String(values.primaryContactEmail ?? "").trim().toLowerCase();
+    const nameParts = String(values.primaryContactName ?? "").trim().split(/\s+/).filter(Boolean);
+    if (!email || nameParts.length === 0 || manualParticipants.some((participant) => participant.email.toLowerCase() === email)) {
+      return;
+    }
+    const nextParticipants = [...manualParticipants, {
+      firstName: nameParts[0],
+      lastName: nameParts.slice(1).join(" ") || "-",
+      email,
+      title: String(values.primaryContactTitle ?? "").trim() || undefined,
+      phone: String(values.primaryContactPhone ?? "").trim() || undefined
+    }];
+    setManualParticipants(nextParticipants);
+    setValues((current) => ({
+      ...current,
+      participantCount: nextParticipants.length,
+      totalAmount: isCompedRegistration ? 0 : registrationTotalForCohort(cohort, nextParticipants.length)
+    }));
+  }
+
   async function save() {
     if (!cohort || !organization || !values.primaryContactName || !values.primaryContactEmail) {
       setError("Cohort, organization, primary contact name, and primary contact email are required");
+      return;
+    }
+
+    if (!editing && creationStep === "edit") {
+      if (manualParticipants.length !== Number(values.participantCount ?? 0)) {
+        setError(`Add the complete participant roster before review. Expected ${Number(values.participantCount ?? 0)}, currently saved ${manualParticipants.length}.`);
+        return;
+      }
+      setError(null);
+      setCreationStep("review");
       return;
     }
 
@@ -448,6 +503,7 @@ export function RegistrationEditor({
           billingContactName: values.billingContactName || values.primaryContactName,
           billingContactEmail: values.billingContactEmail || values.primaryContactEmail,
           billingAddress: values.billingAddress || organizationAddressSummary(savedOrganization ?? organization),
+          ...(!editing ? { participants: manualParticipants } : {}),
           deferNotifications: Boolean(editing && ["PUBLISHED", "ACTIVE"].includes(String(cohort.derivedStatus ?? cohort.status)))
         }
       });
@@ -461,11 +517,48 @@ export function RegistrationEditor({
   }
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="lg">
+    <Dialog open={open} onClose={onClose} fullWidth maxWidth="lg" PaperProps={{ className: "registration-editor-modal" }}>
       <DialogTitle>{editing ? "Edit POC & Billing" : "Add Registration"}</DialogTitle>
-      <DialogContent>
+      <DialogContent className="registration-editor-body">
         {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-        <Grid container spacing={2} sx={{ mt: 0.5 }}>
+        {!editing && creationStep === "review" ? (
+          <div className="registration-create-review">
+            <div className="registration-create-review-header">
+              <div>
+                <span>Final review</span>
+                <h3>{cohortDropdownLabel(cohort ?? {})}</h3>
+                <p>{organization?.name} · {manualParticipants.length} participant{manualParticipants.length === 1 ? "" : "s"}</p>
+              </div>
+              <StatusChip value={manualDeliveryWillSend ? "Ready to send" : "No delivery while draft"} />
+            </div>
+            <div className="registration-create-review-grid">
+              <DetailTile label="Primary contact" value={values.primaryContactName} />
+              <DetailTile label="POC email" value={values.primaryContactEmail} />
+              <DetailTile label="Registration total" value={money(registrationTotal)} />
+              <DetailTile label="Per participant" value={money(effectiveUnitAmount)} />
+            </div>
+            <div className="registration-create-delivery-plan">
+              <strong>{manualDeliveryWillSend ? "What happens after confirmation" : "Saved without outbound delivery"}</strong>
+              {manualDeliveryWillSend ? (
+                <ul>
+                  <li>Send the POC confirmation, generated invoice PDF, and W-9 to {values.primaryContactEmail}.</li>
+                  <li>Send one participant confirmation to each of the {manualParticipants.length} roster email addresses.</li>
+                  <li>Add those participant emails to all future cohort calendar events.</li>
+                  <li>Schedule the applicable participant reminder journey.</li>
+                </ul>
+              ) : (
+                <p>This cohort is not Published, so the registration and roster will be saved without sending emails or updating calendar attendees.</p>
+              )}
+            </div>
+            <div className="registration-create-recipient-list">
+              <strong>Participant recipients ({manualParticipants.length})</strong>
+              {manualParticipants.map((participant) => (
+                <span key={participant.email}>{formatProperDisplay(`${participant.firstName} ${participant.lastName}`)} · {participant.email}</span>
+              ))}
+            </div>
+          </div>
+        ) : (
+        <Grid container spacing={2} sx={{ mt: 0.5 }} className="registration-editor-grid">
           <Grid size={{ xs: 12, md: 6 }}>
             <Autocomplete
               options={cohorts}
@@ -575,13 +668,111 @@ export function RegistrationEditor({
               helperText="Defaults to the primary contact email."
             />
           </Grid>
-          <Grid size={{ xs: 12, md: 3 }}>
+          {!editing ? (
+            <Grid size={{ xs: 12 }} className="registration-manual-roster">
+              <div className="registration-editor-subsection">
+                <div className="registration-editor-subsection-heading">
+                  <div>
+                    <Typography variant="subtitle2">Participant roster</Typography>
+                    <Typography variant="body2" color="text.secondary">Add everyone before reviewing. No email or calendar action occurs while this form is open.</Typography>
+                  </div>
+                  <Button type="button" variant="outlined" size="small" onClick={addPrimaryContactToManualRoster} disabled={!values.primaryContactEmail || manualParticipants.some((participant) => participant.email.toLowerCase() === String(values.primaryContactEmail).toLowerCase())}>
+                    Add POC as participant
+                  </Button>
+                </div>
+                {manualParticipants.length > 0 ? (
+                  <div className="quick-view-list">
+                    {manualParticipants.map((participant) => (
+                      <div className="quick-view-list-row" key={participant.email}>
+                        <div>
+                          <strong>{formatProperDisplay(`${participant.firstName} ${participant.lastName}`)}</strong>
+                          <span>{[participant.email, participant.title].filter(Boolean).join(" · ")}</span>
+                        </div>
+                        <Button type="button" variant="text" color="error" size="small" onClick={() => {
+                          const nextParticipants = manualParticipants.filter((item) => item.email !== participant.email);
+                          setManualParticipants(nextParticipants);
+                          setValues((current) => ({
+                            ...current,
+                            participantCount: nextParticipants.length,
+                            totalAmount: isCompedRegistration ? 0 : registrationTotalForCohort(cohort, nextParticipants.length)
+                          }));
+                        }}>Remove</Button>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+                <TextField
+                  fullWidth
+                  multiline
+                  minRows={4}
+                  label="Paste participant roster"
+                  value={manualRosterText}
+                  onChange={(event) => setManualRosterText(event.target.value)}
+                  placeholder={"Ada Lovelace, Math Coach, ada@example.com\nGrace Hopper, Principal, grace@example.com"}
+                  helperText="Use Full Name, Title, email; Full Name, email; or paste tab-separated spreadsheet rows."
+                />
+                {parsedManualRoster.errors.length > 0 ? (
+                  <Alert severity="warning">{parsedManualRoster.errors.slice(0, 3).join(" ")}</Alert>
+                ) : null}
+                <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1}>
+                  <Typography color="text.secondary">{manualParticipants.length} participant{manualParticipants.length === 1 ? "" : "s"} ready</Typography>
+                  <Button type="button" size="small" onClick={addManualRosterParticipants} disabled={parsedManualRoster.participants.length === 0}>
+                    Add {parsedManualRoster.participants.length || "roster"}
+                  </Button>
+                </Stack>
+              </div>
+            </Grid>
+          ) : null}
+          <div className="registration-editor-section-heading">
+            <strong>Seats & pricing</strong>
+            <span>The per-participant amount is calculated automatically from the registration total.</span>
+          </div>
+          <Grid size={{ xs: 12, md: 3 }} className="registration-pricing-count">
             <TextField fullWidth label="Participant count" type="number" value={values.participantCount ?? 0} onChange={(event) => setValue("participantCount", Number(event.target.value))} />
           </Grid>
-          <Grid size={{ xs: 12, md: 3 }}>
+          <Grid size={{ xs: 12, md: 5 }} className="registration-pricing-total">
+            <TextField
+              fullWidth
+              label="Total amount"
+              type="number"
+              value={values.totalAmount ?? 0}
+              disabled={isCompedRegistration}
+              onChange={(event) => setValue("totalAmount", Number(event.target.value))}
+              helperText={isCompedRegistration
+                ? "Free / comped registration. No invoice or payment collection is expected."
+                : registrationTotal === suggestedTotal && pricePerParticipant > 0
+                ? `Using the configured cohort rate${Number(cohort?.pricePerParticipant ?? 0) > 0 ? "." : ` with ${sessionCount || "unknown"}-session fallback pricing.`}`
+                : "Custom registration total."}
+            />
+          </Grid>
+          <Grid size={{ xs: 12, md: 2 }} className="registration-pricing-unit">
+            <div className="registration-calculated-value">
+              <span>Per participant</span>
+              <strong>{money(effectiveUnitAmount)}</strong>
+              <small>{participantCount > 0 ? `${money(registrationTotal)} ÷ ${participantCount}` : "Enter participant count"}</small>
+            </div>
+          </Grid>
+          <Grid size={{ xs: 12, md: 2 }} className="registration-pricing-comped">
+            <div className="registration-comped-inline">
+              <FormControlLabel
+                control={<Switch checked={isCompedRegistration} onChange={(event) => setCompedRegistration(event.target.checked)} />}
+                label="Free / comped"
+              />
+              <Tooltip title="What does this mean?">
+                <IconButton type="button" size="small" aria-label="Free / comped participant help" onClick={() => setCompedHelpOpen(true)}>
+                  <HelpOutline fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            </div>
+          </Grid>
+          <div className="registration-editor-section-heading">
+            <strong>Payment details</strong>
+            <span>Track how this registration will be collected and its current billing state.</span>
+          </div>
+          <Grid size={{ xs: 12, md: 3 }} className="registration-roster-status">
             <TextField fullWidth label="Roster status" value={formatStatusLabel(values.participantListStatus ?? "NEEDED")} disabled helperText="Calculated from saved participants" />
           </Grid>
-          <Grid size={{ xs: 12, md: 3 }}>
+          <Grid size={{ xs: 12, md: 3 }} className="registration-payment-method">
             <TextField
               fullWidth
               select
@@ -599,43 +790,15 @@ export function RegistrationEditor({
               {paymentMethods.map((value) => <MenuItem value={value} key={value}>{formatStatusLabel(value)}</MenuItem>)}
             </TextField>
           </Grid>
-          <Grid size={{ xs: 12, md: 3 }}>
+          <Grid size={{ xs: 12, md: 3 }} className="registration-payment-status">
             <TextField fullWidth select label="Payment status" value={values.paymentStatus ?? "PENDING"} onChange={(event) => setValue("paymentStatus", event.target.value)}>
               {paymentStatuses.map((value) => <MenuItem value={value} key={value}>{formatStatusLabel(value)}</MenuItem>)}
             </TextField>
           </Grid>
-          <Grid size={{ xs: 12, md: 3 }}>
+          <Grid size={{ xs: 12, md: 3 }} className="registration-payment-po">
             <TextField fullWidth label="PO number" value={values.purchaseOrderNumber ?? ""} onChange={(event) => setValue("purchaseOrderNumber", event.target.value)} />
           </Grid>
-          <Grid size={{ xs: 12, md: 6 }}>
-            <TextField
-              fullWidth
-              label="Total amount"
-              type="number"
-              value={values.totalAmount ?? 0}
-              disabled={isCompedRegistration}
-              onChange={(event) => setValue("totalAmount", Number(event.target.value))}
-              helperText={isCompedRegistration
-                ? "Free / comped registration. No invoice or payment collection is expected."
-                : pricePerParticipant > 0
-                ? `${money(pricePerParticipant)} x ${Number(values.participantCount ?? 0)} participant${Number(values.participantCount ?? 0) === 1 ? "" : "s"}${Number(cohort?.pricePerParticipant ?? 0) > 0 ? "" : ` · fallback ${sessionCount || "unknown"}-session pricing`}`
-                : "No cohort price is configured yet; enter the total manually."}
-            />
-          </Grid>
-          <Grid size={{ xs: 12, md: 3 }}>
-            <div className="registration-comped-inline">
-              <FormControlLabel
-                control={<Switch checked={isCompedRegistration} onChange={(event) => setCompedRegistration(event.target.checked)} />}
-                label="Free / comped participant"
-              />
-              <Tooltip title="What does this mean?">
-                <IconButton type="button" size="small" aria-label="Free / comped participant help" onClick={() => setCompedHelpOpen(true)}>
-                  <HelpOutline fontSize="small" />
-                </IconButton>
-              </Tooltip>
-            </div>
-          </Grid>
-          <Grid size={{ xs: 12 }}>
+          <Grid size={{ xs: 12 }} className="registration-advanced-fields">
             <div className="registration-editor-subsection">
               <Stack direction={{ xs: "column", md: "row" }} spacing={1} justifyContent="space-between" alignItems={{ xs: "stretch", md: "center" }}>
                 <div>
@@ -675,14 +838,16 @@ export function RegistrationEditor({
               </Collapse>
             </div>
           </Grid>
-          <Grid size={{ xs: 12 }}>
+          <Grid size={{ xs: 12 }} className="registration-notes-field">
             <TextField fullWidth multiline minRows={3} label="Notes" value={values.notes ?? ""} onChange={(event) => setValue("notes", event.target.value)} />
           </Grid>
         </Grid>
+        )}
       </DialogContent>
       <DialogActions>
+        {!editing && creationStep === "review" ? <Button variant="outlined" onClick={() => setCreationStep("edit")}>Back</Button> : null}
         <Button variant="outlined" onClick={onClose}>Cancel</Button>
-        <Button onClick={save} disabled={saving}>{saving ? "Saving" : "Save"}</Button>
+        <Button onClick={save} disabled={saving}>{saving ? "Saving" : editing ? "Save" : creationStep === "review" ? (manualDeliveryWillSend ? "Create & Send" : "Create Registration") : "Review Registration"}</Button>
       </DialogActions>
       <Dialog open={compedHelpOpen} onClose={() => setCompedHelpOpen(false)} fullWidth maxWidth="sm">
         <DialogTitle>Free / comped participant</DialogTitle>

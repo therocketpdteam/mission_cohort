@@ -21,6 +21,19 @@ const excludedRevenuePaymentStatuses = new Set<PaymentStatus>([
 type ReportGeography = { city: string; state: string; zip: string };
 type GeographyFallbackMap = Map<string, ReportGeography>;
 
+type TopStateReportYear = {
+  year: number;
+  states: Array<{ state: string; registrations: number; seats: number; amount: number }>;
+  totals: { registrations: number; seats: number; amount: number; states: number; missingStateRegistrations: number };
+};
+
+type TopStateReportInput = {
+  presenterShortName?: string;
+  presenterName?: string;
+  years?: number[];
+  limit?: number;
+};
+
 type CohortRegistrationReportInput = {
   cohortId: string;
   audience?: "thought_leader" | "internal";
@@ -66,6 +79,16 @@ function reportRevenueAmount(registration: { status?: RegistrationStatus | null;
   }
 
   return moneyNumber(registration.totalAmount);
+}
+
+function isReportableRegistration(registration: { archivedAt?: Date | string | null; status?: RegistrationStatus | null; paymentStatus?: PaymentStatus | null }) {
+  return !registration.archivedAt
+    && registration.status !== RegistrationStatus.CANCELLED
+    && !excludedRevenuePaymentStatuses.has(registration.paymentStatus as PaymentStatus);
+}
+
+function reportSeatCount(registration: { participantCount?: number | null; participants?: unknown[] | null }) {
+  return Number(registration.participantCount ?? registration.participants?.length ?? 0);
 }
 
 function sourceLabel(registration: { source?: string | null; utmSource?: string | null; utmCampaign?: string | null; externalSource?: string | null }) {
@@ -476,6 +499,113 @@ export async function getCohortRegistrationReport(input: CohortRegistrationRepor
     monthlyBreakdown,
     sourceBreakdown,
     recommendedOutreachNote
+  };
+}
+
+export async function getThoughtLeaderTopStateReport(input: TopStateReportInput = {}) {
+  const nowYear = new Date().getUTCFullYear();
+  const years = (input.years?.length ? input.years : [nowYear - 1, nowYear])
+    .map((year) => Number(year))
+    .filter((year) => Number.isInteger(year));
+  const uniqueYears = Array.from(new Set(years)).sort((a, b) => a - b);
+  const limit = Math.max(1, Math.min(Number(input.limit ?? 5), 20));
+  const presenterShortName = (input.presenterShortName ?? "KM").trim();
+  const presenterName = (input.presenterName ?? "Kim Marshall").trim();
+  const [firstName = "", ...lastNameParts] = presenterName.split(/\s+/).filter(Boolean);
+  const lastName = lastNameParts.join(" ");
+  const presenterNameFilters: Prisma.CohortWhereInput[] = firstName && lastName
+    ? [{ presenter: { firstName: { equals: firstName, mode: Prisma.QueryMode.insensitive }, lastName: { equals: lastName, mode: Prisma.QueryMode.insensitive } } }]
+    : [];
+
+  if (uniqueYears.length === 0) {
+    return { presenterShortName, presenterName, years: [] as TopStateReportYear[] };
+  }
+
+  const cohorts = await prisma.cohort.findMany({
+    where: {
+      OR: [
+        { shortName: { startsWith: presenterShortName + "-", mode: Prisma.QueryMode.insensitive } },
+        { shortName: { startsWith: presenterShortName + " ", mode: Prisma.QueryMode.insensitive } },
+        { presenter: { shortName: { equals: presenterShortName, mode: Prisma.QueryMode.insensitive } } },
+        ...presenterNameFilters
+      ],
+      startDate: {
+        gte: new Date(Date.UTC(Math.min(...uniqueYears), 0, 1)),
+        lt: new Date(Date.UTC(Math.max(...uniqueYears) + 1, 0, 1))
+      }
+    },
+    include: {
+      presenter: true,
+      registrations: {
+        include: {
+          organization: true,
+          participants: true,
+          webhookEvents: {
+            where: { source: "jotform" },
+            orderBy: { createdAt: "desc" },
+            take: 3,
+            select: { payload: true }
+          }
+        }
+      }
+    }
+  });
+
+  const mappings = await listActiveJotformFormMappings();
+  const yearBuckets = new Map<number, Map<string, { state: string; registrations: number; seats: number; amount: number }>>();
+  const totals = new Map<number, TopStateReportYear["totals"]>();
+
+  for (const year of uniqueYears) {
+    yearBuckets.set(year, new Map());
+    totals.set(year, { registrations: 0, seats: 0, amount: 0, states: 0, missingStateRegistrations: 0 });
+  }
+
+  for (const cohort of cohorts) {
+    const year = cohort.startDate.getUTCFullYear();
+    const bucket = yearBuckets.get(year);
+    const total = totals.get(year);
+    if (!bucket || !total) continue;
+
+    for (const registration of cohort.registrations) {
+      if (!isReportableRegistration(registration)) continue;
+
+      const geography = registrationGeography(registration, mappings);
+      const normalizedState = normalizeUsStateCode(geography.state) || geography.state.trim().toUpperCase();
+      const seats = reportSeatCount(registration);
+      const amount = reportRevenueAmount(registration);
+
+      total.registrations += 1;
+      total.seats += seats;
+      total.amount += amount;
+
+      if (!normalizedState) {
+        total.missingStateRegistrations += 1;
+        continue;
+      }
+
+      const row = bucket.get(normalizedState) ?? { state: normalizedState, registrations: 0, seats: 0, amount: 0 };
+      row.registrations += 1;
+      row.seats += seats;
+      row.amount += amount;
+      bucket.set(normalizedState, row);
+    }
+  }
+
+  return {
+    presenterShortName,
+    presenterName,
+    generatedAt: new Date().toISOString(),
+    years: uniqueYears.map((year) => {
+      const states = Array.from(yearBuckets.get(year)?.values() ?? [])
+        .sort((a, b) => b.registrations - a.registrations || b.seats - a.seats || a.state.localeCompare(b.state));
+      const total = totals.get(year) ?? { registrations: 0, seats: 0, amount: 0, states: 0, missingStateRegistrations: 0 };
+
+      return {
+        year,
+        states: states.slice(0, limit),
+        totals: { ...total, states: states.length }
+      };
+    })
   };
 }
 

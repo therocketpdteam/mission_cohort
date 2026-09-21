@@ -11,3 +11,4 @@ prisma/dev.db
 .vercel
 .env*
 playwright/.auth/
+.local-db-backups/

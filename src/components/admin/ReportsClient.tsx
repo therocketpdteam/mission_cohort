@@ -1,6 +1,6 @@
 "use client";
 
-import { AddLinkOutlined, BlockOutlined } from "@/components/ui/icons";
+import { AddLinkOutlined, BlockOutlined, InsightsOutlined } from "@/components/ui/icons";
 import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Grid, MenuItem, Stack, TextField, Typography } from "@/components/ui/primitives";
 import { GridColDef } from "./common";
 import { useEffect, useMemo, useState } from "react";
@@ -49,6 +49,18 @@ function money(value: unknown) {
 function shortDate(value?: string | null) {
   if (!value) return "-";
   return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(value));
+}
+function stateReportAnswer(report: AdminRow | null) {
+  const years = Array.isArray(report?.years) ? report.years : [];
+  return years.map((yearReport: AdminRow) => {
+    const top = Array.isArray(yearReport.states) ? yearReport.states.slice(0, 5).map((row: AdminRow) => row.state).filter(Boolean) : [];
+    return top.length ? String(yearReport.year) + ": " + top.join(", ") : String(yearReport.year) + ": No state data yet";
+  }).join(" · ");
+}
+
+function stateReportMissingCount(report: AdminRow | null) {
+  const years = Array.isArray(report?.years) ? report.years : [];
+  return years.reduce((sum: number, yearReport: AdminRow) => sum + Number(yearReport.totals?.missingStateRegistrations ?? 0), 0);
 }
 
 function cityState(row: AdminRow) {
@@ -200,6 +212,7 @@ export function ReportsClient() {
   const [reportOpen, setReportOpen] = useState(false);
   const [reportLoading, setReportLoading] = useState(false);
   const [reports, setReports] = useState<AdminRow[]>([]);
+  const [topStateReports, setTopStateReports] = useState<AdminRow>({});
   const [links, setLinks] = useState<AdminRow[]>([]);
   const [locationOptions, setLocationOptions] = useState<{ states: string[]; zips: string[]; cities: string[] }>({ states: [], zips: [], cities: [] });
   const { notifySuccess, notifyError, snackbar } = useNotifier();
@@ -214,6 +227,7 @@ export function ReportsClient() {
     ]);
     setCohorts(cohortRows);
     setReports(reportDataRows.reports ?? []);
+    setTopStateReports(reportDataRows.topStateReports ?? {});
     setLinks(reportDataRows.links ?? []);
   }
 
@@ -245,6 +259,8 @@ export function ReportsClient() {
   }, [audience]);
 
   const currentReport = reports[0];
+  const kmTopStateReport = topStateReports.km ?? null;
+  const kmTopStateMissingCount = stateReportMissingCount(kmTopStateReport);
   const metrics = useMemo(() => {
     if (!currentReport) return [];
 
@@ -463,6 +479,47 @@ export function ReportsClient() {
             </SectionCard>
           </Grid>
         ))}
+
+        <Grid size={{ xs: 12 }}>
+          <SectionCard
+            title="Top KM States"
+            action={<StatusChip value={kmTopStateMissingCount > 0 ? String(kmTopStateMissingCount) + " missing state" : "Ready"} />}
+          >
+            <div className="top-state-report">
+              <div className="top-state-report-intro">
+                <span className="top-state-report-icon"><InsightsOutlined fontSize="small" /></span>
+                <div>
+                  <h3>Five states with the most Kim Marshall registrations</h3>
+                  <p>{stateReportAnswer(kmTopStateReport) || "No KM registration state data yet."}</p>
+                </div>
+              </div>
+              <div className="top-state-report-years">
+                {(Array.isArray(kmTopStateReport?.years) ? kmTopStateReport.years : []).map((yearReport: AdminRow) => (
+                  <section className="top-state-report-year" key={String(yearReport.year)}>
+                    <div className="top-state-report-year-header">
+                      <strong>{yearReport.year}</strong>
+                      <span>{yearReport.totals?.registrations ?? 0} registrations · {yearReport.totals?.seats ?? 0} seats</span>
+                    </div>
+                    <div className="top-state-report-list">
+                      {(Array.isArray(yearReport.states) ? yearReport.states : []).map((row: AdminRow, index: number) => (
+                        <div className="top-state-report-row" key={String(yearReport.year) + "-" + String(row.state)}>
+                          <span className="top-state-report-rank">{index + 1}</span>
+                          <strong>{row.state || "Unknown"}</strong>
+                          <span>{row.registrations} registrations</span>
+                          <span>{row.seats} seats</span>
+                          <span>{money(row.amount)}</span>
+                        </div>
+                      ))}
+                      {(!Array.isArray(yearReport.states) || yearReport.states.length === 0) && (
+                        <p className="top-state-report-empty">No registrations with state data for this year.</p>
+                      )}
+                    </div>
+                  </section>
+                ))}
+              </div>
+            </div>
+          </SectionCard>
+        </Grid>
         <Grid size={{ xs: 12, lg: 6 }}>
           <SectionCard title="Participants By Organization">
             {currentReport ? (

@@ -4,6 +4,7 @@ import {
   getCohortRegistrationReport,
   getCohortRegistrationReportOptions,
   getCohortReport,
+  getThoughtLeaderTopStateReport,
   listReportShareLinks,
   revokeReportShareLink
 } from "@/services/reportService";
@@ -47,6 +48,9 @@ export async function GET(request: Request) {
 
     return ok({
       reports: await getCohortReport(cohortId),
+      topStateReports: {
+        km: await getThoughtLeaderTopStateReport({ presenterShortName: "KM", presenterName: "Kim Marshall", limit: 5 })
+      },
       links: includeLinks ? await listReportShareLinks() : []
     });
   } catch (error) {

@@ -13,6 +13,7 @@ import {
 
 const prisma = new PrismaClient();
 const STAGING_PROJECT_REF = "untuqynkgemgvwmnknhg";
+const LOCAL_DATABASE_MARKER = "localhost:54329/mission_cohort";
 const QA_SOURCE = "STAGING_QA_SEED_V1";
 
 type RegistrationSeed = {
@@ -81,8 +82,8 @@ function emailFor(slug: string, key: string, role: string, index?: number) {
 
 async function main() {
   const databaseUrl = process.env.DATABASE_URL ?? "";
-  if (!databaseUrl.includes(STAGING_PROJECT_REF)) {
-    throw new Error(`Refusing to seed: DATABASE_URL is not the ${STAGING_PROJECT_REF} staging project.`);
+  if (!databaseUrl.includes(STAGING_PROJECT_REF) && !databaseUrl.includes(LOCAL_DATABASE_MARKER)) {
+    throw new Error(`Refusing to seed: DATABASE_URL is neither the ${STAGING_PROJECT_REF} staging project nor the dedicated local Docker database.`);
   }
 
   const presenter = await prisma.presenter.upsert({

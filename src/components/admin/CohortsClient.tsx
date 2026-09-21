@@ -50,7 +50,7 @@ const timezoneOptions = [
   { label: "PST", value: "America/Los_Angeles" }
 ];
 
-const editFields = (presenters: AdminRow[]): FieldConfig[] => [
+export const cohortEditFields = (presenters: AdminRow[]): FieldConfig[] => [
   { name: "title", label: "Cohort title", required: true },
   { name: "shortName", label: "Short name" },
   { name: "slug", label: "Slug", required: true },
@@ -1142,7 +1142,7 @@ export function CohortsClient() {
       <MutationDialog
         title="Edit Cohort"
         open={Boolean(editing)}
-        fields={editFields(presenters)}
+        fields={cohortEditFields(presenters)}
         initialValues={editing ?? undefined}
         onClose={() => setEditing(null)}
         onSubmit={saveEdit}

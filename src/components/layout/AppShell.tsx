@@ -572,18 +572,6 @@ export function AppShell({ children }: { children: ReactNode }) {
               </div>
             )}
           </div>
-          <div className={`app-environment-chip is-${environment.kind}`} title={`${environment.label} environment. Background jobs ${environment.backgroundJobsAllowed ? "enabled" : "disabled"}.`}>
-            <strong>{environment.label}</strong>
-            <span>
-              {environment.outbound?.locked
-                ? "Outbound locked"
-                : environment.kind === "production"
-                  ? "Live data"
-                  : environment.backgroundJobsAllowed
-                    ? "Test jobs on"
-                    : "Jobs off"}
-            </span>
-          </div>
           <GlobalPeopleSearch />
           <div className="app-view-controls" aria-label="View controls">
             <div className="app-density-toggle" aria-label="Density">
