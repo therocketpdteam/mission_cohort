@@ -4592,6 +4592,22 @@ h6,
   max-width: 1440px;
 }
 
+.reports-summary-grid.ui-grid {
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+}
+
+.reports-summary-metric {
+  grid-column: span 2;
+}
+
+.reports-summary-wide {
+  grid-column: 1 / -1;
+}
+
+.reports-summary-half {
+  grid-column: span 5;
+}
+
 .registration-report-builder {
   display: grid;
   gap: 18px;
@@ -4803,6 +4819,19 @@ h6,
 }
 
 @media (max-width: 1180px) {
+  .reports-summary-grid.ui-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .reports-summary-metric,
+  .reports-summary-half {
+    grid-column: span 1;
+  }
+
+  .reports-summary-wide {
+    grid-column: 1 / -1;
+  }
+
   .registration-report-builder-grid {
     grid-template-columns: repeat(3, minmax(150px, 1fr));
   }
@@ -4817,6 +4846,16 @@ h6,
 }
 
 @media (max-width: 760px) {
+  .reports-summary-grid.ui-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .reports-summary-metric,
+  .reports-summary-half,
+  .reports-summary-wide {
+    grid-column: 1;
+  }
+
   .registration-report-builder-grid,
   .registration-report-columns,
   .registration-report-column-grid,
@@ -9538,11 +9577,16 @@ h6,
   margin: -20px -22px;
 }
 
+.app-shell.is-compact .dashboard-readiness-table {
+  margin-right: -14px;
+  margin-left: -14px;
+}
+
 .dashboard-readiness-head,
 .dashboard-readiness-row {
   display: grid;
-  grid-template-columns: minmax(150px, 1.35fr) repeat(3, minmax(82px, 0.8fr)) minmax(86px, 128px);
-  gap: 16px;
+  grid-template-columns: minmax(130px, 1.35fr) repeat(3, minmax(72px, 0.8fr)) minmax(76px, 118px);
+  gap: 12px;
   align-items: center;
   min-width: 0;
   padding: 16px 24px;

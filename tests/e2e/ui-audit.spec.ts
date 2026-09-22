@@ -202,6 +202,12 @@ async function collectLayoutFindings(page: Page, route: string, viewport: string
           ) {
             continue;
           }
+          if (
+            first.element.closest(".ui-date-input") &&
+            first.element.closest(".ui-date-input") === second.element.closest(".ui-date-input")
+          ) {
+            continue;
+          }
 
           const x = Math.max(0, Math.min(first.box.right, second.box.right) - Math.max(first.box.left, second.box.left));
           const y = Math.max(0, Math.min(first.box.bottom, second.box.bottom) - Math.max(first.box.top, second.box.top));

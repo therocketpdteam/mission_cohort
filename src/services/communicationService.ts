@@ -750,7 +750,11 @@ export async function getSystemUserId() {
   return user.id;
 }
 
-export async function ensureDefaultCommunicationTemplates() {
+type EnsuredCommunicationTemplate = Awaited<ReturnType<typeof prisma.communicationTemplate.findFirstOrThrow>>;
+
+let defaultTemplatesPromise: Promise<EnsuredCommunicationTemplate[]> | null = null;
+
+async function ensureDefaultCommunicationTemplatesOnce() {
   const templates = [];
 
   for (const template of defaultTemplates) {
@@ -768,13 +772,23 @@ export async function ensureDefaultCommunicationTemplates() {
     const shouldRefreshExisting = shouldRefreshLegacyDefault || shouldRefreshDefaultCopy || shouldRefreshPocAttachmentCopy || shouldRefreshPaymentReminderAttachmentCopy;
 
     if (existing) {
+      const nextSubject = shouldRefreshExisting || !existing.subject ? template.subject : existing.subject;
+      const nextBodyHtml = shouldRefreshExisting || !existing.bodyHtml ? template.bodyHtml : existing.bodyHtml;
+      const nextBodyText = shouldRefreshExisting || !existing.bodyText ? template.bodyText : existing.bodyText;
+      const templateChanged = existing.subject !== nextSubject || existing.bodyHtml !== nextBodyHtml || existing.bodyText !== nextBodyText;
+
+      if (!templateChanged) {
+        templates.push(existing);
+        continue;
+      }
+
       const updated = await prisma.communicationTemplate.update({
         where: { id: existing.id },
         data: {
           active: existing.active,
-          subject: shouldRefreshExisting || !existing.subject ? template.subject : existing.subject,
-          bodyHtml: shouldRefreshExisting || !existing.bodyHtml ? template.bodyHtml : existing.bodyHtml,
-          bodyText: shouldRefreshExisting || !existing.bodyText ? template.bodyText : existing.bodyText
+          subject: nextSubject,
+          bodyHtml: nextBodyHtml,
+          bodyText: nextBodyText
         }
       });
 
@@ -803,6 +817,16 @@ export async function ensureDefaultCommunicationTemplates() {
   }
 
   return templates;
+}
+
+export async function ensureDefaultCommunicationTemplates() {
+  if (!defaultTemplatesPromise) {
+    defaultTemplatesPromise = ensureDefaultCommunicationTemplatesOnce().finally(() => {
+      defaultTemplatesPromise = null;
+    });
+  }
+
+  return defaultTemplatesPromise;
 }
 
 const recipientIssueTypes = new Set<EmailEventType>([EmailEventType.BOUNCED, EmailEventType.FAILED]);

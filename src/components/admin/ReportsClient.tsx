@@ -471,16 +471,16 @@ export function ReportsClient() {
         </div>
       </SectionCard>
 
-      <Grid container spacing={2}>
+      <Grid container spacing={2} className="reports-summary-grid">
         {metrics.map(([label, value]) => (
-          <Grid size={{ xs: 12, sm: 6, lg: 2.4 }} key={String(label)}>
+          <Grid size={{ xs: 12, sm: 6, lg: 2.4 }} className="reports-summary-metric" key={String(label)}>
             <SectionCard title={String(label)}>
               <Typography variant="h2">{value}</Typography>
             </SectionCard>
           </Grid>
         ))}
 
-        <Grid size={{ xs: 12 }}>
+        <Grid size={{ xs: 12 }} className="reports-summary-wide">
           <SectionCard
             title="Top KM States"
             action={<StatusChip value={kmTopStateMissingCount > 0 ? String(kmTopStateMissingCount) + " missing state" : "Ready"} />}
@@ -520,7 +520,7 @@ export function ReportsClient() {
             </div>
           </SectionCard>
         </Grid>
-        <Grid size={{ xs: 12, lg: 6 }}>
+        <Grid size={{ xs: 12, lg: 6 }} className="reports-summary-half">
           <SectionCard title="Participants By Organization">
             {currentReport ? (
               <Stack spacing={1}>
@@ -536,7 +536,7 @@ export function ReportsClient() {
             )}
           </SectionCard>
         </Grid>
-        <Grid size={{ xs: 12, lg: 6 }}>
+        <Grid size={{ xs: 12, lg: 6 }} className="reports-summary-half">
           <SectionCard title="Payment Status Snapshot">
             <Stack spacing={1}>
               {Object.entries(currentReport?.paymentSummary?.byStatus ?? {}).map(([status, value]) => (
@@ -549,7 +549,7 @@ export function ReportsClient() {
             </Stack>
           </SectionCard>
         </Grid>
-        <Grid size={{ xs: 12 }}>
+        <Grid size={{ xs: 12 }} className="reports-summary-wide">
           <SectionCard title="Secure Share Links">
             <TableShell>
               <AppDataGrid rows={links} columns={linkColumns} pageSizeOptions={[10, 25]} initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} />

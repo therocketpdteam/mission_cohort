@@ -330,11 +330,31 @@ export function RegistrationEditor({
   const parsedManualRoster = useMemo(() => parseRosterText(manualRosterText), [manualRosterText]);
   const isCompedRegistration = values.paymentMethod === "COMPED";
   const manualDeliveryWillSend = !editing && String(cohort?.status ?? cohort?.derivedStatus ?? "").toUpperCase() === "PUBLISHED";
+  const selectableOrganizations = useMemo(() => {
+    const registrationCounts = new Map<string, number>();
+    for (const registration of registrations) {
+      const organizationId = String(registration.organizationId ?? "");
+      registrationCounts.set(organizationId, (registrationCounts.get(organizationId) ?? 0) + 1);
+    }
+
+    const unique = new Map<string, AdminRow>();
+    for (const item of organizations) {
+      const key = [item.name, item.city, item.state, item.zip]
+        .map((value) => String(value ?? "").trim().toLowerCase())
+        .join("|");
+      const current = unique.get(key);
+      if (!current || (registrationCounts.get(String(item.id)) ?? 0) > (registrationCounts.get(String(current.id)) ?? 0)) {
+        unique.set(key, item);
+      }
+    }
+
+    return Array.from(unique.values());
+  }, [organizations, registrations]);
   const organizationName = organizationSearch.trim();
-  const hasExactOrganizationMatch = organizations.some((item) => String(item.name ?? "").trim().toLowerCase() === organizationName.toLowerCase());
+  const hasExactOrganizationMatch = selectableOrganizations.some((item) => String(item.name ?? "").trim().toLowerCase() === organizationName.toLowerCase());
   const organizationOptions = organizationName && !hasExactOrganizationMatch
-    ? [{ id: "__create_organization__", name: `Create "${organizationName}"`, __createOrganization: true }, ...organizations]
-    : organizations;
+    ? [{ id: "__create_organization__", name: `Create "${organizationName}"`, __createOrganization: true }, ...selectableOrganizations]
+    : selectableOrganizations;
 
   function setOrganizationProfileValue(name: string, value: unknown) {
     setOrganizationProfile((current) => ({ ...current, [name]: value }));
