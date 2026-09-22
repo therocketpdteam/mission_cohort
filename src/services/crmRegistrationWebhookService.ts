@@ -242,7 +242,7 @@ function domainFromEmail(value?: string | null) {
 }
 
 function activeSeatCount(registration: CohortTotalsRegistration) {
-  if (registration.archivedAt || registration.status === RegistrationStatus.CANCELLED) {
+  if (!isFinanciallyActiveRegistration(registration)) {
     return 0;
   }
 
@@ -256,7 +256,7 @@ function withdrawnSeatCount(registration: CohortTotalsRegistration) {
     return participantWithdrawals;
   }
 
-  if (registration.archivedAt || registration.status === RegistrationStatus.CANCELLED) {
+  if (!isFinanciallyActiveRegistration(registration)) {
     return Math.max(1, Number(registration.participantCount ?? 0));
   }
 
@@ -265,6 +265,14 @@ function withdrawnSeatCount(registration: CohortTotalsRegistration) {
 
 function isPaidPaymentStatus(value?: PaymentStatus | string | null) {
   return String(value ?? "").toUpperCase() === PaymentStatus.PAID;
+}
+
+function isFinanciallyActiveRegistration(registration: CohortTotalsRegistration) {
+  const paymentStatus = String(registration.paymentStatus ?? "").toUpperCase();
+  return !registration.archivedAt &&
+    registration.status !== RegistrationStatus.CANCELLED &&
+    paymentStatus !== PaymentStatus.CANCELLED &&
+    paymentStatus !== PaymentStatus.REFUNDED;
 }
 
 function isCollectedPaymentRecord(value?: PaymentStatus | string | null) {
