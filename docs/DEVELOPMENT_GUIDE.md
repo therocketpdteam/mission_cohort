@@ -60,15 +60,13 @@ pnpm qa:prepush
 pnpm prisma migrate status
 ```
 
-3. Production deploys run the Vercel build command from `vercel.json`, which applies migrations and prepares Supabase buckets inside Vercel using production environment variables:
+3. Prepare production infrastructure only when a release changes the database schema or storage configuration. Run this from a trusted environment with a reachable Supabase migration connection:
 
 ```bash
-node scripts/apply-production-schema-patches.mjs
-node scripts/ensure-storage-buckets.mjs
-pnpm build
+pnpm production:prepare
 ```
 
-The schema patch script is idempotent and covers the current production backlog because this database was originally created before Prisma Migrate history existed. Do not run migrations from the app UI. For a manual emergency migration with direct database access and a baselined migration history, use:
+Do not run schema changes as part of `vercel:build`. Builds must remain deterministic and must not fail because Supabase's direct database host is unavailable from a Vercel build worker. The schema patch script is idempotent and covers the current production backlog because this database was originally created before Prisma Migrate history existed. Do not run migrations from the app UI. For a manual emergency migration with direct database access and a baselined migration history, use:
 
 ```bash
 pnpm prisma migrate deploy
@@ -80,7 +78,7 @@ pnpm prisma migrate deploy
 - private bucket: `mission-control-private` unless `SUPABASE_PRIVATE_BUCKET` overrides it
 - private bucket supports invoices, receipts, materials, and email attachments up to 20MB per file
 
-5. Deploy/push to `main`, then smoke test:
+5. Vercel validates the deployment environment and compiles the application without mutating production infrastructure. Deploy/push to `main`, then smoke test:
 
 ```bash
 curl -sS https://mission-cohort-six.vercel.app/api/health

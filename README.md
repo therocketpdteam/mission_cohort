@@ -117,14 +117,15 @@ OUTBOUND_RELEASE_LOCK=locked
 
 Recommended go-live order:
 
-1. Confirm Vercel builds the latest `main` commit.
-2. Apply the Prisma schema to Supabase:
+1. Apply the Prisma schema to Supabase from a trusted machine when the release includes schema changes:
 
 ```bash
-pnpm prisma:generate
-pnpm prisma:push
+pnpm production:prepare
 ```
 
+Vercel builds validate configuration and compile the application, but intentionally do not patch the production database or storage. This keeps normal application deployments independent from Supabase direct-database network availability.
+
+2. Confirm Vercel builds the latest `main` commit.
 3. Open `/api/health` and confirm `database: true`.
 4. Create the first admin user, then sign in at `/login`.
 5. Create Jotform mappings in `/settings`.
