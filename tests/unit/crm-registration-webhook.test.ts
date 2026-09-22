@@ -183,6 +183,21 @@ test("calculates active value, collected value, active count, and withdrawn coun
   });
 });
 
+test("excludes payment-cancelled and refunded registrations from CRM cohort totals", () => {
+  const totals = calculateCohortTotals([
+    registration({ participantCount: 2, totalAmount: 1865 }),
+    registration({ participantCount: 1, totalAmount: 1000, paymentStatus: PaymentStatus.CANCELLED }),
+    registration({ participantCount: 1, totalAmount: 1065, paymentStatus: PaymentStatus.REFUNDED })
+  ]);
+
+  assert.deepEqual(totals, {
+    totalCohortValue: 1865,
+    collectedCohortValue: 0,
+    activeRegistrantCount: 2,
+    withdrawnCount: 2
+  });
+});
+
 test("sends collected cohort and per-seat collected values in CRM payloads", () => {
   const row = registration({
     participantCount: 2,
