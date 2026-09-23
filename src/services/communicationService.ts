@@ -2827,6 +2827,7 @@ export async function createDefaultSessionCommunications(sessionId: string) {
   }
 
   for (const template of templates.filter((item) => activeTemplateTypes.includes(item.type as (typeof sessionTemplateTypes)[number]))) {
+    const journeyKey = `session-template:${session.id}:${template.type}`;
     const start = new Date(session.startTime);
     const scheduledFor =
       template.type === TemplateType.WEEK_BEFORE_REMINDER
@@ -2855,6 +2856,7 @@ export async function createDefaultSessionCommunications(sessionId: string) {
             scheduledFor,
             status: scheduledFor ? CommunicationStatus.SCHEDULED : CommunicationStatus.DRAFT,
             providerError: null,
+            journeyKey,
             recipientScope: template.type === TemplateType.REGISTRATION_CONFIRMATION ? RecipientScope.PRIMARY_CONTACTS : RecipientScope.ALL_PARTICIPANTS
           }
         }));
@@ -2862,11 +2864,13 @@ export async function createDefaultSessionCommunications(sessionId: string) {
       }
     }
 
-    records.push(await prisma.cohortCommunication.create({
-      data: {
+    records.push(await prisma.cohortCommunication.upsert({
+      where: { journeyKey },
+      create: {
         cohortId: session.cohortId,
         sessionId,
         templateId: template.id,
+        journeyKey,
         subject: template.subject,
         bodyHtml: template.bodyHtml,
         bodyText: template.bodyText,
@@ -2874,6 +2878,16 @@ export async function createDefaultSessionCommunications(sessionId: string) {
         status: scheduledFor ? CommunicationStatus.SCHEDULED : CommunicationStatus.DRAFT,
         recipientScope: template.type === TemplateType.REGISTRATION_CONFIRMATION ? RecipientScope.PRIMARY_CONTACTS : RecipientScope.ALL_PARTICIPANTS,
         createdById
+      },
+      update: {
+        templateId: template.id,
+        subject: template.subject,
+        bodyHtml: template.bodyHtml,
+        bodyText: template.bodyText,
+        scheduledFor,
+        status: scheduledFor ? CommunicationStatus.SCHEDULED : CommunicationStatus.DRAFT,
+        providerError: null,
+        recipientScope: template.type === TemplateType.REGISTRATION_CONFIRMATION ? RecipientScope.PRIMARY_CONTACTS : RecipientScope.ALL_PARTICIPANTS
       }
     }));
   }
