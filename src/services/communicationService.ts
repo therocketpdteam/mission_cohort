@@ -1863,6 +1863,7 @@ export async function sendCommunication(id: string, options?: { recipients?: str
           bodyHtml: communication.bodyHtml,
           bodyText: communication.bodyText ?? undefined,
           attachments: refreshedAttachments,
+          outboundContext: { communicationId: communication.id },
           context: {
             ...baseContext,
             participant: participantMergeContext(target.participant),
@@ -1902,6 +1903,7 @@ export async function sendCommunication(id: string, options?: { recipients?: str
       bodyHtml: communication.bodyHtml,
       bodyText: communication.bodyText ?? undefined,
       attachments: refreshedAttachments,
+      outboundContext: { communicationId: communication.id },
       context: options?.context ?? baseContext
     });
 

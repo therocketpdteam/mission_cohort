@@ -42,7 +42,11 @@ const envSchema = z.object({
   NEXT_PUBLIC_ENV_LABEL: optionalString,
   ALLOW_BACKGROUND_JOBS: optionalString,
   OUTBOUND_RELEASE_LOCK: optionalString,
+  OUTBOUND_RELEASE_MODE: optionalString,
   OUTBOUND_RELEASE_REASON: optionalString,
+  OUTBOUND_RELEASE_ALLOWED_COMMUNICATION_IDS: optionalString,
+  OUTBOUND_RELEASE_ALLOWED_COHORT_IDS: optionalString,
+  OUTBOUND_RELEASE_ALLOWED_RECIPIENTS: optionalString,
   STAGING_OUTBOUND_CAPTURE_EMAIL: optionalString,
   SUPABASE_PUBLIC_BUCKET: optionalString,
   SUPABASE_PRIVATE_BUCKET: optionalString

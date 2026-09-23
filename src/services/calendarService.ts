@@ -406,17 +406,6 @@ export async function createCalendarInvitePlaceholder(sessionId?: string, mode: 
     if (mode === "google") {
       const attendees = await getCohortCalendarAttendees(session.cohortId);
       await assertCohortDeliveryAllowed("GOOGLE_CALENDAR", session.cohort.status, attendees.map((attendee) => attendee.email));
-      await assertOutboundUnlocked({
-        channel: "GOOGLE_CALENDAR",
-        action: options.sendUpdates === true ? "create/update calendar invite with attendee notifications" : "create/update calendar invite",
-        entityType: "CohortSession",
-        entityId: session.id,
-        metadata: {
-          cohortId: session.cohortId,
-          attendeeCount: attendees.length,
-          sendUpdates: options.sendUpdates === true
-        }
-      });
       const existing = await prisma.calendarEvent.findFirst({
         where: { sessionId: session.id, provider: "google" },
         orderBy: { createdAt: "desc" }
@@ -433,6 +422,24 @@ export async function createCalendarInvitePlaceholder(sessionId?: string, mode: 
           .filter((attendee) => attendee.email)
           .map((attendee) => [attendee.email!.toLowerCase(), attendee.responseStatus])
       );
+      const existingEmails = new Set(
+        (existingGoogleEvent?.attendees ?? []).flatMap((attendee) => attendee.email ? [attendee.email.toLowerCase()] : [])
+      );
+      const missingRecipients = attendees
+        .map((attendee) => attendee.email.toLowerCase())
+        .filter((email) => !existingEmails.has(email));
+      await assertOutboundUnlocked({
+        channel: "GOOGLE_CALENDAR",
+        action: options.sendUpdates === true ? "create/update calendar invite with attendee notifications" : "create/update calendar invite",
+        entityType: "CohortSession",
+        entityId: session.id,
+        metadata: {
+          cohortId: session.cohortId,
+          attendeeCount: attendees.length,
+          missingRecipients,
+          sendUpdates: options.sendUpdates === true
+        }
+      });
       const result = await upsertGoogleCalendarEvent({
         title: session.title,
         description: buildSessionCalendarDescription({

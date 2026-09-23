@@ -16,6 +16,7 @@ export async function sendEmail(input: {
   bodyText?: string;
   context?: MergeFieldContext;
   attachments?: Array<{ fileName: string; contentType?: string | null; url?: string | null; content?: string | Buffer | null }>;
+  outboundContext?: { communicationId?: string };
 }) {
   const recipients = Array.isArray(input.to) ? input.to : [input.to];
   const renderedHtml = renderTemplate(input.bodyHtml, input.context ?? {}).output;
@@ -31,7 +32,9 @@ export async function sendEmail(input: {
       action: "send email",
       metadata: {
         recipientCount: recipients.length,
-        subject: input.subject
+        subject: input.subject,
+        recipients,
+        communicationId: input.outboundContext?.communicationId
       }
     });
   }
