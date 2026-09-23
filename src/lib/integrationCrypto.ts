@@ -1,9 +1,28 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import { env } from "@/lib/env";
 
+export class IntegrationCredentialError extends Error {
+  constructor(message = "Stored integration credentials cannot be decrypted with the configured encryption key.") {
+    super(message);
+    this.name = "IntegrationCredentialError";
+  }
+}
+
+function encryptionSecret() {
+  if (env.INTEGRATION_ENCRYPTION_KEY) {
+    return env.INTEGRATION_ENCRYPTION_KEY;
+  }
+
+  if (process.env.NODE_ENV === "production") {
+    throw new IntegrationCredentialError("INTEGRATION_ENCRYPTION_KEY is required in production.");
+  }
+
+  return env.SUPABASE_SERVICE_ROLE_KEY ?? env.WEBHOOK_SECRET ?? "mission-control-local";
+}
+
 function getKey() {
   return createHash("sha256")
-    .update(env.INTEGRATION_ENCRYPTION_KEY ?? env.SUPABASE_SERVICE_ROLE_KEY ?? env.WEBHOOK_SECRET ?? "mission-control-local")
+    .update(encryptionSecret())
     .digest();
 }
 
@@ -31,11 +50,19 @@ export function decryptSecret(value?: string | null) {
     return undefined;
   }
 
-  const decipher = createDecipheriv("aes-256-gcm", getKey(), Buffer.from(iv, "base64"));
-  decipher.setAuthTag(Buffer.from(tag, "base64"));
+  try {
+    const decipher = createDecipheriv("aes-256-gcm", getKey(), Buffer.from(iv, "base64"));
+    decipher.setAuthTag(Buffer.from(tag, "base64"));
 
-  return Buffer.concat([
-    decipher.update(Buffer.from(encrypted, "base64")),
-    decipher.final()
-  ]).toString("utf8");
+    return Buffer.concat([
+      decipher.update(Buffer.from(encrypted, "base64")),
+      decipher.final()
+    ]).toString("utf8");
+  } catch (error) {
+    if (error instanceof IntegrationCredentialError) {
+      throw error;
+    }
+
+    throw new IntegrationCredentialError();
+  }
 }

@@ -27,6 +27,21 @@ function hasProductionSupabaseRef(value) {
   return normalize(value).toLowerCase().includes(productionSupabaseRef);
 }
 
+function supabaseRef(value) {
+  const normalized = normalize(value).toLowerCase();
+  const hostnameValue = hostname(normalized);
+  const hostMatch = hostnameValue.match(/(?:db\.)?([a-z0-9]{20})\.supabase\.co$/);
+  if (hostMatch) return hostMatch[1];
+
+  try {
+    const parsed = new URL(normalized);
+    const usernameMatch = decodeURIComponent(parsed.username).match(/^postgres\.([a-z0-9]{20})$/);
+    return usernameMatch?.[1] ?? "";
+  } catch {
+    return "";
+  }
+}
+
 function main() {
   const environment = appEnvironment();
   const appBaseHost = hostname(process.env.APP_BASE_URL);
@@ -52,6 +67,18 @@ function main() {
 
   if (environment === "production" && process.env.VERCEL_ENV && process.env.VERCEL_ENV !== "production") {
     failures.push(`APP_ENV=production cannot be deployed with VERCEL_ENV=${process.env.VERCEL_ENV}.`);
+  }
+
+  if (environment === "production" && !normalize(process.env.INTEGRATION_ENCRYPTION_KEY)) {
+    failures.push("Production INTEGRATION_ENCRYPTION_KEY is required so credential encryption does not change when unrelated secrets rotate.");
+  }
+
+  const databaseRef = supabaseRef(process.env.DATABASE_URL);
+  const directDatabaseRef = supabaseRef(process.env.DATABASE_DIRECT_URL);
+  const publicSupabaseRef = supabaseRef(process.env.NEXT_PUBLIC_SUPABASE_URL);
+  const configuredRefs = [databaseRef, directDatabaseRef, publicSupabaseRef].filter(Boolean);
+  if (new Set(configuredRefs).size > 1) {
+    failures.push("DATABASE_URL, DATABASE_DIRECT_URL, and NEXT_PUBLIC_SUPABASE_URL point at different Supabase projects.");
   }
 
   if (failures.length > 0) {

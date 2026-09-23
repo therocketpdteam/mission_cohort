@@ -2,6 +2,7 @@ import { env, getEnvPresence } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
 import { createSupabaseAdminClient } from "@/lib/supabase";
 import { getGoogleCalendarSetup, getQuickBooksSetup, getSendGridSetup } from "@/services/integrationSetupService";
+import { listIntegrationStatuses } from "@/services/integrationService";
 
 export type HealthStatus = "healthy" | "warning" | "blocked";
 
@@ -38,6 +39,19 @@ type SchemaRequirement = {
 };
 
 const requiredSchema: SchemaRequirement[] = [
+  {
+    key: "registrationPaymentDocuments",
+    label: "Registration payment documents",
+    detail: "Stores purchase orders and check-payment evidence on registrations.",
+    nextAction: "Apply the registration payment document schema patch before deploying this release.",
+    columns: [
+      ["Registration", "purchaseOrderFileKey"],
+      ["Registration", "purchaseOrderFileName"],
+      ["Registration", "checkPaymentFileKey"],
+      ["Registration", "checkPaymentFileName"],
+      ["Registration", "checkPaymentContentType"]
+    ]
+  },
   {
     key: "communicationReview",
     label: "Communications issue review",
@@ -282,7 +296,24 @@ async function integrationChecks(): Promise<HealthCheck[]> {
     select: { status: true, accountName: true, tokenExpiresAt: true, errorMessage: true }
   }).catch(() => null);
   const googleConnected = googleConnection?.status === "CONNECTED";
+  const integrationStatuses = await listIntegrationStatuses();
+  const unreadableCredentials = integrationStatuses.filter((connection) => connection.credentialHealth === "UNREADABLE");
   const checks: HealthCheck[] = [
+    {
+      key: "integrationEncryption",
+      label: "Stored integration credentials",
+      status: !presence.integrationEncryptionKey || unreadableCredentials.length > 0 ? "blocked" : "healthy",
+      detail: !presence.integrationEncryptionKey
+        ? "A dedicated integration encryption key is not configured."
+        : unreadableCredentials.length > 0
+          ? `${unreadableCredentials.length} integration connection(s) cannot decrypt their stored credentials.`
+          : "The dedicated encryption key is present and stored credentials are readable.",
+      nextAction: !presence.integrationEncryptionKey
+        ? "Set INTEGRATION_ENCRYPTION_KEY before the next deployment."
+        : unreadableCredentials.length > 0
+          ? "Restore the original encryption key or reconnect the affected integrations."
+          : undefined
+    },
     {
       key: "supabaseAuth",
       label: "Supabase Auth",

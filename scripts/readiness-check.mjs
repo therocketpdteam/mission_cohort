@@ -6,6 +6,7 @@ const requiredEnv = [
   "NEXT_PUBLIC_SUPABASE_URL",
   "NEXT_PUBLIC_SUPABASE_ANON_KEY",
   "SUPABASE_SERVICE_ROLE_KEY",
+  "INTEGRATION_ENCRYPTION_KEY",
   "APP_BASE_URL",
   "WEBHOOK_SECRET"
 ];
@@ -95,6 +96,10 @@ async function main() {
     }));
     console.log(`- /api/health: ${health.status}`);
     console.log(JSON.stringify(health.body, null, 2));
+    if (health.status !== 200 || health.body?.data?.database !== true || health.body?.data?.schema !== true) {
+      console.log("- deployed health is not release-ready");
+      process.exitCode = 1;
+    }
 
     const webhook = await fetch(`${appBaseUrl}/api/webhooks/registrations`, {
       method: "GET",

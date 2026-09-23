@@ -58,6 +58,7 @@ export function getEnvPresence() {
     supabaseUrl: Boolean(env.NEXT_PUBLIC_SUPABASE_URL),
     supabaseAnonKey: Boolean(env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
     supabaseServiceRoleKey: Boolean(env.SUPABASE_SERVICE_ROLE_KEY),
+    integrationEncryptionKey: Boolean(env.INTEGRATION_ENCRYPTION_KEY),
     sendgridConfigured: Boolean(env.SENDGRID_API_KEY && env.SENDGRID_FROM_EMAIL),
     googleCalendarConfigured: Boolean(
       env.GOOGLE_CALENDAR_CLIENT_ID &&

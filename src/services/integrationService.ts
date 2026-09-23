@@ -6,7 +6,7 @@ import {
   Prisma
 } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { decryptSecret, encryptSecret } from "@/lib/integrationCrypto";
+import { decryptSecret, encryptSecret, IntegrationCredentialError } from "@/lib/integrationCrypto";
 
 function cleanJson(value?: unknown) {
   return value == null ? undefined : JSON.parse(JSON.stringify(value));
@@ -79,7 +79,7 @@ export async function getDecryptedIntegrationConnection(provider: IntegrationPro
 }
 
 export async function listIntegrationStatuses() {
-  return prisma.integrationConnection.findMany({
+  const connections = await prisma.integrationConnection.findMany({
     orderBy: [{ provider: "asc" }, { label: "asc" }],
     select: {
       id: true,
@@ -94,6 +94,32 @@ export async function listIntegrationStatuses() {
       errorMessage: true,
       createdAt: true,
       updatedAt: true
+    }
+  });
+
+  const encryptedCredentials = await prisma.integrationConnection.findMany({
+    select: { id: true, accessToken: true, refreshToken: true }
+  });
+  const credentialsById = new Map(encryptedCredentials.map((connection) => [connection.id, connection]));
+
+  return connections.map((connection) => {
+    const credentials = credentialsById.get(connection.id);
+    const hasStoredCredentials = Boolean(credentials?.accessToken || credentials?.refreshToken);
+
+    if (!hasStoredCredentials) {
+      return { ...connection, credentialHealth: "NOT_STORED" as const, credentialError: null };
+    }
+
+    try {
+      decryptSecret(credentials?.accessToken);
+      decryptSecret(credentials?.refreshToken);
+      return { ...connection, credentialHealth: "READABLE" as const, credentialError: null };
+    } catch (error) {
+      return {
+        ...connection,
+        credentialHealth: "UNREADABLE" as const,
+        credentialError: error instanceof IntegrationCredentialError ? error.message : "Credential validation failed."
+      };
     }
   });
 }
