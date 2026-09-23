@@ -1,4 +1,4 @@
-import { CohortStatus, CommunicationStatus, EmailEventType, OperationsTaskCategory, OperationsTaskStatus, ParticipantStatus, Prisma, RecipientScope, RegistrationStatus, Role, TemplateType } from "@prisma/client";
+import { CohortStatus, CommunicationStatus, EmailEventType, InvoiceDraftStatus, OperationsTaskCategory, OperationsTaskStatus, ParticipantStatus, Prisma, RecipientScope, RegistrationStatus, Role, SupportingDocumentStatus, TemplateType } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { isMissingEmailReviewColumn, migrationRequiredResult } from "@/lib/prismaCompatibility";
@@ -1777,6 +1777,23 @@ async function preflightPaymentReminder(communication: {
   };
 }
 
+async function markRegistrationDocumentsSent(registrationId: string) {
+  const sentAt = new Date();
+  await prisma.$transaction([
+    prisma.registration.update({
+      where: { id: registrationId },
+      data: {
+        confirmationDocsSentAt: sentAt,
+        supportingDocumentStatus: SupportingDocumentStatus.SENT
+      }
+    }),
+    prisma.invoiceDraft.updateMany({
+      where: { registrationId, status: InvoiceDraftStatus.DRAFT, pdfUrl: { not: null } },
+      data: { status: InvoiceDraftStatus.SENT }
+    })
+  ]);
+}
+
 export async function sendCommunication(id: string, options?: { recipients?: string[]; context?: Parameters<typeof sendEmail>[0]["context"]; bypassCohortStatus?: boolean }) {
   const communication = await prisma.cohortCommunication.findUnique({
     where: { id },
@@ -1888,6 +1905,10 @@ export async function sendCommunication(id: string, options?: { recipients?: str
         });
       }
 
+      if (registrationContext) {
+        await markRegistrationDocumentsSent(registrationContext.id);
+      }
+
       return prisma.cohortCommunication.update({
         where: { id },
         data: {
@@ -1919,6 +1940,10 @@ export async function sendCommunication(id: string, options?: { recipients?: str
         eventPayload: sentEmailEventPayload(result)
       }))
     });
+
+    if (registrationContext) {
+      await markRegistrationDocumentsSent(registrationContext.id);
+    }
 
     return prisma.cohortCommunication.update({
       where: { id },
