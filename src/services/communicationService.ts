@@ -1681,6 +1681,8 @@ async function preflightPocRegistrationConfirmation(communication: {
     });
   }
 
+  await attachRegistrationBillingDocuments(communication.id, communication.registration, invoiceProfile.w9Url);
+
   return {
     ...communication.registration,
     w9Url: communication.registration.w9Url || readiness.w9Url,
