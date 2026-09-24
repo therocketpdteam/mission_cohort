@@ -449,27 +449,25 @@ async function automationChecks(databaseReady: boolean): Promise<HealthCheck[]> 
   const now = new Date();
   const heartbeatCutoff = new Date(now.getTime() - 15 * 60 * 1000);
   const staleSendingCutoff = new Date(now.getTime() - 15 * 60 * 1000);
-  const [communicationHeartbeat, crmHeartbeat, overdueCommunications, crmBacklog, staleCrmSending] = await Promise.all([
-    prisma.auditLog.findFirst({
+  const communicationHeartbeat = await prisma.auditLog.findFirst({
       where: { entityType: "BackgroundJob", entityId: "send-scheduled-communications", action: "background_job.invoked" },
       orderBy: { createdAt: "desc" },
       select: { createdAt: true }
-    }),
-    prisma.auditLog.findFirst({
+    });
+  const crmHeartbeat = await prisma.auditLog.findFirst({
       where: { entityType: "BackgroundJob", entityId: "process-crm-sync", action: "background_job.invoked" },
       orderBy: { createdAt: "desc" },
       select: { createdAt: true }
-    }),
-    prisma.cohortCommunication.count({
+    });
+  const overdueCommunications = await prisma.cohortCommunication.count({
       where: { status: CommunicationStatus.SCHEDULED, scheduledFor: { lte: now } }
-    }),
-    prisma.crmSyncEvent.count({
+    });
+  const crmBacklog = await prisma.crmSyncEvent.count({
       where: { status: { in: [CrmSyncEventStatus.QUEUED, CrmSyncEventStatus.FAILED] } }
-    }),
-    prisma.crmSyncEvent.count({
+    });
+  const staleCrmSending = await prisma.crmSyncEvent.count({
       where: { status: CrmSyncEventStatus.SENDING, updatedAt: { lt: staleSendingCutoff } }
-    })
-  ]);
+    });
 
   const heartbeatCheck = (key: string, label: string, heartbeat: { createdAt: Date } | null): HealthCheck => {
     const current = Boolean(heartbeat && heartbeat.createdAt >= heartbeatCutoff);

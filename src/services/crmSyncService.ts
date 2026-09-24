@@ -389,8 +389,9 @@ async function fetchReceiverDiagnostics(shortNames: string[]) {
 export async function summarizeCrmSyncEvents(shortNames: string[] = [], includeReceiverDiagnostics = false) {
   const normalizedShortNames = shortNames.map((value) => value.trim()).filter(Boolean);
   const filter = shortNameFilter(normalizedShortNames);
-  const [summaryRows, unsentRows, sentSamples, receiverDiagnostics] = await Promise.all([
-    prisma.$queryRaw<CrmSyncSummaryRow[]>(Prisma.sql`
+  // Production uses a single-connection transaction pool. Keep these diagnostics
+  // sequential so the read-only report cannot exhaust its own function pool.
+  const summaryRows = await prisma.$queryRaw<CrmSyncSummaryRow[]>(Prisma.sql`
       SELECT
         payload->>'shortName' AS "shortName",
         "eventType",
@@ -405,8 +406,8 @@ export async function summarizeCrmSyncEvents(shortNames: string[] = [], includeR
         ${filter}
       GROUP BY payload->>'shortName', "eventType", status
       ORDER BY payload->>'shortName' ASC, "eventType" ASC, status ASC
-    `),
-    prisma.$queryRaw<CrmSyncUnsentRow[]>(Prisma.sql`
+    `);
+  const unsentRows = await prisma.$queryRaw<CrmSyncUnsentRow[]>(Prisma.sql`
       SELECT
         id,
         payload->>'shortName' AS "shortName",
@@ -423,8 +424,8 @@ export async function summarizeCrmSyncEvents(shortNames: string[] = [], includeR
         ${filter}
       ORDER BY "createdAt" ASC
       LIMIT 100
-    `),
-    prisma.$queryRaw<CrmSyncSentSampleRow[]>(Prisma.sql`
+    `);
+  const sentSamples = await prisma.$queryRaw<CrmSyncSentSampleRow[]>(Prisma.sql`
       SELECT
         id,
         payload->>'shortName' AS "shortName",
@@ -447,9 +448,10 @@ export async function summarizeCrmSyncEvents(shortNames: string[] = [], includeR
         ${filter}
       ORDER BY payload->>'shortName' ASC, "sentAt" DESC NULLS LAST
       LIMIT 50
-    `),
-    includeReceiverDiagnostics ? fetchReceiverDiagnostics(normalizedShortNames) : Promise.resolve(null)
-  ]);
+    `);
+  const receiverDiagnostics = includeReceiverDiagnostics
+    ? await fetchReceiverDiagnostics(normalizedShortNames)
+    : null;
 
   return {
     target: missionCohortCrmTarget(),
