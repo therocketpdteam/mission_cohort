@@ -347,7 +347,17 @@ export async function applyRegistrationChanges(registrationId: string) {
 
   if (!pending.calendarAppliedAt) {
     if (attendeeChanges) {
-      for (const session of registration.cohort.sessions.filter((row) => row.startTime.getTime() > Date.now() && row.calendarEvents.some((event) => event.providerEventId))) {
+      const futureSessions = registration.cohort.sessions.filter((row) => row.startTime.getTime() > Date.now());
+      const linkedSessions = futureSessions.filter((row) => row.calendarEvents.some((event) => event.providerEventId));
+      if (futureSessions.length > 0 && linkedSessions.length !== futureSessions.length) {
+        calendarIssues.push({
+          sessionId: "unlinked",
+          title: "Future cohort sessions",
+          error: `${futureSessions.length - linkedSessions.length} future session(s) do not have a linked Google Calendar event.`
+        });
+      }
+
+      for (const session of linkedSessions) {
         try {
           await createCalendarInvitePlaceholder(session.id, "google", { sendUpdates: false });
         } catch (error) {
@@ -359,6 +369,42 @@ export async function applyRegistrationChanges(registrationId: string) {
         }
       }
     }
+
+    if (calendarIssues.length > 0) {
+      const description = [
+        `Registration changes remain pending because calendar enrollment failed for ${calendarIssues.length} item(s).`,
+        `First error: ${calendarIssues[0].error}`,
+        "Restore Google Calendar connectivity, then apply the registration changes again. No success summary was sent."
+      ].join(" ");
+      const existingTask = await prisma.operationsTask.findFirst({
+        where: {
+          registrationId,
+          category: OperationsTaskCategory.CALENDAR_INVITE,
+          status: { in: [OperationsTaskStatus.OPEN, OperationsTaskStatus.IN_PROGRESS] }
+        }
+      });
+      if (existingTask) {
+        await prisma.operationsTask.update({
+          where: { id: existingTask.id },
+          data: { status: OperationsTaskStatus.OPEN, priority: "URGENT", description, completedAt: null }
+        });
+      } else {
+        await prisma.operationsTask.create({
+          data: {
+            cohortId: registration.cohortId,
+            registrationId,
+            title: `Verify calendar invites for ${registration.primaryContactEmail}`,
+            description,
+            category: OperationsTaskCategory.CALENDAR_INVITE,
+            priority: "URGENT",
+            status: OperationsTaskStatus.OPEN
+          }
+        });
+      }
+      await savePendingChanges(registrationId, pending);
+      throw Object.assign(new Error(description), { code: "CALENDAR_UPDATE_FAILED", status: 409, calendarIssues });
+    }
+
     pending.calendarAppliedAt = new Date().toISOString();
     await savePendingChanges(registrationId, pending);
   }
