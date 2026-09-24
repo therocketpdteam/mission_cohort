@@ -33,6 +33,7 @@ import { GridColDef, GridRowParams, GridRowSelectionModel } from "./common";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
+import { activeEmailIssues } from "@/lib/emailIssueState";
 import { pricePerParticipantForCohort, registrationTotalAfterSeatChange, registrationTotalForCohort, sessionCountForPricing } from "@/config/cohortPricing";
 import { formatProperDisplay, formatRegistrationPaymentStatus, formatRegistrationSource, formatStatusLabel } from "@/lib/formatting";
 import { RosterWorkbench } from "./RosterWorkbench";
@@ -194,9 +195,7 @@ function participantListFollowUpCount(registration: AdminRow) {
 function registrationCommunicationIssueCount(registration: AdminRow) {
   return (registration.communications ?? []).filter((communication: AdminRow) =>
     String(communication.status ?? "").toUpperCase() === "FAILED" ||
-    (communication.emailEvents ?? []).some((event: AdminRow) =>
-      ["FAILED", "BOUNCED"].includes(String(event.eventType ?? "").toUpperCase()) && !event.reviewedAt
-    )
+    activeEmailIssues((communication.emailEvents ?? []) as AdminRow[]).length > 0
   ).length;
 }
 

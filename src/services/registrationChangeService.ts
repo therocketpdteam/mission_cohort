@@ -3,6 +3,8 @@ import {
   CohortStatus,
   CommunicationStatus,
   InvoiceDraftStatus,
+  OperationsTaskCategory,
+  OperationsTaskStatus,
   Prisma,
   RecipientScope,
   SupportingDocumentStatus
@@ -359,6 +361,21 @@ export async function applyRegistrationChanges(registrationId: string) {
     }
     pending.calendarAppliedAt = new Date().toISOString();
     await savePendingChanges(registrationId, pending);
+  }
+
+  if (attendeeChanges && calendarIssues.length === 0) {
+    await prisma.operationsTask.updateMany({
+      where: {
+        registrationId,
+        category: OperationsTaskCategory.CALENDAR_INVITE,
+        status: { in: [OperationsTaskStatus.OPEN, OperationsTaskStatus.IN_PROGRESS] }
+      },
+      data: {
+        status: OperationsTaskStatus.COMPLETED,
+        completedAt: new Date(),
+        description: "Calendar enrollment verified after registration changes were applied."
+      }
+    });
   }
 
   registration = await registrationForApply(registrationId);

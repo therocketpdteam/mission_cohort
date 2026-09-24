@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { WarningAmberOutlined } from "@/components/ui/icons";
 import { Button } from "@/components/ui/primitives";
 import { adminApi } from "@/lib/adminApi";
+import { activeEmailIssues } from "@/lib/emailIssueState";
 import { formatProperDisplay, formatStatusLabel } from "@/lib/formatting";
 import { AdminRow, DateBadge, EmptyState, StatusChip, useNotifier } from "./common";
 
@@ -114,7 +115,7 @@ function journeyGroupFor(communication: AdminRow): JourneyGroupKey {
     const eventType = String(event.eventType ?? "").toUpperCase();
     return eventType === "FAILED" || eventType === "BOUNCED";
   });
-  const unreviewedIssueEvents = issueEvents.filter((event) => !event.reviewedAt);
+  const unreviewedIssueEvents = activeEmailIssues(issueEvents.length ? (communication.emailEvents ?? []) as AdminRow[] : []);
 
   if (unreviewedIssueEvents.length > 0 || status === "FAILED") return "needs_attention";
   if (issueEvents.length > 0) return "reviewed";
@@ -198,11 +199,7 @@ function aggregateMessages(rows: AdminRow[], pocEmail?: string | null) {
     const payload = payloadFor(communication);
     const subject = String(payload?.renderedSubject ?? communication.subject ?? title);
     const preview = plainPreview(communication);
-    const issueEmails = ((communication.emailEvents ?? []) as AdminRow[])
-      .filter((event) => {
-        const eventType = String(event.eventType ?? "").toUpperCase();
-        return (eventType === "FAILED" || eventType === "BOUNCED") && !event.reviewedAt;
-      })
+    const issueEmails = activeEmailIssues((communication.emailEvents ?? []) as AdminRow[])
       .map((event) => event.recipientEmail as string | undefined);
     const attachments = (communication.attachments ?? []) as AdminRow[];
     const existing = groups.get(groupId);

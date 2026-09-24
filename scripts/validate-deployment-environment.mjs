@@ -47,6 +47,11 @@ function main() {
   const appBaseHost = hostname(process.env.APP_BASE_URL);
   const failures = [];
 
+  const requireVariables = (names, label) => {
+    const missing = names.filter((name) => !normalize(process.env[name]));
+    if (missing.length > 0) failures.push(`${label} is missing required variables: ${missing.join(", ")}.`);
+  };
+
   if (environment === "staging") {
     if (hasProductionSupabaseRef(process.env.DATABASE_URL) || hasProductionSupabaseRef(process.env.DATABASE_DIRECT_URL)) {
       failures.push("Staging DATABASE_URL/DATABASE_DIRECT_URL points at the known production Supabase project.");
@@ -63,6 +68,10 @@ function main() {
     if (normalize(process.env.ALLOW_BACKGROUND_JOBS).toLowerCase() === "true") {
       failures.push("Staging ALLOW_BACKGROUND_JOBS must stay false unless using isolated test integrations.");
     }
+
+    if (normalize(process.env.OUTBOUND_RELEASE_LOCK).toLowerCase() !== "locked") {
+      failures.push("Staging OUTBOUND_RELEASE_LOCK must be explicitly set to locked.");
+    }
   }
 
   if (environment === "production" && process.env.VERCEL_ENV && process.env.VERCEL_ENV !== "production") {
@@ -71,6 +80,26 @@ function main() {
 
   if (environment === "production" && !normalize(process.env.INTEGRATION_ENCRYPTION_KEY)) {
     failures.push("Production INTEGRATION_ENCRYPTION_KEY is required so credential encryption does not change when unrelated secrets rotate.");
+  }
+
+  if (environment === "production") {
+    requireVariables([
+      "DATABASE_URL",
+      "NEXT_PUBLIC_SUPABASE_URL",
+      "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+      "SUPABASE_SERVICE_ROLE_KEY",
+      "INTEGRATION_ENCRYPTION_KEY",
+      "WEBHOOK_SECRET",
+      "CRON_SECRET",
+      "APP_BASE_URL",
+      "OUTBOUND_RELEASE_LOCK"
+    ], "Production");
+
+    const crmUrl = normalize(process.env.CRM_MISSION_COHORT_WEBHOOK_URL || process.env.CRM_REGISTRATION_WEBHOOK_URL);
+    const crmSecret = normalize(process.env.CRM_MISSION_COHORT_WEBHOOK_SECRET || process.env.CRM_REGISTRATION_WEBHOOK_SECRET);
+    if (!crmUrl || !crmSecret) {
+      failures.push("Production requires a Mission Cohort CRM webhook URL and secret.");
+    }
   }
 
   const databaseRef = supabaseRef(process.env.DATABASE_URL);

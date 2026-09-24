@@ -8,8 +8,8 @@
     "build": "prisma generate && next build",
     "postinstall": "prisma generate",
     "start": "next start",
-    "vercel:build": "pnpm prisma:generate && node scripts/validate-deployment-environment.mjs && node scripts/validate-database-schema.mjs && pnpm build",
-    "production:prepare": "pnpm prisma:generate && node scripts/validate-deployment-environment.mjs && node scripts/apply-production-schema-patches.mjs && node scripts/ensure-storage-buckets.mjs",
+    "vercel:build": "pnpm prisma:generate && node scripts/validate-deployment-environment.mjs && node scripts/validate-database-schema.mjs && node scripts/validate-integration-credentials.mjs && pnpm build",
+    "production:prepare": "pnpm prisma:generate && node scripts/validate-deployment-environment.mjs && node scripts/apply-production-schema-patches.mjs && node scripts/validate-integration-credentials.mjs && node scripts/ensure-storage-buckets.mjs",
     "lint": "next lint",
     "typecheck": "next typegen && tsc --noEmit",
     "prisma:generate": "prisma generate",
@@ -39,6 +39,7 @@
     "test:e2e:report": "playwright show-report",
     "readiness": "node scripts/readiness-check.mjs",
     "deployment:validate-env": "node scripts/validate-deployment-environment.mjs",
+    "deployment:validate-integrations": "node scripts/validate-integration-credentials.mjs",
     "auth:create-admin": "tsx scripts/create-admin-user.ts"
   },
   "dependencies": {

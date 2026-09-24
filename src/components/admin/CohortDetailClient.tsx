@@ -32,6 +32,7 @@ import type { CSSProperties, PointerEvent, ReactNode, SyntheticEvent } from "rea
 import { Fragment } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { adminApi, uploadAdminFile } from "@/lib/adminApi";
+import { activeEmailIssues } from "@/lib/emailIssueState";
 import { formatProperDisplay, formatRegistrationPaymentStatus, formatRegistrationSource, formatStatusLabel, isCompedRegistration } from "@/lib/formatting";
 import { formatDateInZone, formatDateTimeInZone, formatTimeInZone } from "@/lib/timezones";
 import { buildSessionCalendarDescription } from "@/modules/calendar/description";
@@ -4280,7 +4281,7 @@ export function CohortDetailClient({ id }: { id: string }) {
                 <Typography color="text.secondary">No open follow-ups for this registration.</Typography>
               )}
             </CollapsibleSectionCard>
-            <CollapsibleSectionCard title="Registration Communication Journey" alertCount={(registrationDetail.communications ?? []).filter((communication: AdminRow) => String(communication.status ?? "").toUpperCase() === "FAILED" || (communication.emailEvents ?? []).some((event: AdminRow) => ["FAILED", "BOUNCED"].includes(String(event.eventType ?? "").toUpperCase()) && !event.reviewedAt)).length}>
+            <CollapsibleSectionCard title="Registration Communication Journey" alertCount={(registrationDetail.communications ?? []).filter((communication: AdminRow) => String(communication.status ?? "").toUpperCase() === "FAILED" || activeEmailIssues((communication.emailEvents ?? []) as AdminRow[]).length > 0).length}>
               <RegistrationCommunicationJourney
                 communications={registrationDetail.communications}
                 pocEmail={registrationDetail.primaryContactEmail}

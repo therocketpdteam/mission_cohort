@@ -1,6 +1,7 @@
 import { CohortStatus, CommunicationStatus, EmailEventType, InvoiceDraftStatus, OperationsTaskCategory, OperationsTaskStatus, ParticipantStatus, Prisma, RecipientScope, RegistrationStatus, Role, SupportingDocumentStatus, TemplateType } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { activeEmailIssues } from "@/lib/emailIssueState";
 import { isMissingEmailReviewColumn, migrationRequiredResult } from "@/lib/prismaCompatibility";
 import {
   communicationDraftCreateSchema,
@@ -872,6 +873,25 @@ async function recordFailedEmailEvents(communicationId: string, recipients: stri
   });
 }
 
+async function resolveRecoveredEmailIssues(communicationId: string, recipients: string[], recoveredAt: Date) {
+  const recipientEmails = Array.from(new Set(recipients.map((email) => normalizeEmail(email)).filter(Boolean)));
+  if (recipientEmails.length === 0) return;
+
+  await prisma.emailEvent.updateMany({
+    where: {
+      communicationId,
+      recipientEmail: { in: recipientEmails, mode: "insensitive" },
+      eventType: { in: [EmailEventType.BOUNCED, EmailEventType.FAILED] },
+      reviewedAt: null,
+      createdAt: { lt: recoveredAt }
+    },
+    data: {
+      reviewedAt: recoveredAt,
+      reviewNote: "Automatically resolved after a later successful delivery."
+    }
+  });
+}
+
 export function emailEventSummary(events: EventSummaryInput[]) {
   const counts = events.reduce<Record<string, number>>((acc, event) => {
     acc[event.eventType] = (acc[event.eventType] ?? 0) + 1;
@@ -879,7 +899,7 @@ export function emailEventSummary(events: EventSummaryInput[]) {
   }, {});
   const latest = [...events].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
   const issueEvents = events.filter((event) => recipientIssueTypes.has(event.eventType));
-  const unreviewedIssueEvents = issueEvents.filter((event) => !event.reviewedAt);
+  const unreviewedIssueEvents = activeEmailIssues(events);
 
   return {
     lastEmailEvent: latest?.eventType ?? null,
@@ -912,7 +932,7 @@ export function buildRecipientDeliveryRows(events: EventSummaryInput[], relatedB
     .map(([email, recipientEvents]) => {
       const sortedEvents = [...recipientEvents].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
       const issueEvents = sortedEvents.filter((event) => recipientIssueTypes.has(event.eventType));
-      const unreviewedIssueEvents = issueEvents.filter((event) => !event.reviewedAt);
+      const unreviewedIssueEvents = activeEmailIssues(sortedEvents);
       return {
         id: email,
         recipientEmail: email,
@@ -1893,6 +1913,7 @@ export async function sendCommunication(id: string, options?: { recipients?: str
         if (result.providerMessageId) {
           providerMessageIds.push(result.providerMessageId);
         }
+        const recoveredAt = new Date();
         await prisma.emailEvent.create({
           data: {
             communicationId: id,
@@ -1900,9 +1921,11 @@ export async function sendCommunication(id: string, options?: { recipients?: str
             provider: "sendgrid",
             providerMessageId: result.providerMessageId,
             eventType: EmailEventType.SENT,
-            eventPayload: sentEmailEventPayload(result)
+            eventPayload: sentEmailEventPayload(result),
+            createdAt: recoveredAt
           }
         });
+        await resolveRecoveredEmailIssues(id, [target.recipientEmail], recoveredAt);
       }
 
       if (registrationContext) {
@@ -1930,6 +1953,7 @@ export async function sendCommunication(id: string, options?: { recipients?: str
       context: options?.context ?? baseContext
     });
 
+    const recoveredAt = new Date();
     await prisma.emailEvent.createMany({
       data: recipients.map((recipientEmail) => ({
         communicationId: id,
@@ -1937,9 +1961,11 @@ export async function sendCommunication(id: string, options?: { recipients?: str
         provider: "sendgrid",
         providerMessageId: result.providerMessageId,
         eventType: EmailEventType.SENT,
-        eventPayload: sentEmailEventPayload(result)
+        eventPayload: sentEmailEventPayload(result),
+        createdAt: recoveredAt
       }))
     });
+    await resolveRecoveredEmailIssues(id, recipients, recoveredAt);
 
     if (registrationContext) {
       await markRegistrationDocumentsSent(registrationContext.id);
