@@ -6,6 +6,7 @@ import {
   automaticRegistrationJourneyOptions,
   buildRegistrationMilestones,
   calendarFilesJourneyKey,
+  isHistoricalDataOnlyRegistration,
   participantConfirmationJourneyKey,
   pocConfirmationJourneyKey,
   shouldAutoPrepareRegistrationInvoice
@@ -40,6 +41,13 @@ test("automatic registration journeys are plan-only before a cohort is live", ()
     sendParticipantConfirmation: false
   });
   assert.deepEqual(automaticRegistrationJourneyOptions(CohortStatus.PUBLISHED), {});
+});
+
+test("historical data-only registrations are permanently excluded from delivery planning", () => {
+  assert.equal(isHistoricalDataOnlyRegistration({ source: "historical_import" }), true);
+  assert.equal(isHistoricalDataOnlyRegistration({ externalSource: "historical_import" }), true);
+  assert.equal(isHistoricalDataOnlyRegistration({ source: "jotform" }), false);
+  assert.equal(isHistoricalDataOnlyRegistration({ source: "manual" }), false);
 });
 
 test("schedules both cohort milestones for an early registration", () => {

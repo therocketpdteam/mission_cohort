@@ -123,6 +123,13 @@ export function shouldAutoPrepareRegistrationInvoice(registration: {
   return readiness.requiresInvoice && !readiness.invoiceUrl;
 }
 
+export function isHistoricalDataOnlyRegistration(registration: {
+  source?: string | null;
+  externalSource?: string | null;
+}) {
+  return registration.source === "historical_import" || registration.externalSource === "historical_import";
+}
+
 const cancellableJourneyStatuses = [
   CommunicationStatus.DRAFT,
   CommunicationStatus.SCHEDULED,
@@ -868,6 +875,7 @@ export async function planRegistrationJourneys(
     pocConfirmationBatchKey?: string;
     bypassCohortStatusForImmediate?: boolean;
     calendarSendUpdates?: boolean;
+    allowHistoricalDelivery?: boolean;
   } = {}
 ) {
   const registration = await prisma.registration.findUnique({
@@ -890,6 +898,20 @@ export async function planRegistrationJourneys(
 
   if (!registration || registration.archivedAt || registration.status === RegistrationStatus.CANCELLED) {
     return { registrationId, planned: 0, sent: 0, failed: 0, failedCommunicationIds: [], skipped: 0, ignored: true };
+  }
+
+  const historicalRegistration = isHistoricalDataOnlyRegistration(registration);
+  if (historicalRegistration && options.allowHistoricalDelivery !== true) {
+    return {
+      registrationId,
+      planned: 0,
+      sent: 0,
+      failed: 0,
+      failedCommunicationIds: [],
+      skipped: 0,
+      ignored: true,
+      reason: "Historical data-only registrations cannot create communications, invoices, or calendar delivery."
+    };
   }
 
   const templates = await ensureDefaultCommunicationTemplates();

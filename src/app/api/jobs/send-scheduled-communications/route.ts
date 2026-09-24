@@ -1,9 +1,10 @@
 import { handleApiError, ok } from "@/lib/api";
-import { validateJobRequest } from "@/lib/jobAuth";
+import { recordJobInvocation, validateJobRequest } from "@/lib/jobAuth";
 import { processScheduledCommunications } from "@/services/communicationService";
 
 async function processRequest(request: Request, limit?: number) {
   try {
+    await recordJobInvocation(request, "send-scheduled-communications");
     const blockedResponse = validateJobRequest(request);
     if (blockedResponse) return blockedResponse;
 

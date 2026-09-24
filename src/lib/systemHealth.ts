@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { createSupabaseAdminClient } from "@/lib/supabase";
 import { getGoogleCalendarSetup, getQuickBooksSetup, getSendGridSetup } from "@/services/integrationSetupService";
 import { listIntegrationStatuses } from "@/services/integrationService";
+import { getOutboundLockState } from "@/lib/outboundLock";
+import { CommunicationStatus, CrmSyncEventStatus } from "@prisma/client";
 
 export type HealthStatus = "healthy" | "warning" | "blocked";
 
@@ -434,6 +436,92 @@ function group(key: string, title: string, summary: string, checks: HealthCheck[
   };
 }
 
+async function automationChecks(databaseReady: boolean): Promise<HealthCheck[]> {
+  if (!databaseReady) {
+    return [{
+      key: "automationDatabase",
+      label: "Automation monitoring",
+      status: "blocked",
+      detail: "Automation state cannot be inspected because the database is unavailable."
+    }];
+  }
+
+  const now = new Date();
+  const heartbeatCutoff = new Date(now.getTime() - 15 * 60 * 1000);
+  const staleSendingCutoff = new Date(now.getTime() - 15 * 60 * 1000);
+  const [communicationHeartbeat, crmHeartbeat, overdueCommunications, crmBacklog, staleCrmSending] = await Promise.all([
+    prisma.auditLog.findFirst({
+      where: { entityType: "BackgroundJob", entityId: "send-scheduled-communications", action: "background_job.invoked" },
+      orderBy: { createdAt: "desc" },
+      select: { createdAt: true }
+    }),
+    prisma.auditLog.findFirst({
+      where: { entityType: "BackgroundJob", entityId: "process-crm-sync", action: "background_job.invoked" },
+      orderBy: { createdAt: "desc" },
+      select: { createdAt: true }
+    }),
+    prisma.cohortCommunication.count({
+      where: { status: CommunicationStatus.SCHEDULED, scheduledFor: { lte: now } }
+    }),
+    prisma.crmSyncEvent.count({
+      where: { status: { in: [CrmSyncEventStatus.QUEUED, CrmSyncEventStatus.FAILED] } }
+    }),
+    prisma.crmSyncEvent.count({
+      where: { status: CrmSyncEventStatus.SENDING, updatedAt: { lt: staleSendingCutoff } }
+    })
+  ]);
+
+  const heartbeatCheck = (key: string, label: string, heartbeat: { createdAt: Date } | null): HealthCheck => {
+    const current = Boolean(heartbeat && heartbeat.createdAt >= heartbeatCutoff);
+    return {
+      key,
+      label,
+      status: current ? "healthy" : "blocked",
+      detail: current
+        ? `Last application heartbeat: ${heartbeat!.createdAt.toISOString()}.`
+        : heartbeat
+          ? `Last application heartbeat is stale: ${heartbeat.createdAt.toISOString()}.`
+          : "No application heartbeat has been recorded.",
+      nextAction: current ? undefined : "Restore scheduler access and verify a new heartbeat before trusting automated delivery."
+    };
+  };
+
+  const outbound = getOutboundLockState();
+  return [
+    heartbeatCheck("communicationSchedulerHeartbeat", "Scheduled communication worker", communicationHeartbeat),
+    heartbeatCheck("crmSchedulerHeartbeat", "CRM synchronization worker", crmHeartbeat),
+    {
+      key: "overdueCommunications",
+      label: "Overdue scheduled communications",
+      status: overdueCommunications > 0 ? "blocked" : "healthy",
+      detail: overdueCommunications > 0
+        ? `${overdueCommunications} scheduled communication(s) are past due.`
+        : "No scheduled communications are past due.",
+      nextAction: overdueCommunications > 0 ? "Review every overdue recipient before allowing the worker to send." : undefined
+    },
+    {
+      key: "crmBacklog",
+      label: "CRM synchronization backlog",
+      status: crmBacklog > 0 ? "warning" : "healthy",
+      detail: `${crmBacklog} CRM event(s) are queued or failed.`,
+      nextAction: crmBacklog > 0 ? "Drain and verify the CRM queue after scheduler recovery." : undefined
+    },
+    {
+      key: "staleCrmSending",
+      label: "Stalled CRM deliveries",
+      status: staleCrmSending > 0 ? "blocked" : "healthy",
+      detail: `${staleCrmSending} CRM event(s) have been stuck in SENDING for more than 15 minutes.`,
+      nextAction: staleCrmSending > 0 ? "Recover stalled events before declaring CRM synchronization healthy." : undefined
+    },
+    {
+      key: "outboundLock",
+      label: "Outbound release lock",
+      status: outbound.locked ? "warning" : "healthy",
+      detail: outbound.locked ? `${outbound.label} outbound delivery is locked.` : `${outbound.label} outbound delivery is unlocked.`
+    }
+  ];
+}
+
 export async function buildSystemHealth(): Promise<SystemHealth> {
   const database = await databaseCheck();
   const databaseReady = database.status === "healthy";
@@ -444,6 +532,7 @@ export async function buildSystemHealth(): Promise<SystemHealth> {
       ...await schemaChecks(databaseReady)
     ]),
     group("storage", "Storage", "Supabase buckets used by thumbnails, attachments, materials, invoices, and receipts.", await storageChecks()),
+    group("automation", "Automation", "Live scheduler heartbeats and queue state.", await automationChecks(databaseReady)),
     group("integrations", "Integrations", "External systems needed for real operations.", integrations)
   ];
 

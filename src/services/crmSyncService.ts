@@ -103,6 +103,18 @@ export async function processCrmSyncEvents(
   limit = 25,
   options: { shortNames?: string[]; eventTypes?: string[] } = {}
 ) {
+  const staleSendingBefore = new Date(Date.now() - 15 * 60 * 1000);
+  await prisma.crmSyncEvent.updateMany({
+    where: {
+      status: CrmSyncEventStatus.SENDING,
+      updatedAt: { lt: staleSendingBefore }
+    },
+    data: {
+      status: CrmSyncEventStatus.FAILED,
+      errorMessage: "Recovered after the previous CRM worker stopped before recording a result."
+    }
+  });
+
   const shortNameSet = new Set(options.shortNames?.map((value) => value.trim()).filter(Boolean));
   const eventTypeSet = new Set(options.eventTypes?.map((value) => value.trim()).filter(Boolean));
   const candidateLimit = Math.min(Math.max(limit * 100, limit), 5000);

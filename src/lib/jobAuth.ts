@@ -1,6 +1,7 @@
 import { fail } from "@/lib/api";
 import { backgroundJobsAllowed, env, getAppEnvironmentKind, getAppEnvironmentLabel } from "@/lib/env";
 import { getOutboundLockState, outboundLockedMessage } from "@/lib/outboundLock";
+import { logAuditEvent } from "@/services/auditService";
 
 export function validateJobSecret(request: Request) {
   if (!env.CRON_SECRET) {
@@ -34,6 +35,19 @@ export function validateJobRequest(request: Request) {
   }
 
   return null;
+}
+
+export async function recordJobInvocation(request: Request, jobName: string) {
+  await logAuditEvent({
+    entityType: "BackgroundJob",
+    entityId: jobName,
+    action: "background_job.invoked",
+    description: `${jobName} reached the application.`,
+    metadata: {
+      method: request.method,
+      outboundLocked: getOutboundLockState().locked
+    }
+  });
 }
 
 export function jobEnvironmentSnapshot() {
