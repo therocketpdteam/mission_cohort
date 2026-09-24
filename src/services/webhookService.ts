@@ -15,6 +15,7 @@ import { getDecryptedIntegrationConnection } from "@/services/integrationService
 import { listActiveJotformFormMappings } from "@/services/jotformMappingService";
 import { createDefaultRegistrationOperationsTasks } from "@/services/operationsTaskService";
 import { queueParticipantCrmSync, queueRegistrationCrmSync } from "@/services/crmSyncService";
+import { syncRegistrationToCrmWebhook } from "@/services/crmRegistrationWebhookService";
 import { automaticRegistrationJourneyOptions, cancelParticipantJourneys, cancelRegistrationJourneys, planRegistrationJourneys } from "@/services/registrationJourneyService";
 
 export async function recordWebhookEvent(input: {
@@ -392,6 +393,9 @@ export async function processRegistrationWebhook(payload: Record<string, any>, o
         });
     void queueRegistrationCrmSync(registration.id, existingRegistration ? "registration.updated" : "registration.created").catch((crmError) => {
       console.warn("CRM registration sync queue failed", crmError);
+    });
+    void syncRegistrationToCrmWebhook(registration.id, existingRegistration ? "registration.updated" : "registration.created").catch((crmError) => {
+      console.warn("CRM registration webhook sync failed", crmError);
     });
     for (const participant of participants) {
       void queueParticipantCrmSync(participant.id, existingRegistration ? "participant.updated" : "participant.created").catch((crmError) => {
