@@ -44,7 +44,8 @@ export async function POST(request: Request) {
     return ok(
       await processCrmSyncEvents(body.limit, {
         shortNames: Array.isArray(body.shortNames) ? body.shortNames : undefined,
-        eventTypes: Array.isArray(body.eventTypes) ? body.eventTypes : undefined
+        eventTypes: Array.isArray(body.eventTypes) ? body.eventTypes : undefined,
+        retryFailed: body.retryFailed === true
       }),
       { status: 202 }
     );

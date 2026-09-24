@@ -462,8 +462,11 @@ async function automationChecks(databaseReady: boolean): Promise<HealthCheck[]> 
   const overdueCommunications = await prisma.cohortCommunication.count({
       where: { status: CommunicationStatus.SCHEDULED, scheduledFor: { lte: now } }
     });
-  const crmBacklog = await prisma.crmSyncEvent.count({
-      where: { status: { in: [CrmSyncEventStatus.QUEUED, CrmSyncEventStatus.FAILED] } }
+  const crmQueued = await prisma.crmSyncEvent.count({
+      where: { status: CrmSyncEventStatus.QUEUED }
+    });
+  const crmFailed = await prisma.crmSyncEvent.count({
+      where: { status: CrmSyncEventStatus.FAILED }
     });
   const staleCrmSending = await prisma.crmSyncEvent.count({
       where: { status: CrmSyncEventStatus.SENDING, updatedAt: { lt: staleSendingCutoff } }
@@ -498,11 +501,18 @@ async function automationChecks(databaseReady: boolean): Promise<HealthCheck[]> 
       nextAction: overdueCommunications > 0 ? "Review every overdue recipient before allowing the worker to send." : undefined
     },
     {
-      key: "crmBacklog",
-      label: "CRM synchronization backlog",
-      status: crmBacklog > 0 ? "warning" : "healthy",
-      detail: `${crmBacklog} CRM event(s) are queued or failed.`,
-      nextAction: crmBacklog > 0 ? "Drain and verify the CRM queue after scheduler recovery." : undefined
+      key: "crmQueued",
+      label: "Queued CRM synchronization",
+      status: crmQueued > 0 ? "warning" : "healthy",
+      detail: `${crmQueued} new CRM event(s) are queued.`,
+      nextAction: crmQueued > 0 ? "Drain and verify only the new CRM queue after scheduler recovery." : undefined
+    },
+    {
+      key: "crmFailed",
+      label: "Failed CRM history",
+      status: crmFailed > 0 ? "warning" : "healthy",
+      detail: `${crmFailed} failed CRM event(s) require explicit review and will not retry automatically.`,
+      nextAction: crmFailed > 0 ? "Review failures by event type and retry only an approved subset." : undefined
     },
     {
       key: "staleCrmSending",

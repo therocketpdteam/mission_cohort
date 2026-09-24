@@ -101,7 +101,7 @@ export async function queueParticipantCrmSync(participantId: string, eventType =
 
 export async function processCrmSyncEvents(
   limit = 25,
-  options: { shortNames?: string[]; eventTypes?: string[] } = {}
+  options: { shortNames?: string[]; eventTypes?: string[]; retryFailed?: boolean } = {}
 ) {
   const staleSendingBefore = new Date(Date.now() - 15 * 60 * 1000);
   await prisma.crmSyncEvent.updateMany({
@@ -120,7 +120,9 @@ export async function processCrmSyncEvents(
   const candidateLimit = Math.min(Math.max(limit * 100, limit), 5000);
   const candidates = await prisma.crmSyncEvent.findMany({
     where: {
-      status: { in: [CrmSyncEventStatus.QUEUED, CrmSyncEventStatus.FAILED] },
+      status: options.retryFailed === true
+        ? { in: [CrmSyncEventStatus.QUEUED, CrmSyncEventStatus.FAILED] }
+        : CrmSyncEventStatus.QUEUED,
       ...(eventTypeSet.size ? { eventType: { in: Array.from(eventTypeSet) } } : {})
     },
     orderBy: { createdAt: "asc" },
