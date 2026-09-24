@@ -455,6 +455,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [themeMode, setThemeMode] = useState<"normal" | "night">("normal");
   const [user, setUser] = useState<{ firstName?: string; lastName?: string; email?: string; role?: string } | null>(null);
   const [breadcrumbLabels, setBreadcrumbLabels] = useState<Record<string, string>>({});
+  const [buildVersion, setBuildVersion] = useState("");
   const [environment, setEnvironment] = useState<AppEnvironment>({
     kind: "local",
     label: "Local",
@@ -468,11 +469,12 @@ export function AppShell({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (pathname === "/login" || pathname.startsWith("/reports/share/")) return;
 
-    adminApi<{ environment?: AppEnvironment }>("/api/app-version")
+    adminApi<{ environment?: AppEnvironment; shortVersion?: string }>("/api/app-version")
       .then((payload) => {
         if (payload.environment) {
           setEnvironment(payload.environment);
         }
+        setBuildVersion(payload.shortVersion ?? "");
       })
       .catch(() => undefined);
 
@@ -540,6 +542,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <span className={`app-environment-badge is-${environment.kind}`}>
             {environment.label}
           </span>
+          {buildVersion && <span className="app-build-version" title="Currently deployed application build">Build {buildVersion}</span>}
         </div>
         <nav className="app-nav" aria-label="Admin navigation">
           {navItems.map((item) => {

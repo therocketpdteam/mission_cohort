@@ -270,6 +270,19 @@ h6,
   letter-spacing: 0.08em;
 }
 
+.app-build-version {
+  width: fit-content;
+  margin-top: 7px;
+  color: #c5c0fd;
+  font-size: 0.7rem;
+  font-weight: 750;
+  line-height: 1;
+}
+
+.app-shell:not(.is-night) .app-build-version {
+  color: var(--color-slate-500);
+}
+
 .app-environment-chip {
   flex-direction: column;
   justify-content: center;
