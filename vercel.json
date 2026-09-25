@@ -1,18 +1,5 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "pnpm vercel:build",
-  "crons": [
-    {
-      "path": "/api/jobs/send-scheduled-communications?limit=50&jobVersion=2",
-      "schedule": "*/5 * * * *"
-    },
-    {
-      "path": "/api/jobs/process-crm-sync?limit=25&jobVersion=2",
-      "schedule": "*/5 * * * *"
-    },
-    {
-      "path": "/api/jobs/reconcile-quickbooks-invoices?limit=50",
-      "schedule": "15 * * * *"
-    }
-  ]
+  "crons": []
 }
