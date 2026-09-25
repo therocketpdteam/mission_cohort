@@ -4,9 +4,9 @@ import { processScheduledCommunications } from "@/services/communicationService"
 
 async function processRequest(request: Request, limit?: number) {
   try {
-    await recordJobInvocation(request, "send-scheduled-communications");
     const blockedResponse = validateJobRequest(request);
     if (blockedResponse) return blockedResponse;
+    await recordJobInvocation(request, "send-scheduled-communications");
 
     return ok(await processScheduledCommunications(limit), { status: 202 });
   } catch (error) {

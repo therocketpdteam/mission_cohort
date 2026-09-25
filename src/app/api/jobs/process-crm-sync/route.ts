@@ -4,9 +4,9 @@ import { processCrmSyncEvents } from "@/services/crmSyncService";
 
 async function processRequest(request: Request, limit?: number) {
   try {
-    await recordJobInvocation(request, "process-crm-sync");
     const blockedResponse = validateJobRequest(request);
     if (blockedResponse) return blockedResponse;
+    await recordJobInvocation(request, "process-crm-sync");
 
     return ok(await processCrmSyncEvents(limit), { status: 202 });
   } catch (error) {
