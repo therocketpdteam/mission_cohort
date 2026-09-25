@@ -24,14 +24,3 @@ jobs:
             --max-time 60 \
             -H "Authorization: Bearer ${CRON_SECRET}" \
             "https://mission-cohort-rocket-pd.vercel.app/api/jobs/send-scheduled-communications?limit=50"
-
-      - name: Process CRM synchronization
-        env:
-          CRON_SECRET: ${{ secrets.PRODUCTION_CRON_SECRET }}
-        run: |
-          curl --fail-with-body --silent --show-error \
-            --retry 2 \
-            --retry-all-errors \
-            --max-time 60 \
-            -H "Authorization: Bearer ${CRON_SECRET}" \
-            "https://mission-cohort-rocket-pd.vercel.app/api/jobs/process-crm-sync?limit=25"
