@@ -180,6 +180,12 @@ export function mergeRegistrationFieldChanges(
 }
 
 async function savePendingChanges(registrationId: string, pending: RegistrationPendingChanges) {
+  if (registrationPendingChangeCount(pending) === 0) {
+    return prisma.registration.update({
+      where: { id: registrationId },
+      data: { pendingChanges: Prisma.JsonNull, pendingChangesAt: null }
+    });
+  }
   return prisma.registration.update({
     where: { id: registrationId },
     data: { pendingChanges: pending as unknown as Prisma.InputJsonValue, pendingChangesAt: new Date(pending.updatedAt) }
@@ -217,6 +223,27 @@ export function registrationPendingChangeCount(pending: RegistrationPendingChang
     return 0;
   }
   return pending.participantAdditions.length + pending.participantRemovals.length + Object.keys(pending.fields).length;
+}
+
+export function sentParticipantConfirmationEmails(
+  communications: Array<{ status: CommunicationStatus; recipientEmails: unknown; template?: { name?: string | null } | null }>
+) {
+  const sent = new Set<string>();
+  for (const communication of communications) {
+    if (communication.status !== CommunicationStatus.SENT || communication.template?.name !== "Participant Registration Confirmation") {
+      continue;
+    }
+    if (!Array.isArray(communication.recipientEmails)) {
+      continue;
+    }
+    for (const value of communication.recipientEmails) {
+      const email = String(value ?? "").trim().toLowerCase();
+      if (emailPattern.test(email)) {
+        sent.add(email);
+      }
+    }
+  }
+  return sent;
 }
 
 function escapeHtml(value: string) {
@@ -309,6 +336,9 @@ export async function applyRegistrationChanges(registrationId: string) {
   let registration = await registrationForApply(registrationId);
   let pending = readRegistrationPendingChanges(registration.pendingChanges);
   if (!pending || registrationPendingChangeCount(pending) === 0) {
+    if (registration.pendingChanges || registration.pendingChangesAt) {
+      await prisma.registration.update({ where: { id: registrationId }, data: { pendingChanges: Prisma.JsonNull, pendingChangesAt: null } });
+    }
     return { registrationId, status: "no_changes" as const };
   }
   if (!shouldDeferRegistrationDelivery(registration.cohort.status)) {
@@ -318,6 +348,22 @@ export async function applyRegistrationChanges(registrationId: string) {
 
   const invoiceRelevant = ["participantCount", "totalAmount", "purchaseOrderNumber", "invoiceNumber"].some((field) => pending?.fields[field]);
   const attendeeChanges = pending.participantAdditions.length > 0 || pending.participantRemovals.length > 0;
+  if (pending.participantAdditions.length > 0 && pending.participantRemovals.length === 0 && Object.keys(pending.fields).length === 0) {
+    const sentConfirmations = sentParticipantConfirmationEmails(await prisma.cohortCommunication.findMany({
+      where: {
+        registrationId,
+        status: CommunicationStatus.SENT,
+        template: { name: "Participant Registration Confirmation" }
+      },
+      select: { status: true, recipientEmails: true, template: { select: { name: true } } }
+    }));
+    const alreadyDelivered = pending.participantAdditions.every((participant) => sentConfirmations.has(participant.email.trim().toLowerCase()));
+    if (alreadyDelivered) {
+      throw Object.assign(new Error(
+        "These participant additions already have sent confirmations. Apply was stopped to prevent duplicate client communication. Use the controlled stale-change reconciliation after verifying calendar enrollment."
+      ), { code: "STALE_DELIVERY_REVIEW_REQUIRED", status: 409 });
+    }
+  }
   const calendarIssues: Array<{ sessionId: string; title: string; error: string }> = [];
   let invoice = null;
   if (!pending.invoiceAppliedAt) {

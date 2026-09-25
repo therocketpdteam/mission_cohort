@@ -165,6 +165,17 @@ function rosterHealth(registration: AdminRow) {
   return { tone: "warning", label: formatStatusLabel(status), helper: `${actual}/${expected || actual} participants` };
 }
 
+function pendingApplyCount(registration: AdminRow) {
+  const pending = registration.pendingChanges;
+  if (!pending || typeof pending !== "object" || Array.isArray(pending)) {
+    return 0;
+  }
+  const row = pending as AdminRow;
+  return (Array.isArray(row.participantAdditions) ? row.participantAdditions.length : 0)
+    + (Array.isArray(row.participantRemovals) ? row.participantRemovals.length : 0)
+    + (row.fields && typeof row.fields === "object" && !Array.isArray(row.fields) ? Object.keys(row.fields).length : 0);
+}
+
 function taskTemplateName(task: AdminRow) {
   if (task.category === "PAYMENT_FOLLOW_UP") {
     return "Payment Reminder";
@@ -1913,12 +1924,13 @@ export function RegistrationsClient() {
       width: 168,
       renderCell: (params) => {
         const health = rosterHealth(params.row);
+        const pendingCount = pendingApplyCount(params.row);
         return (
           <div className="registration-roster-cell" title={`${health.label} · ${health.helper}`}>
-            <span className={`registration-health-dot is-${health.tone}`} />
+            {pendingCount > 0 ? <WarningAmberOutlined fontSize="small" color="warning" /> : <span className={`registration-health-dot is-${health.tone}`} />}
             <div>
-              <strong>{health.label}</strong>
-              <span>{health.helper}</span>
+              <strong>{pendingCount > 0 ? "Pending Apply" : health.label}</strong>
+              <span>{pendingCount > 0 ? `${pendingCount} saved change${pendingCount === 1 ? "" : "s"}` : health.helper}</span>
             </div>
           </div>
         );

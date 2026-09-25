@@ -5,6 +5,7 @@ import {
   mergeParticipantRemoval,
   mergeRegistrationFieldChanges,
   registrationPendingChangeCount,
+  sentParticipantConfirmationEmails,
   type RegistrationPendingChanges
 } from "../../src/services/registrationChangeService";
 
@@ -47,4 +48,26 @@ test("changing a registration field back to its original value removes it from r
   const reverted = mergeRegistrationFieldChanges(first, { totalAmount: 1590 }, { totalAmount: 795 });
 
   assert.equal(registrationPendingChangeCount(reverted), 0);
+});
+
+test("sent participant confirmation recipients are normalized for replay protection", () => {
+  const emails = sentParticipantConfirmationEmails([
+    {
+      status: "SENT" as never,
+      recipientEmails: [" Chris@Example.com "],
+      template: { name: "Participant Registration Confirmation" }
+    },
+    {
+      status: "FAILED" as never,
+      recipientEmails: ["failed@example.com"],
+      template: { name: "Participant Registration Confirmation" }
+    },
+    {
+      status: "SENT" as never,
+      recipientEmails: ["poc@example.com"],
+      template: { name: "Registration Confirmation" }
+    }
+  ]);
+
+  assert.deepEqual([...emails], ["chris@example.com"]);
 });
