@@ -38,11 +38,11 @@ export async function PATCH(request: Request) {
     }
 
     if (body.action === "sendInvoice") {
-      return ok(await sendInvoiceDocument(body.id, false));
+      return ok(await sendInvoiceDocument(body.id, false, body.recipientEmails));
     }
 
     if (body.action === "sendReceipt") {
-      return ok(await sendInvoiceDocument(body.id, true));
+      return ok(await sendInvoiceDocument(body.id, true, body.recipientEmails));
     }
 
     if (body.action === "sendRegistrationInvoicePackage") {

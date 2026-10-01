@@ -899,6 +899,7 @@ function RegistrationDetailDialog({
   open,
   onClose,
   onChanged,
+  onEdit,
   templates,
   onSuccess,
   onError
@@ -907,6 +908,7 @@ function RegistrationDetailDialog({
   open: boolean;
   onClose: () => void;
   onChanged: () => Promise<void>;
+  onEdit: (registration: AdminRow) => void;
   templates: AdminRow[];
   onSuccess: (message: string) => void;
   onError: (message: string) => void;
@@ -921,6 +923,9 @@ function RegistrationDetailDialog({
   const [sendingTaskId, setSendingTaskId] = useState("");
   const [completingTaskId, setCompletingTaskId] = useState("");
   const [syncingCrm, setSyncingCrm] = useState(false);
+  const [invoiceRecipientOpen, setInvoiceRecipientOpen] = useState(false);
+  const [invoiceRecipient, setInvoiceRecipient] = useState("");
+  const [sendingInvoice, setSendingInvoice] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -928,6 +933,8 @@ function RegistrationDetailDialog({
       setEditingParticipantId("");
       setParticipantEdit({ firstName: "", lastName: "", email: "", title: "", phone: "" });
       setError(null);
+      setInvoiceRecipientOpen(false);
+      setInvoiceRecipient("");
     }
   }, [open, registration?.id]);
 
@@ -1152,6 +1159,39 @@ function RegistrationDetailDialog({
     }
   }
 
+  const currentInvoice = registration?.invoiceDrafts?.[0] ?? null;
+
+  async function sendInvoiceCopy() {
+    if (!currentInvoice?.id || !invoiceRecipient.trim()) {
+      setError("Choose an invoice and enter the recipient email address.");
+      return;
+    }
+
+    setSendingInvoice(true);
+    setError(null);
+    try {
+      const result = await adminApi<AdminRow>("/api/invoices", {
+        method: "PATCH",
+        body: {
+          action: "sendInvoice",
+          id: currentInvoice.id,
+          recipientEmails: [invoiceRecipient.trim()]
+        }
+      });
+      const recipient = Array.isArray(result.recipients) ? result.recipients[0] : invoiceRecipient.trim();
+      onSuccess(`Invoice ${currentInvoice.invoiceNumber ?? "copy"} sent only to ${recipient}.`);
+      setInvoiceRecipientOpen(false);
+      setInvoiceRecipient("");
+      await onChanged();
+    } catch (sendError) {
+      const message = (sendError as Error).message;
+      setError(message);
+      onError(message);
+    } finally {
+      setSendingInvoice(false);
+    }
+  }
+
   function revisionSummary(event: AdminRow) {
     const summary = event.normalizedSummary && typeof event.normalizedSummary === "object" ? event.normalizedSummary : {};
     const amount = Number(summary.totalAmount ?? 0);
@@ -1263,6 +1303,11 @@ function RegistrationDetailDialog({
       actions={
         registration ? (
           <>
+            <Button variant="outlined" startIcon={<EditOutlined />} onClick={() => onEdit(registration)}>Edit registration</Button>
+            <Button variant="outlined" disabled={!currentInvoice} onClick={() => {
+              setInvoiceRecipient(registration.billingContactEmail ?? registration.primaryContactEmail ?? "");
+              setInvoiceRecipientOpen(true);
+            }}>Send invoice copy</Button>
             <Button variant="outlined" onClick={syncCrm} disabled={syncingCrm}>{syncingCrm ? "Syncing CRM" : "Sync to CRM"}</Button>
             <Button variant="outlined" onClick={syncQuickBooks}>Sync QuickBooks</Button>
             <Button variant="outlined" color="warning" onClick={voidQuickBooksInvoice}>Void QB Invoice</Button>
@@ -1494,6 +1539,35 @@ function RegistrationDetailDialog({
       ) : (
         <Typography color="text.secondary">Loading registration detail.</Typography>
       )}
+      <Dialog open={invoiceRecipientOpen} onClose={sendingInvoice ? undefined : () => setInvoiceRecipientOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle>Send invoice copy</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ pt: 1 }}>
+            <Alert severity="info">
+              This sends only invoice {currentInvoice?.invoiceNumber ?? "PDF"}. It does not change the saved POC or billing contact and does not send confirmations or calendar invitations.
+            </Alert>
+            <div className="quick-view-grid">
+              <DetailTile label="Invoice" value={currentInvoice?.invoiceNumber ?? "No invoice"} />
+              <DetailTile label="Total" value={currentInvoice ? money(currentInvoice.totalAmount) : "-"} />
+              <DetailTile label="PDF" value={currentInvoice?.pdfUrl ? "Ready" : "Generated before sending"} />
+            </div>
+            <TextField
+              autoFocus
+              fullWidth
+              required
+              type="email"
+              label="Send invoice to"
+              value={invoiceRecipient}
+              onChange={(event) => setInvoiceRecipient(event.target.value)}
+              helperText="One-time recipient. The registration contact information will not be changed."
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button variant="outlined" onClick={() => setInvoiceRecipientOpen(false)} disabled={sendingInvoice}>Cancel</Button>
+          <Button onClick={sendInvoiceCopy} disabled={sendingInvoice || !invoiceRecipient.trim()}>{sendingInvoice ? "Sending" : "Send invoice"}</Button>
+        </DialogActions>
+      </Dialog>
     </QuickViewDrawer>
   );
 }
@@ -2061,7 +2135,11 @@ export function RegistrationsClient() {
         onSaved={async () => {
           const defer = Boolean(editing && ["PUBLISHED", "ACTIVE"].includes(String(editing.cohort?.derivedStatus ?? editing.cohort?.status)));
           notifySuccess(defer ? "Registration saved. Review and apply its delivery changes." : editing ? "Registration updated" : "Registration created");
-          await load();
+          if (detail?.id && editing?.id === detail.id) {
+            await reloadDetail();
+          } else {
+            await load();
+          }
         }}
       />
       <RegistrationDetailDialog
@@ -2070,6 +2148,10 @@ export function RegistrationsClient() {
         templates={templates}
         onClose={closeDetail}
         onChanged={reloadDetail}
+        onEdit={(registration) => {
+          setEditing(registration);
+          setDialogOpen(true);
+        }}
         onSuccess={notifySuccess}
         onError={notifyError}
       />

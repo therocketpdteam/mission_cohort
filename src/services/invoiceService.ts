@@ -460,7 +460,7 @@ export async function generateInvoicePdf(id: string, receipt = false) {
   });
 }
 
-export async function sendInvoiceDocument(id: string, receipt = false) {
+export async function sendInvoiceDocument(id: string, receipt = false, recipientEmails?: string[]) {
   let invoice = await prisma.invoiceDraft.findUnique({
     where: { id },
     include: invoiceInclude()
@@ -483,7 +483,13 @@ export async function sendInvoiceDocument(id: string, receipt = false) {
   }
 
   const organization = invoice.organization ?? invoice.registration?.organization;
-  const recipients = dedupeEmails([invoice.registration?.billingContactEmail, invoice.registration?.primaryContactEmail]);
+  const requestedRecipients = recipientEmails?.map((email) => email.trim()).filter(Boolean);
+  if (requestedRecipients?.some((email) => !z.string().email().safeParse(email).success)) {
+    throw Object.assign(new Error("Enter a valid recipient email address."), { code: "BAD_REQUEST", status: 400 });
+  }
+  const recipients = dedupeEmails(requestedRecipients?.length
+    ? requestedRecipients
+    : [invoice.registration?.billingContactEmail, invoice.registration?.primaryContactEmail]);
 
   if (recipients.length === 0) {
     throw Object.assign(new Error("No billing or POC email is available for this invoice."), { code: "BAD_REQUEST", status: 400 });
