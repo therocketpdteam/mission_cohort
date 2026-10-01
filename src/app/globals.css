@@ -6234,10 +6234,19 @@ h6,
 }
 
 .invoice-quick-actions {
+  display: flex !important;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: nowrap !important;
+  gap: 6px;
   min-width: 0;
 }
 
 .invoice-quick-actions .status-chip {
+  flex-shrink: 0;
+}
+
+.invoice-quick-actions > * {
   flex-shrink: 0;
 }
 
@@ -8946,6 +8955,10 @@ h6,
 
   .invoice-workbench-row {
     align-items: start;
+  }
+
+  .invoice-quick-actions {
+    flex-wrap: wrap !important;
   }
 
   .app-topbar {
