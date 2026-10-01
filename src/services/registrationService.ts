@@ -610,7 +610,11 @@ export async function listRegistrations(cohortId?: string, options: { includeArc
   return prisma.registration.findMany({
     where: {
       ...(cohortId ? { cohortId } : {}),
-      ...(options.includeArchived ? {} : { archivedAt: null })
+      ...(options.includeArchived ? {} : { archivedAt: null }),
+      OR: [
+        { archivedReason: null },
+        { archivedReason: { not: { startsWith: "MERGED_INTO:" } } }
+      ]
     },
     orderBy: { createdAt: "desc" },
     include: {

@@ -900,6 +900,8 @@ function RegistrationDetailDialog({
   onClose,
   onChanged,
   onEdit,
+  mergeCandidates,
+  onMerged,
   templates,
   onSuccess,
   onError
@@ -909,6 +911,8 @@ function RegistrationDetailDialog({
   onClose: () => void;
   onChanged: () => Promise<void>;
   onEdit: (registration: AdminRow) => void;
+  mergeCandidates: AdminRow[];
+  onMerged: (targetId: string) => Promise<void>;
   templates: AdminRow[];
   onSuccess: (message: string) => void;
   onError: (message: string) => void;
@@ -926,6 +930,12 @@ function RegistrationDetailDialog({
   const [invoiceRecipientOpen, setInvoiceRecipientOpen] = useState(false);
   const [invoiceRecipient, setInvoiceRecipient] = useState("");
   const [sendingInvoice, setSendingInvoice] = useState(false);
+  const [mergeOpen, setMergeOpen] = useState(false);
+  const [mergeTargetId, setMergeTargetId] = useState("");
+  const [mergeSourceId, setMergeSourceId] = useState("");
+  const [mergePreview, setMergePreview] = useState<AdminRow | null>(null);
+  const [mergeBusy, setMergeBusy] = useState(false);
+  const [sendMergeSummary, setSendMergeSummary] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -935,6 +945,11 @@ function RegistrationDetailDialog({
       setError(null);
       setInvoiceRecipientOpen(false);
       setInvoiceRecipient("");
+      setMergeOpen(false);
+      setMergeTargetId(registration?.id ?? "");
+      setMergeSourceId("");
+      setMergePreview(null);
+      setSendMergeSummary(false);
     }
   }, [open, registration?.id]);
 
@@ -1192,6 +1207,59 @@ function RegistrationDetailDialog({
     }
   }
 
+  async function previewMerge() {
+    if (!mergeTargetId || !mergeSourceId || mergeTargetId === mergeSourceId) {
+      setError("Choose different surviving and merged registrations.");
+      return;
+    }
+    setMergeBusy(true);
+    setError(null);
+    try {
+      setMergePreview(await adminApi<AdminRow>("/api/registrations", {
+        method: "PATCH",
+        body: { id: mergeTargetId, action: "previewMerge", sourceId: mergeSourceId }
+      }));
+    } catch (mergeError) {
+      const message = (mergeError as Error).message;
+      setError(message);
+      onError(message);
+    } finally {
+      setMergeBusy(false);
+    }
+  }
+
+  async function applyMerge() {
+    if (!mergePreview || (mergePreview.blockers ?? []).length > 0) return;
+    setMergeBusy(true);
+    setError(null);
+    try {
+      const result = await adminApi<AdminRow>("/api/registrations", {
+        method: "PATCH",
+        body: {
+          id: mergeTargetId,
+          action: "mergeRegistration",
+          sourceId: mergeSourceId,
+          sendPocSummary: sendMergeSummary
+        }
+      });
+      if (result.invoiceError) {
+        onError(`Registrations merged, but the updated invoice PDF needs attention: ${result.invoiceError}`);
+      } else if (result.communicationError) {
+        onError(`Registrations merged and invoice regenerated, but the POC email failed: ${result.communicationError}`);
+      } else {
+        onSuccess(sendMergeSummary ? "Registrations merged and the updated invoice was sent to the POC." : "Registrations merged without sending email.");
+      }
+      setMergeOpen(false);
+      await onMerged(mergeTargetId);
+    } catch (mergeError) {
+      const message = (mergeError as Error).message;
+      setError(message);
+      onError(message);
+    } finally {
+      setMergeBusy(false);
+    }
+  }
+
   function revisionSummary(event: AdminRow) {
     const summary = event.normalizedSummary && typeof event.normalizedSummary === "object" ? event.normalizedSummary : {};
     const amount = Number(summary.totalAmount ?? 0);
@@ -1304,6 +1372,13 @@ function RegistrationDetailDialog({
         registration ? (
           <>
             <Button variant="outlined" startIcon={<EditOutlined />} onClick={() => onEdit(registration)}>Edit registration</Button>
+            <Button variant="outlined" disabled={mergeCandidates.length < 2} onClick={() => {
+              setMergeTargetId(registration.id);
+              setMergeSourceId("");
+              setMergePreview(null);
+              setSendMergeSummary(false);
+              setMergeOpen(true);
+            }}>Merge registrations</Button>
             <Button variant="outlined" disabled={!currentInvoice} onClick={() => {
               setInvoiceRecipient(registration.billingContactEmail ?? registration.primaryContactEmail ?? "");
               setInvoiceRecipientOpen(true);
@@ -1566,6 +1641,67 @@ function RegistrationDetailDialog({
         <DialogActions>
           <Button variant="outlined" onClick={() => setInvoiceRecipientOpen(false)} disabled={sendingInvoice}>Cancel</Button>
           <Button onClick={sendInvoiceCopy} disabled={sendingInvoice || !invoiceRecipient.trim()}>{sendingInvoice ? "Sending" : "Send invoice"}</Button>
+        </DialogActions>
+      </Dialog>
+      <Dialog open={mergeOpen} onClose={mergeBusy ? undefined : () => setMergeOpen(false)} fullWidth maxWidth="md">
+        <DialogTitle>Merge registrations</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ pt: 1 }}>
+            <Alert severity="warning">
+              The surviving registration keeps its invoice number. The other invoice is voided and retained only in the audit trail. Nothing is sent until you explicitly confirm below.
+            </Alert>
+            <Grid container spacing={2}>
+              <Grid size={{ xs: 12, md: 6 }}>
+                <TextField select fullWidth label="Registration that survives" value={mergeTargetId} onChange={(event) => { setMergeTargetId(event.target.value); setMergePreview(null); }}>
+                  {mergeCandidates.map((candidate) => (
+                    <MenuItem value={candidate.id} key={candidate.id} disabled={candidate.id === mergeSourceId}>
+                      {`${new Date(candidate.createdAt).toLocaleDateString("en-US")} · ${candidate.participantCount} seats · ${candidate.invoiceNumber ?? "No invoice"}`}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              </Grid>
+              <Grid size={{ xs: 12, md: 6 }}>
+                <TextField select fullWidth label="Registration merged into it" value={mergeSourceId} onChange={(event) => { setMergeSourceId(event.target.value); setMergePreview(null); }}>
+                  {mergeCandidates.map((candidate) => (
+                    <MenuItem value={candidate.id} key={candidate.id} disabled={candidate.id === mergeTargetId}>
+                      {`${new Date(candidate.createdAt).toLocaleDateString("en-US")} · ${candidate.participantCount} seats · ${candidate.invoiceNumber ?? "No invoice"}`}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              </Grid>
+            </Grid>
+            {!mergePreview ? (
+              <Button variant="outlined" onClick={previewMerge} disabled={mergeBusy || !mergeTargetId || !mergeSourceId}>Review merge impact</Button>
+            ) : (
+              <>
+                <div className="quick-view-grid">
+                  <DetailTile label="Combined seats" value={mergePreview.result?.participantCount} />
+                  <DetailTile label="Price per participant" value={money(mergePreview.result?.unitAmount)} />
+                  <DetailTile label="Updated total" value={money(mergePreview.result?.totalAmount)} />
+                  <DetailTile label="Invoice retained" value={mergePreview.result?.survivingInvoiceNumber} />
+                  <DetailTile label="Invoice superseded" value={mergePreview.result?.supersededInvoiceNumber} />
+                  <DetailTile label="Participant messages" value="None" tone="success" />
+                  <DetailTile label="Calendar changes" value="None" tone="success" />
+                  <DetailTile label="POC recipient" value={mergePreview.communication?.pocEmail} />
+                </div>
+                {(mergePreview.blockers ?? []).length > 0 ? (
+                  <Alert severity="error">
+                    <strong>Merge blocked.</strong>
+                    <ul>{(mergePreview.blockers ?? []).map((blocker: string) => <li key={blocker}>{blocker}</li>)}</ul>
+                  </Alert>
+                ) : (
+                  <FormControlLabel
+                    control={<Switch checked={sendMergeSummary} onChange={(event) => setSendMergeSummary(event.target.checked)} />}
+                    label={`Send one consolidation email with the updated invoice to ${mergePreview.communication?.pocEmail}`}
+                  />
+                )}
+              </>
+            )}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button variant="outlined" onClick={() => setMergeOpen(false)} disabled={mergeBusy}>Cancel</Button>
+          {mergePreview ? <Button color="warning" onClick={applyMerge} disabled={mergeBusy || (mergePreview.blockers ?? []).length > 0}>{mergeBusy ? "Merging" : "Confirm merge"}</Button> : null}
         </DialogActions>
       </Dialog>
     </QuickViewDrawer>
@@ -2151,6 +2287,11 @@ export function RegistrationsClient() {
         onEdit={(registration) => {
           setEditing(registration);
           setDialogOpen(true);
+        }}
+        mergeCandidates={rows.filter((candidate) => candidate.cohortId === detail?.cohortId && candidate.organizationId === detail?.organizationId && !candidate.archivedAt)}
+        onMerged={async (targetId) => {
+          await load();
+          await openDetail(targetId, { syncUrl: true });
         }}
         onSuccess={notifySuccess}
         onError={notifyError}

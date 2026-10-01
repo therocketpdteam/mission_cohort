@@ -18,6 +18,7 @@ import {
 import { applyRegistrationChanges, discardRegistrationChanges } from "@/services/registrationChangeService";
 import { syncRegistrationToCrm } from "@/services/crmRegistrationWebhookService";
 import { planRegistrationJourneys } from "@/services/registrationJourneyService";
+import { mergeRegistrations, previewRegistrationMerge } from "@/services/registrationMergeService";
 
 export async function GET(request: Request) {
   try {
@@ -135,6 +136,18 @@ export async function PATCH(request: Request) {
 
     if (body.action === "syncRosterStatus") {
       return ok(await syncRegistrationRosterStatuses({ id: body.id }));
+    }
+
+    if (body.action === "previewMerge") {
+      return ok(await previewRegistrationMerge(body.id, body.sourceId));
+    }
+
+    if (body.action === "mergeRegistration") {
+      return ok(await mergeRegistrations({
+        targetId: body.id,
+        sourceId: body.sourceId,
+        sendPocSummary: Boolean(body.sendPocSummary)
+      }));
     }
 
     return ok(await updateRegistration(body.id, body, { deferNotifications: true }));

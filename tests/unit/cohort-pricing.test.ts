@@ -35,3 +35,27 @@ test("keeps comped registrations at zero when seats are added", () => {
     2
   ), 0);
 });
+
+test("applies five-session volume tiers for cohorts configured at the 495 base rate", () => {
+  const cohort = { pricePerParticipant: 495, sessions: new Array(5) };
+  assert.equal(registrationTotalForCohort(cohort, 4), 1980);
+  assert.equal(registrationTotalForCohort(cohort, 5), 2425);
+  assert.equal(registrationTotalForCohort(cohort, 13), 6045);
+  assert.equal(registrationTotalForCohort(cohort, 18), 8370);
+  assert.equal(registrationTotalForCohort(cohort, 20), 9100);
+  assert.equal(registrationTotalForCohort(cohort, 100), 42500);
+});
+
+test("recalculates a standard tiered registration when seats cross a volume boundary", () => {
+  const cohort = { pricePerParticipant: 495, sessions: new Array(5) };
+  assert.equal(registrationTotalAfterSeatChange(cohort, {
+    participantCount: 9,
+    totalAmount: 4365,
+    paymentMethod: "INVOICE"
+  }, 10), 4650);
+  assert.equal(registrationTotalAfterSeatChange(cohort, {
+    participantCount: 13,
+    totalAmount: 6045,
+    paymentMethod: "INVOICE"
+  }, 18), 8370);
+});
