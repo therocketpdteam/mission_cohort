@@ -1728,7 +1728,7 @@ export function RegistrationRemovalDialog({
   onError
 }: {
   open: boolean;
-  action: "archive" | "delete" | "restore" | null;
+  action: "cancel" | "archive" | "delete" | "restore" | null;
   registration: AdminRow | null;
   templates: AdminRow[];
   onClose: () => void;
@@ -1741,14 +1741,24 @@ export function RegistrationRemovalDialog({
   const [notify, setNotify] = useState(false);
   const [templateId, setTemplateId] = useState("");
   const [busy, setBusy] = useState(false);
+  const [cancellationPreview, setCancellationPreview] = useState<AdminRow | null>(null);
+  const [previewError, setPreviewError] = useState("");
 
   useEffect(() => {
     if (open) {
       setNotify(false);
       setTemplateId(String(defaultTemplate?.id ?? ""));
       setBusy(false);
+      setCancellationPreview(null);
+      setPreviewError("");
+      if (action === "cancel" && registration?.id) {
+        adminApi<AdminRow>("/api/registrations", {
+          method: "PATCH",
+          body: { id: registration.id, action: "previewCancellation" }
+        }).then(setCancellationPreview).catch((error) => setPreviewError((error as Error).message));
+      }
     }
-  }, [defaultTemplate?.id, open]);
+  }, [action, defaultTemplate?.id, open, registration?.id]);
 
   async function runAction() {
     if (!action || !registration?.id) {
@@ -1757,7 +1767,7 @@ export function RegistrationRemovalDialog({
 
     setBusy(true);
     try {
-      if (notify && action !== "restore") {
+      if (notify && action !== "restore" && action !== "cancel") {
         if (!templateId) {
           throw new Error("Choose a notification template or turn notification off.");
         }
@@ -1768,7 +1778,18 @@ export function RegistrationRemovalDialog({
         });
       }
 
-      if (action === "delete") {
+      if (action === "cancel") {
+        const result = await adminApi<AdminRow>("/api/registrations", {
+          method: "PATCH",
+          body: { id: registration.id, action: "cancel", sendPocCancellation: true }
+        });
+        const emailError = result.cancellation?.communicationError;
+        if (emailError) {
+          onError(`Registration cancelled, but the POC email needs attention: ${emailError}`);
+        } else {
+          onSuccess(`Registration cancelled and confirmation sent only to ${registration.primaryContactEmail}`);
+        }
+      } else if (action === "delete") {
         await adminApi(`/api/registrations?id=${encodeURIComponent(String(registration.id))}`, { method: "DELETE" });
         onSuccess(notify ? "Notification sent and registration permanently deleted" : "Registration permanently deleted");
       } else {
@@ -1792,13 +1813,15 @@ export function RegistrationRemovalDialog({
     }
   }
 
-  const title = action === "delete" ? "Delete registration permanently?" : action === "restore" ? "Restore registration?" : "Remove registration from cohort?";
+  const title = action === "cancel" ? "Confirm registration cancellation" : action === "delete" ? "Delete registration permanently?" : action === "restore" ? "Restore registration?" : "Remove registration from cohort?";
   const buttonLabel = busy
     ? "Working..."
     : action === "delete"
       ? "Delete permanently"
       : action === "restore"
         ? "Restore"
+        : action === "cancel"
+          ? "Cancel registration and notify POC"
         : "Remove registration";
 
   return (
@@ -1811,7 +1834,48 @@ export function RegistrationRemovalDialog({
               ? `${formatProperDisplay(String(registration.primaryContactName ?? ""))} · ${registration.primaryContactEmail ?? ""}`
               : ""}
           </Typography>
-          {action === "delete" ? (
+          {action === "cancel" ? (
+            <>
+              {previewError ? <Alert severity="error">{previewError}</Alert> : null}
+              {!cancellationPreview && !previewError ? <Alert severity="info">Loading the exact cancellation impact...</Alert> : null}
+              {cancellationPreview ? (
+                <Stack spacing={1.5}>
+                  <Alert severity="warning">
+                    This action cancels only this registration. It does not cancel the cohort and does not issue a refund automatically.
+                  </Alert>
+                  <div className="registration-detail-grid">
+                    <DetailTile label="Cohort" value={cancellationPreview.registration?.cohortShortName ?? cancellationPreview.registration?.cohortTitle} />
+                    <DetailTile label="Organization" value={cancellationPreview.registration?.organizationName} />
+                    <DetailTile label="Participants affected" value={cancellationPreview.registration?.participantCount} />
+                    <DetailTile label="Current value" value={money(cancellationPreview.registration?.totalAmount)} />
+                    <DetailTile label="Reporting value afterward" value="$0" tone="success" />
+                    <DetailTile label="CRM status afterward" value="Cancelled" tone="success" />
+                    <DetailTile label="Future calendar sessions" value={cancellationPreview.effects?.futureCalendarSessions?.length ?? 0} />
+                    <DetailTile label="Queued messages cancelled" value={cancellationPreview.effects?.communicationsToCancel?.length ?? 0} />
+                    <DetailTile label="Participant emails sent" value="None" tone="success" />
+                    <DetailTile label="Calendar notifications sent" value="None (silent removal)" tone="success" />
+                  </div>
+                  <Box>
+                    <Typography variant="subtitle2">Calendar attendees removed</Typography>
+                    <Typography color="text.secondary">
+                      {(cancellationPreview.effects?.calendarEmails ?? []).join(", ") || "No participant calendar attendees were found."}
+                    </Typography>
+                  </Box>
+                  <Box>
+                    <Typography variant="subtitle2">POC cancellation email</Typography>
+                    <Typography><strong>To:</strong> {cancellationPreview.email?.to}</Typography>
+                    <Typography><strong>Subject:</strong> {cancellationPreview.email?.subject}</Typography>
+                    <Box component="pre" sx={{ whiteSpace: "pre-wrap", fontFamily: "inherit", margin: 0, padding: 2, border: "1px solid", borderColor: "divider", borderRadius: 1, backgroundColor: "background.default" }}>
+                      {cancellationPreview.email?.bodyText}
+                    </Box>
+                  </Box>
+                  {(cancellationPreview.blockers ?? []).length > 0 ? (
+                    <Alert severity="error">{(cancellationPreview.blockers ?? []).join(" ")}</Alert>
+                  ) : null}
+                </Stack>
+              ) : null}
+            </>
+          ) : action === "delete" ? (
             <Alert severity="warning">
               Permanent delete removes the registration, participants, payments, and registration tasks. Records with invoices or QuickBooks references are blocked and should be removed with Archive instead.
             </Alert>
@@ -1822,7 +1886,7 @@ export function RegistrationRemovalDialog({
           ) : (
             <Alert severity="info">Restore brings this registration back into normal operational lists.</Alert>
           )}
-          {action && action !== "restore" ? (
+          {action && action !== "restore" && action !== "cancel" ? (
             <>
               <FormControlLabel
                 control={<Switch checked={notify} onChange={(event) => setNotify(event.target.checked)} />}
@@ -1842,8 +1906,8 @@ export function RegistrationRemovalDialog({
         </Stack>
       </DialogContent>
       <DialogActions>
-        <Button variant="outlined" onClick={onClose} disabled={busy}>Cancel</Button>
-        <Button color={action === "delete" ? "error" : "primary"} onClick={runAction} disabled={busy}>
+        <Button variant="outlined" onClick={onClose} disabled={busy}>{action === "cancel" ? "Go back" : "Cancel"}</Button>
+        <Button color={action === "delete" || action === "cancel" ? "error" : "primary"} onClick={runAction} disabled={busy || (action === "cancel" && (!cancellationPreview || Boolean(previewError) || (cancellationPreview.blockers ?? []).length > 0))}>
           {buttonLabel}
         </Button>
       </DialogActions>
@@ -1873,7 +1937,7 @@ export function RegistrationsClient() {
   const [cohortId, setCohortId] = useState("");
   const [organizationId, setOrganizationId] = useState("");
   const [visibility, setVisibility] = useState("active");
-  const [pendingLifecycleAction, setPendingLifecycleAction] = useState<{ action: "archive" | "restore" | "delete"; row: AdminRow } | null>(null);
+  const [pendingLifecycleAction, setPendingLifecycleAction] = useState<{ action: "cancel" | "archive" | "restore" | "delete"; row: AdminRow } | null>(null);
   const { notifySuccess, notifyError, snackbar } = useNotifier();
 
   async function load() {
@@ -2174,7 +2238,7 @@ export function RegistrationsClient() {
             actions={[
               { label: "Edit POC & billing", icon: <EditOutlined fontSize="small" />, onClick: () => { setEditing(params.row); setDialogOpen(true); } },
               { label: "Confirm registration", icon: <CheckCircleOutline fontSize="small" />, color: "success", onClick: () => mutate({ id: params.row.id, action: "confirm" }, "Registration confirmed") },
-              { label: "Cancel registration", icon: <CancelOutlined fontSize="small" />, color: "warning", onClick: () => mutate({ id: params.row.id, action: "cancel" }, "Registration cancelled") },
+              { label: "Cancel registration", icon: <CancelOutlined fontSize="small" />, color: "warning", onClick: () => setPendingLifecycleAction({ action: "cancel", row: params.row }) },
               params.row.archivedAt
                 ? { label: "Restore registration", icon: <ArchiveOutlined fontSize="small" />, onClick: () => setPendingLifecycleAction({ action: "restore", row: params.row }) }
                 : { label: "Archive registration", icon: <ArchiveOutlined fontSize="small" />, onClick: () => setPendingLifecycleAction({ action: "archive", row: params.row }) },

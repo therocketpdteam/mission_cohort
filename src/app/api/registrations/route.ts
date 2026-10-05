@@ -10,6 +10,7 @@ import {
   deleteRegistration,
   getRegistrationById,
   listRegistrations,
+  previewRegistrationCancellation,
   restoreRegistration,
   syncRegistrationRosterStatuses,
   updateRegistration,
@@ -70,7 +71,11 @@ export async function PATCH(request: Request) {
     }
 
     if (body.action === "cancel") {
-      return ok(await cancelRegistration(body.id));
+      return ok(await cancelRegistration(body.id, { sendPocCancellation: body.sendPocCancellation === true }));
+    }
+
+    if (body.action === "previewCancellation") {
+      return ok(await previewRegistrationCancellation(body.id));
     }
 
     if (body.action === "archive") {

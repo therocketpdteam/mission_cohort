@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { CommunicationStatus, ParticipantListStatus, ParticipantStatus, PaymentStatus, Prisma, RegistrationStatus, SupportingDocumentStatus } from "@prisma/client";
+import { CommunicationStatus, ParticipantListStatus, ParticipantStatus, PaymentStatus, Prisma, RecipientScope, RegistrationStatus, SupportingDocumentStatus } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { shouldDefaultPrimaryContactParticipant } from "@/lib/rosterStatus";
@@ -15,6 +15,9 @@ import { syncPaymentRecordsToRegistrationStatus } from "./paymentService";
 import { shouldDeferRegistrationDelivery, stageParticipantAddition, stageRegistrationFieldChanges } from "./registrationChangeService";
 import { removeFutureGoogleCalendarAttendees, syncFutureLinkedGoogleCalendarInvitesForCohort } from "./calendarService";
 import { deletePrivateAppFile } from "./storageService";
+import { getSystemUserId, sendCommunication } from "./communicationService";
+import { renderMergeFields } from "@/modules/email/mergeFields";
+import { registrationCancellationEmail } from "@/config/registrationCancellation";
 
 type BulkMoveRegistrationSummaryInput = Array<{
   id: string;
@@ -267,21 +270,154 @@ export async function confirmRegistration(id: string) {
   return registration;
 }
 
-export async function cancelRegistration(id: string) {
-  const existing = await prisma.registration.findUniqueOrThrow({ where: { id }, select: { cohortId: true } });
-  await removeFutureGoogleCalendarAttendees({
-    cohortId: existing.cohortId,
+export async function previewRegistrationCancellation(id: string) {
+  const registration = await prisma.registration.findUniqueOrThrow({
+    where: { id },
+    include: {
+      cohort: {
+        include: {
+          sessions: {
+            where: {
+              startTime: { gt: new Date() },
+              calendarEvents: { some: { provider: "google", providerEventId: { not: null } } }
+            },
+            orderBy: { sessionNumber: "asc" }
+          }
+        }
+      },
+      organization: true,
+      participants: true,
+      invoiceDrafts: { orderBy: { updatedAt: "desc" }, take: 1 },
+      communications: {
+        where: {
+          journeyKey: { not: null },
+          status: { in: [CommunicationStatus.DRAFT, CommunicationStatus.SCHEDULED, CommunicationStatus.FAILED] }
+        },
+        select: { id: true, subject: true, status: true, scheduledFor: true }
+      }
+    }
+  });
+  const firstName = registration.primaryContactName.trim().split(/\s+/)[0] || registration.primaryContactName;
+  const latestInvoice = registration.invoiceDrafts[0] ?? null;
+  const calendarEmails = Array.from(new Set([
+    ...registration.participants.map((participant) => participant.email.trim().toLowerCase()),
+    ...(registration.participantCount <= 1 && registration.participants.length === 0
+      ? [registration.primaryContactEmail.trim().toLowerCase()]
+      : [])
+  ].filter(Boolean)));
+  const context = {
+    cohort: registration.cohort,
+    organization: registration.organization,
+    registration: {
+      ...registration,
+      primaryContactFirstName: firstName,
+      invoiceNumber: latestInvoice?.invoiceNumber ?? registration.invoiceNumber ?? "Not assigned"
+    }
+  };
+
+  return {
+    registration: {
+      id: registration.id,
+      primaryContactName: registration.primaryContactName,
+      primaryContactEmail: registration.primaryContactEmail,
+      organizationName: registration.organization.name,
+      cohortTitle: registration.cohort.title,
+      cohortShortName: registration.cohort.shortName,
+      participantCount: registration.participantCount,
+      savedParticipantCount: registration.participants.length,
+      participantEmails: registration.participants.map((participant) => participant.email.trim().toLowerCase()),
+      totalAmount: Number(registration.totalAmount),
+      paymentStatus: registration.paymentStatus,
+      invoiceNumber: latestInvoice?.invoiceNumber ?? registration.invoiceNumber,
+      alreadyCancelled: registration.status === RegistrationStatus.CANCELLED
+    },
+    effects: {
+      futureCalendarSessions: registration.cohort.sessions.map((session) => ({
+        id: session.id,
+        sessionNumber: session.sessionNumber,
+        title: session.title,
+        startTime: session.startTime
+      })),
+      calendarEmails,
+      communicationsToCancel: registration.communications,
+      participantEmailsSent: 0,
+      calendarNotificationsSent: 0,
+      reportingValueAfterCancellation: 0,
+      crmStatus: "cancelled"
+    },
+    email: {
+      to: registration.primaryContactEmail.trim().toLowerCase(),
+      subject: renderMergeFields(registrationCancellationEmail.subject, context).output,
+      bodyHtml: renderMergeFields(registrationCancellationEmail.bodyHtml, context).output,
+      bodyText: renderMergeFields(registrationCancellationEmail.bodyText, context).output
+    },
+    blockers: [
+      registration.status === RegistrationStatus.CANCELLED ? "This registration is already cancelled." : "",
+      !registration.primaryContactEmail.trim() ? "A POC email is required before cancellation." : ""
+    ].filter(Boolean)
+  };
+}
+
+export async function cancelRegistration(id: string, options: { sendPocCancellation?: boolean } = {}) {
+  const preview = await previewRegistrationCancellation(id);
+  if (preview.blockers.length > 0) {
+    throw Object.assign(new Error(preview.blockers.join(" ")), { code: "BAD_REQUEST", status: 400 });
+  }
+  const calendar = await removeFutureGoogleCalendarAttendees({
+    cohortId: (await prisma.registration.findUniqueOrThrow({ where: { id }, select: { cohortId: true } })).cohortId,
     registrationId: id,
     reason: "Registration cancelled."
   });
   const registration = await updateRegistration(id, { status: RegistrationStatus.CANCELLED });
 
+  let communication = null;
+  let communicationError: string | null = null;
+  if (options.sendPocCancellation) {
+    try {
+      const draft = await prisma.cohortCommunication.create({
+        data: {
+          cohortId: registration.cohortId,
+          registrationId: registration.id,
+          subject: registrationCancellationEmail.subject,
+          bodyHtml: registrationCancellationEmail.bodyHtml,
+          bodyText: registrationCancellationEmail.bodyText,
+          status: CommunicationStatus.DRAFT,
+          recipientScope: RecipientScope.CUSTOM,
+          recipientEmails: [preview.email.to],
+          createdById: await getSystemUserId()
+        }
+      });
+      communication = await sendCommunication(draft.id, {
+        recipients: [preview.email.to],
+        bypassCohortStatus: true
+      });
+    } catch (error) {
+      communicationError = error instanceof Error ? error.message : "The POC cancellation email could not be sent.";
+    }
+  }
+
   if (registration.quickBooksInvoiceRef) {
     void voidRegistrationQuickBooksInvoice(registration.id).catch(() => undefined);
   }
 
+  logAuditEventAsync({
+    entityType: "Registration",
+    entityId: registration.id,
+    action: "CANCELLED",
+    description: "Registration cancelled by an administrator",
+    metadata: {
+      cohortId: registration.cohortId,
+      pocEmail: preview.email.to,
+      participantEmails: preview.registration.participantEmails,
+      calendar,
+      sendPocCancellation: Boolean(options.sendPocCancellation),
+      communicationError,
+      crmStatus: "cancelled",
+      reportingValue: 0
+    }
+  });
   void queueRegistrationCrmSync(registration.id, "registration.cancelled").catch(() => undefined);
-  return registration;
+  return { ...registration, cancellation: { preview, calendar, communication, communicationError } };
 }
 
 export async function archiveRegistration(id: string, reason?: string) {
