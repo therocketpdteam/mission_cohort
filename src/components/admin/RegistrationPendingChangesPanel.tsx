@@ -204,6 +204,7 @@ export function RegistrationPendingChangesPanel({
         <div className="registration-change-review-actions">
           <Button variant="outlined" onClick={discardChanges} disabled={applying || discarding}>{discarding ? "Discarding" : "Discard"}</Button>
           <Button
+            className="registration-apply-button"
             variant="contained"
             onClick={applyChanges}
             disabled={applying || discarding}

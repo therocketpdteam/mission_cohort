@@ -3502,7 +3502,7 @@ h6,
   min-width: 0;
 }
 
-.registration-change-review-header span {
+.registration-change-review-header > div:first-child > span {
   color: var(--color-blue-600);
   font-size: 0.7rem;
   font-weight: 760;
@@ -3519,6 +3519,13 @@ h6,
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.registration-change-review-actions .registration-apply-button,
+.registration-change-review-actions .registration-apply-button > span {
+  color: var(--color-white);
+  font-size: inherit;
+  text-transform: none;
 }
 
 .registration-change-impact,
