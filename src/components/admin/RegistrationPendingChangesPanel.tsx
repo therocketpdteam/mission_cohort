@@ -203,7 +203,18 @@ export function RegistrationPendingChangesPanel({
         </div>
         <div className="registration-change-review-actions">
           <Button variant="outlined" onClick={discardChanges} disabled={applying || discarding}>{discarding ? "Discarding" : "Discard"}</Button>
-          <Button onClick={applyChanges} disabled={applying || discarding}>{applying ? "Applying" : "Apply Changes"}</Button>
+          <Button
+            variant="contained"
+            onClick={applyChanges}
+            disabled={applying || discarding}
+            sx={{
+              color: "#fff",
+              "&:hover": { color: "#fff" },
+              "&.Mui-disabled": { color: "rgba(255, 255, 255, 0.72)" }
+            }}
+          >
+            {applying ? "Applying" : "Apply Changes"}
+          </Button>
         </div>
       </div>
       <div className="quick-view-list">
