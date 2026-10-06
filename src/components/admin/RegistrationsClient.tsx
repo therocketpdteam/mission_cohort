@@ -1370,24 +1370,26 @@ function RegistrationDetailDialog({
       className="registration-detail-drawer"
       actions={
         registration ? (
-          <>
-            <Button variant="outlined" startIcon={<EditOutlined />} onClick={() => onEdit(registration)}>Edit registration</Button>
-            <Button variant="outlined" disabled={mergeCandidates.length < 2} onClick={() => {
-              setMergeTargetId(registration.id);
-              setMergeSourceId("");
-              setMergePreview(null);
-              setSendMergeSummary(false);
-              setMergeOpen(true);
-            }}>Merge registrations</Button>
-            <Button variant="outlined" disabled={!currentInvoice} onClick={() => {
-              setInvoiceRecipient(registration.billingContactEmail ?? registration.primaryContactEmail ?? "");
-              setInvoiceRecipientOpen(true);
-            }}>Send invoice copy</Button>
-            <Button variant="outlined" onClick={syncCrm} disabled={syncingCrm}>{syncingCrm ? "Syncing CRM" : "Sync to CRM"}</Button>
-            <Button variant="outlined" onClick={syncQuickBooks}>Sync QuickBooks</Button>
-            <Button variant="outlined" color="warning" onClick={voidQuickBooksInvoice}>Void QB Invoice</Button>
-            <Button onClick={onClose}>Done</Button>
-          </>
+          <div className="registration-detail-footer-actions">
+            <div className="registration-detail-footer-tools">
+              <Button variant="outlined" startIcon={<EditOutlined />} onClick={() => onEdit(registration)}>Edit registration</Button>
+              <Button variant="outlined" disabled={mergeCandidates.length < 2} onClick={() => {
+                setMergeTargetId(registration.id);
+                setMergeSourceId("");
+                setMergePreview(null);
+                setSendMergeSummary(false);
+                setMergeOpen(true);
+              }}>Merge registrations</Button>
+              <Button variant="outlined" disabled={!currentInvoice} onClick={() => {
+                setInvoiceRecipient(registration.billingContactEmail ?? registration.primaryContactEmail ?? "");
+                setInvoiceRecipientOpen(true);
+              }}>Send invoice copy</Button>
+              <Button variant="outlined" onClick={syncCrm} disabled={syncingCrm}>{syncingCrm ? "Syncing CRM" : "Sync to CRM"}</Button>
+              <Button variant="outlined" onClick={syncQuickBooks}>Sync QuickBooks</Button>
+              <Button variant="outlined" color="warning" onClick={voidQuickBooksInvoice}>Void QB Invoice</Button>
+            </div>
+            <Button className="registration-detail-footer-done" onClick={onClose}>Done</Button>
+          </div>
         ) : null
       }
     >

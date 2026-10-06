@@ -3355,6 +3355,27 @@ h6,
   padding-inline: 22px;
 }
 
+.registration-detail-footer-actions {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+}
+
+.registration-detail-footer-tools {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.registration-detail-footer-done {
+  flex: 0 0 auto;
+}
+
 .quick-view-drawer.registration-detail-drawer .quick-view-body {
   gap: 16px;
   padding: 22px;
