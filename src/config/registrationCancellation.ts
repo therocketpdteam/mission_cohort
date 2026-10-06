@@ -29,3 +29,17 @@ If we have already received your payment, we will issue a refund to the mailing 
 Thank you,
 {{support.teamName}}`
 };
+
+export function cancellationInvoiceDisposition(input: {
+  hasInvoice: boolean;
+  invoiceStatus?: string | null;
+  paidAmount?: number | null;
+  paymentStatus?: string | null;
+}) {
+  if (!input.hasInvoice) return "none" as const;
+  if (input.invoiceStatus === "PAID" || Number(input.paidAmount ?? 0) > 0 || input.paymentStatus === "PAID") {
+    return "refund_required" as const;
+  }
+  if (input.invoiceStatus === "VOIDED" || input.invoiceStatus === "CANCELLED") return "already_voided" as const;
+  return "void_and_attach" as const;
+}

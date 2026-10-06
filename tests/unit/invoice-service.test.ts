@@ -7,7 +7,7 @@ import {
   presenterInvoiceCode,
   shouldInvalidateInvoiceDocuments
 } from "../../src/services/invoiceService";
-import { invoiceDescriptionParts } from "../../src/services/pdfService";
+import { buildInvoicePdf, invoiceDescriptionParts } from "../../src/services/pdfService";
 
 test("printable invoice edits invalidate generated documents", () => {
   assert.equal(shouldInvalidateInvoiceDocuments({ lineItems: [{ description: "Seat", quantity: 1, unitAmount: 795 }] }), true);
@@ -53,4 +53,27 @@ test("prints cohort title and description as separate invoice line text", () => 
     title: "Learning Cohort - Truly Effective Teacher Supervision, Coaching, and Evaluation",
     detail: "Updated cohort copy."
   });
+});
+
+test("prints a prominent VOIDED watermark for voided invoices", () => {
+  const pdf = buildInvoicePdf({
+    issuer: { displayName: "RocketPD", legalName: "In Demand Group, LLC", email: "info@rocketpd.com", website: "rocketpd.com" },
+    documentType: "invoice",
+    invoiceNumber: "PL-2026-466",
+    status: "VOIDED",
+    organizationName: "Lackawanna City School District",
+    organizationAddressLines: [],
+    cohortTitle: "Building Thinking Classrooms",
+    issueDate: "10/1/2026",
+    dueDate: "-",
+    lineItems: [{ description: "Building Thinking Classrooms", quantity: 5, unitAmount: "$485.00", totalAmount: "$2,425.00" }],
+    subtotalAmount: "$2,425.00",
+    taxAmount: "$0.00",
+    totalAmount: "$2,425.00",
+    paidAmount: "$0.00",
+    balanceAmount: "$2,425.00",
+    notes: "VOIDED - This invoice is no longer payable."
+  });
+
+  assert.match(pdf.toString("latin1"), /\(VOIDED\) Tj/);
 });

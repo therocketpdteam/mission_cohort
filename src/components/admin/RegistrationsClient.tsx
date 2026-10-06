@@ -1852,6 +1852,16 @@ export function RegistrationRemovalDialog({
                     <DetailTile label="CRM status afterward" value="Cancelled" tone="success" />
                     <DetailTile label="Future calendar sessions" value={cancellationPreview.effects?.futureCalendarSessions?.length ?? 0} />
                     <DetailTile label="Queued messages cancelled" value={cancellationPreview.effects?.communicationsToCancel?.length ?? 0} />
+                    <DetailTile
+                      label="Invoice action"
+                      value={cancellationPreview.invoice?.willAttachVoidedPdf
+                        ? `Void and attach ${cancellationPreview.invoice?.invoiceNumber ?? "invoice"}`
+                        : cancellationPreview.invoice?.requiresRefundHandling
+                          ? "Keep paid invoice; refund follow-up required"
+                          : cancellationPreview.invoice?.disposition === "already_voided"
+                            ? "Already voided"
+                            : "No invoice"}
+                    />
                     <DetailTile label="Participant emails sent" value="None" tone="success" />
                     <DetailTile label="Calendar notifications sent" value="None (silent removal)" tone="success" />
                   </div>

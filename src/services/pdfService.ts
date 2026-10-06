@@ -478,5 +478,9 @@ export function buildInvoicePdf(input: InvoicePdfInput) {
   content.push(pdfText(input.footerNote || "In Demand Group, LLC", 306, 34, { size: 8, color: [100, 116, 139], align: "center" }));
   content.push(pdfText("DBA RocketPD", 306, 22, { size: 8, color: [100, 116, 139], align: "center" }));
 
+  if (["VOIDED", "CANCELLED"].includes(input.status.trim().toUpperCase())) {
+    content.push("q 0.780 0.110 0.160 RG 3 w 0.707 0.707 -0.707 0.707 122 312 cm BT /F2 82 Tf 1 Tr 0 0 Td (VOIDED) Tj ET Q");
+  }
+
   return buildPdf(content.join("\n"), logoImage ? [logoImage] : []);
 }

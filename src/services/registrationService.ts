@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { CommunicationStatus, ParticipantListStatus, ParticipantStatus, PaymentStatus, Prisma, RecipientScope, RegistrationStatus, SupportingDocumentStatus } from "@prisma/client";
+import { CommunicationStatus, InvoiceDraftStatus, ParticipantListStatus, ParticipantStatus, PaymentStatus, Prisma, RecipientScope, RegistrationStatus, SupportingDocumentStatus } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { shouldDefaultPrimaryContactParticipant } from "@/lib/rosterStatus";
@@ -15,9 +15,10 @@ import { syncPaymentRecordsToRegistrationStatus } from "./paymentService";
 import { shouldDeferRegistrationDelivery, stageParticipantAddition, stageRegistrationFieldChanges } from "./registrationChangeService";
 import { removeFutureGoogleCalendarAttendees, syncFutureLinkedGoogleCalendarInvitesForCohort } from "./calendarService";
 import { deletePrivateAppFile } from "./storageService";
-import { getSystemUserId, sendCommunication } from "./communicationService";
+import { addCommunicationAttachment, getSystemUserId, sendCommunication } from "./communicationService";
+import { generateInvoicePdf } from "./invoiceService";
 import { renderMergeFields } from "@/modules/email/mergeFields";
-import { registrationCancellationEmail } from "@/config/registrationCancellation";
+import { cancellationInvoiceDisposition, registrationCancellationEmail } from "@/config/registrationCancellation";
 
 type BulkMoveRegistrationSummaryInput = Array<{
   id: string;
@@ -62,6 +63,15 @@ function splitPrimaryContactName(value: string) {
     firstName: parts.length > 1 ? parts.slice(0, -1).join(" ") : parts[0] || "Participant",
     lastName: parts.length > 1 ? parts.at(-1)! : "-"
   };
+}
+
+function escapeHtml(value: unknown) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
 async function ensureSingleSeatPrimaryContactParticipant(registration: {
@@ -299,6 +309,16 @@ export async function previewRegistrationCancellation(id: string) {
   });
   const firstName = registration.primaryContactName.trim().split(/\s+/)[0] || registration.primaryContactName;
   const latestInvoice = registration.invoiceDrafts[0] ?? null;
+  const invoiceDisposition = cancellationInvoiceDisposition({
+    hasInvoice: Boolean(latestInvoice),
+    invoiceStatus: latestInvoice?.status,
+    paidAmount: Number(latestInvoice?.paidAmount ?? 0),
+    paymentStatus: registration.paymentStatus
+  });
+  const participantRoster = registration.participants.map((participant) => ({
+    name: `${participant.firstName} ${participant.lastName}`.trim(),
+    email: participant.email.trim().toLowerCase()
+  }));
   const calendarEmails = Array.from(new Set([
     ...registration.participants.map((participant) => participant.email.trim().toLowerCase()),
     ...(registration.participantCount <= 1 && registration.participants.length === 0
@@ -315,6 +335,16 @@ export async function previewRegistrationCancellation(id: string) {
     }
   };
 
+  const renderedSubject = renderMergeFields(registrationCancellationEmail.subject, context).output;
+  const renderedBodyHtml = renderMergeFields(registrationCancellationEmail.bodyHtml, context).output;
+  const renderedBodyText = renderMergeFields(registrationCancellationEmail.bodyText, context).output;
+  const rosterHtml = participantRoster.length > 0
+    ? `<p><strong>Participants removed</strong></p><ul>${participantRoster.map((participant) => `<li>${escapeHtml(participant.name)} - ${escapeHtml(participant.email)}</li>`).join("")}</ul>`
+    : "";
+  const rosterText = participantRoster.length > 0
+    ? `\nParticipants removed\n${participantRoster.map((participant) => `- ${participant.name} - ${participant.email}`).join("\n")}\n`
+    : "";
+
   return {
     registration: {
       id: registration.id,
@@ -329,6 +359,10 @@ export async function previewRegistrationCancellation(id: string) {
       totalAmount: Number(registration.totalAmount),
       paymentStatus: registration.paymentStatus,
       invoiceNumber: latestInvoice?.invoiceNumber ?? registration.invoiceNumber,
+      invoiceId: latestInvoice?.id ?? null,
+      invoiceStatus: latestInvoice?.status ?? null,
+      invoicePaidAmount: Number(latestInvoice?.paidAmount ?? 0),
+      invoiceNotes: latestInvoice?.notes ?? null,
       alreadyCancelled: registration.status === RegistrationStatus.CANCELLED
     },
     effects: {
@@ -345,11 +379,18 @@ export async function previewRegistrationCancellation(id: string) {
       reportingValueAfterCancellation: 0,
       crmStatus: "cancelled"
     },
+    invoice: {
+      disposition: invoiceDisposition,
+      invoiceNumber: latestInvoice?.invoiceNumber ?? registration.invoiceNumber ?? null,
+      willGenerateVoidedPdf: invoiceDisposition === "void_and_attach",
+      willAttachVoidedPdf: invoiceDisposition === "void_and_attach",
+      requiresRefundHandling: invoiceDisposition === "refund_required"
+    },
     email: {
       to: registration.primaryContactEmail.trim().toLowerCase(),
-      subject: renderMergeFields(registrationCancellationEmail.subject, context).output,
-      bodyHtml: renderMergeFields(registrationCancellationEmail.bodyHtml, context).output,
-      bodyText: renderMergeFields(registrationCancellationEmail.bodyText, context).output
+      subject: renderedSubject,
+      bodyHtml: renderedBodyHtml.replace("<p>The participants associated", `${rosterHtml}<p>The participants associated`),
+      bodyText: renderedBodyText.replace("\nThe participants associated", `${rosterText}\nThe participants associated`)
     },
     blockers: [
       registration.status === RegistrationStatus.CANCELLED ? "This registration is already cancelled." : "",
@@ -370,23 +411,61 @@ export async function cancelRegistration(id: string, options: { sendPocCancellat
   });
   const registration = await updateRegistration(id, { status: RegistrationStatus.CANCELLED });
 
+  let cancellationInvoice = null;
+  let invoiceError: string | null = null;
+  if (preview.invoice.disposition === "void_and_attach" && preview.registration.invoiceId) {
+    try {
+      await prisma.invoiceDraft.update({
+        where: { id: preview.registration.invoiceId },
+        data: {
+          status: InvoiceDraftStatus.VOIDED,
+          notes: [preview.registration.invoiceNotes, "VOIDED - Registration cancelled. This invoice is no longer payable."].filter(Boolean).join("\n\n"),
+          pdfFileKey: null,
+          pdfUrl: null
+        }
+      });
+      cancellationInvoice = await generateInvoicePdf(preview.registration.invoiceId);
+    } catch (error) {
+      invoiceError = error instanceof Error ? error.message : "The voided invoice PDF could not be generated.";
+    }
+  }
+
   let communication = null;
   let communicationError: string | null = null;
   if (options.sendPocCancellation) {
     try {
+      if (preview.invoice.disposition === "void_and_attach" && (!cancellationInvoice?.pdfFileKey || !cancellationInvoice.pdfUrl)) {
+        throw new Error(invoiceError || "The voided invoice PDF could not be generated, so the cancellation email was not sent.");
+      }
+      const attachmentHtml = cancellationInvoice
+        ? `<p>A voided copy of invoice <strong>${escapeHtml(cancellationInvoice.invoiceNumber ?? cancellationInvoice.id)}</strong> is attached for your records.</p>`
+        : "";
+      const attachmentText = cancellationInvoice
+        ? `\nA voided copy of invoice ${cancellationInvoice.invoiceNumber ?? cancellationInvoice.id} is attached for your records.\n`
+        : "";
       const draft = await prisma.cohortCommunication.create({
         data: {
           cohortId: registration.cohortId,
           registrationId: registration.id,
-          subject: registrationCancellationEmail.subject,
-          bodyHtml: registrationCancellationEmail.bodyHtml,
-          bodyText: registrationCancellationEmail.bodyText,
+          subject: preview.email.subject,
+          bodyHtml: preview.email.bodyHtml.replace("<p>Thank you,", `${attachmentHtml}<p>Thank you,`),
+          bodyText: preview.email.bodyText.replace("\nThank you,", `${attachmentText}\nThank you,`),
           status: CommunicationStatus.DRAFT,
           recipientScope: RecipientScope.CUSTOM,
           recipientEmails: [preview.email.to],
           createdById: await getSystemUserId()
         }
       });
+      if (cancellationInvoice?.pdfFileKey && cancellationInvoice.pdfUrl) {
+        await addCommunicationAttachment({
+          communicationId: draft.id,
+          fileName: `VOIDED-Invoice-${cancellationInvoice.invoiceNumber ?? cancellationInvoice.id}.pdf`,
+          contentType: "application/pdf",
+          provider: "supabase",
+          fileKey: cancellationInvoice.pdfFileKey,
+          url: cancellationInvoice.pdfUrl
+        });
+      }
       communication = await sendCommunication(draft.id, {
         recipients: [preview.email.to],
         bypassCohortStatus: true
@@ -412,12 +491,15 @@ export async function cancelRegistration(id: string, options: { sendPocCancellat
       calendar,
       sendPocCancellation: Boolean(options.sendPocCancellation),
       communicationError,
+      invoiceDisposition: preview.invoice.disposition,
+      invoiceId: cancellationInvoice?.id ?? preview.registration.invoiceId,
+      invoiceError,
       crmStatus: "cancelled",
       reportingValue: 0
     }
   });
   void queueRegistrationCrmSync(registration.id, "registration.cancelled").catch(() => undefined);
-  return { ...registration, cancellation: { preview, calendar, communication, communicationError } };
+  return { ...registration, cancellation: { preview, calendar, invoice: cancellationInvoice, invoiceError, communication, communicationError } };
 }
 
 export async function archiveRegistration(id: string, reason?: string) {
