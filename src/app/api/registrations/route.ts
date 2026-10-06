@@ -11,6 +11,7 @@ import {
   getRegistrationById,
   listRegistrations,
   previewRegistrationCancellation,
+  reconcileCancelledRegistrationState,
   restoreRegistration,
   syncRegistrationRosterStatuses,
   updateRegistration,
@@ -76,6 +77,10 @@ export async function PATCH(request: Request) {
 
     if (body.action === "previewCancellation") {
       return ok(await previewRegistrationCancellation(body.id));
+    }
+
+    if (body.action === "reconcileCancellation") {
+      return ok(await reconcileCancelledRegistrationState(body.id));
     }
 
     if (body.action === "archive") {

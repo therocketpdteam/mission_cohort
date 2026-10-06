@@ -399,6 +399,72 @@ export async function previewRegistrationCancellation(id: string) {
   };
 }
 
+export async function reconcileCancelledRegistrationState(id: string) {
+  const registration = await prisma.registration.findUniqueOrThrow({
+    where: { id },
+    select: { id: true, status: true, paymentStatus: true }
+  });
+  if (registration.status !== RegistrationStatus.CANCELLED) {
+    throw Object.assign(new Error("Only a cancelled registration can be reconciled."), { code: "BAD_REQUEST", status: 400 });
+  }
+
+  const cancelledAt = new Date();
+  const cancelUnpaidBilling = registration.paymentStatus === PaymentStatus.PENDING || registration.paymentStatus === PaymentStatus.INVOICED;
+  const participantsToCancel = await prisma.participant.findMany({
+    where: { registrationId: id, status: ParticipantStatus.REGISTERED },
+    select: { id: true }
+  });
+  const reconciliation = await prisma.$transaction(async (tx) => {
+    const participants = await tx.participant.updateMany({
+      where: { registrationId: id, status: ParticipantStatus.REGISTERED },
+      data: { status: ParticipantStatus.CANCELLED }
+    });
+    const tasks = await tx.operationsTask.updateMany({
+      where: {
+        registrationId: id,
+        status: { in: [OperationsTaskStatus.OPEN, OperationsTaskStatus.IN_PROGRESS] }
+      },
+      data: { status: OperationsTaskStatus.CANCELLED, completedAt: cancelledAt }
+    });
+    if (!cancelUnpaidBilling) {
+      return { participants, tasks, paymentRegistrationUpdated: false, paymentRecordsCancelled: 0 };
+    }
+
+    await tx.registration.update({
+      where: { id },
+      data: { paymentStatus: PaymentStatus.CANCELLED }
+    });
+    const paymentRecords = await tx.paymentRecord.updateMany({
+      where: {
+        registrationId: id,
+        status: { in: [PaymentStatus.PENDING, PaymentStatus.INVOICED] }
+      },
+      data: { status: PaymentStatus.CANCELLED }
+    });
+    return { participants, tasks, paymentRegistrationUpdated: true, paymentRecordsCancelled: paymentRecords.count };
+  });
+
+  await Promise.all(participantsToCancel.map((participant) => queueParticipantCrmSync(participant.id, "participant.cancelled")));
+  const result = {
+    registrationId: id,
+    paymentStatus: cancelUnpaidBilling ? PaymentStatus.CANCELLED : registration.paymentStatus,
+    participantsCancelled: reconciliation.participants.count,
+    tasksCancelled: reconciliation.tasks.count,
+    paymentRecordsCancelled: reconciliation.paymentRecordsCancelled,
+    paymentRegistrationUpdated: reconciliation.paymentRegistrationUpdated,
+    communicationsSent: 0,
+    calendarEventsChanged: 0
+  };
+  logAuditEventAsync({
+    entityType: "Registration",
+    entityId: id,
+    action: "CANCELLATION_STATE_RECONCILED",
+    description: "Reconciled participant, task, and unpaid payment states after cancellation",
+    metadata: result
+  });
+  return result;
+}
+
 export async function cancelRegistration(id: string, options: { sendPocCancellation?: boolean } = {}) {
   const preview = await previewRegistrationCancellation(id);
   if (preview.blockers.length > 0) {
@@ -410,47 +476,8 @@ export async function cancelRegistration(id: string, options: { sendPocCancellat
     reason: "Registration cancelled."
   });
   let registration = await updateRegistration(id, { status: RegistrationStatus.CANCELLED });
-  const cancelledAt = new Date();
-  const cancelUnpaidBilling = registration.paymentStatus === PaymentStatus.PENDING || registration.paymentStatus === PaymentStatus.INVOICED;
-  const participantsToCancel = await prisma.participant.findMany({
-    where: { registrationId: id, status: ParticipantStatus.REGISTERED },
-    select: { id: true }
-  });
-
-  await prisma.$transaction([
-    prisma.participant.updateMany({
-      where: { registrationId: id, status: ParticipantStatus.REGISTERED },
-      data: { status: ParticipantStatus.CANCELLED }
-    }),
-    prisma.operationsTask.updateMany({
-      where: {
-        registrationId: id,
-        status: { in: [OperationsTaskStatus.OPEN, OperationsTaskStatus.IN_PROGRESS] }
-      },
-      data: { status: OperationsTaskStatus.CANCELLED, completedAt: cancelledAt }
-    }),
-    ...(cancelUnpaidBilling
-      ? [
-          prisma.registration.update({
-            where: { id },
-            data: { paymentStatus: PaymentStatus.CANCELLED }
-          }),
-          prisma.paymentRecord.updateMany({
-            where: {
-              registrationId: id,
-              status: { in: [PaymentStatus.PENDING, PaymentStatus.INVOICED] }
-            },
-            data: { status: PaymentStatus.CANCELLED }
-          })
-        ]
-      : [])
-  ]);
-
-  registration = {
-    ...registration,
-    paymentStatus: cancelUnpaidBilling ? PaymentStatus.CANCELLED : registration.paymentStatus
-  };
-  await Promise.all(participantsToCancel.map((participant) => queueParticipantCrmSync(participant.id, "participant.cancelled")));
+  const reconciliation = await reconcileCancelledRegistrationState(id);
+  registration = { ...registration, paymentStatus: reconciliation.paymentStatus };
 
   let cancellationInvoice = null;
   let invoiceError: string | null = null;
