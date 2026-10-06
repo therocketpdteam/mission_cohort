@@ -425,6 +425,10 @@ export async function cancelRegistration(id: string, options: { sendPocCancellat
         }
       });
       cancellationInvoice = await generateInvoicePdf(preview.registration.invoiceId);
+      await prisma.registration.update({
+        where: { id: registration.id },
+        data: { invoiceUrl: cancellationInvoice.pdfUrl }
+      });
     } catch (error) {
       invoiceError = error instanceof Error ? error.message : "The voided invoice PDF could not be generated.";
     }
