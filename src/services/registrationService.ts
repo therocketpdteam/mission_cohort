@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { CommunicationStatus, InvoiceDraftStatus, ParticipantListStatus, ParticipantStatus, PaymentStatus, Prisma, RecipientScope, RegistrationStatus, SupportingDocumentStatus } from "@prisma/client";
+import { CommunicationStatus, InvoiceDraftStatus, OperationsTaskStatus, ParticipantListStatus, ParticipantStatus, PaymentStatus, Prisma, RecipientScope, RegistrationStatus, SupportingDocumentStatus } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { shouldDefaultPrimaryContactParticipant } from "@/lib/rosterStatus";
@@ -409,7 +409,48 @@ export async function cancelRegistration(id: string, options: { sendPocCancellat
     registrationId: id,
     reason: "Registration cancelled."
   });
-  const registration = await updateRegistration(id, { status: RegistrationStatus.CANCELLED });
+  let registration = await updateRegistration(id, { status: RegistrationStatus.CANCELLED });
+  const cancelledAt = new Date();
+  const cancelUnpaidBilling = registration.paymentStatus === PaymentStatus.PENDING || registration.paymentStatus === PaymentStatus.INVOICED;
+  const participantsToCancel = await prisma.participant.findMany({
+    where: { registrationId: id, status: ParticipantStatus.REGISTERED },
+    select: { id: true }
+  });
+
+  await prisma.$transaction([
+    prisma.participant.updateMany({
+      where: { registrationId: id, status: ParticipantStatus.REGISTERED },
+      data: { status: ParticipantStatus.CANCELLED }
+    }),
+    prisma.operationsTask.updateMany({
+      where: {
+        registrationId: id,
+        status: { in: [OperationsTaskStatus.OPEN, OperationsTaskStatus.IN_PROGRESS] }
+      },
+      data: { status: OperationsTaskStatus.CANCELLED, completedAt: cancelledAt }
+    }),
+    ...(cancelUnpaidBilling
+      ? [
+          prisma.registration.update({
+            where: { id },
+            data: { paymentStatus: PaymentStatus.CANCELLED }
+          }),
+          prisma.paymentRecord.updateMany({
+            where: {
+              registrationId: id,
+              status: { in: [PaymentStatus.PENDING, PaymentStatus.INVOICED] }
+            },
+            data: { status: PaymentStatus.CANCELLED }
+          })
+        ]
+      : [])
+  ]);
+
+  registration = {
+    ...registration,
+    paymentStatus: cancelUnpaidBilling ? PaymentStatus.CANCELLED : registration.paymentStatus
+  };
+  await Promise.all(participantsToCancel.map((participant) => queueParticipantCrmSync(participant.id, "participant.cancelled")));
 
   let cancellationInvoice = null;
   let invoiceError: string | null = null;
