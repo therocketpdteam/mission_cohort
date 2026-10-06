@@ -18,5 +18,7 @@ test("registration cancellation email uses supported merge fields and renders it
   assert.match(body, /Hello Avery,/);
   assert.match(body, /Northview School District/);
   assert.match(body, /INV-1001/);
+  assert.match(body, /issue a refund to the mailing address provided with your registration/);
+  assert.match(body, /disregard the invoice we previously sent/);
   assert.doesNotMatch(body, /\{\{/);
 });

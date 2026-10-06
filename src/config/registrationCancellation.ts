@@ -10,7 +10,7 @@ export const registrationCancellationEmail = {
   <li>Invoice: {{registration.invoiceNumber}}</li>
 </ul>
 <p>The participants associated with this registration have been removed from future cohort calendar events and will not receive additional automated cohort messages.</p>
-<p>This cancellation does not by itself confirm a refund. If payment was already made or you have a billing question, please contact us at {{support.email}}.</p>
+<p>If we have already received your payment, we will issue a refund to the mailing address provided with your registration. If payment has not been sent or processed, no further action is needed and you may disregard the invoice we previously sent.</p>
 <p>Thank you,<br>{{support.teamName}}</p>`,
   bodyText: `Hello {{registration.primaryContactFirstName}},
 
@@ -24,7 +24,7 @@ Cancellation details
 
 The participants associated with this registration have been removed from future cohort calendar events and will not receive additional automated cohort messages.
 
-This cancellation does not by itself confirm a refund. If payment was already made or you have a billing question, please contact us at {{support.email}}.
+If we have already received your payment, we will issue a refund to the mailing address provided with your registration. If payment has not been sent or processed, no further action is needed and you may disregard the invoice we previously sent.
 
 Thank you,
 {{support.teamName}}`
