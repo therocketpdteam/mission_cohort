@@ -443,6 +443,37 @@ export async function prepareCrmBacklogRecovery(options: { dryRun?: boolean; lim
   };
 }
 
+export async function finalizeCrmBacklogReview(options: { dryRun?: boolean } = {}) {
+  await ensureCrmReviewSchema();
+  const dryRun = options.dryRun !== false;
+  const audit = await auditCrmSyncBacklog();
+  const reviewable = audit.rows.filter((row) =>
+    ["missing_entity", "superseded_by_newer", "superseded_by_sent"].includes(row.category)
+    || row.entityType === "Organization"
+  );
+  const byReason = reviewable.reduce<Record<string, number>>((counts, row) => {
+    const reason = row.entityType === "Organization"
+      ? "organization_embedded_in_registration_snapshot"
+      : row.category;
+    counts[reason] = (counts[reason] ?? 0) + 1;
+    return counts;
+  }, {});
+
+  if (dryRun) return { dryRun: true, reviewable: reviewable.length, byReason };
+
+  for (const [reason] of Object.entries(byReason)) {
+    const ids = reviewable
+      .filter((row) => (row.entityType === "Organization" ? "organization_embedded_in_registration_snapshot" : row.category) === reason)
+      .map((row) => row.id);
+    await prisma.crmSyncEvent.updateMany({
+      where: { id: { in: ids }, status: { notIn: [CrmSyncEventStatus.SENT, CrmSyncEventStatus.REVIEWED] } },
+      data: { status: CrmSyncEventStatus.REVIEWED, reviewedAt: new Date(), reviewReason: reason, errorMessage: null }
+    });
+  }
+
+  return { dryRun: false, reviewed: reviewable.length, byReason };
+}
+
 type CrmSyncSummaryRow = {
   shortName: string | null;
   eventType: string;
@@ -607,7 +638,7 @@ export async function summarizeCrmSyncEvents(shortNames: string[] = [], includeR
       FROM "CrmSyncEvent"
       WHERE jsonb_typeof(payload) = 'object'
         AND payload ? 'shortName'
-        AND status <> 'SENT'::"CrmSyncEventStatus"
+        AND status NOT IN ('SENT'::"CrmSyncEventStatus", 'REVIEWED'::"CrmSyncEventStatus")
         ${filter}
       ORDER BY "createdAt" ASC
       LIMIT 100

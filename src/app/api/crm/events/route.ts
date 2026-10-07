@@ -3,6 +3,7 @@ import { requireRole } from "@/lib/auth";
 import { Role } from "@prisma/client";
 import {
   auditCrmSyncBacklog,
+  finalizeCrmBacklogReview,
   listCrmSyncEvents,
   prepareCrmBacklogRecovery,
   processCrmSyncEvents,
@@ -50,6 +51,10 @@ export async function POST(request: Request) {
 
     if (body.action === "prepareBacklogRecovery") {
       return ok(await prepareCrmBacklogRecovery({ dryRun: body.dryRun !== false, limit: body.limit }), { status: 202 });
+    }
+
+    if (body.action === "finalizeBacklogReview") {
+      return ok(await finalizeCrmBacklogReview({ dryRun: body.dryRun !== false }), { status: 202 });
     }
 
     return ok(
