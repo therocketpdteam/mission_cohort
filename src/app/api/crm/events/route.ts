@@ -2,6 +2,7 @@ import { handleApiError, ok } from "@/lib/api";
 import { requireRole } from "@/lib/auth";
 import { Role } from "@prisma/client";
 import {
+  auditCrmSyncBacklog,
   listCrmSyncEvents,
   processCrmSyncEvents,
   replayHistoricalCrmRegistrationEvents,
@@ -11,6 +12,11 @@ import {
 export async function GET(request: Request) {
   try {
     const searchParams = new URL(request.url).searchParams;
+
+    if (searchParams.get("backlogAudit") === "1") {
+      await requireRole([Role.SUPER_ADMIN]);
+      return ok(await auditCrmSyncBacklog());
+    }
 
     if (searchParams.get("summary") === "1") {
       await requireRole([Role.SUPER_ADMIN]);

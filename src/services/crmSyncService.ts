@@ -258,6 +258,101 @@ export async function listCrmSyncEvents() {
   });
 }
 
+type CrmBacklogAuditRow = {
+  id: string;
+  eventType: string;
+  entityType: string;
+  entityId: string;
+  registrationId: string | null;
+  participantId: string | null;
+  status: CrmSyncEventStatus;
+  attempts: number;
+  errorMessage: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  invoiceNumber: string | null;
+  registrationStatus: string | null;
+  registrationUpdatedAt: Date | null;
+  participantEmail: string | null;
+  participantStatus: string | null;
+  participantUpdatedAt: Date | null;
+  hasNewerEvent: boolean;
+  hasNewerSentEvent: boolean;
+};
+
+export async function auditCrmSyncBacklog() {
+  const rows = await prisma.$queryRaw<CrmBacklogAuditRow[]>(Prisma.sql`
+    SELECT
+      event.id,
+      event."eventType",
+      event."entityType",
+      event."entityId",
+      event."registrationId",
+      event."participantId",
+      event.status,
+      event.attempts,
+      event."errorMessage",
+      event."createdAt",
+      event."updatedAt",
+      registration."invoiceNumber",
+      registration.status::text AS "registrationStatus",
+      registration."updatedAt" AS "registrationUpdatedAt",
+      participant.email AS "participantEmail",
+      participant.status::text AS "participantStatus",
+      participant."updatedAt" AS "participantUpdatedAt",
+      EXISTS (
+        SELECT 1 FROM "CrmSyncEvent" newer
+        WHERE newer."entityType" = event."entityType"
+          AND newer."entityId" = event."entityId"
+          AND newer."createdAt" > event."createdAt"
+      ) AS "hasNewerEvent",
+      EXISTS (
+        SELECT 1 FROM "CrmSyncEvent" newer
+        WHERE newer."entityType" = event."entityType"
+          AND newer."entityId" = event."entityId"
+          AND newer.status = 'SENT'::"CrmSyncEventStatus"
+          AND newer."createdAt" > event."createdAt"
+      ) AS "hasNewerSentEvent"
+    FROM "CrmSyncEvent" event
+    LEFT JOIN "Registration" registration ON registration.id = event."registrationId"
+    LEFT JOIN "Participant" participant ON participant.id = event."participantId"
+    WHERE event.status <> 'SENT'::"CrmSyncEventStatus"
+    ORDER BY event."createdAt" ASC
+    LIMIT 2000
+  `);
+
+  const audited = rows.map((row) => {
+    const entityMissing = row.entityType === "Registration"
+      ? !row.registrationId || !row.registrationStatus
+      : row.entityType === "Participant"
+        ? !row.participantId || !row.participantStatus
+        : false;
+    const category = entityMissing
+      ? "missing_entity"
+      : row.hasNewerSentEvent
+        ? "superseded_by_sent"
+        : row.hasNewerEvent
+          ? "superseded_by_newer"
+          : row.status === CrmSyncEventStatus.SENDING
+            ? "stalled_current"
+            : row.status === CrmSyncEventStatus.FAILED
+              ? "failed_current"
+              : "queued_current";
+    return { ...row, category };
+  });
+  const countBy = (key: "category" | "status" | "eventType") => Object.fromEntries(
+    Array.from(audited.reduce((counts, row) => counts.set(String(row[key]), (counts.get(String(row[key])) ?? 0) + 1), new Map<string, number>()).entries()).sort()
+  );
+
+  return {
+    total: audited.length,
+    byCategory: countBy("category"),
+    byStatus: countBy("status"),
+    byEventType: countBy("eventType"),
+    rows: audited
+  };
+}
+
 type CrmSyncSummaryRow = {
   shortName: string | null;
   eventType: string;

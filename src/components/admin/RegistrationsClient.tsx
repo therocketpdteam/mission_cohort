@@ -1595,6 +1595,27 @@ function RegistrationDetailDialog({
             )}
           </section>
 
+          <CollapsibleSectionCard
+            title="CRM Sync History"
+            alertCount={(registration.crmSyncEvents ?? []).filter((event: AdminRow) => event.status === "FAILED" || event.status === "SENDING").length}
+          >
+            {(registration.crmSyncEvents ?? []).length > 0 ? (
+              <div className="quick-view-list">
+                {(registration.crmSyncEvents ?? []).map((event: AdminRow) => (
+                  <div className="quick-view-list-row" key={event.id}>
+                    <div>
+                      <strong>{formatStatusLabel(event.eventType)}</strong>
+                      <span>{`${event.createdAt ? new Date(event.createdAt).toLocaleString("en-US") : ""}${event.errorMessage ? ` · ${event.errorMessage}` : ""}`}</span>
+                    </div>
+                    <StatusChip value={event.status} />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <EmptyState title="No CRM sync history" description="CRM events linked to this registration will appear here." />
+            )}
+          </CollapsibleSectionCard>
+
           <section className="registration-detail-section">
             <div className="registration-section-heading">
               <div>

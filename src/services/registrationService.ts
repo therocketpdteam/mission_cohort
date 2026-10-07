@@ -947,6 +947,10 @@ export async function getRegistrationById(id: string) {
           organization: true,
           lineItems: true
         }
+      },
+      crmSyncEvents: {
+        orderBy: { createdAt: "desc" },
+        take: 50
       }
     }
   });
