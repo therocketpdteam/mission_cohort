@@ -1605,7 +1605,7 @@ function RegistrationDetailDialog({
                   <div className="quick-view-list-row" key={event.id}>
                     <div>
                       <strong>{formatStatusLabel(event.eventType)}</strong>
-                      <span>{`${event.createdAt ? new Date(event.createdAt).toLocaleString("en-US") : ""}${event.errorMessage ? ` · ${event.errorMessage}` : ""}`}</span>
+                      <span>{`${event.createdAt ? new Date(event.createdAt).toLocaleString("en-US") : ""}${event.reviewReason ? ` · Reviewed: ${formatStatusLabel(event.reviewReason)}` : event.errorMessage ? ` · ${event.errorMessage}` : ""}`}</span>
                     </div>
                     <StatusChip value={event.status} />
                   </div>

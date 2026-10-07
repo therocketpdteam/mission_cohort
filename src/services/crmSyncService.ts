@@ -316,7 +316,7 @@ export async function auditCrmSyncBacklog() {
     FROM "CrmSyncEvent" event
     LEFT JOIN "Registration" registration ON registration.id = event."registrationId"
     LEFT JOIN "Participant" participant ON participant.id = event."participantId"
-    WHERE event.status <> 'SENT'::"CrmSyncEventStatus"
+    WHERE event.status NOT IN ('SENT'::"CrmSyncEventStatus", 'REVIEWED'::"CrmSyncEventStatus")
     ORDER BY event."createdAt" ASC
     LIMIT 2000
   `);
@@ -350,6 +350,78 @@ export async function auditCrmSyncBacklog() {
     byStatus: countBy("status"),
     byEventType: countBy("eventType"),
     rows: audited
+  };
+}
+
+const CRM_SNAPSHOT_EVENT_TYPES = ["registration.snapshot", "participant.snapshot"] as const;
+
+export async function prepareCrmBacklogRecovery(options: { dryRun?: boolean } = {}) {
+  const dryRun = options.dryRun !== false;
+  const initial = await auditCrmSyncBacklog();
+  const current = initial.rows.filter((row) =>
+    ["queued_current", "failed_current", "stalled_current"].includes(row.category)
+  );
+  const currentSnapshotKeys = new Set(current
+    .filter((row) => CRM_SNAPSHOT_EVENT_TYPES.includes(row.eventType as typeof CRM_SNAPSHOT_EVENT_TYPES[number]))
+    .map((row) => `${row.entityType}:${row.entityId}`));
+  const registrationIds = Array.from(new Set(current
+    .filter((row) => row.entityType === "Registration" && row.registrationId && !currentSnapshotKeys.has(`Registration:${row.entityId}`))
+    .map((row) => row.registrationId!)));
+  const participantIds = Array.from(new Set(current
+    .filter((row) => row.entityType === "Participant" && row.participantId && !currentSnapshotKeys.has(`Participant:${row.entityId}`))
+    .map((row) => row.participantId!)));
+
+  const preview = {
+    dryRun,
+    snapshots: {
+      registrations: registrationIds.length,
+      participants: participantIds.length,
+      total: registrationIds.length + participantIds.length
+    },
+    reviewableBeforeSnapshots: initial.rows.filter((row) =>
+      ["missing_entity", "superseded_by_newer", "superseded_by_sent"].includes(row.category)
+    ).length,
+    untouchedCurrentNonRegistrationEvents: current.filter((row) =>
+      row.entityType !== "Registration" && row.entityType !== "Participant"
+    ).length
+  };
+
+  if (dryRun) return preview;
+
+  for (const registrationId of registrationIds) {
+    await queueRegistrationCrmSync(registrationId, "registration.snapshot");
+  }
+  for (const participantId of participantIds) {
+    await queueParticipantCrmSync(participantId, "participant.snapshot");
+  }
+
+  const afterSnapshots = await auditCrmSyncBacklog();
+  const reviewable = afterSnapshots.rows.filter((row) =>
+    ["missing_entity", "superseded_by_newer", "superseded_by_sent"].includes(row.category)
+  );
+  const reviewedAt = new Date();
+  const reviewedByCategory: Record<string, number> = {};
+
+  for (const category of ["missing_entity", "superseded_by_newer", "superseded_by_sent"] as const) {
+    const ids = reviewable.filter((row) => row.category === category).map((row) => row.id);
+    if (!ids.length) continue;
+    await prisma.crmSyncEvent.updateMany({
+      where: { id: { in: ids }, status: { notIn: [CrmSyncEventStatus.SENT, CrmSyncEventStatus.REVIEWED] } },
+      data: {
+        status: CrmSyncEventStatus.REVIEWED,
+        reviewedAt,
+        reviewReason: category,
+        errorMessage: null
+      }
+    });
+    reviewedByCategory[category] = ids.length;
+  }
+
+  return {
+    ...preview,
+    reviewed: Object.values(reviewedByCategory).reduce((sum, count) => sum + count, 0),
+    reviewedByCategory,
+    snapshotEventTypes: CRM_SNAPSHOT_EVENT_TYPES
   };
 }
 

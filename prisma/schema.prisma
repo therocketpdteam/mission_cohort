@@ -218,6 +218,7 @@ enum CrmSyncEventStatus {
   SENDING
   SENT
   FAILED
+  REVIEWED
 }
 
 enum ReportShareStatus {
@@ -964,6 +965,8 @@ model CrmSyncEvent {
   lastAttemptAt  DateTime?
   sentAt         DateTime?
   errorMessage   String?
+  reviewedAt     DateTime?
+  reviewReason   String?
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
   registration   Registration?      @relation(fields: [registrationId], references: [id], onDelete: SetNull)

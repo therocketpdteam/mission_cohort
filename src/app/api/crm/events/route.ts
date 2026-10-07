@@ -4,6 +4,7 @@ import { Role } from "@prisma/client";
 import {
   auditCrmSyncBacklog,
   listCrmSyncEvents,
+  prepareCrmBacklogRecovery,
   processCrmSyncEvents,
   replayHistoricalCrmRegistrationEvents,
   summarizeCrmSyncEvents
@@ -45,6 +46,10 @@ export async function POST(request: Request) {
         }),
         { status: 202 }
       );
+    }
+
+    if (body.action === "prepareBacklogRecovery") {
+      return ok(await prepareCrmBacklogRecovery({ dryRun: body.dryRun !== false }), { status: 202 });
     }
 
     return ok(

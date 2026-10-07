@@ -42,6 +42,14 @@ const prisma = new PrismaClient({
 
 const patches = [
   {
+    name: "CRM sync event review state",
+    sql: `
+      ALTER TYPE "CrmSyncEventStatus" ADD VALUE IF NOT EXISTS 'REVIEWED';
+      ALTER TABLE "CrmSyncEvent" ADD COLUMN IF NOT EXISTS "reviewedAt" TIMESTAMP(3);
+      ALTER TABLE "CrmSyncEvent" ADD COLUMN IF NOT EXISTS "reviewReason" TEXT;
+    `
+  },
+  {
     name: "registration payment documents",
     sql: `
       ALTER TYPE "PaymentMethod" ADD VALUE IF NOT EXISTS 'CHECK' AFTER 'CREDIT_CARD';
