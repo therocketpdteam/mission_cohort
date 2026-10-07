@@ -363,39 +363,37 @@ async function ensureCrmReviewSchema() {
   await prisma.$executeRawUnsafe(`ALTER TABLE "CrmSyncEvent" ADD COLUMN IF NOT EXISTS "reviewReason" TEXT`);
 }
 
-export async function prepareCrmBacklogRecovery(options: { dryRun?: boolean } = {}) {
+type CrmRecoveryRegistrationRow = { registrationId: string };
+
+export async function prepareCrmBacklogRecovery(options: { dryRun?: boolean; limit?: number } = {}) {
   await ensureCrmReviewSchema();
   const dryRun = options.dryRun !== false;
-  const initial = await auditCrmSyncBacklog();
-  const current = initial.rows.filter((row) =>
-    ["queued_current", "failed_current", "stalled_current"].includes(row.category)
-  );
-  const existingMissionSnapshotRegistrations = new Set(current
-    .filter((row) => row.eventType === CRM_CURRENT_SNAPSHOT_EVENT_TYPE && row.registrationId)
-    .map((row) => row.registrationId!));
-  const registrationIds = Array.from(new Set(current
-    .filter((row) => row.registrationId && !existingMissionSnapshotRegistrations.has(row.registrationId))
-    .map((row) => row.registrationId!)));
-  const participantIds = Array.from(new Set(current
-    .filter((row) => row.participantId)
-    .map((row) => row.participantId!)));
+  const requestedLimit = Math.max(1, Math.min(Number(options.limit ?? 5), 10));
+  const missingRows = await prisma.$queryRaw<CrmRecoveryRegistrationRow[]>(Prisma.sql`
+    SELECT DISTINCT legacy."registrationId"
+    FROM "CrmSyncEvent" legacy
+    WHERE legacy."eventType" IN ('registration.snapshot', 'participant.snapshot')
+      AND legacy.status IN ('QUEUED'::"CrmSyncEventStatus", 'FAILED'::"CrmSyncEventStatus", 'SENDING'::"CrmSyncEventStatus")
+      AND legacy."registrationId" IS NOT NULL
+      AND NOT EXISTS (
+        SELECT 1 FROM "CrmSyncEvent" replacement
+        WHERE replacement."registrationId" = legacy."registrationId"
+          AND replacement."eventType" = ${CRM_CURRENT_SNAPSHOT_EVENT_TYPE}
+          AND replacement.status <> 'REVIEWED'::"CrmSyncEventStatus"
+      )
+    ORDER BY legacy."registrationId"
+    LIMIT ${dryRun ? 1000 : requestedLimit}
+  `);
+  const registrationIds = missingRows.map((row) => row.registrationId);
 
-  const preview = {
-    dryRun,
-    snapshots: {
-      registrations: registrationIds.length,
-      participants: participantIds.length,
-      estimatedPayloads: participantIds.length
-    },
-    reviewableBeforeSnapshots: initial.rows.filter((row) =>
-      ["missing_entity", "superseded_by_newer", "superseded_by_sent"].includes(row.category)
-    ).length,
-    untouchedCurrentNonRegistrationEvents: current.filter((row) =>
-      row.entityType !== "Registration" && row.entityType !== "Participant"
-    ).length
-  };
-
-  if (dryRun) return preview;
+  if (dryRun) {
+    return {
+      dryRun: true,
+      remainingRegistrations: registrationIds.length,
+      nextBatchSize: Math.min(requestedLimit, registrationIds.length),
+      snapshotEventTypes: [CRM_CURRENT_SNAPSHOT_EVENT_TYPE]
+    };
+  }
 
   let queuedMissionPayloads = 0;
   for (const registrationId of registrationIds) {
@@ -403,16 +401,28 @@ export async function prepareCrmBacklogRecovery(options: { dryRun?: boolean } = 
     queuedMissionPayloads += result.results.length;
   }
 
-  const legacySnapshots = await prisma.crmSyncEvent.findMany({
-    where: {
-      eventType: { in: [...LEGACY_CRM_SNAPSHOT_EVENT_TYPES] },
-      status: { in: [CrmSyncEventStatus.QUEUED, CrmSyncEventStatus.FAILED, CrmSyncEventStatus.SENDING] }
-    },
-    select: { id: true }
-  });
-  if (legacySnapshots.length) {
-    await prisma.crmSyncEvent.updateMany({
-      where: { id: { in: legacySnapshots.map((event) => event.id) } },
+  const remainingRows = await prisma.$queryRaw<Array<{ count: bigint }>>(Prisma.sql`
+    SELECT COUNT(DISTINCT legacy."registrationId") AS count
+    FROM "CrmSyncEvent" legacy
+    WHERE legacy."eventType" IN ('registration.snapshot', 'participant.snapshot')
+      AND legacy.status IN ('QUEUED'::"CrmSyncEventStatus", 'FAILED'::"CrmSyncEventStatus", 'SENDING'::"CrmSyncEventStatus")
+      AND legacy."registrationId" IS NOT NULL
+      AND NOT EXISTS (
+        SELECT 1 FROM "CrmSyncEvent" replacement
+        WHERE replacement."registrationId" = legacy."registrationId"
+          AND replacement."eventType" = ${CRM_CURRENT_SNAPSHOT_EVENT_TYPE}
+          AND replacement.status <> 'REVIEWED'::"CrmSyncEventStatus"
+      )
+  `);
+  const remainingRegistrations = Number(remainingRows[0]?.count ?? 0);
+
+  let reviewedLegacySnapshots = 0;
+  if (remainingRegistrations === 0) {
+    const reviewed = await prisma.crmSyncEvent.updateMany({
+      where: {
+        eventType: { in: [...LEGACY_CRM_SNAPSHOT_EVENT_TYPES] },
+        status: { in: [CrmSyncEventStatus.QUEUED, CrmSyncEventStatus.FAILED, CrmSyncEventStatus.SENDING] }
+      },
       data: {
         status: CrmSyncEventStatus.REVIEWED,
         reviewedAt: new Date(),
@@ -420,36 +430,15 @@ export async function prepareCrmBacklogRecovery(options: { dryRun?: boolean } = 
         errorMessage: null
       }
     });
-  }
-
-  const afterSnapshots = await auditCrmSyncBacklog();
-  const reviewable = afterSnapshots.rows.filter((row) =>
-    ["missing_entity", "superseded_by_newer", "superseded_by_sent"].includes(row.category)
-  );
-  const reviewedAt = new Date();
-  const reviewedByCategory: Record<string, number> = {};
-
-  for (const category of ["missing_entity", "superseded_by_newer", "superseded_by_sent"] as const) {
-    const ids = reviewable.filter((row) => row.category === category).map((row) => row.id);
-    if (!ids.length) continue;
-    await prisma.crmSyncEvent.updateMany({
-      where: { id: { in: ids }, status: { notIn: [CrmSyncEventStatus.SENT, CrmSyncEventStatus.REVIEWED] } },
-      data: {
-        status: CrmSyncEventStatus.REVIEWED,
-        reviewedAt,
-        reviewReason: category,
-        errorMessage: null
-      }
-    });
-    reviewedByCategory[category] = ids.length;
+    reviewedLegacySnapshots = reviewed.count;
   }
 
   return {
-    ...preview,
+    dryRun: false,
+    processedRegistrations: registrationIds.length,
     queuedMissionPayloads,
-    reviewedLegacySnapshots: legacySnapshots.length,
-    reviewed: Object.values(reviewedByCategory).reduce((sum, count) => sum + count, 0),
-    reviewedByCategory,
+    remainingRegistrations,
+    reviewedLegacySnapshots,
     snapshotEventTypes: [CRM_CURRENT_SNAPSHOT_EVENT_TYPE]
   };
 }

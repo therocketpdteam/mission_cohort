@@ -49,7 +49,7 @@ export async function POST(request: Request) {
     }
 
     if (body.action === "prepareBacklogRecovery") {
-      return ok(await prepareCrmBacklogRecovery({ dryRun: body.dryRun !== false }), { status: 202 });
+      return ok(await prepareCrmBacklogRecovery({ dryRun: body.dryRun !== false, limit: body.limit }), { status: 202 });
     }
 
     return ok(
