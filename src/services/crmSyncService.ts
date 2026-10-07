@@ -4,7 +4,8 @@ import { assertOutboundUnlocked } from "@/lib/outboundLock";
 import { prisma } from "@/lib/prisma";
 import {
   crmRegistrationWebhookHeaders,
-  isCrmRegistrationWebhookPayload
+  isCrmRegistrationWebhookPayload,
+  queueRegistrationToCrmWebhook
 } from "@/services/crmRegistrationWebhookService";
 
 export async function queueCrmSyncEvent(input: {
@@ -353,7 +354,8 @@ export async function auditCrmSyncBacklog() {
   };
 }
 
-const CRM_SNAPSHOT_EVENT_TYPES = ["registration.snapshot", "participant.snapshot"] as const;
+const LEGACY_CRM_SNAPSHOT_EVENT_TYPES = ["registration.snapshot", "participant.snapshot"] as const;
+const CRM_CURRENT_SNAPSHOT_EVENT_TYPE = "registration.current_snapshot";
 
 async function ensureCrmReviewSchema() {
   await prisma.$executeRawUnsafe(`ALTER TYPE "CrmSyncEventStatus" ADD VALUE IF NOT EXISTS 'REVIEWED'`);
@@ -368,14 +370,14 @@ export async function prepareCrmBacklogRecovery(options: { dryRun?: boolean } = 
   const current = initial.rows.filter((row) =>
     ["queued_current", "failed_current", "stalled_current"].includes(row.category)
   );
-  const currentSnapshotKeys = new Set(current
-    .filter((row) => CRM_SNAPSHOT_EVENT_TYPES.includes(row.eventType as typeof CRM_SNAPSHOT_EVENT_TYPES[number]))
-    .map((row) => `${row.entityType}:${row.entityId}`));
+  const existingMissionSnapshotRegistrations = new Set(current
+    .filter((row) => row.eventType === CRM_CURRENT_SNAPSHOT_EVENT_TYPE && row.registrationId)
+    .map((row) => row.registrationId!));
   const registrationIds = Array.from(new Set(current
-    .filter((row) => row.entityType === "Registration" && row.registrationId && !currentSnapshotKeys.has(`Registration:${row.entityId}`))
+    .filter((row) => row.registrationId && !existingMissionSnapshotRegistrations.has(row.registrationId))
     .map((row) => row.registrationId!)));
   const participantIds = Array.from(new Set(current
-    .filter((row) => row.entityType === "Participant" && row.participantId && !currentSnapshotKeys.has(`Participant:${row.entityId}`))
+    .filter((row) => row.participantId)
     .map((row) => row.participantId!)));
 
   const preview = {
@@ -383,7 +385,7 @@ export async function prepareCrmBacklogRecovery(options: { dryRun?: boolean } = 
     snapshots: {
       registrations: registrationIds.length,
       participants: participantIds.length,
-      total: registrationIds.length + participantIds.length
+      estimatedPayloads: participantIds.length
     },
     reviewableBeforeSnapshots: initial.rows.filter((row) =>
       ["missing_entity", "superseded_by_newer", "superseded_by_sent"].includes(row.category)
@@ -395,11 +397,29 @@ export async function prepareCrmBacklogRecovery(options: { dryRun?: boolean } = 
 
   if (dryRun) return preview;
 
+  let queuedMissionPayloads = 0;
   for (const registrationId of registrationIds) {
-    await queueRegistrationCrmSync(registrationId, "registration.snapshot");
+    const result = await queueRegistrationToCrmWebhook(registrationId, CRM_CURRENT_SNAPSHOT_EVENT_TYPE);
+    queuedMissionPayloads += result.results.length;
   }
-  for (const participantId of participantIds) {
-    await queueParticipantCrmSync(participantId, "participant.snapshot");
+
+  const legacySnapshots = await prisma.crmSyncEvent.findMany({
+    where: {
+      eventType: { in: [...LEGACY_CRM_SNAPSHOT_EVENT_TYPES] },
+      status: { in: [CrmSyncEventStatus.QUEUED, CrmSyncEventStatus.FAILED, CrmSyncEventStatus.SENDING] }
+    },
+    select: { id: true }
+  });
+  if (legacySnapshots.length) {
+    await prisma.crmSyncEvent.updateMany({
+      where: { id: { in: legacySnapshots.map((event) => event.id) } },
+      data: {
+        status: CrmSyncEventStatus.REVIEWED,
+        reviewedAt: new Date(),
+        reviewReason: "replaced_by_mission_snapshot",
+        errorMessage: null
+      }
+    });
   }
 
   const afterSnapshots = await auditCrmSyncBacklog();
@@ -426,9 +446,11 @@ export async function prepareCrmBacklogRecovery(options: { dryRun?: boolean } = 
 
   return {
     ...preview,
+    queuedMissionPayloads,
+    reviewedLegacySnapshots: legacySnapshots.length,
     reviewed: Object.values(reviewedByCategory).reduce((sum, count) => sum + count, 0),
     reviewedByCategory,
-    snapshotEventTypes: CRM_SNAPSHOT_EVENT_TYPES
+    snapshotEventTypes: [CRM_CURRENT_SNAPSHOT_EVENT_TYPE]
   };
 }
 
