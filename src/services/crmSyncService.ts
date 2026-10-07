@@ -355,7 +355,14 @@ export async function auditCrmSyncBacklog() {
 
 const CRM_SNAPSHOT_EVENT_TYPES = ["registration.snapshot", "participant.snapshot"] as const;
 
+async function ensureCrmReviewSchema() {
+  await prisma.$executeRawUnsafe(`ALTER TYPE "CrmSyncEventStatus" ADD VALUE IF NOT EXISTS 'REVIEWED'`);
+  await prisma.$executeRawUnsafe(`ALTER TABLE "CrmSyncEvent" ADD COLUMN IF NOT EXISTS "reviewedAt" TIMESTAMP(3)`);
+  await prisma.$executeRawUnsafe(`ALTER TABLE "CrmSyncEvent" ADD COLUMN IF NOT EXISTS "reviewReason" TEXT`);
+}
+
 export async function prepareCrmBacklogRecovery(options: { dryRun?: boolean } = {}) {
+  await ensureCrmReviewSchema();
   const dryRun = options.dryRun !== false;
   const initial = await auditCrmSyncBacklog();
   const current = initial.rows.filter((row) =>
