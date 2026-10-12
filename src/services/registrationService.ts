@@ -20,6 +20,7 @@ import { generateInvoicePdf } from "./invoiceService";
 import { renderMergeFields } from "@/modules/email/mergeFields";
 import { cancellationInvoiceDisposition, registrationCancellationEmail } from "@/config/registrationCancellation";
 import { queueIntegrationJob } from "./integrationService";
+import { ensureRegistrationDeliveryJobType } from "./registrationDeliveryJobService";
 
 type BulkMoveRegistrationSummaryInput = Array<{
   id: string;
@@ -184,6 +185,7 @@ export async function createRegistration(
     hasSupportingDocs: Boolean(registration.w9Url || registration.invoiceUrl || registration.confirmationDocsSentAt)
   });
   if (options.backgroundDelivery) {
+    await ensureRegistrationDeliveryJobType();
     const deliveryJob = await queueIntegrationJob({
       provider: IntegrationProvider.SENDGRID,
       type: IntegrationJobType.REGISTRATION_DELIVERY,

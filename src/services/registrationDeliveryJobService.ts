@@ -14,6 +14,12 @@ function json(value: unknown) {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 }
 
+export async function ensureRegistrationDeliveryJobType() {
+  await prisma.$executeRawUnsafe(
+    `ALTER TYPE "IntegrationJobType" ADD VALUE IF NOT EXISTS 'REGISTRATION_DELIVERY'`
+  );
+}
+
 export async function listRegistrationDeliveryJobs(ids: string[]) {
   return prisma.integrationSyncJob.findMany({
     where: { id: { in: ids }, type: IntegrationJobType.REGISTRATION_DELIVERY },

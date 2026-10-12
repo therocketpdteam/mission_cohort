@@ -85,7 +85,7 @@ export function RegistrationDeliveryProgress() {
               <IconButton size="small" aria-label="Dismiss progress" onClick={() => persist(readJobs().filter((item) => item.id !== job.id))}><CloseIcon /></IconButton>
             </div>
             <div className="registration-delivery-progress-track"><span style={{ width: `${progress}%` }} /></div>
-            <p>{failed ? job.errorMessage : complete ? "Invoice, communications, calendar enrollment, reminders, and CRM handoff are complete." : stage}</p>
+            <p>{failed ? job.errorMessage : complete ? "Invoice, communications, calendar enrollment, and reminders are complete. CRM handoff is queued." : stage}</p>
           </article>
         );
       })}
