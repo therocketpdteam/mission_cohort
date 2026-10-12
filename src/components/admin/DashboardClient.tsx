@@ -335,7 +335,7 @@ function FutureAgendaPanel({ loading, sessions }: { loading: boolean; sessions: 
 
 function PaymentSnapshot({ finance }: { finance: AdminRow }) {
   return (
-    <DashboardPanel title="Payment Snapshot" className="dashboard-panel-payment">
+    <DashboardPanel title="Revenue at a glance" eyebrow="Active cohort collections" className="dashboard-panel-payment">
       <div className="dashboard-payment-bars">
         <PaymentBar label="Collected" amount={finance.collected} total={finance.total} tone="primary" />
         <PaymentBar label="Pending" amount={finance.pending} total={finance.total} tone="secondary" />
@@ -351,6 +351,62 @@ function PaymentSnapshot({ finance }: { finance: AdminRow }) {
           <span>Outstanding rate</span>
         </div>
       </div>
+    </DashboardPanel>
+  );
+}
+
+function RegistrationActivityPanel({ registrations }: { registrations: AdminRow[] }) {
+  const buckets = useMemo(() => {
+    const counts = new Map<string, number>();
+    registrations.forEach((registration) => {
+      const date = new Date(registration.createdAt);
+      if (!Number.isFinite(date.getTime())) return;
+      const key = date.toISOString().slice(0, 10);
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    });
+    const sorted = Array.from(counts.entries()).sort(([a], [b]) => a.localeCompare(b)).slice(-8);
+    return sorted.length ? sorted : [[new Date().toISOString().slice(0, 10), 0] as [string, number]];
+  }, [registrations]);
+  const max = Math.max(1, ...buckets.map(([, count]) => count));
+
+  return (
+    <DashboardPanel title="Registration activity" actionLabel="Recent intake" className="dashboard-panel-registration-activity">
+      <div className="dashboard-activity-chart" role="img" aria-label="Recent registration activity">
+        <div className="dashboard-chart-grid" aria-hidden="true"><i /><i /><i /></div>
+        <div className="dashboard-chart-bars">
+          {buckets.map(([date, count]) => (
+            <div className="dashboard-chart-column" key={date}>
+              <strong>{count}</strong>
+              <span style={{ height: `${Math.max(8, (count / max) * 100)}%` }} />
+              <small>{new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date(`${date}T12:00:00`))}</small>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="dashboard-chart-legend"><i /> Registrations received <span>{registrations.length} recent records</span></div>
+    </DashboardPanel>
+  );
+}
+
+function RecentRegistrationsPanel({ rows, onOpen }: { rows: AdminRow[]; onOpen: (id: string) => void }) {
+  return (
+    <DashboardPanel title="Recent registrations" href="/registrations" actionLabel="View all" className="dashboard-panel-recent-registrations">
+      <div className="dashboard-registration-table" role="table" aria-label="Recent registrations">
+        <div className="dashboard-registration-head" role="row">
+          <span>Primary contact</span><span>Cohort</span><span>Seats</span><span>Value</span><span>Payment</span><span>Roster</span>
+        </div>
+        {rows.slice(0, 6).map((registration) => (
+          <button type="button" className="dashboard-registration-row" key={registration.id} onClick={() => onOpen(registration.id)}>
+            <span><strong>{formatProperDisplay(registration.primaryContactName)}</strong><small>{formatProperDisplay(registration.organization?.name ?? "Organization")}</small></span>
+            <span>{registration.cohort?.shortName || registration.cohort?.slug || registration.cohort?.title || "Cohort"}</span>
+            <span>{registration.participantCount ?? registration.participants?.length ?? 0}</span>
+            <span>{formatMoney(Number(registration.totalAmount ?? 0))}</span>
+            <StatusChip value={formatRegistrationPaymentStatus(registration)} />
+            <StatusChip value={registration.participantListStatus ?? "Needed"} />
+          </button>
+        ))}
+      </div>
+      {rows.length === 0 && <EmptyState title="No recent registrations" description="New registrations will appear here." />}
     </DashboardPanel>
   );
 }
@@ -582,8 +638,10 @@ export function DashboardClient() {
         </div>
         <Button component={Link} href="/registrations" startIcon={<AddIcon />}>Add registration</Button>
       </header>
-      <section className="dashboard-filter-row" aria-label="Dashboard filters">
-        <TextField
+      <details className="dashboard-filter-disclosure">
+        <summary>Refine dashboard view</summary>
+        <section className="dashboard-filter-row" aria-label="Dashboard filters">
+          <TextField
           select
           label="Cohort view"
           value={cohortScope}
@@ -626,22 +684,28 @@ export function DashboardClient() {
         <TextField select label="Date window" value={datePreset} onChange={(event) => setDatePreset(event.target.value)}>
           {dashboardDateOptions.map((option) => <MenuItem value={option.value} key={option.value || "any"}>{option.label}</MenuItem>)}
         </TextField>
-        {datePreset === "custom" && (
+          {datePreset === "custom" && (
           <>
             <TextField label="Start" type="date" value={customStart} InputLabelProps={{ shrink: true }} onChange={(event) => setCustomStart(event.target.value)} />
             <TextField label="End" type="date" value={customEnd} InputLabelProps={{ shrink: true }} onChange={(event) => setCustomEnd(event.target.value)} />
           </>
-        )}
-      </section>
+          )}
+        </section>
+      </details>
       <MetricGrid data={data} finance={financeSummary} />
       {loading && <LoadingState label="Loading dashboard" />}
 
-      <section className="dashboard-command-grid">
-        <FutureAgendaPanel loading={loading} sessions={data?.upcomingSessions ?? []} />
+      <section className="dashboard-insight-grid">
+        <RegistrationActivityPanel registrations={data?.recentRegistrations ?? []} />
         <PaymentSnapshot finance={financeSummary} />
       </section>
 
-      <section className="dashboard-lower-grid">
+      <section className="dashboard-work-grid">
+        <RecentRegistrationsPanel rows={data?.recentRegistrations ?? []} onOpen={openRecentRegistration} />
+        <FutureAgendaPanel loading={loading} sessions={data?.upcomingSessions ?? []} />
+      </section>
+
+      <section className="dashboard-work-grid">
         <PriorityPanel loading={loading} rows={readinessRows} onOpen={setReadinessCohort} />
         <RecentActivityPanel data={data} onOpenRegistration={openRecentRegistration} />
       </section>
