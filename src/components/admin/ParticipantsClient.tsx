@@ -738,10 +738,11 @@ export function ParticipantsClient() {
   ];
 
   return (
-    <PageStack>
+    <PageStack className="reference-index-page participants-index-page">
       <PageHeader
+        eyebrow="Roster operations"
         title="Participants"
-        description="Global participant roster across all cohorts, registrations, and organizations."
+        description="Participant delivery status across cohorts and organizations."
         action={<ToolbarButton onClick={() => setDialogOpen(true)}>Add Participant</ToolbarButton>}
       />
       <CompactFilterBar

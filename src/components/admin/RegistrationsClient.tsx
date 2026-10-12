@@ -2290,10 +2290,11 @@ export function RegistrationsClient() {
   ];
 
   return (
-    <PageStack>
+    <PageStack className="reference-index-page registrations-index-page">
       <PageHeader
+        eyebrow={`Operations · ${filteredRows.length} registrations`}
         title="Registrations"
-        description="The POC-first operations hub for team registrations, payment status, supporting documents, and participant rosters."
+        description="Search, triage, and update every enrollment without losing context."
         action={<ToolbarButton onClick={() => setDialogOpen(true)}>Add Registration</ToolbarButton>}
       />
       <CompactFilterBar

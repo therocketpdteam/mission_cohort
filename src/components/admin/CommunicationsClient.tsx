@@ -1044,7 +1044,6 @@ export function CommunicationsClient() {
   const messagePreview = useMemo(() => messageBodyPreview(messageDetail), [messageDetail]);
 
   const selectedCohort = cohorts.find((cohort) => cohort.id === selectedCohortId);
-  const activeTemplates = templates.filter((template) => template.active).length;
   const templateUsageCounts = useMemo(() => {
     const counts = new Map<string, number>();
     communications.forEach((communication) => {
@@ -1074,18 +1073,6 @@ export function CommunicationsClient() {
   const filteredIssues = issueRows.filter((row) => recipientSearchText(row).includes(messageSearch.toLowerCase()));
   const scheduledMessages = communications.filter((row) => row.scheduledFor && !row.sentAt).length;
   const sentMessages = communications.filter((row) => row.sentAt).length;
-  const deliveryTotals = communications.reduce(
-    (total, row) => {
-      const summary = row.emailSummary ?? {};
-      total.delivered += Number(summary.deliveredCount ?? 0);
-      total.opened += Number(summary.openedCount ?? 0);
-      total.failed += Number(summary.unreviewedIssueCount ?? 0);
-      return total;
-    },
-    { delivered: 0, opened: 0, failed: 0 }
-  );
-  const openRate = deliveryTotals.delivered > 0 ? `${Math.round((deliveryTotals.opened / deliveryTotals.delivered) * 100)}%` : "0%";
-
   async function refreshAfterMutation(nextMessageDetail?: AdminRow | null) {
     await load(selectedCohortId);
     if (nextMessageDetail === null) {
@@ -1540,17 +1527,12 @@ export function CommunicationsClient() {
   const availableResources = eligibleResources.filter((resource) => !attachedResourceKeys.has(resourceAttachmentKey(resource)));
 
   return (
-    <PageStack>
+    <PageStack className="reference-index-page communications-index-page">
       <PageHeader
+        eyebrow="Audience-safe messaging"
         title="Communications"
-        description="Monitor scheduled messages, delivery health, recipient issues, templates, and send/resend operations."
-        action={
-          <ActionGroup>
-            <Button variant="outlined" startIcon={<EmailOutlined />} onClick={() => setMergeFieldsOpen(true)}>Merge Fields</Button>
-            <ToolbarButton onClick={() => { setEditingMessage(null); setComposeOpen(true); }}>Create Message</ToolbarButton>
-            <ToolbarButton onClick={() => { setEditing(null); setDialogOpen(true); }}>Create Template</ToolbarButton>
-          </ActionGroup>
-        }
+        description="Review who will receive each message before scheduling or sending."
+        action={<ToolbarButton onClick={() => { setEditingMessage(null); setComposeOpen(true); }}>Compose Message</ToolbarButton>}
       />
 
       {communicationHealthWarnings.length > 0 && (
@@ -1560,11 +1542,9 @@ export function CommunicationsClient() {
       )}
 
       <div className="comms-summary-grid">
-        <CommunicationsStat label="Scheduled" value={scheduledMessages} helper="Messages queued across the current filter" tone="primary" />
         <CommunicationsStat label="Sent" value={sentMessages} helper="Messages already delivered or attempted" tone="success" />
-        <CommunicationsStat label="Issues" value={issueRows.length} helper="Unreviewed failed or bounced recipients" tone={issueRows.length ? "error" : "success"} />
-        <CommunicationsStat label="Open rate" value={openRate} helper={`${deliveryTotals.opened} opens from ${deliveryTotals.delivered} delivered`} tone="warning" />
-        <CommunicationsStat label="Templates" value={`${activeTemplates}/${templates.length}`} helper="Active templates in library" />
+        <CommunicationsStat label="Scheduled" value={scheduledMessages} helper="Messages queued across the current filter" tone="primary" />
+        <CommunicationsStat label="Needs attention" value={issueRows.length} helper="Unreviewed failed or bounced recipients" tone={issueRows.length ? "error" : "success"} />
       </div>
 
       <SectionCard
@@ -1584,7 +1564,11 @@ export function CommunicationsClient() {
           <Tabs value={activeTab} onChange={(_event, value) => setActiveTab(value)}>
             {tabs.map((label) => <Tab key={label} label={label === "Issues" && issueRows.length ? `Issues (${issueRows.length})` : label} />)}
           </Tabs>
-          <span title={selectedCohort?.title ?? "All cohorts"}>{selectedCohort ? cohortDropdownLabel(selectedCohort) : "All cohorts"}</span>
+          <div className="comms-workspace-tools">
+            <Button size="small" variant="outlined" startIcon={<EmailOutlined />} onClick={() => setMergeFieldsOpen(true)}>Merge Fields</Button>
+            <Button size="small" variant="outlined" onClick={() => { setEditing(null); setDialogOpen(true); }}>New Template</Button>
+            <span title={selectedCohort?.title ?? "All cohorts"}>{selectedCohort ? cohortDropdownLabel(selectedCohort) : "All cohorts"}</span>
+          </div>
         </div>
 
         {activeTab < 2 ? (

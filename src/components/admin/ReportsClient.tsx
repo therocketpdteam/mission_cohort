@@ -378,8 +378,9 @@ export function ReportsClient() {
   return (
     <PageStack className="reports-page">
       <PageHeader
+        eyebrow="Operations intelligence"
         title="Reports"
-        description="Build cohort registration reports, answer thought leader questions, and keep secure summary links available."
+        description="A practical snapshot of enrollment, roster readiness, and collections."
         action={<Button startIcon={<AddLinkOutlined />} onClick={createShareLink}>Create Share Link</Button>}
       />
 

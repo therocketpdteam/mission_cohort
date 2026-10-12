@@ -2397,8 +2397,8 @@ export function SettingsClient() {
   ];
 
   return (
-    <PageStack>
-      <PageHeader title="System Configuration" description="Runtime health, admin access, integrations, and Jotform intake setup." />
+    <PageStack className="reference-index-page settings-index-page">
+      <PageHeader eyebrow="Workspace preferences" title="Settings" description="Runtime health, admin access, integrations, and safe data controls." />
       <Paper variant="outlined" sx={{ px: 1 }}>
         <Tabs value={activeTab} onChange={(_event, value) => setActiveTab(value)} variant="scrollable" scrollButtons="auto">
           {settingsTabs.map((tab) => <Tab label={tab} key={tab} />)}

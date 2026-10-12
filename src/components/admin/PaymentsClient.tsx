@@ -29,6 +29,17 @@ export function PaymentsClient() {
   }, [notifyError]);
 
   const filteredRows = useMemo(() => rows.filter((row) => (status ? row.status === status : true)), [rows, status]);
+  const summary = useMemo(() => {
+    const paid = rows.filter((row) => row.status === "PAID");
+    const open = rows.filter((row) => !["PAID", "REFUNDED", "CANCELLED"].includes(String(row.status ?? "")));
+    const poRows = rows.filter((row) => row.method === "PURCHASE_ORDER" || row.purchaseOrderNumber || row.registration?.purchaseOrderNumber);
+    return {
+      openBalance: open.reduce((sum, row) => sum + Number(row.amount ?? 0), 0),
+      paidCount: paid.length,
+      openCount: open.length,
+      poCount: poRows.length
+    };
+  }, [rows]);
 
   const columns: GridColDef[] = [
     { field: "cohort", headerName: "Cohort", flex: 1.2, minWidth: 220, valueGetter: (_value, row) => row.cohort?.title ?? "" },
@@ -69,8 +80,14 @@ export function PaymentsClient() {
   ];
 
   return (
-    <PageStack>
-      <PageHeader title="Payments" description="Track invoices, payment methods, payment status, and payment dates." />
+    <PageStack className="reference-index-page payments-index-page">
+      <PageHeader eyebrow="Finance operations" title="Payments" description="Invoice status, purchase orders, check records, and balances." />
+      <section className="reference-metric-grid reference-metric-grid-four" aria-label="Payment summary">
+        <div><span>Open balance</span><strong>${summary.openBalance.toLocaleString()}</strong><small>Across active payment records</small></div>
+        <div><span>Paid in full</span><strong>{summary.paidCount}</strong><small>Payment records</small></div>
+        <div><span>Invoices open</span><strong>{summary.openCount}</strong><small>Awaiting payment</small></div>
+        <div><span>POs on file</span><strong>{summary.poCount}</strong><small>Purchase-order records</small></div>
+      </section>
       <CompactFilterBar resultCount={filteredRows.length}>
         <TextField select label="Payment status" value={status} onChange={(event) => setStatus(event.target.value)} sx={{ minWidth: 220 }}>
           <MenuItem value="">All statuses</MenuItem>

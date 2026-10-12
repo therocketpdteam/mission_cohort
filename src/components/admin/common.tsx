@@ -121,10 +121,11 @@ export function ActionGroup({ children, justify = "flex-end" }: { children: Reac
   return <div className="action-group" style={{ justifyContent: justify }}>{children}</div>;
 }
 
-export function PageHeader({ title, description, action }: { title: string; description: string; action?: ReactNode }) {
+export function PageHeader({ title, description, action, eyebrow }: { title: string; description: string; action?: ReactNode; eyebrow?: string }) {
   return (
     <header className="page-header">
       <div>
+        {eyebrow && <span className="page-header-eyebrow">{eyebrow}</span>}
         <h1>{title}</h1>
         <p>{description}</p>
       </div>
