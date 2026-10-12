@@ -538,13 +538,19 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className={`app-shell is-${density} is-${themeMode}`}>
       <aside className={`app-sidebar ${mobileOpen ? "is-open" : ""}`}>
         <div className="app-brand">
-          <p className="app-brand-title">Mission Cohort</p>
-          <p className="app-brand-subtitle">Internal Ops</p>
+          <div className="app-brand-lockup">
+            <span className="app-brand-mark" aria-hidden="true">M</span>
+            <div>
+              <p className="app-brand-title">Mission Cohort</p>
+              <p className="app-brand-subtitle">RocketPD operations</p>
+            </div>
+          </div>
           <span className={`app-environment-badge is-${environment.kind}`}>
             {environment.label}
           </span>
           {buildVersion && <span className="app-build-version" title="Currently deployed application build">Build {buildVersion}</span>}
         </div>
+        <p className="app-nav-label">Operations</p>
         <nav className="app-nav" aria-label="Admin navigation">
           {navItems.map((item) => {
             const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
@@ -557,6 +563,10 @@ export function AppShell({ children }: { children: ReactNode }) {
             );
           })}
         </nav>
+        <div className="app-sidebar-footer">
+          <strong>RocketPD internal operations</strong>
+          <span>Controlled workspace · {environment.kind === "production" ? "live data" : "test data"}</span>
+        </div>
       </aside>
 
       <div className="app-main">
@@ -580,7 +590,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div className="app-view-controls" aria-label="View controls">
             <div className="app-density-toggle" aria-label="Density">
               <button type="button" className={density === "standard" ? "is-active" : ""} onClick={() => setDensity("standard")}>
-                Standard
+                Std
               </button>
               <button type="button" className={density === "compact" ? "is-active" : ""} onClick={() => setDensity("compact")}>
                 Compact

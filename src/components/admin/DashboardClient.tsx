@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  AddIcon,
   ArticleOutlined,
   DashboardOutlined,
   EmailOutlined,
@@ -48,9 +49,10 @@ type MetricConfig = {
 
 const metrics: ReadonlyArray<MetricConfig> = [
   { key: "activeCohorts", label: "Active cohorts", href: "/cohorts", helper: "Published or running now", icon: <GroupsOutlined /> },
+  { key: "openRegistrations", label: "Registrations", href: "/registrations", helper: "Across the selected cohort view", icon: <ArticleOutlined /> },
   { key: "totalParticipants", label: "Total participants", href: "/participants", helper: "Rostered participants", icon: <DashboardOutlined /> },
-  { key: "revenueCollected", label: "Revenue collected", href: "/registrations", helper: "Paid payment records", icon: <InsightsOutlined /> },
-  { key: "outstanding", label: "Outstanding", href: "/registrations", helper: "Pending, invoiced, or past due", icon: <ArticleOutlined /> }
+  { key: "outstanding", label: "Outstanding balance", href: "/payments", helper: "Pending, invoiced, or past due", icon: <InsightsOutlined /> },
+  { key: "attention", label: "Needs attention", href: "/registrations", helper: "Roster, payment, or delivery follow-up", icon: <EmailOutlined /> }
 ];
 
 const dashboardDateOptions = [
@@ -230,9 +232,10 @@ function DashboardPanel({
 function MetricGrid({ data, finance }: { data: AdminRow | null; finance: AdminRow }) {
   const values: Record<string, string | number> = {
     activeCohorts: data?.metrics?.activeCohorts ?? "-",
+    openRegistrations: data?.metrics?.openRegistrations ?? "-",
     totalParticipants: data?.metrics?.totalParticipants ?? "-",
-    revenueCollected: formatMoney(finance.collected),
-    outstanding: formatMoney(finance.outstanding)
+    outstanding: formatMoney(finance.outstanding),
+    attention: (data?.metrics?.openOperationsTasks ?? 0) + (data?.metrics?.communicationIssues ?? 0)
   };
 
   return (
@@ -241,7 +244,7 @@ function MetricGrid({ data, finance }: { data: AdminRow | null; finance: AdminRo
         <Link href={metric.href} className="dashboard-metric-card" key={metric.key}>
           <span className={`dashboard-metric-icon dashboard-metric-icon-${metric.key}`}>{metric.icon}</span>
           <span className="dashboard-metric-label">{metric.label}</span>
-          <strong className={metric.key === "outstanding" ? "is-danger" : ""}>{values[metric.key]}</strong>
+          <strong>{values[metric.key]}</strong>
           <span className="dashboard-metric-helper">{metric.helper}</span>
         </Link>
       ))}
@@ -571,6 +574,14 @@ export function DashboardClient() {
 
   return (
     <PageStack className="dashboard-page">
+      <header className="dashboard-welcome">
+        <div>
+          <p className="dashboard-welcome-date">Operations overview</p>
+          <h1>Mission Cohort dashboard</h1>
+          <p>A clear view of what is moving across your learning cohorts.</p>
+        </div>
+        <Button component={Link} href="/registrations" startIcon={<AddIcon />}>Add registration</Button>
+      </header>
       <section className="dashboard-filter-row" aria-label="Dashboard filters">
         <TextField
           select
