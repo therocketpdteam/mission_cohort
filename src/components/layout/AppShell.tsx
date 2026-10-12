@@ -25,6 +25,7 @@ import type { MouseEvent, ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
 import { NewVersionPrompt } from "./NewVersionPrompt";
+import { RegistrationDeliveryProgress } from "./RegistrationDeliveryProgress";
 
 type PeopleSearchResult = {
   id: string;
@@ -617,6 +618,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <main className="app-content">{children}</main>
       </div>
       <NewVersionPrompt />
+      <RegistrationDeliveryProgress />
     </div>
   );
 }

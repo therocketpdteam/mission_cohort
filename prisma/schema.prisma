@@ -173,6 +173,7 @@ enum IntegrationJobType {
   CRM_PUSH
   MUX_SYNC
   WEBHOOK_REPLAY
+  REGISTRATION_DELIVERY
 }
 
 enum IntegrationJobStatus {

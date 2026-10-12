@@ -4,10 +4,27 @@ import { processScheduledCommunications } from "@/services/communicationService"
 import { processCrmSyncEvents } from "@/services/crmSyncService";
 import { markIntegrationJobCompleted, markIntegrationJobFailed } from "@/services/integrationService";
 import { syncQuickBooksInvoice, voidRegistrationQuickBooksInvoice } from "@/services/quickBooksService";
+import { processRegistrationDeliveryJob } from "@/services/registrationDeliveryJobService";
 
 export async function processIntegrationJobs(limit = 25) {
+  const registrationJobs = await prisma.integrationSyncJob.findMany({
+    where: {
+      type: IntegrationJobType.REGISTRATION_DELIVERY,
+      status: IntegrationJobStatus.QUEUED,
+      runAfter: { lte: new Date() }
+    },
+    orderBy: { createdAt: "asc" },
+    take: Math.min(limit, 5),
+    select: { id: true }
+  });
+  const registrationResults = [];
+  for (const job of registrationJobs) {
+    registrationResults.push(await processRegistrationDeliveryJob(job.id));
+  }
+
   const jobs = await prisma.integrationSyncJob.findMany({
     where: {
+      type: { not: IntegrationJobType.REGISTRATION_DELIVERY },
       status: IntegrationJobStatus.QUEUED,
       runAfter: { lte: new Date() }
     },
@@ -45,7 +62,7 @@ export async function processIntegrationJobs(limit = 25) {
     }
   }
 
-  return results;
+  return [...registrationResults, ...results];
 }
 
 export async function processAllIntegrationWork() {

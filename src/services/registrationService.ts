@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { CommunicationStatus, InvoiceDraftStatus, OperationsTaskStatus, ParticipantListStatus, ParticipantStatus, PaymentStatus, Prisma, RecipientScope, RegistrationStatus, SupportingDocumentStatus } from "@prisma/client";
+import { CommunicationStatus, IntegrationJobType, IntegrationProvider, InvoiceDraftStatus, OperationsTaskStatus, ParticipantListStatus, ParticipantStatus, PaymentStatus, Prisma, RecipientScope, RegistrationStatus, SupportingDocumentStatus } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { shouldDefaultPrimaryContactParticipant } from "@/lib/rosterStatus";
@@ -19,6 +19,7 @@ import { addCommunicationAttachment, getSystemUserId, sendCommunication } from "
 import { generateInvoicePdf } from "./invoiceService";
 import { renderMergeFields } from "@/modules/email/mergeFields";
 import { cancellationInvoiceDisposition, registrationCancellationEmail } from "@/config/registrationCancellation";
+import { queueIntegrationJob } from "./integrationService";
 
 type BulkMoveRegistrationSummaryInput = Array<{
   id: string;
@@ -132,7 +133,7 @@ const manualParticipantSchema = z.object({
 
 export async function createRegistration(
   input: z.input<typeof registrationCreateSchema>,
-  options: { participants?: z.input<typeof manualParticipantSchema>[] } = {}
+  options: { participants?: z.input<typeof manualParticipantSchema>[]; backgroundDelivery?: boolean } = {}
 ) {
   const data = registrationCreateSchema.parse(input);
   const participants = z.array(manualParticipantSchema).parse(options.participants ?? []);
@@ -182,6 +183,17 @@ export async function createRegistration(
     totalAmount: Number(registration.totalAmount ?? 0),
     hasSupportingDocs: Boolean(registration.w9Url || registration.invoiceUrl || registration.confirmationDocsSentAt)
   });
+  if (options.backgroundDelivery) {
+    const deliveryJob = await queueIntegrationJob({
+      provider: IntegrationProvider.SENDGRID,
+      type: IntegrationJobType.REGISTRATION_DELIVERY,
+      entityType: "Registration",
+      entityId: registration.id,
+      payload: { stage: "POC", cursor: 0, totalParticipants: roster?.actualCount ?? participants.length, progress: 5 }
+    });
+    return { ...registration, participantListStatus: roster?.status ?? registration.participantListStatus, journey: null, deliveryJob };
+  }
+
   void queueRegistrationCrmSync(registration.id, "registration.created").catch(() => undefined);
   void syncRegistrationToCrmWebhook(registration.id, "registration.created").catch((error) => {
     console.error("CRM registration webhook scheduling failed", { registrationId: registration.id, error: error instanceof Error ? error.message : "Unknown error" });

@@ -42,6 +42,10 @@ const prisma = new PrismaClient({
 
 const patches = [
   {
+    name: "registration delivery jobs",
+    sql: `ALTER TYPE "IntegrationJobType" ADD VALUE IF NOT EXISTS 'REGISTRATION_DELIVERY';`
+  },
+  {
     name: "CRM sync event review state",
     sql: `
       ALTER TYPE "CrmSyncEventStatus" ADD VALUE IF NOT EXISTS 'REVIEWED';

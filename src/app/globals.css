@@ -10795,3 +10795,45 @@ button.dashboard-activity-item {
     width: 100%;
   }
 }
+.registration-delivery-progress {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 1500;
+  display: grid;
+  gap: 10px;
+  width: min(380px, calc(100vw - 32px));
+}
+
+.registration-delivery-progress-card {
+  padding: 16px;
+  border: 1px solid var(--color-purple-200, #ddd0ff);
+  border-radius: 8px;
+  background: var(--color-white, #fff);
+  box-shadow: 0 14px 36px rgba(22, 17, 38, 0.18);
+}
+
+.registration-delivery-progress-heading {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 32px;
+  gap: 10px;
+  align-items: center;
+}
+
+.registration-delivery-progress-heading strong,
+.registration-delivery-progress-heading span { display: block; }
+.registration-delivery-progress-heading span { margin-top: 2px; color: var(--color-slate-600); font-size: 0.84rem; }
+.registration-delivery-progress-icon { color: var(--color-purple-700, #6524d7); }
+.registration-delivery-progress-card.is-complete .registration-delivery-progress-icon { color: #16834b; }
+.registration-delivery-progress-card.is-failed .registration-delivery-progress-icon { color: #c62828; }
+.registration-delivery-progress-track { height: 7px; margin-top: 14px; overflow: hidden; border-radius: 4px; background: #e8e8ee; }
+.registration-delivery-progress-track span { display: block; height: 100%; border-radius: inherit; background: #7137ed; transition: width 300ms ease; }
+.registration-delivery-progress-card.is-complete .registration-delivery-progress-track span { background: #1b9a5a; }
+.registration-delivery-progress-card.is-failed .registration-delivery-progress-track span { background: #d83a3a; }
+.registration-delivery-progress-card p { margin: 9px 0 0; color: var(--color-slate-600); font-size: 0.86rem; }
+.registration-delivery-spinner { width: 18px; height: 18px; border: 2px solid #d8c7ff; border-top-color: #7137ed; border-radius: 50%; animation: registration-delivery-spin 800ms linear infinite; }
+@keyframes registration-delivery-spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 700px) {
+  .registration-delivery-progress { right: 16px; bottom: 16px; }
+}

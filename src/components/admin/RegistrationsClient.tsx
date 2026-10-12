@@ -523,7 +523,7 @@ export function RegistrationEditor({
         setOrganizationProfile(organizationProfileFromRow(savedOrganization));
       }
 
-      await adminApi("/api/registrations", {
+      const saved = await adminApi<AdminRow>("/api/registrations", {
         method: editing ? "PATCH" : "POST",
         body: {
           ...values,
@@ -534,9 +534,15 @@ export function RegistrationEditor({
           billingContactEmail: values.billingContactEmail || values.primaryContactEmail,
           billingAddress: values.billingAddress || organizationAddressSummary(savedOrganization ?? organization),
           ...(!editing ? { participants: manualParticipants } : {}),
+          ...(!editing ? { backgroundDelivery: true } : {}),
           deferNotifications: Boolean(editing && ["PUBLISHED", "ACTIVE"].includes(String(cohort.derivedStatus ?? cohort.status)))
         }
       });
+      if (!editing && saved.deliveryJob?.id) {
+        window.dispatchEvent(new CustomEvent("registration-delivery-job", {
+          detail: { id: saved.deliveryJob.id, label: `${cohortDropdownLabel(cohort)} · ${manualParticipants.length} participants` }
+        }));
+      }
       await onSaved();
       onClose();
     } catch (saveError) {
