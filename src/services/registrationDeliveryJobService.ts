@@ -18,6 +18,12 @@ export async function ensureRegistrationDeliveryJobType() {
   await prisma.$executeRawUnsafe(
     `ALTER TYPE "IntegrationJobType" ADD VALUE IF NOT EXISTS 'REGISTRATION_DELIVERY'`
   );
+  await prisma.$executeRawUnsafe(
+    `ALTER TYPE "CrmSyncEventStatus" ADD VALUE IF NOT EXISTS 'REVIEWED'`
+  );
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE "CrmSyncEvent" ADD COLUMN IF NOT EXISTS "reviewedAt" TIMESTAMP(3), ADD COLUMN IF NOT EXISTS "reviewReason" TEXT`
+  );
 }
 
 export async function listRegistrationDeliveryJobs(ids: string[]) {
