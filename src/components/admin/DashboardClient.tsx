@@ -8,19 +8,11 @@ import {
   GroupsOutlined,
   InsightsOutlined,
   MoreHorizIcon,
-  SendOutlined
+  SendOutlined,
+  WarningAmberOutlined,
+  CheckCircleOutline
 } from "@/components/ui/icons";
-import {
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  Divider,
-  Grid,
-  MenuItem,
-  TextField
-} from "@/components/ui/primitives";
+import { Button, Dialog, DialogActions, DialogContent, DialogTitle, Divider, Grid } from "@/components/ui/primitives";
 import Link from "next/link";
 import type { Route } from "next";
 import type { ReactNode } from "react";
@@ -35,7 +27,6 @@ import {
   MetadataPill,
   PageStack,
   StatusChip,
-  cohortDropdownLabel,
   useNotifier
 } from "./common";
 
@@ -50,54 +41,10 @@ type MetricConfig = {
 const metrics: ReadonlyArray<MetricConfig> = [
   { key: "activeCohorts", label: "Active cohorts", href: "/cohorts", helper: "Published or running now", icon: <GroupsOutlined /> },
   { key: "openRegistrations", label: "Registrations", href: "/registrations", helper: "Across the selected cohort view", icon: <ArticleOutlined /> },
-  { key: "totalParticipants", label: "Total participants", href: "/participants", helper: "Rostered participants", icon: <DashboardOutlined /> },
+  { key: "totalParticipants", label: "Participant seats", href: "/participants", helper: "Rostered and expected", icon: <DashboardOutlined /> },
   { key: "outstanding", label: "Outstanding balance", href: "/payments", helper: "Pending, invoiced, or past due", icon: <InsightsOutlined /> },
   { key: "attention", label: "Needs attention", href: "/registrations", helper: "Roster, payment, or delivery follow-up", icon: <EmailOutlined /> }
 ];
-
-const dashboardDateOptions = [
-  { value: "", label: "Any date" },
-  { value: "next30", label: "Next 30 days" },
-  { value: "next90", label: "Next 90 days" },
-  { value: "thisYear", label: "This year" },
-  { value: "custom", label: "Custom date" }
-];
-
-function isoDateBoundary(value: string, end = false) {
-  if (!value) {
-    return "";
-  }
-
-  const date = new Date(`${value}T00:00:00.000`);
-  if (end) {
-    date.setDate(date.getDate() + 1);
-  }
-  return date.toISOString();
-}
-
-function dashboardDateRange(datePreset: string, customStart: string, customEnd: string) {
-  const now = new Date();
-  const start = new Date(now);
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(start);
-
-  if (datePreset === "next30") {
-    end.setDate(end.getDate() + 30);
-  } else if (datePreset === "next90") {
-    end.setDate(end.getDate() + 90);
-  } else if (datePreset === "thisYear") {
-    start.setMonth(0, 1);
-    end.setFullYear(start.getFullYear() + 1, 0, 1);
-  } else if (datePreset === "custom") {
-    const rangeStart = isoDateBoundary(customStart);
-    const rangeEnd = isoDateBoundary(customEnd, true);
-    return rangeStart && rangeEnd ? { rangeStart, rangeEnd } : null;
-  } else {
-    return null;
-  }
-
-  return { rangeStart: start.toISOString(), rangeEnd: end.toISOString() };
-}
 
 function taskTemplateName(task: AdminRow) {
   if (task.category === "PAYMENT_FOLLOW_UP") {
@@ -334,23 +281,23 @@ function FutureAgendaPanel({ loading, sessions }: { loading: boolean; sessions: 
 }
 
 function PaymentSnapshot({ finance }: { finance: AdminRow }) {
+  const collectedPercent = finance.total ? Math.round((finance.collected / finance.total) * 100) : 0;
+  const openInvoices = finance.openInvoices ?? 0;
+
   return (
-    <DashboardPanel title="Revenue at a glance" eyebrow="Active cohort collections" className="dashboard-panel-payment">
-      <div className="dashboard-payment-bars">
-        <PaymentBar label="Collected" amount={finance.collected} total={finance.total} tone="primary" />
-        <PaymentBar label="Pending" amount={finance.pending} total={finance.total} tone="secondary" />
-        <PaymentBar label="Past Due" amount={finance.pastDue} total={finance.total} tone="danger" />
+    <DashboardPanel title="Revenue at a glance" className="dashboard-panel-payment">
+      <div className="dashboard-revenue-summary">
+        <p className="dashboard-eyebrow">Collected across active cohorts</p>
+        <strong>{formatMoney(finance.collected)}</strong>
+        <span>of {formatMoney(finance.total)} committed</span>
+        <i aria-hidden="true"><b style={{ width: `${Math.min(100, collectedPercent)}%` }} /></i>
       </div>
-      <div className="dashboard-payment-footer">
-        <div>
-          <strong>{formatMoney(finance.total)}</strong>
-          <span>Total pipeline</span>
-        </div>
-        <div>
-          <strong>{finance.total ? `${Math.round((finance.outstanding / finance.total) * 1000) / 10}%` : "0%"}</strong>
-          <span>Outstanding rate</span>
-        </div>
+      <div className="dashboard-revenue-list">
+        <span>Paid <strong>{formatMoney(finance.collected)}</strong></span>
+        <span>Invoiced / pending <strong>{formatMoney(finance.outstanding)}</strong></span>
+        <span>Open invoices <strong>{openInvoices}</strong></span>
       </div>
+      <div className="dashboard-revenue-note"><CheckCircleOutline /> Collections are ready for follow-up.</div>
     </DashboardPanel>
   );
 }
@@ -368,23 +315,60 @@ function RegistrationActivityPanel({ registrations }: { registrations: AdminRow[
     return sorted.length ? sorted : [[new Date().toISOString().slice(0, 10), 0] as [string, number]];
   }, [registrations]);
   const max = Math.max(1, ...buckets.map(([, count]) => count));
+  const points = buckets.map(([, count], index) => {
+    const x = buckets.length === 1 ? 50 : (index / (buckets.length - 1)) * 100;
+    const y = 92 - (count / max) * 76;
+    return { x, y, count };
+  });
+  const path = points.map((point, index) => `${index ? "L" : "M"} ${point.x} ${point.y}`).join(" ");
 
   return (
-    <DashboardPanel title="Registration activity" actionLabel="Recent intake" className="dashboard-panel-registration-activity">
+    <DashboardPanel title="Registration activity" actionLabel="Last 10 weeks" className="dashboard-panel-registration-activity">
       <div className="dashboard-activity-chart" role="img" aria-label="Recent registration activity">
         <div className="dashboard-chart-grid" aria-hidden="true"><i /><i /><i /></div>
-        <div className="dashboard-chart-bars">
-          {buckets.map(([date, count]) => (
-            <div className="dashboard-chart-column" key={date}>
-              <strong>{count}</strong>
-              <span style={{ height: `${Math.max(8, (count / max) * 100)}%` }} />
-              <small>{new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date(`${date}T12:00:00`))}</small>
-            </div>
-          ))}
+        <svg className="dashboard-chart-line" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+          <path className="dashboard-chart-area" d={`${path} L 100 92 L 0 92 Z`} />
+          <path className="dashboard-chart-stroke" d={path} />
+          {points.map((point, index) => <circle key={buckets[index][0]} cx={point.x} cy={point.y} r="1.35" />)}
+        </svg>
+        <div className="dashboard-chart-labels">
+          {buckets.map(([date]) => <small key={date}>{new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date(`${date}T12:00:00`))}</small>)}
         </div>
       </div>
-      <div className="dashboard-chart-legend"><i /> Registrations received <span>{registrations.length} recent records</span></div>
+      <div className="dashboard-chart-legend"><i /> Registrations <span>New registrations by week</span></div>
     </DashboardPanel>
+  );
+}
+
+function OperationalTasksPanel({ rows, onOpen }: { rows: AdminRow[]; onOpen: (row: AdminRow) => void }) {
+  return (
+    <DashboardPanel title="Operational tasks" actionLabel={`${rows.length} need attention`} className="dashboard-panel-operational-tasks">
+      <div className="dashboard-operational-list">
+        {rows.slice(0, 3).map((row) => (
+          <button type="button" key={row.cohort.id} onClick={() => onOpen(row)}>
+            <span className="dashboard-operational-icon"><WarningAmberOutlined /></span>
+            <span><strong>{row.tasks.length} item{row.tasks.length === 1 ? "" : "s"} need follow-up</strong><small>{row.cohort.title}</small></span>
+            <em>Review</em>
+          </button>
+        ))}
+        {!rows.length && <div className="dashboard-operational-clear"><CheckCircleOutline /> No operational tasks need attention.</div>}
+      </div>
+    </DashboardPanel>
+  );
+}
+
+function SystemHealthPanel({ data }: { data: AdminRow | null }) {
+  const issueCount = data?.metrics?.communicationIssues ?? data?.communicationIssues?.length ?? 0;
+  return (
+    <section className="dashboard-system-health">
+      <div><h2>System health</h2><span className={issueCount ? "is-warning" : ""}><i />{issueCount ? `${issueCount} delivery issue${issueCount === 1 ? "" : "s"}` : "All systems operational"}</span></div>
+      <div className="dashboard-health-items">
+        <span><i />Background jobs monitored</span>
+        <span><i />Delivery queue connected</span>
+        <span><i />Application data available</span>
+        <small>Controlled environment</small>
+      </div>
+    </section>
   );
 }
 
@@ -480,14 +464,6 @@ function RecentActivityPanel({ data, onOpenRegistration }: { data: AdminRow | nu
 export function DashboardClient() {
   const [data, setData] = useState<AdminRow | null>(null);
   const [templates, setTemplates] = useState<AdminRow[]>([]);
-  const [cohorts, setCohorts] = useState<AdminRow[]>([]);
-  const [presenters, setPresenters] = useState<AdminRow[]>([]);
-  const [cohortScope, setCohortScope] = useState("active");
-  const [cohortId, setCohortId] = useState("");
-  const [presenterId, setPresenterId] = useState("");
-  const [datePreset, setDatePreset] = useState("");
-  const [customStart, setCustomStart] = useState("");
-  const [customEnd, setCustomEnd] = useState("");
   const [loading, setLoading] = useState(true);
   const [readinessCohort, setReadinessCohort] = useState<AdminRow | null>(null);
   const [recentRegistration, setRecentRegistration] = useState<AdminRow | null>(null);
@@ -496,31 +472,16 @@ export function DashboardClient() {
 
   useEffect(() => {
     setLoading(true);
-    const params = new URLSearchParams();
-    if (cohortScope) params.set("cohortScope", cohortScope);
-    if (cohortId) params.set("cohortId", cohortId);
-    if (presenterId) params.set("presenterId", presenterId);
-    const range = dashboardDateRange(datePreset, customStart, customEnd);
-    if (range) {
-      params.set("rangeStart", range.rangeStart);
-      params.set("rangeEnd", range.rangeEnd);
-    }
-    adminApi<AdminRow>(`/api/admin-dashboard${params.size ? `?${params.toString()}` : ""}`)
+    adminApi<AdminRow>("/api/admin-dashboard?cohortScope=active")
       .then((dashboardData) => setData(dashboardData))
       .catch((error) => notifyError(error.message))
       .finally(() => setLoading(false));
-  }, [cohortId, cohortScope, customEnd, customStart, datePreset, notifyError, presenterId]);
+  }, [notifyError]);
 
   useEffect(() => {
-    Promise.all([
-      adminApi<AdminRow[]>("/api/communications/templates").catch(() => []),
-      adminApi<AdminRow[]>("/api/cohorts").catch(() => []),
-      adminApi<AdminRow[]>("/api/presenters").catch(() => [])
-    ])
-      .then(([templateRows, cohortRows, presenterRows]) => {
+    Promise.all([adminApi<AdminRow[]>("/api/communications/templates").catch(() => [])])
+      .then(([templateRows]) => {
         setTemplates(templateRows.filter((template) => template.active !== false));
-        setCohorts(cohortRows);
-        setPresenters(presenterRows);
       })
       .catch((error) => notifyError(error.message));
   }, [notifyError]);
@@ -578,14 +539,16 @@ export function DashboardClient() {
         } else if (status === "OVERDUE" || status === "FAILED") {
           summary.pastDue += amount;
           summary.outstanding += amount;
+          summary.openInvoices += 1;
         } else {
           summary.pending += amount;
           summary.outstanding += amount;
+          summary.openInvoices += 1;
         }
 
         return summary;
       },
-      { total: 0, collected: 0, pending: 0, pastDue: 0, outstanding: 0 }
+      { total: 0, collected: 0, pending: 0, pastDue: 0, outstanding: 0, openInvoices: 0 }
     );
   }, [data]);
 
@@ -632,66 +595,12 @@ export function DashboardClient() {
     <PageStack className="dashboard-page">
       <header className="dashboard-welcome">
         <div>
-          <p className="dashboard-welcome-date">Operations overview</p>
-          <h1>Mission Cohort dashboard</h1>
-          <p>A clear view of what is moving across your learning cohorts.</p>
+          <p className="dashboard-welcome-date">{new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" }).format(new Date())} · Operations</p>
+          <h1>Good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"}</h1>
+          <p>A clear view of what&apos;s moving across your learning cohorts.</p>
         </div>
         <Button component={Link} href="/registrations" startIcon={<AddIcon />}>Add registration</Button>
       </header>
-      <details className="dashboard-filter-disclosure">
-        <summary>Refine dashboard view</summary>
-        <section className="dashboard-filter-row" aria-label="Dashboard filters">
-          <TextField
-          select
-          label="Cohort view"
-          value={cohortScope}
-          onChange={(event) => {
-            setCohortScope(event.target.value);
-            if (event.target.value === "active") {
-              setCohortId("");
-            }
-          }}
-        >
-          <MenuItem value="active">Active cohorts</MenuItem>
-          <MenuItem value="">All cohorts</MenuItem>
-        </TextField>
-        <TextField
-          select
-          label="Selected cohort"
-          value={cohortId}
-          onChange={(event) => {
-            setCohortId(event.target.value);
-            if (event.target.value) {
-              setCohortScope("");
-            }
-          }}
-        >
-          <MenuItem value="">All selected view cohorts</MenuItem>
-          {cohorts.map((cohort) => (
-            <MenuItem value={cohort.id} key={cohort.id}>
-              {cohortDropdownLabel(cohort)}
-            </MenuItem>
-          ))}
-        </TextField>
-        <TextField select label="Thought leader" value={presenterId} onChange={(event) => setPresenterId(event.target.value)}>
-          <MenuItem value="">All thought leaders</MenuItem>
-          {presenters.map((presenter) => (
-            <MenuItem value={presenter.id} key={presenter.id}>
-              {formatProperDisplay(`${presenter.firstName ?? ""} ${presenter.lastName ?? ""}`)}
-            </MenuItem>
-          ))}
-        </TextField>
-        <TextField select label="Date window" value={datePreset} onChange={(event) => setDatePreset(event.target.value)}>
-          {dashboardDateOptions.map((option) => <MenuItem value={option.value} key={option.value || "any"}>{option.label}</MenuItem>)}
-        </TextField>
-          {datePreset === "custom" && (
-          <>
-            <TextField label="Start" type="date" value={customStart} InputLabelProps={{ shrink: true }} onChange={(event) => setCustomStart(event.target.value)} />
-            <TextField label="End" type="date" value={customEnd} InputLabelProps={{ shrink: true }} onChange={(event) => setCustomEnd(event.target.value)} />
-          </>
-          )}
-        </section>
-      </details>
       <MetricGrid data={data} finance={financeSummary} />
       {loading && <LoadingState label="Loading dashboard" />}
 
@@ -705,10 +614,8 @@ export function DashboardClient() {
         <FutureAgendaPanel loading={loading} sessions={data?.upcomingSessions ?? []} />
       </section>
 
-      <section className="dashboard-work-grid">
-        <PriorityPanel loading={loading} rows={readinessRows} onOpen={setReadinessCohort} />
-        <RecentActivityPanel data={data} onOpenRegistration={openRecentRegistration} />
-      </section>
+      <OperationalTasksPanel rows={readinessRows} onOpen={setReadinessCohort} />
+      <SystemHealthPanel data={data} />
 
       <Dialog open={Boolean(readinessCohort)} onClose={() => setReadinessCohort(null)} fullWidth maxWidth="md">
         <DialogTitle>{readinessCohort?.cohort?.title ?? "Cohort Readiness"}</DialogTitle>
