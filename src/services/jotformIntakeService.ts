@@ -6,6 +6,7 @@ import { previewJotformRegistrationPayload } from "@/modules/jotform";
 import { getDecryptedIntegrationConnection, upsertIntegrationConnection } from "@/services/integrationService";
 import { listActiveJotformFormMappings } from "@/services/jotformMappingService";
 import { processRegistrationWebhook } from "@/services/webhookService";
+import { getJotformReconciliationSetup } from "@/services/jotformReconciliationService";
 
 function appBaseUrl() {
   return (env.APP_BASE_URL ?? "https://mission-cohort-six.vercel.app").replace(/\/$/, "");
@@ -23,7 +24,8 @@ export async function getJotformIntakeSetup() {
     configured: Boolean(secret),
     webhookUrl: secret ? buildJotformWebhookUrl(secret) : "",
     lastRotatedAt: connection?.updatedAt ?? null,
-    connectionStatus: connection?.status ?? IntegrationConnectionStatus.NOT_CONFIGURED
+    connectionStatus: connection?.status ?? IntegrationConnectionStatus.NOT_CONFIGURED,
+    reconciliation: await getJotformReconciliationSetup()
   };
 }
 
@@ -142,7 +144,7 @@ export async function listJotformIntakeEvents() {
   });
 }
 
-export async function replayJotformWebhookEvent(id: string) {
+export async function replayJotformWebhookEvent(id: string, options?: { importOnly?: boolean }) {
   const event = await prisma.webhookEvent.findUnique({ where: { id } });
 
   if (!event) {
@@ -151,6 +153,13 @@ export async function replayJotformWebhookEvent(id: string) {
 
   if (event.source !== "jotform") {
     throw Object.assign(new Error("Only Jotform webhook events can be replayed here"), { code: "BAD_REQUEST", status: 400 });
+  }
+
+  if (event.eventType === "registration.reconciliation_missing" && options?.importOnly !== true) {
+    throw Object.assign(
+      new Error("Recovered submissions must be imported without automations first."),
+      { code: "BAD_REQUEST", status: 400 }
+    );
   }
 
   const mappings = await listActiveJotformFormMappings();
@@ -178,5 +187,8 @@ export async function replayJotformWebhookEvent(id: string) {
     );
   }
 
-  return processRegistrationWebhook(event.payload as Record<string, any>, { existingEventId: event.id });
+  return processRegistrationWebhook(event.payload as Record<string, any>, {
+    existingEventId: event.id,
+    suppressAutomations: options?.importOnly === true
+  });
 }

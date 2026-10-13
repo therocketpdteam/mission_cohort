@@ -1165,11 +1165,12 @@ function JotformSubmissionRow({
   const fieldOptions: JotformFieldOption[] = Array.isArray(preview.fieldOptions) ? preview.fieldOptions : [];
   const status = row.reviewStatus ?? row.status;
   const revision = row.revision ?? {};
+  const recoveredSubmission = row.eventType === "registration.reconciliation_missing";
   const organization = formatProperDisplay(preview.organizationName) || "Unknown organization";
   const contact = formatProperDisplay(preview.primaryContactName) || preview.primaryContactEmail || "Unknown POC";
   const routeSummary = jotformRouteCohortSummary(row, cohorts);
   const canReplay = Boolean(readiness.canReplay) && status !== "PROCESSED";
-  const replayButtonLabel = status === "PROCESSED" ? "Imported" : canReplay ? "Replay" : "Map first";
+  const replayButtonLabel = status === "PROCESSED" ? "Imported" : canReplay ? recoveredSubmission ? "Import only" : "Replay" : "Map first";
 
   return (
     <Paper variant="outlined" sx={{ overflow: "hidden" }}>
@@ -1259,7 +1260,7 @@ function JotformSubmissionRow({
           )}
           <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
             <Button size="small" startIcon={<EditOutlined />} onClick={() => onReview(row)}>Review & Map Fields</Button>
-            <Button size="small" variant="outlined" startIcon={<ReplayOutlined />} disabled={!canReplay} onClick={() => onReplay(row)}>{canReplay ? "Replay Submission" : replayButtonLabel}</Button>
+            <Button size="small" variant="outlined" startIcon={<ReplayOutlined />} disabled={!canReplay} onClick={() => onReplay(row)}>{canReplay ? recoveredSubmission ? "Import Without Automations" : "Replay Submission" : replayButtonLabel}</Button>
           </Stack>
         </Stack>
       </Collapse>
@@ -1792,6 +1793,8 @@ export function SettingsClient() {
   const [integrationStatus, setIntegrationStatus] = useState<AdminRow | null>(null);
   const [jotformSetup, setJotformSetup] = useState<AdminRow | null>(null);
   const [webhookEvents, setWebhookEvents] = useState<AdminRow[]>([]);
+  const [jotformApiKey, setJotformApiKey] = useState("");
+  const [jotformReconciliationBusy, setJotformReconciliationBusy] = useState(false);
   const [mappingWizardEvent, setMappingWizardEvent] = useState<AdminRow | null>(null);
   const [historicalImports, setHistoricalImports] = useState<AdminRow[]>([]);
   const [historicalCsvText, setHistoricalCsvText] = useState("");
@@ -2299,8 +2302,17 @@ export function SettingsClient() {
 
   async function replayWebhook(row: AdminRow, throwOnError = false) {
     try {
-      await adminApi("/api/jotform/replay", { method: "POST", body: { id: row.id } });
-      notifySuccess("Jotform submission replayed");
+      const recoveredSubmission = row.eventType === "registration.reconciliation_missing";
+      if (recoveredSubmission && !window.confirm(
+        "Import this recovered registration for review? No emails, calendar invitations, CRM sync, or QuickBooks actions will run."
+      )) {
+        return;
+      }
+      await adminApi("/api/jotform/replay", {
+        method: "POST",
+        body: { id: row.id, mode: recoveredSubmission ? "import_only" : "normal" }
+      });
+      notifySuccess(recoveredSubmission ? "Recovered registration imported without automations" : "Jotform submission replayed");
       await load();
     } catch (error) {
       notifyError((error as Error).message);
@@ -2332,6 +2344,41 @@ export function SettingsClient() {
       notifySuccess("Jotform webhook URL copied");
     } catch (error) {
       notifyError((error as Error).message);
+    }
+  }
+
+  async function configureJotformReconciliation() {
+    try {
+      setJotformReconciliationBusy(true);
+      const reconciliation = await adminApi<AdminRow>("/api/jotform/reconciliation", {
+        method: "POST",
+        body: { action: "configure", apiKey: jotformApiKey }
+      });
+      setJotformSetup((current) => ({ ...(current ?? {}), reconciliation }));
+      setJotformApiKey("");
+      notifySuccess("Jotform reconciliation connected");
+    } catch (error) {
+      notifyError((error as Error).message);
+    } finally {
+      setJotformReconciliationBusy(false);
+    }
+  }
+
+  async function runJotformReconciliation() {
+    try {
+      setJotformReconciliationBusy(true);
+      const result = await adminApi<AdminRow>("/api/jotform/reconciliation", {
+        method: "POST",
+        body: { action: "run", lookbackDays: 45, limitPerForm: 100 }
+      });
+      notifySuccess(result.missingDetected
+        ? `${result.missingDetected} missing submission${result.missingDetected === 1 ? "" : "s"} added to review`
+        : "Reconciliation complete - no missing submissions");
+      await load();
+    } catch (error) {
+      notifyError((error as Error).message);
+    } finally {
+      setJotformReconciliationBusy(false);
     }
   }
 
@@ -2780,6 +2827,59 @@ export function SettingsClient() {
                 value={jotformSetup?.webhookUrl ?? "Generate a Jotform secret to create the webhook URL"}
                 InputProps={{ readOnly: true }}
               />
+            </Stack>
+          </SectionCard>
+
+          <SectionCard
+            title="Missing Submission Monitor"
+            action={
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<ReplayOutlined />}
+                disabled={!jotformSetup?.reconciliation?.configured || jotformReconciliationBusy}
+                onClick={() => void runJotformReconciliation()}
+              >
+                {jotformReconciliationBusy ? "Checking" : "Run audit now"}
+              </Button>
+            }
+          >
+            <Stack spacing={2}>
+              <Alert severity={jotformSetup?.reconciliation?.errorMessage ? "error" : jotformSetup?.reconciliation?.configured ? "success" : "warning"}>
+                {jotformSetup?.reconciliation?.errorMessage
+                  || (jotformSetup?.reconciliation?.configured
+                    ? "Jotform submissions are checked independently every hour. Missing records are added to Review Queue only; they are never imported or contacted automatically."
+                    : "Add a Jotform API key to detect submissions that never reached the webhook.")}
+              </Alert>
+              <Stack direction={{ xs: "column", md: "row" }} spacing={1} alignItems={{ md: "flex-end" }}>
+                <TextField
+                  fullWidth
+                  size="small"
+                  type="password"
+                  label={jotformSetup?.reconciliation?.configured ? "Replace Jotform API key" : "Jotform API key"}
+                  value={jotformApiKey}
+                  onChange={(event) => setJotformApiKey(event.target.value)}
+                  helperText="Stored encrypted. Used only to read submissions from mapped forms."
+                />
+                <Button
+                  variant="outlined"
+                  disabled={!jotformApiKey.trim() || jotformReconciliationBusy}
+                  onClick={() => void configureJotformReconciliation()}
+                >
+                  Connect
+                </Button>
+              </Stack>
+              <Grid container spacing={1.5}>
+                <Grid size={{ xs: 12, md: 4 }}>
+                  <InfoTile label="Status" value={jotformSetup?.reconciliation?.configured ? "Monitoring enabled" : "Not configured"} />
+                </Grid>
+                <Grid size={{ xs: 12, md: 4 }}>
+                  <InfoTile label="Last checked" value={jotformSetup?.reconciliation?.lastCheckedAt ? compactDate(jotformSetup.reconciliation.lastCheckedAt) : "Not run yet"} />
+                </Grid>
+                <Grid size={{ xs: 12, md: 4 }}>
+                  <InfoTile label="Last result" value={jotformSetup?.reconciliation?.lastResult ? `${jotformSetup.reconciliation.lastResult.missingDetected ?? 0} missing of ${jotformSetup.reconciliation.lastResult.submissionsChecked ?? 0} checked` : "No audit yet"} />
+                </Grid>
+              </Grid>
             </Stack>
           </SectionCard>
 

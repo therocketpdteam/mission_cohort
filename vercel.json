@@ -13,6 +13,10 @@
     {
       "path": "/api/jobs/reconcile-quickbooks-invoices?limit=50",
       "schedule": "15 * * * *"
+    },
+    {
+      "path": "/api/jobs/reconcile-jotform-submissions",
+      "schedule": "35 * * * *"
     }
   ]
 }

@@ -89,7 +89,10 @@ export async function validateWebhookSecret(request: Request) {
   return configuredSecrets.includes(providedSecret ?? "");
 }
 
-export async function processRegistrationWebhook(payload: Record<string, any>, options?: { existingEventId?: string }) {
+export async function processRegistrationWebhook(
+  payload: Record<string, any>,
+  options?: { existingEventId?: string; suppressAutomations?: boolean }
+) {
   const isJotformPayload = Boolean(
     stringValue(payload.source).toLowerCase() === "jotform" ||
       payload.answers ||
@@ -391,20 +394,24 @@ export async function processRegistrationWebhook(payload: Record<string, any>, o
           totalAmount: Number(registration.totalAmount ?? 0),
           hasSupportingDocs: Boolean(registration.w9Url || registration.invoiceUrl || registration.confirmationDocsSentAt)
         });
-    void queueRegistrationCrmSync(registration.id, existingRegistration ? "registration.updated" : "registration.created").catch((crmError) => {
-      console.warn("CRM registration sync queue failed", crmError);
-    });
-    void syncRegistrationToCrmWebhook(registration.id, existingRegistration ? "registration.updated" : "registration.created").catch((crmError) => {
-      console.warn("CRM registration webhook sync failed", crmError);
-    });
-    for (const participant of participants) {
-      void queueParticipantCrmSync(participant.id, existingRegistration ? "participant.updated" : "participant.created").catch((crmError) => {
-        console.warn("CRM participant sync queue failed", crmError);
+    if (!options?.suppressAutomations) {
+      void queueRegistrationCrmSync(registration.id, existingRegistration ? "registration.updated" : "registration.created").catch((crmError) => {
+        console.warn("CRM registration sync queue failed", crmError);
       });
+      void syncRegistrationToCrmWebhook(registration.id, existingRegistration ? "registration.updated" : "registration.created").catch((crmError) => {
+        console.warn("CRM registration webhook sync failed", crmError);
+      });
+      for (const participant of participants) {
+        void queueParticipantCrmSync(participant.id, existingRegistration ? "participant.updated" : "participant.created").catch((crmError) => {
+          console.warn("CRM participant sync queue failed", crmError);
+        });
+      }
     }
-    const journey = registration.status === RegistrationStatus.CANCELLED
-      ? await cancelRegistrationJourneys(registration.id, "Registration cancelled by intake revision.")
-      : await planRegistrationJourneys(registration.id, automaticRegistrationJourneyOptions(cohortForDelivery.status));
+    const journey = options?.suppressAutomations
+      ? { mode: "suppressed", reason: "Recovered submission imported for administrative review only." }
+      : registration.status === RegistrationStatus.CANCELLED
+        ? await cancelRegistrationJourneys(registration.id, "Registration cancelled by intake revision.")
+        : await planRegistrationJourneys(registration.id, automaticRegistrationJourneyOptions(cohortForDelivery.status));
 
     return {
       eventId: event.id,
@@ -418,7 +425,8 @@ export async function processRegistrationWebhook(payload: Record<string, any>, o
       participants,
       payment,
       operationsTasks,
-      journey
+      journey,
+      automationsSuppressed: options?.suppressAutomations === true
     };
   } catch (error) {
     await prisma.webhookEvent.update({
