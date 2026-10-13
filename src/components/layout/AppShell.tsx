@@ -487,6 +487,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [density, setDensity] = useState<"standard" | "compact">("standard");
   const [themeMode, setThemeMode] = useState<"normal" | "night">("normal");
@@ -571,7 +572,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className={`app-shell is-${density} is-${themeMode}`}>
+    <div className={`app-shell is-${density} is-${themeMode} ${sidebarCollapsed ? "is-sidebar-collapsed" : ""}`}>
       <aside className={`app-sidebar ${mobileOpen ? "is-open" : ""}`}>
         <div className="app-brand">
           <div className="app-brand-lockup">
@@ -607,20 +608,27 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <div className="app-main">
         <header className="app-topbar">
-          <IconButton type="button" className="mobile-menu-button" onClick={() => setMobileOpen(true)} aria-label="Open navigation">
+          <IconButton
+            type="button"
+            className="mobile-menu-button"
+            onClick={() => {
+              if (window.innerWidth > 980) {
+                setSidebarCollapsed((current) => !current);
+              } else {
+                setMobileOpen(true);
+              }
+            }}
+            aria-label={sidebarCollapsed ? "Expand navigation" : "Collapse navigation"}
+          >
             <MenuIcon />
           </IconButton>
           <div className="app-topbar-title">
-            <h1>{title}</h1>
-            {subtitle ? (
-              <p className="app-topbar-subtitle">{subtitle}</p>
-            ) : (
-              <div className="app-breadcrumbs">
-                {crumbs.map((crumb, index) => (
-                  <span key={`${crumb}-${index}`}>{index > 0 ? `/ ${crumb}` : crumb}</span>
-                ))}
-              </div>
-            )}
+            <div className="app-breadcrumbs">
+              <span>Mission Cohort</span>
+              {crumbs.map((crumb, index) => (
+                <span className={index === crumbs.length - 1 ? "is-current" : ""} key={`${crumb}-${index}`}>› {crumb}</span>
+              ))}
+            </div>
           </div>
           <GlobalPeopleSearch />
           <div className="app-view-controls" aria-label="View controls">
