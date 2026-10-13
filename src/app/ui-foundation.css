@@ -80,6 +80,8 @@ body {
 .app-shell .app-topbar {
   height: 62px;
   min-height: 62px;
+  grid-template-columns: 32px minmax(180px, 0.65fr) minmax(320px, 1fr) auto auto;
+  grid-template-rows: 1fr;
   align-items: center;
   gap: 12px;
   border-color: var(--mc-border);
