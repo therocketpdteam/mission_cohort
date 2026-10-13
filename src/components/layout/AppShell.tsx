@@ -21,8 +21,9 @@ import { formatCurrency, formatProperDisplay, formatStatusLabel } from "@/lib/fo
 import type { Route } from "next";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import type { MouseEvent, ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import type { CSSProperties, MouseEvent, ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { adminApi } from "@/lib/adminApi";
 import { NewVersionPrompt } from "./NewVersionPrompt";
 import { RegistrationDeliveryProgress } from "./RegistrationDeliveryProgress";
@@ -261,11 +262,13 @@ function groupSearchResults(results: PeopleSearchResult[], query: string): Peopl
 
 function GlobalPeopleSearch() {
   const pathname = usePathname();
+  const searchRef = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<PeopleSearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
   const [error, setError] = useState("");
+  const [panelPosition, setPanelPosition] = useState<CSSProperties>();
 
   useEffect(() => {
     const trimmed = query.trim();
@@ -327,8 +330,40 @@ function GlobalPeopleSearch() {
   const showPanel = open && query.trim().length >= 2;
   const groupedResults = useMemo(() => groupSearchResults(results, query), [results, query]);
 
+  const positionPanel = useCallback(() => {
+    const search = searchRef.current;
+    if (!search) return;
+
+    const searchBounds = search.getBoundingClientRect();
+    const workspaceBounds = search.closest(".app-main")?.getBoundingClientRect();
+    const gutter = window.innerWidth <= 620 ? 12 : 16;
+    const workspaceLeft = (workspaceBounds?.left ?? 0) + gutter;
+    const rightEdge = Math.min(searchBounds.right, window.innerWidth - gutter);
+    const availableWidth = Math.max(0, rightEdge - workspaceLeft);
+    const width = Math.min(920, availableWidth);
+
+    setPanelPosition({
+      top: searchBounds.bottom + 10,
+      left: Math.max(workspaceLeft, rightEdge - width),
+      width
+    });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!showPanel) return;
+
+    positionPanel();
+    window.addEventListener("resize", positionPanel);
+    window.addEventListener("scroll", positionPanel, true);
+
+    return () => {
+      window.removeEventListener("resize", positionPanel);
+      window.removeEventListener("scroll", positionPanel, true);
+    };
+  }, [positionPanel, showPanel]);
+
   return (
-    <div className="global-people-search">
+    <div className="global-people-search" ref={searchRef}>
       <label className="global-people-search-field">
         <SearchOutlined />
         <input
@@ -347,8 +382,8 @@ function GlobalPeopleSearch() {
           aria-label="Search people, registrations, invoices, and cohorts"
         />
       </label>
-      {showPanel && (
-        <div className="global-people-search-panel">
+      {showPanel && panelPosition && createPortal(
+        <div className="global-people-search-panel" style={panelPosition}>
           <div className="global-people-search-summary">
             <strong>{loading ? "Searching..." : `${groupedResults.length} result${groupedResults.length === 1 ? "" : "s"}`}</strong>
             <button type="button" onClick={closeSearch}>Close</button>
@@ -441,7 +476,8 @@ function GlobalPeopleSearch() {
               );
             })}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

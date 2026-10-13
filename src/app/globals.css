@@ -432,12 +432,10 @@ h6,
 }
 
 .global-people-search-panel {
-  position: absolute;
-  top: calc(100% + 10px);
-  right: 0;
+  position: fixed;
+  z-index: 1000;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  width: min(920px, calc(100vw - 320px));
   max-height: min(72vh, 680px);
   min-height: 0;
   overflow: hidden;
@@ -9321,9 +9319,7 @@ h6,
   }
 
   .global-people-search-panel {
-    left: 0;
-    right: auto;
-    width: min(100%, calc(100vw - 28px));
+    max-width: calc(100vw - 28px);
   }
 
   .global-people-search-registration-row {
@@ -9483,9 +9479,6 @@ h6,
   }
 
   .global-people-search-panel {
-    position: fixed;
-    inset: 138px 12px auto 12px;
-    width: auto;
     max-height: calc(100vh - 158px);
   }
 
