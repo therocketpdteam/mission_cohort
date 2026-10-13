@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { AppShell } from "@/components/layout/AppShell";
 import { Providers } from "./providers";
 import "./globals.css";
+import "./ui-foundation.css";
 
 export const metadata: Metadata = {
   title: "Mission Control",

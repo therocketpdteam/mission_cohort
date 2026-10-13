@@ -1,0 +1,232 @@
+/*
+ * Canonical shared UI foundation.
+ *
+ * This file intentionally loads after globals.css. Page-specific legacy rules
+ * are retired stage by stage; shared shell and primitive styling belongs here.
+ */
+
+:root {
+  --mc-sidebar-width: 236px;
+  --mc-sidebar-collapsed-width: 72px;
+  --mc-workspace: #f5f7fa;
+  --mc-sidebar: #202d3c;
+  --mc-accent: #7047a8;
+  --mc-accent-hover: #613b96;
+  --mc-text: #263246;
+  --mc-muted: #718196;
+  --mc-border: #d7e0e8;
+  --mc-border-soft: #e0e6ed;
+  --mc-panel: #fff;
+}
+
+body {
+  background: var(--mc-workspace);
+  color: var(--mc-text);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+@media (min-width: 981px) {
+  .app-shell,
+  .app-shell.is-standard,
+  .app-shell.is-compact {
+    grid-template-columns: var(--mc-sidebar-width) minmax(0, 1fr);
+  }
+
+  .app-shell .app-sidebar,
+  .app-shell.is-standard .app-sidebar,
+  .app-shell.is-compact .app-sidebar {
+    width: var(--mc-sidebar-width);
+  }
+
+  .app-shell.is-sidebar-collapsed,
+  .app-shell.is-sidebar-collapsed.is-standard,
+  .app-shell.is-sidebar-collapsed.is-compact {
+    grid-template-columns: var(--mc-sidebar-collapsed-width) minmax(0, 1fr);
+  }
+
+  .app-shell.is-sidebar-collapsed .app-sidebar {
+    width: var(--mc-sidebar-collapsed-width);
+  }
+
+  .app-shell.is-sidebar-collapsed .app-brand-lockup > div,
+  .app-shell.is-sidebar-collapsed .app-environment-badge,
+  .app-shell.is-sidebar-collapsed .app-build-version,
+  .app-shell.is-sidebar-collapsed .app-nav-label,
+  .app-shell.is-sidebar-collapsed .app-nav-item span,
+  .app-shell.is-sidebar-collapsed .app-sidebar-footer {
+    display: none;
+  }
+
+  .app-shell.is-sidebar-collapsed .app-brand,
+  .app-shell.is-sidebar-collapsed .app-nav {
+    padding-inline: 12px;
+  }
+
+  .app-shell.is-sidebar-collapsed .app-nav-item {
+    justify-content: center;
+    padding-inline: 0;
+  }
+
+  .app-shell .mobile-menu-button {
+    display: inline-flex;
+  }
+}
+
+.app-shell .app-sidebar {
+  background: var(--mc-sidebar);
+}
+
+.app-shell .app-topbar {
+  height: 62px;
+  min-height: 62px;
+  align-items: center;
+  gap: 12px;
+  border-color: var(--mc-border);
+  padding: 0 28px;
+}
+
+.app-shell .mobile-menu-button {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--mc-border);
+  border-radius: 5px;
+  color: #536478;
+}
+
+.app-shell .app-topbar-title {
+  min-width: 250px;
+  max-width: 390px;
+}
+
+.app-shell .app-breadcrumbs {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #8492a4;
+  font-size: 0.73rem;
+  white-space: nowrap;
+}
+
+.app-shell .app-breadcrumbs .is-current {
+  color: var(--mc-text);
+  font-weight: 700;
+}
+
+.app-shell .global-people-search-field {
+  min-height: 34px;
+  border-color: var(--mc-border);
+  border-radius: 5px;
+  background: #f8fafc;
+}
+
+.app-shell .global-people-search-field input {
+  font-size: 0.76rem;
+  font-weight: 450;
+}
+
+.app-shell .app-density-toggle,
+.app-shell .user-menu > .ui-button,
+.app-shell .app-view-controls > .ui-icon-button {
+  min-height: 34px;
+  border-color: var(--mc-border);
+  border-radius: 5px;
+}
+
+.app-shell .app-content {
+  max-width: none;
+  padding: 26px 30px 42px;
+}
+
+.app-shell .page-header,
+.app-shell .section-card,
+.app-shell .ui-card,
+.app-shell .ui-paper,
+.app-shell .app-table-shell {
+  border-color: var(--mc-border);
+  border-radius: 6px;
+  box-shadow: none;
+}
+
+.app-shell .page-header h1 {
+  color: var(--mc-text);
+  font-size: 1.36rem;
+  font-weight: 700;
+}
+
+.app-shell .page-header p {
+  color: var(--mc-muted);
+  font-size: 0.76rem;
+}
+
+.app-shell .ui-button {
+  min-height: 34px;
+  border-radius: 5px;
+  padding: 0 13px;
+  box-shadow: none;
+  font-size: 0.75rem;
+  font-weight: 650;
+}
+
+.app-shell .ui-button-contained {
+  border-color: var(--mc-accent);
+  background: var(--mc-accent);
+}
+
+.app-shell .ui-button-contained:hover {
+  border-color: var(--mc-accent-hover);
+  background: var(--mc-accent-hover);
+}
+
+.app-shell .ui-button-outlined,
+.app-shell .ui-button-text {
+  color: #403052;
+}
+
+.app-shell .ui-icon-button {
+  border-radius: 5px;
+}
+
+.app-shell .ui-label {
+  color: #536478;
+  font-size: 0.68rem;
+  font-weight: 650;
+}
+
+.app-shell .ui-input,
+.app-shell .ui-select-trigger {
+  min-height: 34px;
+  border-color: var(--mc-border);
+  border-radius: 5px;
+  background: var(--mc-panel);
+  font-size: 0.76rem;
+}
+
+.app-shell .status-chip {
+  min-height: 23px;
+  border-radius: 4px;
+  padding: 0 8px;
+  font-size: 0.63rem;
+  font-weight: 650;
+}
+
+.app-shell .section-card-title {
+  color: var(--mc-text);
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+@media (max-width: 980px) {
+  .app-shell .app-topbar {
+    height: auto;
+  }
+
+  .app-shell .app-topbar-title {
+    min-width: 0;
+  }
+
+  .app-shell .app-breadcrumbs {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
