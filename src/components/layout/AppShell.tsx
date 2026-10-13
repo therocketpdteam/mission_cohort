@@ -132,20 +132,12 @@ function titleFromPath(pathname: string) {
   return current?.label ?? "Mission Control";
 }
 
-function subtitleFromPath(pathname: string) {
-  if (pathname === "/dashboard") {
-    return "Operational snapshot across active cohorts.";
-  }
-
-  return "";
-}
-
 function breadcrumbsFor(pathname: string, labels: Record<string, string> = {}) {
   const parts = pathname.split("/").filter(Boolean);
-  return ["Mission Control", ...parts.map((part, index) => {
+  return parts.map((part, index) => {
     const key = `/${parts.slice(0, index + 1).join("/")}`;
     return labels[key] ?? part.replace(/-/g, " ");
-  })];
+  });
 }
 
 function formatShortDate(value?: string | null) {
@@ -501,7 +493,6 @@ export function AppShell({ children }: { children: ReactNode }) {
     backgroundJobsAllowed: false
   });
   const title = titleFromPath(pathname);
-  const subtitle = subtitleFromPath(pathname);
   const crumbs = useMemo(() => breadcrumbsFor(pathname, breadcrumbLabels), [breadcrumbLabels, pathname]);
 
   useEffect(() => {
