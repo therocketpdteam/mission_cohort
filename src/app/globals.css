@@ -11485,6 +11485,30 @@ button.dashboard-activity-item {
   font-weight: 600;
 }
 
+@media (min-width: 981px) {
+  .app-sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: 30;
+    width: 268px;
+    height: 100dvh;
+  }
+
+  .app-main {
+    grid-column: 2;
+  }
+
+  .app-shell.is-compact .app-sidebar {
+    width: 220px;
+  }
+}
+
+@media (min-width: 1400px) {
+  .app-shell.is-compact .app-sidebar {
+    width: 236px;
+  }
+}
+
 .app-main {
   background: #f5f7fa;
 }
