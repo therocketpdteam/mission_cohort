@@ -77,7 +77,9 @@ body {
   background: var(--mc-sidebar);
 }
 
-.app-shell .app-topbar {
+.app-shell .app-topbar,
+.app-shell:not(.is-night) .app-topbar,
+.app-shell.is-night .app-topbar {
   height: 62px;
   min-height: 62px;
   grid-template-columns: 32px minmax(180px, 0.65fr) minmax(320px, 1fr) auto auto;
@@ -88,9 +90,11 @@ body {
   padding: 0 28px;
 }
 
-.app-shell .mobile-menu-button {
+.app-shell .ui-icon-button.mobile-menu-button {
   width: 32px;
   height: 32px;
+  min-width: 32px;
+  min-height: 32px;
   border: 1px solid var(--mc-border);
   border-radius: 5px;
   color: #536478;
