@@ -8,6 +8,7 @@ import { CancelOutlined, CheckCircleOutline, SendOutlined } from "@/components/u
 import { ArchiveOutlined, DeleteOutline } from "@/components/ui/icons";
 import { EditOutlined } from "@/components/ui/icons";
 import { ExpandMoreOutlined, VisibilityOutlined, WarningAmberOutlined } from "@/components/ui/icons";
+import { ContentCopyOutlined } from "@/components/ui/icons";
 import {
   Box,
   Alert,
@@ -2849,6 +2850,34 @@ export function CohortDetailClient({ id }: { id: string }) {
 
   const registrationColumns: GridColDef[] = [
     { field: "primaryContactName", headerName: "Contact", flex: 1, minWidth: 160, valueGetter: (_value, row) => formatProperDisplay(row.primaryContactName ?? "") },
+    {
+      field: "primaryContactEmail",
+      headerName: "Email",
+      flex: 1.25,
+      minWidth: 230,
+      renderCell: (params) => {
+        const email = String(params.value ?? "").trim();
+        return email ? (
+          <button
+            className="cohort-registration-email"
+            type="button"
+            title={`Copy ${email}`}
+            onClick={async (event) => {
+              event.stopPropagation();
+              try {
+                await navigator.clipboard.writeText(email);
+                notifySuccess(`Copied ${email}`);
+              } catch {
+                notifyError("Email could not be copied");
+              }
+            }}
+          >
+            <span>{email}</span>
+            <ContentCopyOutlined fontSize="small" />
+          </button>
+        ) : <span className="app-table-sub">No email</span>;
+      }
+    },
     { field: "organization", headerName: "Organization", flex: 1, minWidth: 180, valueGetter: (_value, row) => formatProperDisplay(row.organization?.name ?? "") },
     {
       field: "createdAt",

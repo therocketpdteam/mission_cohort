@@ -4197,6 +4197,39 @@ body {
   white-space: nowrap;
 }
 
+.cohort-registration-email {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  gap: 7px;
+  border: 0;
+  background: transparent;
+  color: var(--color-primary-700);
+  cursor: pointer;
+  padding: 5px 0;
+  font: inherit;
+  text-align: left;
+}
+
+.cohort-registration-email span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cohort-registration-email svg {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 15px;
+  color: var(--color-on-surface-variant);
+}
+
+.cohort-registration-email:hover,
+.cohort-registration-email:focus-visible {
+  color: var(--color-primary-900);
+  text-decoration: underline;
+}
+
 @media (max-width: 720px) {
   .cohort-view-switch {
     width: 100%;
