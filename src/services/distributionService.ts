@@ -1,7 +1,8 @@
-import { DistributionPayoutStatus, PaymentStatus, RegistrationStatus } from "@prisma/client";
+import { DistributionPayoutStatus } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { dateInput, moneyInput } from "@/lib/validators";
+import { calculateDistributionTotals } from "@/lib/distributionTotals";
 
 export const distributionUpdateSchema = z.object({
   cohortId: z.string().min(1),
@@ -27,19 +28,6 @@ export const distributionPayoutCreateSchema = z.object({
 export const distributionPayoutUpdateSchema = distributionPayoutCreateSchema.partial().extend({
   id: z.string().min(1)
 });
-
-function roundMoney(value: number) {
-  return Math.round(value * 100) / 100;
-}
-
-function percent(value: unknown) {
-  return Number(value ?? 0) / 100;
-}
-
-const excludedRevenuePaymentStatuses = new Set<PaymentStatus>([
-  PaymentStatus.CANCELLED,
-  PaymentStatus.REFUNDED
-]);
 
 export async function getCohortDistribution(cohortId: string) {
   const [cohort, payments, registrations] = await Promise.all([
@@ -71,39 +59,18 @@ export async function getCohortDistribution(cohortId: string) {
     include: { payouts: { orderBy: { createdAt: "desc" }, include: { paymentRecord: true } } }
   });
 
-  const billableRegistrations = registrations.filter((registration) => (
-    registration.status !== RegistrationStatus.CANCELLED &&
-    !excludedRevenuePaymentStatuses.has(registration.paymentStatus)
-  ));
-  const soldAmount = billableRegistrations.reduce((sum, registration) => sum + Number(registration.totalAmount ?? 0), 0);
-  const paidAmount = payments
-    .filter((payment) => payment.status === PaymentStatus.PAID || payment.status === PaymentStatus.PARTIALLY_PAID)
-    .reduce((sum, payment) => sum + Number(payment.amount ?? 0), 0);
-  const payoutMade = distribution.payouts
-    .filter((payout) => payout.status === DistributionPayoutStatus.PAID || payout.status === DistributionPayoutStatus.PARTIAL)
-    .reduce((sum, payout) => sum + Number(payout.amount ?? 0), 0);
-  const commissionAmount = roundMoney(soldAmount * percent(distribution.commissionPercent));
-  const tlShareAmount = roundMoney(soldAmount * percent(distribution.tlSharePercent));
-  const paymentRatio = soldAmount > 0 ? paidAmount / soldAmount : 0;
-  const tlPayoutDue = roundMoney(tlShareAmount * paymentRatio);
-  const pendingPayout = roundMoney(Math.max(tlPayoutDue - payoutMade, 0));
-  const projectReturn = roundMoney(paidAmount - payoutMade);
+  const totals = calculateDistributionTotals({
+    registrations,
+    payments,
+    payouts: distribution.payouts,
+    commissionPercent: distribution.commissionPercent,
+    tlSharePercent: distribution.tlSharePercent
+  });
 
   return {
     cohort,
     distribution,
-    totals: {
-      soldAmount,
-      paidAmount,
-      commissionAmount,
-      tlShareAmount,
-      paymentRatio,
-      tlPayoutDue,
-      payoutMade,
-      pendingPayout,
-      projectReturn,
-      returnPercent: paidAmount > 0 ? roundMoney((projectReturn / paidAmount) * 100) : 0
-    }
+    totals
   };
 }
 

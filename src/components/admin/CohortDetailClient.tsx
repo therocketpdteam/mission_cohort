@@ -1429,7 +1429,10 @@ function PayoutEditorDialog({
 }
 
 export function CohortDetailClient({ id }: { id: string }) {
-  const [tab, setTab] = useState(0);
+  const [tab, setTab] = useState(() => {
+    if (typeof window === "undefined") return 0;
+    return new URLSearchParams(window.location.search).get("tab")?.toLowerCase() === "distribution" ? 4 : 0;
+  });
   const [loading, setLoading] = useState(true);
   const [cohort, setCohort] = useState<AdminRow | null>(null);
   const [presenters, setPresenters] = useState<AdminRow[]>([]);

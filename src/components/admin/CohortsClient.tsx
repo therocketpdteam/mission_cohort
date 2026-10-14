@@ -750,6 +750,7 @@ export function CohortsClient() {
   const [loadingStatusChangeReview, setLoadingStatusChangeReview] = useState(false);
   const [applyingStatusChange, setApplyingStatusChange] = useState(false);
   const [expandedCohortId, setExpandedCohortId] = useState("");
+  const [pageView, setPageView] = useState<"cohorts" | "distribution">("cohorts");
   const { notifySuccess, notifyError, snackbar } = useNotifier();
 
   async function load() {
@@ -980,6 +981,16 @@ export function CohortsClient() {
   const currentRows = rows.filter((row) => currentStatuses.has(row.status));
   const endedOutstandingRows = rows.filter((row) => isEndedCohort(row) && hasOutstandingCollection(row));
   const completedRows = rows.filter((row) => isEndedCohort(row) && !hasOutstandingCollection(row));
+  const distributionDueRows = rows.filter((row) => (
+    (currentStatuses.has(row.status) || isEndedCohort(row)) &&
+    Number(row.distributionSummary?.pendingPayout ?? 0) > 0
+  ));
+  const currentDistributionRows = distributionDueRows.filter((row) => currentStatuses.has(row.status));
+  const endedDistributionRows = distributionDueRows.filter((row) => isEndedCohort(row));
+  const distributionDueTotal = distributionDueRows.reduce(
+    (sum, row) => sum + Number(row.distributionSummary?.pendingPayout ?? 0),
+    0
+  );
 
   function nextSessionFor(row: AdminRow) {
     return [...(row.sessions ?? [])]
@@ -1038,6 +1049,45 @@ export function CohortsClient() {
     );
   }
 
+  function distributionSection(label: string, sectionRows: AdminRow[]) {
+    if (!sectionRows.length && !loading) return null;
+
+    return (
+      <section className="cohort-reference-section" aria-label={label}>
+        <p className="cohort-reference-label">{label}</p>
+        <div className="cohort-reference-table cohort-distribution-table">
+          <div className="cohort-distribution-head">
+            <span>Cohort</span><span>Thought Leader</span><span>Status</span><span>Revenue</span><span>Commissionable</span><span>RPD commission</span><span>TL earnings</span><span>Customer paid</span><span>Customer balance</span><span>Earned to date</span><span>Distributed</span><span>Payment due</span><span />
+          </div>
+          {sectionRows.map((row) => {
+            const summary = row.distributionSummary ?? {};
+            return (
+              <div className="cohort-distribution-row" key={row.id}>
+                <button className="cohort-distribution-name" type="button" onClick={() => router.push(`/cohorts/${row.id}?tab=Distribution`)}>
+                  <strong>{displayShortName(row.shortName) || row.title}</strong>
+                  <small>{row.title}</small>
+                </button>
+                <span>{formatProperDisplay(summary.tlName) || "Not configured"}</span>
+                <StatusChip value={currentStatuses.has(row.status) ? "Current" : "Ended"} />
+                <span>{money(summary.soldAmount)}</span>
+                <span>{money(summary.commissionableAmount)}</span>
+                <span>{summary.commissionPercent}% · {money(summary.commissionAmount)}</span>
+                <span>{summary.tlSharePercent}% · {money(summary.tlShareAmount)}</span>
+                <span>{money(summary.paidAmount)}</span>
+                <span>{money(summary.outstandingAmount)}</span>
+                <span>{money(summary.tlPayoutDue)}</span>
+                <span>{money(summary.payoutMade)}</span>
+                <strong className="cohort-distribution-due">{money(summary.pendingPayout)}</strong>
+                <Button size="small" variant="outlined" onClick={() => router.push(`/cohorts/${row.id}?tab=Distribution`)}>Open</Button>
+              </div>
+            );
+          })}
+          {loading && <div className="cohort-reference-loading">Loading distributions...</div>}
+        </div>
+      </section>
+    );
+  }
+
   return (
     <PageStack className="cohort-console-page">
       <header className="cohort-console-header">
@@ -1052,9 +1102,29 @@ export function CohortsClient() {
         }}>Create Cohort</ToolbarButton>
       </header>
 
-      {cohortLifecycleSection("Current cohorts", currentRows)}
-      {cohortLifecycleSection("Ended · outstanding balances", endedOutstandingRows)}
-      {cohortLifecycleSection("Completed cohorts", completedRows)}
+      <div className="cohort-view-switch" role="group" aria-label="Cohort view">
+        <button type="button" className={pageView === "cohorts" ? "is-active" : ""} onClick={() => setPageView("cohorts")}>Cohort overview</button>
+        <button type="button" className={pageView === "distribution" ? "is-active" : ""} onClick={() => setPageView("distribution")}>TL payments due <strong>{distributionDueRows.length}</strong></button>
+      </div>
+
+      {pageView === "cohorts" ? (
+        <>
+          {cohortLifecycleSection("Current cohorts", currentRows)}
+          {cohortLifecycleSection("Ended · outstanding balances", endedOutstandingRows)}
+          {cohortLifecycleSection("Completed cohorts", completedRows)}
+        </>
+      ) : (
+        <>
+          <div className="cohort-distribution-summary">
+            <span>Amount currently due across {distributionDueRows.length} cohorts</span>
+            <strong>{money(distributionDueTotal)}</strong>
+            <small>Based on collected commissionable revenue, less paid and partial distributions.</small>
+          </div>
+          {distributionSection("Current cohorts · TL payment due", currentDistributionRows)}
+          {distributionSection("Ended cohorts · TL payment due", endedDistributionRows)}
+          {!loading && distributionDueRows.length === 0 && <EmptyState title="No Thought Leader payments due" description="All earned distributions are currently covered." />}
+        </>
+      )}
       {!loading && rows.length === 0 && <EmptyState title="No cohorts found" description="Create a cohort to begin." />}
       <CreateCohortWizard
         open={wizardOpen}

@@ -10,6 +10,7 @@ import { withCohortLifecycle } from "./cohortLifecycle";
 import { activateCohortRegistrationJourneys } from "./registrationJourneyService";
 import { syncCohortQuickBooksProjectAfterCreate } from "./quickBooksService";
 import { syncCohortTotalsToCrm } from "./crmRegistrationWebhookService";
+import { calculateDistributionTotals } from "@/lib/distributionTotals";
 
 const nestedSessionCreateSchema = z.object({
   title: z.string().min(1),
@@ -325,16 +326,41 @@ export async function listCohorts() {
         }
       },
       operationsTasks: { select: { category: true, registrationId: true, sessionId: true, status: true } },
-      registrations: { where: { archivedAt: null }, select: { totalAmount: true } },
+      registrations: { where: { archivedAt: null }, select: { totalAmount: true, status: true, paymentStatus: true, participantListStatus: true } },
       paymentRecords: {
         where: { registration: { is: { archivedAt: null } } },
         select: { amount: true, status: true }
+      },
+      distribution: {
+        include: {
+          payouts: { select: { amount: true, status: true, paymentDate: true } }
+        }
       },
       _count: { select: { registrations: true, participants: true, sessions: true } }
     }
   });
 
-  return cohorts.map(withCohortLifecycle);
+  return cohorts.map((cohort) => {
+    const commissionPercent = cohort.distribution?.commissionPercent ?? 30;
+    const tlSharePercent = cohort.distribution?.tlSharePercent ?? 70;
+    const distributionTotals = calculateDistributionTotals({
+      registrations: cohort.registrations,
+      payments: cohort.paymentRecords,
+      payouts: cohort.distribution?.payouts ?? [],
+      commissionPercent,
+      tlSharePercent
+    });
+
+    return withCohortLifecycle({
+      ...cohort,
+      distributionSummary: {
+        tlName: cohort.distribution?.tlName ?? [cohort.presenter.firstName, cohort.presenter.lastName].filter(Boolean).join(" "),
+        commissionPercent: Number(commissionPercent),
+        tlSharePercent: Number(tlSharePercent),
+        ...distributionTotals
+      }
+    });
+  });
 }
 
 export async function publishCohort(id: string) {
