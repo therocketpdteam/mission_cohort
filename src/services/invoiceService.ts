@@ -167,6 +167,10 @@ export function shouldInvalidateInvoiceDocuments(input: Record<string, unknown>)
   return Object.keys(input).some((key) => printableInvoiceFields.has(key));
 }
 
+export function shouldSyncInvoicePurchaseOrder(invoicePurchaseOrder?: string | null, registrationPurchaseOrder?: string | null) {
+  return (invoicePurchaseOrder ?? null) !== (registrationPurchaseOrder ?? null);
+}
+
 function dedupeEmails(values: Array<string | null | undefined>) {
   const seen = new Set<string>();
   return values
@@ -427,6 +431,18 @@ export async function generateInvoicePdf(id: string, receipt = false) {
     throw Object.assign(new Error("Invoice draft not found."), { code: "NOT_FOUND", status: 404 });
   }
 
+  if (!receipt && invoice.registration && shouldSyncInvoicePurchaseOrder(invoice.purchaseOrderNumber, invoice.registration.purchaseOrderNumber)) {
+    invoice = await prisma.invoiceDraft.update({
+      where: { id },
+      data: {
+        purchaseOrderNumber: invoice.registration.purchaseOrderNumber,
+        pdfFileKey: null,
+        pdfUrl: null
+      },
+      include: invoiceInclude()
+    });
+  }
+
   if (!receipt && !invoice.invoiceNumber) {
     invoice = await prisma.invoiceDraft.update({
       where: { id },
@@ -477,7 +493,7 @@ export async function sendInvoiceDocument(id: string, receipt = false, recipient
     invoice = await generateInvoicePdf(id, true);
   }
 
-  if (!receipt && !invoice.pdfFileKey) {
+  if (!receipt) {
     invoice = await generateInvoicePdf(id, false);
   }
 

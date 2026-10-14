@@ -936,6 +936,8 @@ function RegistrationDetailDialog({
   const [invoiceRecipientOpen, setInvoiceRecipientOpen] = useState(false);
   const [invoiceRecipient, setInvoiceRecipient] = useState("");
   const [sendingInvoice, setSendingInvoice] = useState(false);
+  const [invoicePdfBusy, setInvoicePdfBusy] = useState<"preview" | "download" | "">("");
+  const [invoicePreview, setInvoicePreview] = useState<{ url: string; title: string } | null>(null);
   const [mergeOpen, setMergeOpen] = useState(false);
   const [mergeTargetId, setMergeTargetId] = useState("");
   const [mergeSourceId, setMergeSourceId] = useState("");
@@ -951,6 +953,8 @@ function RegistrationDetailDialog({
       setError(null);
       setInvoiceRecipientOpen(false);
       setInvoiceRecipient("");
+      setInvoicePdfBusy("");
+      setInvoicePreview(null);
       setMergeOpen(false);
       setMergeTargetId(registration?.id ?? "");
       setMergeSourceId("");
@@ -1182,6 +1186,46 @@ function RegistrationDetailDialog({
 
   const currentInvoice = registration?.invoiceDrafts?.[0] ?? null;
 
+  async function openInvoicePdf(mode: "preview" | "download") {
+    if (!currentInvoice?.id) {
+      setError("No invoice is available for this registration.");
+      return;
+    }
+
+    setInvoicePdfBusy(mode);
+    setError(null);
+    try {
+      const invoice = await adminApi<AdminRow>("/api/invoices", {
+        method: "PATCH",
+        body: { action: "generatePdf", id: currentInvoice.id }
+      });
+      if (!invoice.pdfUrl) {
+        throw new Error("The updated invoice PDF could not be generated.");
+      }
+
+      const title = `Invoice ${invoice.invoiceNumber ?? currentInvoice.invoiceNumber ?? "PDF"}`;
+      if (mode === "preview") {
+        setInvoicePreview({ url: invoice.pdfUrl, title });
+      } else {
+        const link = document.createElement("a");
+        link.href = invoice.pdfUrl;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.download = `${title}.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      }
+      await onChanged();
+    } catch (pdfError) {
+      const message = (pdfError as Error).message;
+      setError(message);
+      onError(message);
+    } finally {
+      setInvoicePdfBusy("");
+    }
+  }
+
   async function sendInvoiceCopy() {
     if (!currentInvoice?.id || !invoiceRecipient.trim()) {
       setError("Choose an invoice and enter the recipient email address.");
@@ -1386,10 +1430,6 @@ function RegistrationDetailDialog({
                 setSendMergeSummary(false);
                 setMergeOpen(true);
               }}>Merge registrations</Button>
-              <Button variant="outlined" disabled={!currentInvoice} onClick={() => {
-                setInvoiceRecipient(registration.billingContactEmail ?? registration.primaryContactEmail ?? "");
-                setInvoiceRecipientOpen(true);
-              }}>Send invoice copy</Button>
               <Button variant="outlined" onClick={syncCrm} disabled={syncingCrm}>{syncingCrm ? "Syncing CRM" : "Sync to CRM"}</Button>
               <Button variant="outlined" onClick={syncQuickBooks}>Sync QuickBooks</Button>
               <Button variant="outlined" color="warning" onClick={voidQuickBooksInvoice}>Void QB Invoice</Button>
@@ -1449,6 +1489,41 @@ function RegistrationDetailDialog({
               onError(message);
             }}
           />
+
+          <section className="registration-detail-section registration-invoice-section">
+            <div className="registration-section-heading">
+              <div>
+                <h3>Invoice</h3>
+                <p>Generate the current PDF before previewing, downloading, or sending it.</p>
+              </div>
+            </div>
+            {currentInvoice ? (
+              <div className="registration-invoice-row">
+                <div className="registration-invoice-summary">
+                  <strong>{currentInvoice.invoiceNumber ?? registration.invoiceNumber ?? "Invoice draft"}</strong>
+                  <span>
+                    {[formatStatusLabel(currentInvoice.status), money(currentInvoice.totalAmount), registration.purchaseOrderNumber ? `PO ${registration.purchaseOrderNumber}` : "No PO"]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </span>
+                </div>
+                <div className="registration-invoice-actions">
+                  <Button variant="outlined" disabled={Boolean(invoicePdfBusy)} onClick={() => openInvoicePdf("preview")}>
+                    {invoicePdfBusy === "preview" ? "Generating" : "Preview updated PDF"}
+                  </Button>
+                  <Button variant="outlined" disabled={Boolean(invoicePdfBusy)} onClick={() => openInvoicePdf("download")}>
+                    {invoicePdfBusy === "download" ? "Generating" : "Download"}
+                  </Button>
+                  <Button variant="outlined" onClick={() => {
+                    setInvoiceRecipient(registration.billingContactEmail ?? registration.primaryContactEmail ?? "");
+                    setInvoiceRecipientOpen(true);
+                  }}>Send copy</Button>
+                </div>
+              </div>
+            ) : (
+              <EmptyState title="No invoice yet" description="Create an invoice to preview or download it here." />
+            )}
+          </section>
 
           <CollapsibleSectionCard title="Open Follow-Ups" alertCount={registrationFollowUpTasks.length} defaultOpen={registrationFollowUpTasks.length > 0}>
             <div className="registration-section-heading">
@@ -1670,6 +1745,18 @@ function RegistrationDetailDialog({
         <DialogActions>
           <Button variant="outlined" onClick={() => setInvoiceRecipientOpen(false)} disabled={sendingInvoice}>Cancel</Button>
           <Button onClick={sendInvoiceCopy} disabled={sendingInvoice || !invoiceRecipient.trim()}>{sendingInvoice ? "Sending" : "Send invoice"}</Button>
+        </DialogActions>
+      </Dialog>
+      <Dialog open={Boolean(invoicePreview)} onClose={() => setInvoicePreview(null)} fullWidth maxWidth="xl">
+        <DialogTitle>{invoicePreview?.title ?? "Invoice preview"}</DialogTitle>
+        <DialogContent className="invoice-preview-body">
+          {invoicePreview ? (
+            <iframe className="invoice-preview-frame" src={`${invoicePreview.url}#toolbar=1&navpanes=0&scrollbar=1&view=FitH`} title={invoicePreview.title} />
+          ) : null}
+        </DialogContent>
+        <DialogActions>
+          {invoicePreview ? <Button variant="outlined" href={invoicePreview.url} target="_blank">Download</Button> : null}
+          <Button onClick={() => setInvoicePreview(null)}>Close</Button>
         </DialogActions>
       </Dialog>
       <Dialog open={mergeOpen} onClose={mergeBusy ? undefined : () => setMergeOpen(false)} fullWidth maxWidth="md">

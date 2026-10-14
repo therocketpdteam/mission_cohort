@@ -5,7 +5,8 @@ import {
   invoiceYearFromCohort,
   nextInvoiceSequence,
   presenterInvoiceCode,
-  shouldInvalidateInvoiceDocuments
+  shouldInvalidateInvoiceDocuments,
+  shouldSyncInvoicePurchaseOrder
 } from "../../src/services/invoiceService";
 import { buildInvoicePdf, invoiceDescriptionParts } from "../../src/services/pdfService";
 
@@ -18,6 +19,13 @@ test("printable invoice edits invalidate generated documents", () => {
 test("accounting reference edits do not invalidate generated documents", () => {
   assert.equal(shouldInvalidateInvoiceDocuments({ quickBooksInvoiceRef: "QB-1001" }), false);
   assert.equal(shouldInvalidateInvoiceDocuments({ quickBooksCustomerRef: "Customer-42", quickBooksRealmId: "realm" }), false);
+});
+
+test("regenerates an invoice when the registration PO differs", () => {
+  assert.equal(shouldSyncInvoicePurchaseOrder("OLD-PO", "NEW-PO"), true);
+  assert.equal(shouldSyncInvoicePurchaseOrder(null, "NEW-PO"), true);
+  assert.equal(shouldSyncInvoicePurchaseOrder("PO-123", "PO-123"), false);
+  assert.equal(shouldSyncInvoicePurchaseOrder(undefined, null), false);
 });
 
 test("formats invoice numbers with presenter code session year and running sequence", () => {
