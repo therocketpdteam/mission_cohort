@@ -59,5 +59,9 @@ export function deriveRegistrationPaymentStatusFromRecords(
     return PaymentStatus.PENDING;
   }
 
+  if (activeStatuses.includes(PaymentStatus.UNCOLLECTIBLE)) {
+    return PaymentStatus.UNCOLLECTIBLE;
+  }
+
   return fallback;
 }

@@ -51,3 +51,24 @@ test("excludes cancelled and refunded registrations from commissionable revenue"
   assert.equal(totals.payoutMade, 0);
   assert.equal(totals.pendingPayout, 650);
 });
+
+test("preserves sold revenue but removes uncollectible balances from commissionable revenue", () => {
+  const totals = calculateDistributionTotals({
+    registrations: [
+      { status: "COMPLETED", paymentStatus: "PAID", totalAmount: 1_000 },
+      { status: "COMPLETED", paymentStatus: "UNCOLLECTIBLE", totalAmount: 500 }
+    ],
+    payments: [
+      { status: "PAID", amount: 1_000 },
+      { status: "UNCOLLECTIBLE", amount: 500 }
+    ],
+    payouts: [],
+    commissionPercent: 40,
+    tlSharePercent: 60
+  });
+
+  assert.equal(totals.soldAmount, 1_500);
+  assert.equal(totals.commissionableAmount, 1_000);
+  assert.equal(totals.outstandingAmount, 0);
+  assert.equal(totals.tlPayoutDue, 600);
+});

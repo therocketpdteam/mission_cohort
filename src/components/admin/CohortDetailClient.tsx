@@ -1679,6 +1679,18 @@ export function CohortDetailClient({ id }: { id: string }) {
     }
   }
 
+  async function markUncollectible(registration: AdminRow) {
+    const confirmed = window.confirm(`Mark the unpaid balance for ${registration.primaryContactName || registration.primaryContactEmail} as uncollectible?\n\nParticipants remain enrolled. Invoice history is preserved. Payment reminders stop, and the unpaid balance is removed from collectible reporting.`);
+    if (!confirmed) return;
+    try {
+      await adminApi("/api/registrations", { method: "PATCH", body: { id: registration.id, action: "markUncollectible" } });
+      notifySuccess("Registration balance marked uncollectible");
+      await load();
+    } catch (error) {
+      notifyError((error as Error).message);
+    }
+  }
+
   async function sendRegistrationTaskMessage(task: AdminRow) {
     const registrationId = registrationDetail?.id ?? task.registrationId ?? task.registration?.id;
 
@@ -2999,9 +3011,10 @@ export function CohortDetailClient({ id }: { id: string }) {
               {
                 label: "Send invoice reminder",
                 icon: <EmailOutlined fontSize="small" />,
-                disabled: ["PAID", "REFUNDED", "CANCELLED"].includes(String(registrationBillingStatus(params.row, payments, invoiceDrafts)).toUpperCase()),
+                disabled: ["PAID", "REFUNDED", "CANCELLED", "UNCOLLECTIBLE"].includes(String(registrationBillingStatus(params.row, payments, invoiceDrafts)).toUpperCase()),
                 onClick: () => setPaymentReminderRegistration(params.row)
               },
+              { label: "Mark uncollectible", color: "warning", onClick: () => void markUncollectible(params.row) },
               { label: "Remove registration", icon: <ArchiveOutlined fontSize="small" />, onClick: () => setRegistrationRemovalAction({ action: "archive", row: params.row }) },
               { label: "Delete permanently", icon: <DeleteOutline fontSize="small" />, color: "error", onClick: () => setRegistrationRemovalAction({ action: "delete", row: params.row }) }
             ]}

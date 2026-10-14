@@ -37,18 +37,22 @@ export function calculateDistributionTotals(input: {
   const payoutMade = input.payouts
     .filter((payout) => payout.status === "PAID" || payout.status === "PARTIAL")
     .reduce((sum, payout) => sum + Number(payout.amount ?? 0), 0);
-  const commissionAmount = roundMoney(soldAmount * (Number(input.commissionPercent ?? 0) / 100));
-  const tlShareAmount = roundMoney(soldAmount * (Number(input.tlSharePercent ?? 0) / 100));
-  const paymentRatio = soldAmount > 0 ? paidAmount / soldAmount : 0;
-  const tlPayoutDue = roundMoney(tlShareAmount * paymentRatio);
+  const collectibleAmount = billableRegistrations
+    .filter((registration) => registration.paymentStatus !== "UNCOLLECTIBLE")
+    .reduce((sum, registration) => sum + Number(registration.totalAmount ?? 0), 0);
+  const commissionableAmount = Math.max(paidAmount, collectibleAmount);
+  const commissionAmount = roundMoney(commissionableAmount * (Number(input.commissionPercent ?? 0) / 100));
+  const tlShareAmount = roundMoney(commissionableAmount * (Number(input.tlSharePercent ?? 0) / 100));
+  const paymentRatio = commissionableAmount > 0 ? paidAmount / commissionableAmount : 0;
+  const tlPayoutDue = roundMoney(paidAmount * (Number(input.tlSharePercent ?? 0) / 100));
   const pendingPayout = roundMoney(Math.max(tlPayoutDue - payoutMade, 0));
   const projectReturn = roundMoney(paidAmount - payoutMade);
 
   return {
     soldAmount,
-    commissionableAmount: soldAmount,
+    commissionableAmount,
     paidAmount,
-    outstandingAmount: roundMoney(Math.max(soldAmount - paidAmount, 0)),
+    outstandingAmount: roundMoney(Math.max(commissionableAmount - paidAmount, 0)),
     commissionAmount,
     tlShareAmount,
     paymentRatio,

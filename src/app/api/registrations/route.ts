@@ -10,6 +10,7 @@ import {
   deleteRegistration,
   getRegistrationById,
   listRegistrations,
+  markRegistrationUncollectible,
   previewRegistrationCancellation,
   reconcileCancelledRegistrationState,
   restoreRegistration,
@@ -76,6 +77,10 @@ export async function PATCH(request: Request) {
 
     if (body.action === "cancel") {
       return ok(await cancelRegistration(body.id, { sendPocCancellation: body.sendPocCancellation === true }));
+    }
+
+    if (body.action === "markUncollectible") {
+      return ok(await markRegistrationUncollectible(body.id));
     }
 
     if (body.action === "previewCancellation") {

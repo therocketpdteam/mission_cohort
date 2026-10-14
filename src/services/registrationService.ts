@@ -252,6 +252,34 @@ export async function updateRegistration(
   return { ...registration, participantListStatus: roster?.status ?? registration.participantListStatus, journey };
 }
 
+export async function markRegistrationUncollectible(id: string) {
+  const registration = await prisma.registration.update({
+    where: { id },
+    data: { paymentStatus: PaymentStatus.UNCOLLECTIBLE }
+  });
+  await prisma.paymentRecord.updateMany({
+    where: { registrationId: id, status: { in: [PaymentStatus.PENDING, PaymentStatus.INVOICED] } },
+    data: { status: PaymentStatus.UNCOLLECTIBLE, notes: "Outstanding balance marked uncollectible in Mission Cohort." }
+  });
+  await prisma.cohortCommunication.updateMany({
+    where: {
+      registrationId: id,
+      status: { in: [CommunicationStatus.DRAFT, CommunicationStatus.SCHEDULED] },
+      template: { type: TemplateType.PAYMENT_REMINDER }
+    },
+    data: { status: CommunicationStatus.CANCELLED, providerError: "Registration balance marked uncollectible." }
+  });
+  logAuditEventAsync({
+    entityType: "Registration",
+    entityId: id,
+    action: "PAYMENT_MARKED_UNCOLLECTIBLE",
+    description: "Outstanding registration balance marked uncollectible"
+  });
+  void queueRegistrationCrmSync(id, "registration.marked_uncollectible").catch(() => undefined);
+  void syncRegistrationToCrmWebhook(id, "registration.marked_uncollectible").catch(() => undefined);
+  return registration;
+}
+
 export async function syncRegistrationRosterStatuses(input: { id?: string; cohortId?: string }) {
   const ids = input.id
     ? [input.id]
