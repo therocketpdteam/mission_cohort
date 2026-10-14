@@ -1187,8 +1187,8 @@ function RegistrationDetailDialog({
   const currentInvoice = registration?.invoiceDrafts?.[0] ?? null;
 
   async function openInvoicePdf(mode: "preview" | "download") {
-    if (!currentInvoice?.id) {
-      setError("No invoice is available for this registration.");
+    if (!registration?.id) {
+      setError("No registration is available for this invoice.");
       return;
     }
 
@@ -1197,13 +1197,17 @@ function RegistrationDetailDialog({
     try {
       const invoice = await adminApi<AdminRow>("/api/invoices", {
         method: "PATCH",
-        body: { action: "generatePdf", id: currentInvoice.id }
+        body: {
+          action: "prepareRegistrationInvoice",
+          registrationId: registration.id,
+          id: currentInvoice?.id
+        }
       });
       if (!invoice.pdfUrl) {
         throw new Error("The updated invoice PDF could not be generated.");
       }
 
-      const title = `Invoice ${invoice.invoiceNumber ?? currentInvoice.invoiceNumber ?? "PDF"}`;
+      const title = `Invoice ${invoice.invoiceNumber ?? currentInvoice?.invoiceNumber ?? "PDF"}`;
       if (mode === "preview") {
         setInvoicePreview({ url: invoice.pdfUrl, title });
       } else {
@@ -1494,7 +1498,7 @@ function RegistrationDetailDialog({
             <div className="registration-section-heading">
               <div>
                 <h3>Invoice</h3>
-                <p>Generate the current PDF before previewing, downloading, or sending it.</p>
+                <p>The PDF is created automatically and refreshed from the latest registration details.</p>
               </div>
             </div>
             {currentInvoice ? (
@@ -1521,7 +1525,20 @@ function RegistrationDetailDialog({
                 </div>
               </div>
             ) : (
-              <EmptyState title="No invoice yet" description="Create an invoice to preview or download it here." />
+              <div className="registration-invoice-row">
+                <div className="registration-invoice-summary">
+                  <strong>Invoice will be prepared automatically</strong>
+                  <span>The current seats, total, billing contact, and PO number will be used.</span>
+                </div>
+                <div className="registration-invoice-actions">
+                  <Button variant="outlined" disabled={Boolean(invoicePdfBusy)} onClick={() => openInvoicePdf("preview")}>
+                    {invoicePdfBusy === "preview" ? "Preparing" : "Preview invoice"}
+                  </Button>
+                  <Button variant="outlined" disabled={Boolean(invoicePdfBusy)} onClick={() => openInvoicePdf("download")}>
+                    {invoicePdfBusy === "download" ? "Preparing" : "Download"}
+                  </Button>
+                </div>
+              </div>
             )}
           </section>
 

@@ -475,6 +475,70 @@ export async function generateInvoicePdf(id: string, receipt = false) {
   });
 }
 
+export async function prepareRegistrationInvoice(input: { registrationId: string; invoiceId?: string }) {
+  const registration = await prisma.registration.findUnique({
+    where: { id: input.registrationId },
+    include: {
+      organization: true,
+      cohort: { include: { presenter: true, sessions: { orderBy: { startTime: "asc" } } } },
+      invoiceDrafts: {
+        where: { status: { notIn: [InvoiceDraftStatus.VOIDED, InvoiceDraftStatus.CANCELLED] } },
+        orderBy: { updatedAt: "desc" },
+        include: { lineItems: true }
+      }
+    }
+  });
+
+  if (!registration) {
+    throw Object.assign(new Error("Registration not found."), { code: "NOT_FOUND", status: 404 });
+  }
+  if (registration.archivedAt) {
+    throw Object.assign(new Error("Archived registrations cannot be invoiced."), { code: "BAD_REQUEST", status: 400 });
+  }
+  if (registration.paymentMethod === "COMPED" || Number(registration.totalAmount ?? 0) <= 0) {
+    throw Object.assign(new Error("This registration is comped or has no billable amount."), { code: "BAD_REQUEST", status: 400 });
+  }
+
+  let invoice = input.invoiceId
+    ? registration.invoiceDrafts.find((item) => item.id === input.invoiceId) ?? null
+    : registration.invoiceDrafts[0] ?? null;
+
+  if (input.invoiceId && !invoice) {
+    throw Object.assign(new Error("Invoice draft is not linked to this registration."), { code: "BAD_REQUEST", status: 400 });
+  }
+
+  if (!invoice) {
+    invoice = await createInvoiceDraft({
+      cohortId: registration.cohortId,
+      registrationId: registration.id,
+      organizationId: registration.organizationId ?? undefined,
+      invoiceNumber: registration.invoiceNumber ?? undefined,
+      purchaseOrderNumber: registration.purchaseOrderNumber ?? undefined
+    });
+  } else {
+    const lineItems = invoice.lineItems.length === 1
+      ? [{
+          description: invoice.lineItems[0]!.description,
+          quantity: Math.max(registration.participantCount, 1),
+          unitAmount: Number(registration.totalAmount) / Math.max(registration.participantCount, 1)
+        }]
+      : undefined;
+    invoice = await updateInvoiceDraft(invoice.id, {
+      cohortId: registration.cohortId,
+      invoiceNumber: registration.invoiceNumber ?? undefined,
+      purchaseOrderNumber: registration.purchaseOrderNumber ?? "",
+      lineItems
+    });
+  }
+
+  const generated = await generateInvoicePdf(invoice.id, false);
+  await prisma.registration.update({
+    where: { id: registration.id },
+    data: { invoiceNumber: generated.invoiceNumber, invoiceUrl: generated.pdfUrl }
+  });
+  return generated;
+}
+
 export async function sendInvoiceDocument(id: string, receipt = false, recipientEmails?: string[]) {
   let invoice = await prisma.invoiceDraft.findUnique({
     where: { id },
@@ -626,26 +690,7 @@ export async function prepareAndSendRegistrationInvoicePackage(input: { registra
     });
   }
 
-  let invoice = input.invoiceId
-    ? await prisma.invoiceDraft.findFirst({
-        where: { id: input.invoiceId, registrationId: registration.id },
-        include: invoiceInclude()
-      })
-    : registration.invoiceDrafts[0] ?? null;
-
-  if (input.invoiceId && !invoice) {
-    throw Object.assign(new Error("Invoice draft is not linked to this registration."), { code: "BAD_REQUEST", status: 400 });
-  }
-
-  if (!invoice) {
-    invoice = await createInvoiceDraft({
-      cohortId: registration.cohortId,
-      registrationId: registration.id,
-      organizationId: registration.organizationId ?? undefined
-    });
-  }
-
-  const generated = await generateInvoicePdf(invoice.id, false);
+  const generated = await prepareRegistrationInvoice(input);
   const sent = await sendInvoiceDocument(generated.id, false);
 
   return {

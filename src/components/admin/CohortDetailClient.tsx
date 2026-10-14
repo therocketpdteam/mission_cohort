@@ -2661,6 +2661,28 @@ export function CohortDetailClient({ id }: { id: string }) {
     }
   }
 
+  async function prepareAndPreviewRegistrationInvoice(registration: AdminRow) {
+    try {
+      const invoice = await adminApi<AdminRow>("/api/invoices", {
+        method: "PATCH",
+        body: { action: "prepareRegistrationInvoice", registrationId: registration.id }
+      });
+      if (!invoice.pdfUrl) {
+        throw new Error("The invoice PDF could not be prepared.");
+      }
+      setInvoicePreview({
+        url: String(invoice.pdfUrl),
+        title: `Invoice ${invoice.invoiceNumber ?? registration.invoiceNumber ?? "PDF"}`
+      });
+      await load();
+      if (registrationDetail?.id === registration.id) {
+        await openRegistrationDetail(registration);
+      }
+    } catch (error) {
+      notifyError((error as Error).message);
+    }
+  }
+
   async function sendInvoiceDocument(invoice: AdminRow, receipt = false) {
     try {
       await adminApi("/api/invoices", { method: "PATCH", body: { action: receipt ? "sendReceipt" : "sendInvoice", id: invoice.id } });
@@ -3007,7 +3029,7 @@ export function CohortDetailClient({ id }: { id: string }) {
             actions={[
               { label: "Quick view", onClick: () => void openRegistrationDetail(params.row) },
               { label: "Edit POC & billing", icon: <EditOutlined fontSize="small" />, onClick: () => openRegistrationEditor(params.row) },
-              { label: "Create invoice", onClick: () => openInvoiceEditor(null, params.row) },
+              { label: "Edit invoice details", onClick: () => openInvoiceEditor(null, params.row) },
               {
                 label: "Send invoice reminder",
                 icon: <EmailOutlined fontSize="small" />,
@@ -4197,8 +4219,8 @@ export function CohortDetailClient({ id }: { id: string }) {
             <Button variant="outlined" onClick={() => openRegistrationEditor(registrationDetail)}>
               Edit POC & Billing
             </Button>
-            <Button variant="outlined" onClick={() => openInvoiceEditor(null, registrationDetail)}>
-              Create Invoice
+            <Button variant="outlined" onClick={() => void prepareAndPreviewRegistrationInvoice(registrationDetail)}>
+              Preview Invoice
             </Button>
             {registrationDetail.primaryContactEmail && (
               <Button href={`/communications?search=${encodeURIComponent(registrationDetail.primaryContactEmail)}`} variant="outlined">
@@ -4253,13 +4275,13 @@ export function CohortDetailClient({ id }: { id: string }) {
             />
             <SectionCard
               title="Invoices And Receipts"
-              action={<Button variant="outlined" size="small" onClick={() => openInvoiceEditor(null, registrationDetail)}>Create invoice</Button>}
+              action={<Button variant="outlined" size="small" onClick={() => void prepareAndPreviewRegistrationInvoice(registrationDetail)}>Preview current invoice</Button>}
             >
               {(() => {
                 const registrationInvoices = ((registrationDetail.invoiceDrafts ?? invoiceDrafts.filter((invoice) => invoice.registrationId === registrationDetail.id)) as AdminRow[]);
 
                 if (registrationInvoices.length === 0) {
-                  return <EmptyState title="No invoice drafts yet" description="Create an invoice draft from this registration, then generate or send the PDF from here." />;
+                  return <EmptyState title="Invoice not prepared yet" description="Previewing or downloading will automatically create it from the current registration details." />;
                 }
 
                 return (
@@ -4279,9 +4301,7 @@ export function CohortDetailClient({ id }: { id: string }) {
                         </div>
                         <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap justifyContent="flex-end" className="invoice-quick-actions">
                           <StatusChip value={invoice.status} />
-                          {invoice.pdfUrl ? (
-                            <Button href={String(invoice.pdfUrl)} target="_blank" rel="noreferrer" variant="outlined" size="small">Invoice PDF</Button>
-                          ) : null}
+                          <Button variant="outlined" size="small" onClick={() => void prepareAndPreviewRegistrationInvoice(registrationDetail)}>Preview PDF</Button>
                           {invoice.receiptUrl ? (
                             <Button href={String(invoice.receiptUrl)} target="_blank" rel="noreferrer" variant="outlined" size="small">Receipt PDF</Button>
                           ) : null}
