@@ -4251,6 +4251,46 @@ body {
   text-align: left;
 }
 
+.cohort-registration-contact {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  gap: 2px;
+}
+
+.cohort-registration-email.is-compact {
+  width: fit-content;
+  max-width: 100%;
+  gap: 5px;
+  padding: 0;
+  color: var(--color-primary-700);
+  font-size: 0.7rem;
+}
+
+.cohort-registration-email.is-compact span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cohort-registration-email.is-compact svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+.cohort-registration-statuses {
+  display: grid;
+  min-width: 0;
+  justify-items: start;
+  gap: 3px;
+}
+
+.cohort-registration-statuses .MuiChip-root {
+  min-width: 0;
+}
+
 .cohort-registration-email span {
   overflow: hidden;
   text-overflow: ellipsis;

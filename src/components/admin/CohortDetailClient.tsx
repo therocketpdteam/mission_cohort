@@ -2876,47 +2876,51 @@ export function CohortDetailClient({ id }: { id: string }) {
   ];
 
   const registrationColumns: GridColDef[] = [
-    { field: "primaryContactName", headerName: "Contact", flex: 1, minWidth: 160, valueGetter: (_value, row) => formatProperDisplay(row.primaryContactName ?? "") },
     {
-      field: "primaryContactEmail",
-      headerName: "Email",
+      field: "primaryContactName",
+      headerName: "Contact",
       flex: 1.25,
-      minWidth: 230,
+      minWidth: 240,
       renderCell: (params) => {
-        const email = String(params.value ?? "").trim();
-        return email ? (
-          <button
-            className="cohort-registration-email"
-            type="button"
-            title={`Copy ${email}`}
-            onClick={async (event) => {
-              event.stopPropagation();
-              try {
-                await navigator.clipboard.writeText(email);
-                notifySuccess(`Copied ${email}`);
-              } catch {
-                notifyError("Email could not be copied");
-              }
-            }}
-          >
-            <span>{email}</span>
-            <ContentCopyOutlined fontSize="small" />
-          </button>
-        ) : <span className="app-table-sub">No email</span>;
+        const email = String(params.row.primaryContactEmail ?? "").trim();
+        return (
+          <div className="cohort-registration-contact">
+            <span className="app-table-main">{formatProperDisplay(params.row.primaryContactName ?? "") || "No contact name"}</span>
+            {email ? (
+              <button
+                className="cohort-registration-email is-compact"
+                type="button"
+                title={`Copy ${email}`}
+                onClick={async (event) => {
+                  event.stopPropagation();
+                  try {
+                    await navigator.clipboard.writeText(email);
+                    notifySuccess(`Copied ${email}`);
+                  } catch {
+                    notifyError("Email could not be copied");
+                  }
+                }}
+              >
+                <span>{email}</span>
+                <ContentCopyOutlined fontSize="small" />
+              </button>
+            ) : <span className="app-table-sub">No email</span>}
+          </div>
+        );
       }
     },
-    { field: "organization", headerName: "Organization", flex: 1, minWidth: 180, valueGetter: (_value, row) => formatProperDisplay(row.organization?.name ?? "") },
+    { field: "organization", headerName: "Organization", flex: 1, minWidth: 170, valueGetter: (_value, row) => formatProperDisplay(row.organization?.name ?? "") },
     {
       field: "createdAt",
       headerName: "Registered",
-      width: 116,
+      width: 108,
       valueGetter: (_value, row) => row.createdAt ?? "",
       valueFormatter: (value) => formatDate(value)
     },
     {
       field: "participantCount",
       headerName: "Participants",
-      width: 116,
+      width: 104,
       valueGetter: (_value, row) => Number(row.participantCount ?? 0),
       renderCell: (params) => (
         <span className="app-table-main" title={`${params.value} participant${Number(params.value ?? 0) === 1 ? "" : "s"}`}>
@@ -2925,32 +2929,21 @@ export function CohortDetailClient({ id }: { id: string }) {
       )
     },
     {
-      field: "totalAmount",
-      headerName: "Value",
-      width: 112,
-      valueGetter: (_value, row) => registrationRevenueAmount(row),
-      valueFormatter: (value) => money(value)
-    },
-    {
-      field: "collectedAmount",
-      headerName: "Collected",
-      width: 124,
+      field: "financials",
+      headerName: "Collected / Value",
+      width: 148,
       sortable: false,
-      valueGetter: (_value, row) => registrationCollectedAmount(row, payments, invoiceDrafts),
-      valueFormatter: (value) => money(value)
-    },
-    {
-      field: "billingStatus",
-      headerName: "Status",
-      width: 132,
-      sortable: false,
-      valueGetter: (_value, row) => registrationBillingStatus(row, payments, invoiceDrafts),
-      renderCell: (params) => <StatusChip value={params.value} />
+      renderCell: (params) => (
+        <div>
+          <span className="app-table-main">{money(registrationCollectedAmount(params.row, payments, invoiceDrafts))}</span>
+          <span className="app-table-sub">of {money(registrationRevenueAmount(params.row))}</span>
+        </div>
+      )
     },
     {
       field: "paymentReminder",
       headerName: "Last Reminder",
-      width: 142,
+      width: 132,
       sortable: false,
       valueGetter: (_value, row) => row.communications?.[0]?.sentAt ?? "",
       renderCell: (params) => {
@@ -2964,15 +2957,21 @@ export function CohortDetailClient({ id }: { id: string }) {
       }
     },
     {
-      field: "participantListStatus",
-      headerName: "Roster",
-      width: 124,
-      renderCell: (params) => <StatusChip value={registrationRosterStatus(params.row)} />
+      field: "operationalStatus",
+      headerName: "Payment / Roster",
+      width: 142,
+      sortable: false,
+      renderCell: (params) => (
+        <div className="cohort-registration-statuses">
+          <StatusChip value={registrationBillingStatus(params.row, payments, invoiceDrafts)} />
+          <StatusChip value={registrationRosterStatus(params.row)} />
+        </div>
+      )
     },
     {
       field: "billing",
       headerName: "Billing",
-      width: 136,
+      width: 142,
       sortable: false,
       renderCell: (params) => {
         const invoice = String(params.row.invoiceNumber ?? "").trim();
@@ -2984,17 +2983,6 @@ export function CohortDetailClient({ id }: { id: string }) {
           </div>
         );
       }
-    },
-    {
-      field: "notes",
-      headerName: "Notes",
-      flex: 1,
-      minWidth: 180,
-      renderCell: (params) => (
-        <span className="app-table-sub" title={String(params.value ?? "No notes")}>
-          {params.value ? String(params.value) : "No notes"}
-        </span>
-      )
     },
     {
       field: "actions",
