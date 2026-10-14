@@ -2478,16 +2478,26 @@ export async function sendManualTemplateToParticipants(input: { templateId: stri
   };
 }
 
+export function manualRegistrationTemplateBypassesCohortStatus(type?: TemplateType | null) {
+  return type === TemplateType.PAYMENT_REMINDER;
+}
+
 export async function sendTemplateToRegistrations(input: { templateId: string; registrationIds: string[] }) {
-  const registrations = await prisma.registration.findMany({
-    where: { id: { in: input.registrationIds }, archivedAt: null },
-    include: {
-      cohort: { include: { presenter: true } },
-      organization: true,
-      participants: { where: { status: ParticipantStatus.REGISTERED } },
-      invoiceDrafts: { orderBy: { updatedAt: "desc" } }
-    }
-  });
+  const [template, registrations] = await Promise.all([
+    prisma.communicationTemplate.findUnique({ where: { id: input.templateId } }),
+    prisma.registration.findMany({
+      where: { id: { in: input.registrationIds }, archivedAt: null },
+      include: {
+        cohort: { include: { presenter: true } },
+        organization: true,
+        participants: { where: { status: ParticipantStatus.REGISTERED } },
+        invoiceDrafts: { orderBy: { updatedAt: "desc" } }
+      }
+    })
+  ]);
+  if (!template) {
+    throw Object.assign(new Error("Communication template not found"), { code: "NOT_FOUND", status: 404 });
+  }
   const results = [];
 
   for (const registration of registrations) {
@@ -2504,7 +2514,8 @@ export async function sendTemplateToRegistrations(input: { templateId: string; r
         cohort: cohortMergeContext(registration.cohort),
         organization: registration.organization,
         registration: registrationMergeContext(registration)
-      }
+      },
+      bypassCohortStatus: manualRegistrationTemplateBypassesCohortStatus(template.type)
     }));
   }
 

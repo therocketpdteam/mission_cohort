@@ -898,6 +898,11 @@ function PaymentDetailDialog({
         throw new Error("No active email template is available for payment reminders.");
       }
 
+      await adminApi("/api/invoices", {
+        method: "PATCH",
+        body: { action: "prepareRegistrationInvoice", registrationId: payment.registrationId }
+      });
+
       await adminApi("/api/communications", {
         method: "PATCH",
         body: { action: "sendTemplateToRegistrations", templateId: reminder.id, registrationIds: [payment.registrationId] }
@@ -1665,6 +1670,10 @@ export function CohortDetailClient({ id }: { id: string }) {
 
     setSendingPaymentReminder(true);
     try {
+      await adminApi("/api/invoices", {
+        method: "PATCH",
+        body: { action: "prepareRegistrationInvoice", registrationId: paymentReminderRegistration.id }
+      });
       await adminApi("/api/communications", {
         method: "PATCH",
         body: { action: "sendTemplateToRegistrations", templateId: reminder.id, registrationIds: [paymentReminderRegistration.id] }

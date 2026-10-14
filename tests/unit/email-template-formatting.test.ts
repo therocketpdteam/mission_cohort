@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { TemplateType } from "@prisma/client";
 import { renderMergeFields, sampleMergeContext, textToEmailHtml } from "../../src/modules/email";
 import { buildSendGridMailPayload, normalizeSendGridApiKey } from "../../src/modules/email/sendgridProvider";
-import { defaultTemplates } from "../../src/services/communicationService";
+import { defaultTemplates, manualRegistrationTemplateBypassesCohortStatus } from "../../src/services/communicationService";
 import { buildEmailDelivery } from "../../src/services/emailService";
 
 test("renders email body formatting into safe HTML", () => {
@@ -32,6 +33,12 @@ test("normalizes pasted SendGrid API keys", () => {
   assert.equal(normalizeSendGridApiKey("Bearer SG.test-key"), "SG.test-key");
   assert.equal(normalizeSendGridApiKey("\"SG.quoted-key\""), "SG.quoted-key");
   assert.equal(normalizeSendGridApiKey("   "), undefined);
+});
+
+test("only explicit payment reminders bypass cohort lifecycle status", () => {
+  assert.equal(manualRegistrationTemplateBypassesCohortStatus(TemplateType.PAYMENT_REMINDER), true);
+  assert.equal(manualRegistrationTemplateBypassesCohortStatus(TemplateType.WEEK_BEFORE_REMINDER), false);
+  assert.equal(manualRegistrationTemplateBypassesCohortStatus(null), false);
 });
 
 test("builds private SendGrid personalizations for multiple recipients", () => {
