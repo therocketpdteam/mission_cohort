@@ -4132,9 +4132,9 @@ body {
 .cohort-distribution-head,
 .cohort-distribution-row {
   display: grid;
-  grid-template-columns: minmax(170px, 1.4fr) minmax(130px, 1fr) 80px repeat(9, minmax(108px, 0.8fr)) 70px;
-  gap: 12px;
-  min-width: 1700px;
+  grid-template-columns: minmax(210px, 1.45fr) repeat(3, minmax(140px, 0.9fr)) repeat(3, minmax(112px, 0.72fr)) 64px;
+  gap: 14px;
+  min-width: 1080px;
   align-items: center;
 }
 
@@ -4164,10 +4164,6 @@ body {
   border-top: 0;
 }
 
-.cohort-distribution-row > span {
-  white-space: nowrap;
-}
-
 .cohort-distribution-name {
   display: grid;
   min-width: 0;
@@ -4189,6 +4185,50 @@ body {
 
 .cohort-distribution-name small {
   color: #7f8ea0;
+}
+
+.cohort-distribution-identity,
+.cohort-distribution-metric {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.cohort-distribution-meta {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
+
+.cohort-distribution-meta > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  color: #66778a;
+  font-size: 0.68rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cohort-distribution-meta .MuiChip-root {
+  flex: 0 0 auto;
+}
+
+.cohort-distribution-metric strong,
+.cohort-distribution-metric small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cohort-distribution-metric strong {
+  color: #263246;
+  font-size: 0.75rem;
+}
+
+.cohort-distribution-metric small {
+  color: #7f8ea0;
+  font-size: 0.65rem;
 }
 
 .cohort-distribution-due {

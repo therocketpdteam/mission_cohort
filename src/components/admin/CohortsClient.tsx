@@ -1057,26 +1057,27 @@ export function CohortsClient() {
         <p className="cohort-reference-label">{label}</p>
         <div className="cohort-reference-table cohort-distribution-table">
           <div className="cohort-distribution-head">
-            <span>Cohort</span><span>Thought Leader</span><span>Status</span><span>Revenue</span><span>Commissionable</span><span>RPD commission</span><span>TL earnings</span><span>Customer paid</span><span>Customer balance</span><span>Earned to date</span><span>Distributed</span><span>Payment due</span><span />
+            <span>Cohort</span><span>Revenue</span><span>Commission split</span><span>Customer payments</span><span>TL earned</span><span>Distributed</span><span>Payment due</span><span />
           </div>
           {sectionRows.map((row) => {
             const summary = row.distributionSummary ?? {};
             return (
               <div className="cohort-distribution-row" key={row.id}>
-                <button className="cohort-distribution-name" type="button" onClick={() => router.push(`/cohorts/${row.id}?tab=Distribution`)}>
-                  <strong>{displayShortName(row.shortName) || row.title}</strong>
-                  <small>{row.title}</small>
-                </button>
-                <span>{formatProperDisplay(summary.tlName) || "Not configured"}</span>
-                <StatusChip value={currentStatuses.has(row.status) ? "Current" : "Ended"} />
-                <span>{money(summary.soldAmount)}</span>
-                <span>{money(summary.commissionableAmount)}</span>
-                <span>{summary.commissionPercent}% · {money(summary.commissionAmount)}</span>
-                <span>{summary.tlSharePercent}% · {money(summary.tlShareAmount)}</span>
-                <span>{money(summary.paidAmount)}</span>
-                <span>{money(summary.outstandingAmount)}</span>
-                <span>{money(summary.tlPayoutDue)}</span>
-                <span>{money(summary.payoutMade)}</span>
+                <div className="cohort-distribution-identity">
+                  <button className="cohort-distribution-name" type="button" onClick={() => router.push(`/cohorts/${row.id}?tab=Distribution`)}>
+                    <strong>{displayShortName(row.shortName) || row.title}</strong>
+                    <small>{row.title}</small>
+                  </button>
+                  <div className="cohort-distribution-meta">
+                    <span>{formatProperDisplay(summary.tlName) || "Thought leader not configured"}</span>
+                    <StatusChip value={currentStatuses.has(row.status) ? "Current" : "Ended"} />
+                  </div>
+                </div>
+                <div className="cohort-distribution-metric"><strong>{money(summary.soldAmount)}</strong><small>{money(summary.commissionableAmount)} commissionable</small></div>
+                <div className="cohort-distribution-metric"><strong>{summary.tlSharePercent}% · {money(summary.tlShareAmount)}</strong><small>TL · RPD {summary.commissionPercent}% · {money(summary.commissionAmount)}</small></div>
+                <div className="cohort-distribution-metric"><strong>{money(summary.paidAmount)} paid</strong><small>{money(summary.outstandingAmount)} outstanding</small></div>
+                <div className="cohort-distribution-metric"><strong>{money(summary.tlPayoutDue)}</strong><small>Based on collections</small></div>
+                <div className="cohort-distribution-metric"><strong>{money(summary.payoutMade)}</strong><small>Paid to date</small></div>
                 <strong className="cohort-distribution-due">{money(summary.pendingPayout)}</strong>
                 <Button size="small" variant="outlined" onClick={() => router.push(`/cohorts/${row.id}?tab=Distribution`)}>Open</Button>
               </div>
