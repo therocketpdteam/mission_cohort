@@ -1720,15 +1720,15 @@ async function attachRegistrationBillingDocuments(communicationId: string, regis
     pdfUrl?: string | null;
   }>;
 }, fallbackW9Url?: string | null) {
-  const invoice = registration.invoiceDrafts?.find((item) => item.pdfFileKey && item.pdfUrl);
+  const invoice = registration.invoiceDrafts?.find((item) => item.pdfUrl);
   const w9Url = registration.w9Url || fallbackW9Url || null;
   const documents = [
     invoice
       ? {
           fileName: `Invoice ${invoice.invoiceNumber ?? registration.id}.pdf`,
           contentType: "application/pdf",
-          provider: "supabase",
-          fileKey: invoice.pdfFileKey!,
+          provider: invoice.pdfFileKey ? "supabase" : "external",
+          fileKey: invoice.pdfFileKey || `registration/${registration.id}/invoice-draft`,
           url: invoice.pdfUrl!
         }
       : registration.invoiceUrl

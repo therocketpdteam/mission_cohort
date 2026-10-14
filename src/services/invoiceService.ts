@@ -1,4 +1,4 @@
-import { CommunicationStatus, InvoiceDraftStatus, RecipientScope, SupportingDocumentStatus, SyncStatus } from "@prisma/client";
+import { CommunicationStatus, InvoiceDraftStatus, RecipientScope, SupportingDocumentStatus } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { dateInput, moneyInput, positiveIntInput } from "@/lib/validators";
@@ -6,7 +6,6 @@ import { buildInvoicePdf } from "./pdfService";
 import { uploadAppFile } from "./storageService";
 import { addCommunicationAttachment, getSystemUserId, sendCommunication } from "./communicationService";
 import { getOrganizationInvoiceProfile } from "./appSettingsService";
-import { createQuickBooksInvoiceFromDraft } from "./quickBooksService";
 
 const lineItemSchema = z.object({
   id: z.string().optional(),
@@ -630,20 +629,11 @@ export async function prepareAndSendRegistrationInvoicePackage(input: { registra
     });
   }
 
-  if (invoice.quickBooksSyncStatus === SyncStatus.ERROR) {
-    throw Object.assign(new Error(invoice.quickBooksSyncError || "QuickBooks invoice link needs review before emailing this invoice."), {
-      code: "BAD_REQUEST",
-      status: 400
-    });
-  }
-
-  const quickBooks = await createQuickBooksInvoiceFromDraft(invoice.id);
   const generated = await generateInvoicePdf(invoice.id, false);
   const sent = await sendInvoiceDocument(generated.id, false);
 
   return {
     invoice: sent.invoice,
-    quickBooks,
     communication: sent.communication,
     recipients: sent.recipients,
     documents: {
