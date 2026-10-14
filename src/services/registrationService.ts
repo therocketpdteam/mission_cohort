@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { CommunicationStatus, IntegrationJobType, IntegrationProvider, InvoiceDraftStatus, OperationsTaskStatus, ParticipantListStatus, ParticipantStatus, PaymentStatus, Prisma, RecipientScope, RegistrationStatus, SupportingDocumentStatus } from "@prisma/client";
+import { CommunicationStatus, IntegrationJobType, IntegrationProvider, InvoiceDraftStatus, OperationsTaskStatus, ParticipantListStatus, ParticipantStatus, PaymentStatus, Prisma, RecipientScope, RegistrationStatus, SupportingDocumentStatus, TemplateType } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { shouldDefaultPrimaryContactParticipant } from "@/lib/rosterStatus";
@@ -925,6 +925,12 @@ export async function listRegistrations(cohortId?: string, options: { includeArc
       cohort: true,
       organization: true,
       participants: { select: { firstName: true, lastName: true, email: true, status: true } },
+      communications: {
+        where: { status: CommunicationStatus.SENT, template: { type: TemplateType.PAYMENT_REMINDER } },
+        orderBy: { sentAt: "desc" },
+        take: 1,
+        select: { sentAt: true }
+      },
       _count: { select: { participants: true } }
     }
   });

@@ -1477,6 +1477,8 @@ export function CohortDetailClient({ id }: { id: string }) {
   const [registrationDetailLoading, setRegistrationDetailLoading] = useState(false);
   const registrationDetailRequestRef = useRef(0);
   const [registrationRemovalAction, setRegistrationRemovalAction] = useState<{ action: "archive" | "delete"; row: AdminRow } | null>(null);
+  const [paymentReminderRegistration, setPaymentReminderRegistration] = useState<AdminRow | null>(null);
+  const [sendingPaymentReminder, setSendingPaymentReminder] = useState(false);
   const [registrationDialogOpen, setRegistrationDialogOpen] = useState(false);
   const [editingRegistration, setEditingRegistration] = useState<AdminRow | null>(null);
   const [registrationThread, setRegistrationThread] = useState<AdminRow[]>([]);
@@ -1650,6 +1652,31 @@ export function CohortDetailClient({ id }: { id: string }) {
   function openRegistrationEditor(row?: AdminRow | null) {
     setEditingRegistration(row ?? null);
     setRegistrationDialogOpen(true);
+  }
+
+  async function sendPaymentReminder() {
+    if (!paymentReminderRegistration?.id) return;
+    const reminder = templates.find((template) => template.type === "PAYMENT_REMINDER" && template.active);
+
+    if (!reminder?.id) {
+      notifyError("No active Payment Reminder template is available.");
+      return;
+    }
+
+    setSendingPaymentReminder(true);
+    try {
+      await adminApi("/api/communications", {
+        method: "PATCH",
+        body: { action: "sendTemplateToRegistrations", templateId: reminder.id, registrationIds: [paymentReminderRegistration.id] }
+      });
+      notifySuccess(`Payment reminder sent to ${paymentReminderRegistration.primaryContactEmail}.`);
+      setPaymentReminderRegistration(null);
+      await load();
+    } catch (error) {
+      notifyError((error as Error).message);
+    } finally {
+      setSendingPaymentReminder(false);
+    }
   }
 
   async function sendRegistrationTaskMessage(task: AdminRow) {
@@ -2921,6 +2948,22 @@ export function CohortDetailClient({ id }: { id: string }) {
       renderCell: (params) => <StatusChip value={params.value} />
     },
     {
+      field: "paymentReminder",
+      headerName: "Last Reminder",
+      width: 142,
+      sortable: false,
+      valueGetter: (_value, row) => row.communications?.[0]?.sentAt ?? "",
+      renderCell: (params) => {
+        const sentAt = params.row.communications?.[0]?.sentAt;
+        return (
+          <div>
+            <span className="app-table-main">{sentAt ? formatDate(sentAt) : "Never"}</span>
+            <span className="app-table-sub">{sentAt ? new Date(sentAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "No reminder sent"}</span>
+          </div>
+        );
+      }
+    },
+    {
       field: "participantListStatus",
       headerName: "Roster",
       width: 124,
@@ -2965,6 +3008,12 @@ export function CohortDetailClient({ id }: { id: string }) {
               { label: "Quick view", onClick: () => void openRegistrationDetail(params.row) },
               { label: "Edit POC & billing", icon: <EditOutlined fontSize="small" />, onClick: () => openRegistrationEditor(params.row) },
               { label: "Create invoice", onClick: () => openInvoiceEditor(null, params.row) },
+              {
+                label: "Send invoice reminder",
+                icon: <EmailOutlined fontSize="small" />,
+                disabled: ["PAID", "REFUNDED", "CANCELLED"].includes(String(registrationBillingStatus(params.row, payments, invoiceDrafts)).toUpperCase()),
+                onClick: () => setPaymentReminderRegistration(params.row)
+              },
               { label: "Remove registration", icon: <ArchiveOutlined fontSize="small" />, onClick: () => setRegistrationRemovalAction({ action: "archive", row: params.row }) },
               { label: "Delete permanently", icon: <DeleteOutline fontSize="small" />, color: "error", onClick: () => setRegistrationRemovalAction({ action: "delete", row: params.row }) }
             ]}
@@ -4042,6 +4091,33 @@ export function CohortDetailClient({ id }: { id: string }) {
         onClose={() => { setResourceDialogOpen(false); setResourceSeedSession(null); }}
         onSubmit={saveResource}
       />
+      <Dialog open={Boolean(paymentReminderRegistration)} onClose={() => !sendingPaymentReminder && setPaymentReminderRegistration(null)} maxWidth="sm" fullWidth>
+        <DialogTitle>Send Invoice Reminder</DialogTitle>
+        <DialogContent>
+          {paymentReminderRegistration ? (
+            <Stack spacing={2}>
+              <Typography color="text.secondary">
+                Review this delivery before sending. The email will be sent immediately after confirmation.
+              </Typography>
+              <div className="quick-view-grid">
+                <DetailField label="Recipient" value={paymentReminderRegistration.primaryContactEmail} />
+                <DetailField label="Invoice" value={paymentReminderRegistration.invoiceNumber || "Invoice PDF on registration"} />
+                <DetailField label="Amount" value={money(registrationRevenueAmount(paymentReminderRegistration))} />
+                <DetailField label="Last reminder" value={paymentReminderRegistration.communications?.[0]?.sentAt ? new Date(paymentReminderRegistration.communications[0].sentAt).toLocaleString("en-US") : "Never sent"} />
+              </div>
+              <Alert severity="info">
+                The current invoice PDF and RocketPD W-9 will be attached. Sending is blocked if either document is unavailable.
+              </Alert>
+            </Stack>
+          ) : null}
+        </DialogContent>
+        <DialogActions>
+          <Button variant="outlined" onClick={() => setPaymentReminderRegistration(null)} disabled={sendingPaymentReminder}>Cancel</Button>
+          <Button onClick={() => void sendPaymentReminder()} disabled={sendingPaymentReminder}>
+            {sendingPaymentReminder ? "Sending" : "Send Reminder"}
+          </Button>
+        </DialogActions>
+      </Dialog>
       <PaymentDetailDialog
         payment={paymentDetail}
         cohortId={id}

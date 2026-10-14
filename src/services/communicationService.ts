@@ -1765,10 +1765,10 @@ async function attachRegistrationBillingDocuments(communicationId: string, regis
 
 async function preflightPaymentReminder(communication: {
   id: string;
-  template: { name: string } | null;
+  template: { name: string; type: TemplateType } | null;
   registration: any;
 }) {
-  if (communication.template?.name !== "Payment Reminder" || !communication.registration) {
+  if (communication.template?.type !== TemplateType.PAYMENT_REMINDER || !communication.registration) {
     return null;
   }
 
@@ -2282,6 +2282,8 @@ async function createCommunicationFromTemplate(input: {
   templateId: string;
   cohortId: string;
   sessionId?: string;
+  registrationId?: string;
+  participantId?: string;
   recipientScope: RecipientScope;
   recipientEmails?: string[];
   scheduledFor?: Date;
@@ -2298,6 +2300,8 @@ async function createCommunicationFromTemplate(input: {
     data: {
       cohortId: input.cohortId,
       sessionId: input.sessionId,
+      registrationId: input.registrationId,
+      participantId: input.participantId,
       templateId: template.id,
       subject: template.subject,
       bodyHtml: template.bodyHtml,
@@ -2334,6 +2338,8 @@ export async function sendTemplateToParticipant(input: { templateId: string; par
   const communication = await createCommunicationFromTemplate({
     templateId: input.templateId,
     cohortId: participant.cohortId,
+    registrationId: participant.registrationId,
+    participantId: participant.id,
     recipientScope: RecipientScope.CUSTOM,
     recipientEmails: [participant.email]
   });
@@ -2488,6 +2494,7 @@ export async function sendTemplateToRegistrations(input: { templateId: string; r
     const communication = await createCommunicationFromTemplate({
       templateId: input.templateId,
       cohortId: registration.cohortId,
+      registrationId: registration.id,
       recipientScope: RecipientScope.CUSTOM,
       recipientEmails: [registration.primaryContactEmail]
     });
