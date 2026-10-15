@@ -17,7 +17,7 @@ import {
   getSystemUserId,
   sendCommunication
 } from "./communicationService";
-import { createInvoiceDraft, generateInvoicePdf, updateInvoiceDraft } from "./invoiceService";
+import { createInvoiceDraft, createSupplementalInvoice, generateInvoicePdf, updateInvoiceDraft } from "./invoiceService";
 import { planRegistrationJourneys } from "./registrationJourneyService";
 
 export type PendingParticipantChange = {
@@ -295,6 +295,42 @@ async function refreshSimpleInvoice(
     });
   }
   const amountChanged = Boolean(pending.fields.participantCount || pending.fields.totalAmount);
+  const protectedInvoices = registration.invoiceDrafts.filter((candidate) => {
+    const matchingPaidAmount = registration.paymentRecords
+      .filter((payment) => payment.status === "PAID" && payment.invoiceNumber === candidate.invoiceNumber)
+      .reduce((sum, payment) => sum + Number(payment.amount), 0);
+    return candidate.status === InvoiceDraftStatus.PAID || Number(candidate.paidAmount) > 0 || matchingPaidAmount > 0;
+  });
+  if (amountChanged && protectedInvoices.length > 0) {
+    const targetTotal = Number(registration.totalAmount ?? 0);
+    const invoicedTotal = registration.invoiceDrafts.reduce((sum, candidate) => sum + Number(candidate.totalAmount ?? 0), 0);
+    const delta = Math.round((targetTotal - invoicedTotal) * 100) / 100;
+    if (delta < 0) {
+      throw Object.assign(new Error(
+        `The registration is ${money(Math.abs(delta))} lower than its protected invoice total. Create a credit or refund decision before applying these changes.`
+      ), { code: "INVOICE_CREDIT_REVIEW_REQUIRED", status: 409 });
+    }
+    if (delta > 0) {
+      const oldestInvoice = [...registration.invoiceDrafts].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())[0];
+      const baseInvoiceNumber = oldestInvoice?.invoiceNumber ?? registration.invoiceNumber;
+      if (!baseInvoiceNumber) {
+        throw Object.assign(new Error("The paid invoice does not have an invoice number. Add one before creating a supplemental invoice."), {
+          code: "INVOICE_REVIEW_REQUIRED",
+          status: 409
+        });
+      }
+      const beforeSeats = Number(pending.fields.participantCount?.before ?? registration.participantCount);
+      const addedSeats = Math.max(registration.participantCount - beforeSeats, 1);
+      return createSupplementalInvoice({
+        registrationId: registration.id,
+        amount: delta,
+        quantity: addedSeats,
+        baseInvoiceNumber,
+        description: `Additional seats for ${registration.cohort.title}`
+      });
+    }
+    return invoice;
+  }
   if (amountChanged && invoice.lineItems.length !== 1) {
     throw Object.assign(new Error("This invoice has custom line items. Review and save the invoice before applying registration delivery changes."), {
       code: "INVOICE_REVIEW_REQUIRED",
@@ -327,7 +363,8 @@ function registrationForApply(registrationId: string) {
         where: { status: { notIn: [InvoiceDraftStatus.VOIDED, InvoiceDraftStatus.CANCELLED] } },
         orderBy: { updatedAt: "desc" },
         include: { lineItems: true }
-      }
+      },
+      paymentRecords: true
     }
   });
 }
@@ -479,6 +516,9 @@ export async function applyRegistrationChanges(registrationId: string) {
     throw Object.assign(new Error("Registration Changes Summary template is unavailable."), { code: "NOT_FOUND", status: 404 });
   }
   const rows = changeSummaryRows(pending);
+  if (invoice?.invoiceNumber && /-[A-Z]$/i.test(invoice.invoiceNumber)) {
+    rows.push(`Supplemental invoice ${invoice.invoiceNumber}: ${money(invoice.totalAmount)} for the added balance only. The original paid invoice remains unchanged.`);
+  }
   const deliveryNote = attendeeChanges
     ? calendarIssues.length
       ? "Participant communications now reflect these updates. Calendar attendee updates need attention in Mission Control."

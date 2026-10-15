@@ -125,6 +125,19 @@ export function formatInvoiceNumber(input: { presenterCode: string; year: number
   return `${input.presenterCode}-${input.year}-${String(input.sequence).padStart(3, "0")}`;
 }
 
+export function supplementalInvoiceNumber(baseInvoiceNumber: string, existingNumbers: Array<string | null | undefined>) {
+  const base = baseInvoiceNumber.replace(/-[A-Z]$/i, "");
+  const used = new Set(existingNumbers.map((value) => String(value ?? "").trim().toUpperCase()));
+  for (let index = 0; index < 26; index += 1) {
+    const candidate = `${base}-${String.fromCharCode(65 + index)}`;
+    if (!used.has(candidate.toUpperCase())) return candidate;
+  }
+  throw Object.assign(new Error("This registration already has 26 supplemental invoices. Review its billing history before continuing."), {
+    code: "INVOICE_REVIEW_REQUIRED",
+    status: 409
+  });
+}
+
 async function defaultInvoiceNumber(input: {
   id: string;
   cohort: InvoiceNumberCohortInput;
@@ -325,6 +338,55 @@ export async function createInvoiceDraft(input: z.input<typeof invoiceDraftInput
 
     return updated;
   });
+}
+
+export async function createSupplementalInvoice(input: {
+  registrationId: string;
+  amount: number;
+  quantity: number;
+  baseInvoiceNumber: string;
+  description: string;
+}) {
+  const registration = await prisma.registration.findUniqueOrThrow({
+    where: { id: input.registrationId },
+    include: {
+      cohort: true,
+      invoiceDrafts: {
+        where: { status: { notIn: [InvoiceDraftStatus.VOIDED, InvoiceDraftStatus.CANCELLED] } },
+        select: { invoiceNumber: true }
+      }
+    }
+  });
+  const invoiceNumber = supplementalInvoiceNumber(
+    input.baseInvoiceNumber,
+    registration.invoiceDrafts.map((invoice) => invoice.invoiceNumber)
+  );
+  const quantity = Math.max(input.quantity, 1);
+  const unitAmount = input.amount / quantity;
+
+  const invoice = await prisma.invoiceDraft.create({
+    data: {
+      cohortId: registration.cohortId,
+      registrationId: registration.id,
+      organizationId: registration.organizationId,
+      invoiceNumber,
+      purchaseOrderNumber: registration.purchaseOrderNumber,
+      status: InvoiceDraftStatus.DRAFT,
+      subtotalAmount: input.amount,
+      totalAmount: input.amount,
+      notes: `Supplemental invoice for additional registration charges. Original invoice: ${input.baseInvoiceNumber}.`,
+      lineItems: {
+        create: [{
+          description: input.description,
+          quantity,
+          unitAmount,
+          totalAmount: input.amount
+        }]
+      }
+    },
+    include: invoiceInclude()
+  });
+  return generateInvoicePdf(invoice.id, false);
 }
 
 export async function updateInvoiceDraft(id: string, input: z.input<typeof invoiceDraftInputSchema>) {
@@ -580,7 +642,7 @@ export async function prepareRegistrationInvoice(input: { registrationId: string
       invoiceNumber: registration.invoiceNumber ?? undefined,
       purchaseOrderNumber: registration.purchaseOrderNumber ?? undefined
     });
-  } else {
+  } else if (!input.invoiceId) {
     const lineItems = invoice.lineItems.length === 1
       ? [{
           description: invoice.lineItems[0]!.description,
@@ -594,12 +656,17 @@ export async function prepareRegistrationInvoice(input: { registrationId: string
       purchaseOrderNumber: registration.purchaseOrderNumber ?? "",
       lineItems
     });
+  } else if (shouldSyncInvoicePurchaseOrder(invoice.purchaseOrderNumber, registration.purchaseOrderNumber)) {
+    invoice = await updateInvoiceDraft(invoice.id, {
+      cohortId: registration.cohortId,
+      purchaseOrderNumber: registration.purchaseOrderNumber ?? ""
+    });
   }
 
   const generated = await generateInvoicePdf(invoice.id, false);
   await prisma.registration.update({
     where: { id: registration.id },
-    data: { invoiceNumber: generated.invoiceNumber, invoiceUrl: generated.pdfUrl }
+    data: { invoiceUrl: generated.pdfUrl }
   });
   return generated;
 }

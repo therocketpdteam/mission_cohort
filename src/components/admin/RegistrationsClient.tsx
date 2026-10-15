@@ -935,6 +935,7 @@ function RegistrationDetailDialog({
   const [syncingCrm, setSyncingCrm] = useState(false);
   const [invoiceRecipientOpen, setInvoiceRecipientOpen] = useState(false);
   const [invoiceRecipient, setInvoiceRecipient] = useState("");
+  const [selectedInvoice, setSelectedInvoice] = useState<AdminRow | null>(null);
   const [sendingInvoice, setSendingInvoice] = useState(false);
   const [invoicePdfBusy, setInvoicePdfBusy] = useState<"preview" | "download" | "">("");
   const [soleSourceBusy, setSoleSourceBusy] = useState(false);
@@ -954,6 +955,7 @@ function RegistrationDetailDialog({
       setError(null);
       setInvoiceRecipientOpen(false);
       setInvoiceRecipient("");
+      setSelectedInvoice(null);
       setInvoicePdfBusy("");
       setInvoicePreview(null);
       setMergeOpen(false);
@@ -1185,9 +1187,23 @@ function RegistrationDetailDialog({
     }
   }
 
-  const currentInvoice = registration?.invoiceDrafts?.[0] ?? null;
+  const activeInvoices = (registration?.invoiceDrafts ?? []).filter((invoice: AdminRow) => !["VOIDED", "CANCELLED"].includes(String(invoice.status)));
+  const registrationTotal = Number(registration?.totalAmount ?? 0);
+  const invoicedTotal = activeInvoices.reduce((sum: number, invoice: AdminRow) => sum + Number(invoice.totalAmount ?? 0), 0);
+  const recordedPayments = (registration?.paymentRecords ?? [])
+    .filter((payment: AdminRow) => payment.status === "PAID")
+    .reduce((sum: number, payment: AdminRow) => sum + Number(payment.amount ?? 0), 0);
+  const invoicePaidTotal = activeInvoices.reduce((sum: number, invoice: AdminRow) => sum + Number(invoice.paidAmount ?? 0), 0);
+  const receivedTotal = recordedPayments > 0 ? recordedPayments : invoicePaidTotal;
+  const overpaymentTotal = Math.max(receivedTotal - registrationTotal, 0);
+  const paidForInvoice = (invoice: AdminRow) => {
+    const allocated = (registration?.paymentRecords ?? [])
+      .filter((payment: AdminRow) => payment.status === "PAID" && payment.invoiceNumber === invoice.invoiceNumber)
+      .reduce((sum: number, payment: AdminRow) => sum + Number(payment.amount ?? 0), 0);
+    return allocated > 0 ? allocated : Number(invoice.paidAmount ?? 0);
+  };
 
-  async function openInvoicePdf(mode: "preview" | "download") {
+  async function openInvoicePdf(mode: "preview" | "download", requestedInvoice?: AdminRow | null) {
     if (!registration?.id) {
       setError("No registration is available for this invoice.");
       return;
@@ -1201,14 +1217,14 @@ function RegistrationDetailDialog({
         body: {
           action: "prepareRegistrationInvoice",
           registrationId: registration.id,
-          id: currentInvoice?.id
+          id: requestedInvoice?.id
         }
       });
       if (!invoice.pdfUrl) {
         throw new Error("The updated invoice PDF could not be generated.");
       }
 
-      const title = `Invoice ${invoice.invoiceNumber ?? currentInvoice?.invoiceNumber ?? "PDF"}`;
+      const title = `Invoice ${invoice.invoiceNumber ?? requestedInvoice?.invoiceNumber ?? "PDF"}`;
       if (mode === "preview") {
         setInvoicePreview({ url: invoice.pdfUrl, title });
       } else {
@@ -1258,7 +1274,7 @@ function RegistrationDetailDialog({
   }
 
   async function sendInvoiceCopy() {
-    if (!currentInvoice?.id || !invoiceRecipient.trim()) {
+    if (!selectedInvoice?.id || !invoiceRecipient.trim()) {
       setError("Choose an invoice and enter the recipient email address.");
       return;
     }
@@ -1270,12 +1286,12 @@ function RegistrationDetailDialog({
         method: "PATCH",
         body: {
           action: "sendInvoice",
-          id: currentInvoice.id,
+          id: selectedInvoice.id,
           recipientEmails: [invoiceRecipient.trim()]
         }
       });
       const recipient = Array.isArray(result.recipients) ? result.recipients[0] : invoiceRecipient.trim();
-      onSuccess(`Invoice ${currentInvoice.invoiceNumber ?? "copy"} sent only to ${recipient}.`);
+      onSuccess(`Invoice ${selectedInvoice.invoiceNumber ?? "copy"} sent only to ${recipient}.`);
       setInvoiceRecipientOpen(false);
       setInvoiceRecipient("");
       await onChanged();
@@ -1525,30 +1541,46 @@ function RegistrationDetailDialog({
             <div className="registration-section-heading">
               <div>
                 <h3>Invoice</h3>
-                <p>The PDF is created automatically and refreshed from the latest registration details.</p>
+                <p>Paid invoices stay unchanged. Additional charges are issued as separate supplemental invoices.</p>
               </div>
             </div>
-            {currentInvoice ? (
-              <div className="registration-invoice-row">
-                <div className="registration-invoice-summary">
-                  <strong>{currentInvoice.invoiceNumber ?? registration.invoiceNumber ?? "Invoice draft"}</strong>
-                  <span>
-                    {[formatStatusLabel(currentInvoice.status), money(currentInvoice.totalAmount), registration.purchaseOrderNumber ? `PO ${registration.purchaseOrderNumber}` : "No PO"]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  </span>
+            {activeInvoices.length > 0 ? (
+              <div className="registration-invoice-ledger">
+                <div className="registration-invoice-totals">
+                  <DetailTile label="Registration total" value={money(registrationTotal)} />
+                  <DetailTile label="Total invoiced" value={money(invoicedTotal)} />
+                  <DetailTile label="Payments received" value={money(receivedTotal)} />
+                  <DetailTile label={overpaymentTotal > 0 ? "Overpayment" : "Balance"} value={money(overpaymentTotal > 0 ? overpaymentTotal : Math.max(registrationTotal - receivedTotal, 0))} tone={overpaymentTotal > 0 ? "warning" : undefined} />
                 </div>
-                <div className="registration-invoice-actions">
-                  <Button variant="outlined" disabled={Boolean(invoicePdfBusy)} onClick={() => openInvoicePdf("preview")}>
-                    {invoicePdfBusy === "preview" ? "Generating" : "Preview updated PDF"}
-                  </Button>
-                  <Button variant="outlined" disabled={Boolean(invoicePdfBusy)} onClick={() => openInvoicePdf("download")}>
-                    {invoicePdfBusy === "download" ? "Generating" : "Download"}
-                  </Button>
-                  <Button variant="outlined" onClick={() => {
-                    setInvoiceRecipient(registration.billingContactEmail ?? registration.primaryContactEmail ?? "");
-                    setInvoiceRecipientOpen(true);
-                  }}>Send copy</Button>
+                {overpaymentTotal > 0 ? (
+                  <Alert severity="warning">This registration has an overpayment of {money(overpaymentTotal)}. Record a refund or customer credit; do not rewrite a paid invoice.</Alert>
+                ) : null}
+                {activeInvoices.map((invoice: AdminRow) => (
+                  <div className="registration-invoice-row" key={invoice.id}>
+                    <div className="registration-invoice-summary">
+                      <strong>{invoice.invoiceNumber ?? "Invoice draft"}{/-[A-Z]$/i.test(String(invoice.invoiceNumber ?? "")) ? " · Supplemental" : ""}</strong>
+                      <span>
+                        {[formatStatusLabel(invoice.status), `Total ${money(invoice.totalAmount)}`, `Paid ${money(paidForInvoice(invoice))}`, `Balance ${money(Math.max(Number(invoice.totalAmount ?? 0) - paidForInvoice(invoice), 0))}`, invoice.purchaseOrderNumber ? `PO ${invoice.purchaseOrderNumber}` : "No PO"]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </span>
+                    </div>
+                    <div className="registration-invoice-actions">
+                      <Button variant="outlined" disabled={Boolean(invoicePdfBusy)} onClick={() => openInvoicePdf("preview", invoice)}>
+                        {invoicePdfBusy === "preview" ? "Generating" : "Preview"}
+                      </Button>
+                      <Button variant="outlined" disabled={Boolean(invoicePdfBusy)} onClick={() => openInvoicePdf("download", invoice)}>
+                        {invoicePdfBusy === "download" ? "Generating" : "Download"}
+                      </Button>
+                      <Button variant="outlined" onClick={() => {
+                        setSelectedInvoice(invoice);
+                        setInvoiceRecipient(registration.billingContactEmail ?? registration.primaryContactEmail ?? "");
+                        setInvoiceRecipientOpen(true);
+                      }}>Send copy</Button>
+                    </div>
+                  </div>
+                ))}
+                <div className="registration-invoice-document-actions">
                   <Button variant="outlined" disabled={soleSourceBusy} onClick={() => void downloadSoleSourceLetter()}>
                     {soleSourceBusy ? "Creating" : "Sole Source Letter"}
                   </Button>
@@ -1561,10 +1593,10 @@ function RegistrationDetailDialog({
                   <span>The current seats, total, billing contact, and PO number will be used.</span>
                 </div>
                 <div className="registration-invoice-actions">
-                  <Button variant="outlined" disabled={Boolean(invoicePdfBusy)} onClick={() => openInvoicePdf("preview")}>
+                  <Button variant="outlined" disabled={Boolean(invoicePdfBusy)} onClick={() => openInvoicePdf("preview", null)}>
                     {invoicePdfBusy === "preview" ? "Preparing" : "Preview invoice"}
                   </Button>
-                  <Button variant="outlined" disabled={Boolean(invoicePdfBusy)} onClick={() => openInvoicePdf("download")}>
+                  <Button variant="outlined" disabled={Boolean(invoicePdfBusy)} onClick={() => openInvoicePdf("download", null)}>
                     {invoicePdfBusy === "download" ? "Preparing" : "Download"}
                   </Button>
                   <Button variant="outlined" disabled={soleSourceBusy} onClick={() => void downloadSoleSourceLetter()}>
@@ -1773,12 +1805,12 @@ function RegistrationDetailDialog({
         <DialogContent>
           <Stack spacing={2} sx={{ pt: 1 }}>
             <Alert severity="info">
-              This sends only invoice {currentInvoice?.invoiceNumber ?? "PDF"}. It does not change the saved POC or billing contact and does not send confirmations or calendar invitations.
+              This sends only invoice {selectedInvoice?.invoiceNumber ?? "PDF"}. It does not change the saved POC or billing contact and does not send confirmations or calendar invitations.
             </Alert>
             <div className="quick-view-grid">
-              <DetailTile label="Invoice" value={currentInvoice?.invoiceNumber ?? "No invoice"} />
-              <DetailTile label="Total" value={currentInvoice ? money(currentInvoice.totalAmount) : "-"} />
-              <DetailTile label="PDF" value={currentInvoice?.pdfUrl ? "Ready" : "Generated before sending"} />
+              <DetailTile label="Invoice" value={selectedInvoice?.invoiceNumber ?? "No invoice"} />
+              <DetailTile label="Total" value={selectedInvoice ? money(selectedInvoice.totalAmount) : "-"} />
+              <DetailTile label="PDF" value={selectedInvoice?.pdfUrl ? "Ready" : "Generated before sending"} />
             </div>
             <TextField
               autoFocus

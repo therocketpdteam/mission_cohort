@@ -6,7 +6,8 @@ import {
   nextInvoiceSequence,
   presenterInvoiceCode,
   shouldInvalidateInvoiceDocuments,
-  shouldSyncInvoicePurchaseOrder
+  shouldSyncInvoicePurchaseOrder,
+  supplementalInvoiceNumber
 } from "../../src/services/invoiceService";
 import { buildInvoicePdf, invoiceDescriptionParts } from "../../src/services/pdfService";
 
@@ -41,6 +42,12 @@ test("formats invoice numbers with presenter code session year and running seque
   assert.equal(nextInvoiceSequence([]), 355);
   assert.equal(nextInvoiceSequence(["KM-2026-355", "PL-2026-356", "legacy-100"]), 357);
   assert.equal(formatInvoiceNumber({ presenterCode: "KM", year: 2026, sequence: 355 }), "KM-2026-355");
+});
+
+test("creates sequential supplemental invoice numbers without changing the base sequence", () => {
+  assert.equal(supplementalInvoiceNumber("KM-2026-001", ["KM-2026-001"]), "KM-2026-001-A");
+  assert.equal(supplementalInvoiceNumber("KM-2026-001", ["KM-2026-001", "KM-2026-001-A"]), "KM-2026-001-B");
+  assert.equal(supplementalInvoiceNumber("KM-2026-001-A", ["KM-2026-001", "KM-2026-001-A"]), "KM-2026-001-B");
 });
 
 test("prints cohort title and description as separate invoice line text", () => {
