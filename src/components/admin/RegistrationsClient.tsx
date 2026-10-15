@@ -937,6 +937,7 @@ function RegistrationDetailDialog({
   const [invoiceRecipient, setInvoiceRecipient] = useState("");
   const [sendingInvoice, setSendingInvoice] = useState(false);
   const [invoicePdfBusy, setInvoicePdfBusy] = useState<"preview" | "download" | "">("");
+  const [soleSourceBusy, setSoleSourceBusy] = useState(false);
   const [invoicePreview, setInvoicePreview] = useState<{ url: string; title: string } | null>(null);
   const [mergeOpen, setMergeOpen] = useState(false);
   const [mergeTargetId, setMergeTargetId] = useState("");
@@ -1232,6 +1233,30 @@ function RegistrationDetailDialog({
     }
   }
 
+  async function downloadSoleSourceLetter() {
+    if (!registration?.id) return;
+    setSoleSourceBusy(true);
+    setError(null);
+    try {
+      const document = await adminApi<{ url: string; fileName: string }>("/api/invoices", {
+        method: "PATCH",
+        body: { action: "createSoleSourceLetter", registrationId: registration.id }
+      });
+      const link = window.document.createElement("a");
+      link.href = document.url;
+      link.download = document.fileName;
+      window.document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (documentError) {
+      const message = (documentError as Error).message;
+      setError(message);
+      onError(message);
+    } finally {
+      setSoleSourceBusy(false);
+    }
+  }
+
   async function sendInvoiceCopy() {
     if (!currentInvoice?.id || !invoiceRecipient.trim()) {
       setError("Choose an invoice and enter the recipient email address.");
@@ -1524,6 +1549,9 @@ function RegistrationDetailDialog({
                     setInvoiceRecipient(registration.billingContactEmail ?? registration.primaryContactEmail ?? "");
                     setInvoiceRecipientOpen(true);
                   }}>Send copy</Button>
+                  <Button variant="outlined" disabled={soleSourceBusy} onClick={() => void downloadSoleSourceLetter()}>
+                    {soleSourceBusy ? "Creating" : "Sole Source Letter"}
+                  </Button>
                 </div>
               </div>
             ) : (
@@ -1538,6 +1566,9 @@ function RegistrationDetailDialog({
                   </Button>
                   <Button variant="outlined" disabled={Boolean(invoicePdfBusy)} onClick={() => openInvoicePdf("download")}>
                     {invoicePdfBusy === "download" ? "Preparing" : "Download"}
+                  </Button>
+                  <Button variant="outlined" disabled={soleSourceBusy} onClick={() => void downloadSoleSourceLetter()}>
+                    {soleSourceBusy ? "Creating" : "Sole Source Letter"}
                   </Button>
                 </div>
               </div>

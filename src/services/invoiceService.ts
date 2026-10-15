@@ -2,7 +2,7 @@ import { CommunicationStatus, InvoiceDraftStatus, RecipientScope, SupportingDocu
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { dateInput, moneyInput, positiveIntInput } from "@/lib/validators";
-import { buildInvoicePdf } from "./pdfService";
+import { buildInvoicePdf, buildSoleSourceLetterPdf } from "./pdfService";
 import { createPrivateAppFileUrl, uploadAppFile } from "./storageService";
 import { addCommunicationAttachment, getSystemUserId, sendCommunication } from "./communicationService";
 import { getOrganizationInvoiceProfile } from "./appSettingsService";
@@ -512,6 +512,32 @@ export async function createInvoiceDownload(id: string) {
   const fileName = invoiceDownloadFileName(invoice.invoiceNumber, organization?.name);
   const url = await createPrivateAppFileUrl(invoice.pdfFileKey, 60 * 10, fileName);
   return { url, fileName };
+}
+
+export async function createSoleSourceLetterDownload(registrationId: string) {
+  const registration = await prisma.registration.findUnique({
+    where: { id: registrationId },
+    include: { organization: true, cohort: { include: { presenter: true } } }
+  });
+  if (!registration) {
+    throw Object.assign(new Error("Registration not found."), { code: "NOT_FOUND", status: 404 });
+  }
+  if (!registration.organization?.name) {
+    throw Object.assign(new Error("Add an organization before creating a sole source letter."), { code: "BAD_REQUEST", status: 400 });
+  }
+  const thoughtLeaderName = `${registration.cohort.presenter.firstName} ${registration.cohort.presenter.lastName}`.trim();
+  const fileName = `Sole Source Letter - ${registration.organization.name}`
+    .replace(/[\\/:*?"<>|]+/g, "-")
+    .replace(/\s+/g, " ")
+    .trim() + ".pdf";
+  const pdf = buildSoleSourceLetterPdf({
+    date: new Intl.DateTimeFormat("en-US", { month: "long", day: "numeric", year: "numeric" }).format(new Date()),
+    organizationName: registration.organization.name,
+    cohortName: registration.cohort.title,
+    thoughtLeaderName
+  });
+  const upload = await uploadAppFile({ purpose: "email-attachment", fileName, contentType: "application/pdf", bytes: pdf });
+  return { url: await createPrivateAppFileUrl(upload.fileKey, 60 * 10, fileName), fileName };
 }
 
 export async function prepareRegistrationInvoice(input: { registrationId: string; invoiceId?: string }) {

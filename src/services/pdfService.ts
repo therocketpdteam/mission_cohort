@@ -323,6 +323,42 @@ export function buildSimplePdf(title: string, lines: string[]) {
   return buildPdf(content);
 }
 
+export function buildSoleSourceLetterPdf(input: {
+  date: string;
+  organizationName: string;
+  cohortName: string;
+  thoughtLeaderName: string;
+}) {
+  const purple: [number, number, number] = [59, 58, 109];
+  const ink: [number, number, number] = [15, 23, 42];
+  const muted: [number, number, number] = [55, 65, 81];
+  const paragraphs = [
+    `We are providing this letter to fulfill the requirement of ${input.organizationName} regarding the purchasing of goods and/or services as a sole source.`,
+    `In Demand Group, LLC DBA RocketPD is a sole source for the ${input.cohortName} Cohort. This cohort is attributed to ${input.thoughtLeaderName}'s practices for deep learning to occur inside mathematics and other classrooms. Further, any agents used in the delivery of the above said programs are under contract with RocketPD and no other entity and, as such, are licensed to deliver the contents of the work.`,
+    `RocketPD and ${input.thoughtLeaderName} hold all copyright and registered trademarks for programs and materials associated with this professional development.`,
+    "We believe that given this, RocketPD should be considered a sole source for your requested training."
+  ];
+  const content = [
+    fillRect(0, 730, 612, 62, purple),
+    pdfText("RocketPD", 44, 752, { size: 24, font: "F2", color: [255, 255, 255] }),
+    pdfText(`DATE: ${input.date}`, 44, 686, { size: 10, font: "F2", color: ink }),
+    pdfText(`TO: ${input.organizationName}`, 44, 658, { size: 10, font: "F2", color: ink })
+  ];
+  let y = 610;
+  for (const paragraph of paragraphs) {
+    for (const line of wrapText(paragraph, 88)) {
+      content.push(pdfText(line, 44, y, { size: 10.5, color: muted }));
+      y -= 15;
+    }
+    y -= 14;
+  }
+  content.push(pdfText("Sincerely,", 44, y, { size: 10.5, color: ink }));
+  content.push(pdfText("The RocketPD Team", 44, y - 34, { size: 11, font: "F2", color: ink }));
+  content.push(pdfText("1055 Howell Mill Rd, 8th floor", 44, y - 62, { size: 9.5, color: muted }));
+  content.push(pdfText("Atlanta, Georgia 30318", 44, y - 77, { size: 9.5, color: muted }));
+  return buildPdf(content.join("\n"));
+}
+
 export type InvoicePdfInput = {
   issuer: {
     displayName: string;
