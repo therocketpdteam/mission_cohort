@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { dateInput, moneyInput, positiveIntInput } from "@/lib/validators";
 import { buildInvoicePdf } from "./pdfService";
-import { uploadAppFile } from "./storageService";
+import { createPrivateAppFileUrl, uploadAppFile } from "./storageService";
 import { addCommunicationAttachment, getSystemUserId, sendCommunication } from "./communicationService";
 import { getOrganizationInvoiceProfile } from "./appSettingsService";
 
@@ -473,6 +473,35 @@ export async function generateInvoicePdf(id: string, receipt = false) {
     data: receipt ? { receiptFileKey: upload.fileKey, receiptUrl: upload.url, status: InvoiceDraftStatus.PAID } : { pdfFileKey: upload.fileKey, pdfUrl: upload.url },
     include: invoiceInclude()
   });
+}
+
+function invoiceDownloadFileName(invoiceNumber: string | null | undefined, organizationName: string | null | undefined) {
+  const number = String(invoiceNumber ?? "Invoice").trim() || "Invoice";
+  const organization = String(organizationName ?? "").trim();
+  const baseName = organization ? `${number} - ${organization}` : number;
+  const safeName = baseName
+    .replace(/[\\/:*?"<>|]+/g, "-")
+    .replace(/\s+/g, " ")
+    .trim();
+  return `${safeName || "Invoice"}.pdf`;
+}
+
+export async function createInvoiceDownload(id: string) {
+  let invoice = await prisma.invoiceDraft.findUnique({ where: { id }, include: invoiceInclude() });
+  if (!invoice) {
+    throw Object.assign(new Error("Invoice not found."), { code: "NOT_FOUND", status: 404 });
+  }
+  if (!invoice.pdfFileKey || !invoice.pdfUrl) {
+    invoice = await generateInvoicePdf(id, false);
+  }
+  if (!invoice.pdfFileKey) {
+    throw Object.assign(new Error("The invoice PDF could not be prepared for download."), { code: "BAD_REQUEST", status: 400 });
+  }
+
+  const organization = invoice.organization ?? invoice.registration?.organization;
+  const fileName = invoiceDownloadFileName(invoice.invoiceNumber, organization?.name);
+  const url = await createPrivateAppFileUrl(invoice.pdfFileKey, 60 * 10, fileName);
+  return { url, fileName };
 }
 
 export async function prepareRegistrationInvoice(input: { registrationId: string; invoiceId?: string }) {

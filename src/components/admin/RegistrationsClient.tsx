@@ -1211,11 +1211,13 @@ function RegistrationDetailDialog({
       if (mode === "preview") {
         setInvoicePreview({ url: invoice.pdfUrl, title });
       } else {
+        const download = await adminApi<{ url: string; fileName: string }>("/api/invoices", {
+          method: "PATCH",
+          body: { action: "createDownload", id: invoice.id }
+        });
         const link = document.createElement("a");
-        link.href = invoice.pdfUrl;
-        link.target = "_blank";
-        link.rel = "noopener noreferrer";
-        link.download = `${title}.pdf`;
+        link.href = download.url;
+        link.download = download.fileName;
         document.body.appendChild(link);
         link.click();
         link.remove();

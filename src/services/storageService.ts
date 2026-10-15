@@ -134,10 +134,14 @@ export async function deletePrivateAppFile(fileKey: string) {
   return { deleted: true };
 }
 
-export async function createPrivateAppFileUrl(fileKey: string, expiresInSeconds = 60 * 10) {
+export async function createPrivateAppFileUrl(fileKey: string, expiresInSeconds = 60 * 10, downloadFileName?: string) {
   const supabase = createSupabaseAdminClient();
   const bucket = env.SUPABASE_PRIVATE_BUCKET ?? "mission-control-private";
-  const signed = await supabase.storage.from(bucket).createSignedUrl(fileKey, expiresInSeconds);
+  const signed = await supabase.storage.from(bucket).createSignedUrl(
+    fileKey,
+    expiresInSeconds,
+    downloadFileName ? { download: downloadFileName } : undefined
+  );
 
   if (signed.error || !signed.data?.signedUrl) {
     throw Object.assign(new Error(signed.error?.message ?? "Document download link could not be created."), {

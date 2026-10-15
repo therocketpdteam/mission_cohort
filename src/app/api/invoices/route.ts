@@ -1,7 +1,7 @@
 import { handleApiError, ok } from "@/lib/api";
 import { MUTATION_ROLES, requireRole } from "@/lib/auth";
 import { isMissingPrismaSchema, migrationRequiredResult } from "@/lib/prismaCompatibility";
-import { createInvoiceDraft, generateInvoicePdf, listInvoiceDrafts, prepareAndSendRegistrationInvoicePackage, prepareRegistrationInvoice, sendInvoiceDocument, updateInvoiceDraft } from "@/services/invoiceService";
+import { createInvoiceDownload, createInvoiceDraft, generateInvoicePdf, listInvoiceDrafts, prepareAndSendRegistrationInvoicePackage, prepareRegistrationInvoice, sendInvoiceDocument, updateInvoiceDraft } from "@/services/invoiceService";
 import { createQuickBooksInvoiceFromDraft } from "@/services/quickBooksService";
 
 export async function GET(request: Request) {
@@ -39,6 +39,10 @@ export async function PATCH(request: Request) {
 
     if (body.action === "prepareRegistrationInvoice") {
       return ok(await prepareRegistrationInvoice({ registrationId: body.registrationId, invoiceId: body.id }));
+    }
+
+    if (body.action === "createDownload") {
+      return ok(await createInvoiceDownload(body.id));
     }
 
     if (body.action === "sendInvoice") {
