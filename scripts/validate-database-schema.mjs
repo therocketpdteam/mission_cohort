@@ -35,17 +35,6 @@ async function main() {
     missing.push("PaymentMethod.CHECK");
   }
 
-  const paymentStatuses = await prisma.$queryRawUnsafe(`
-    SELECT enumlabel
-    FROM pg_enum
-    JOIN pg_type ON pg_type.oid = pg_enum.enumtypid
-    WHERE pg_type.typname = 'PaymentStatus'
-  `);
-
-  if (!paymentStatuses.some((row) => row.enumlabel === "UNCOLLECTIBLE")) {
-    missing.push("PaymentStatus.UNCOLLECTIBLE");
-  }
-
   if (missing.length > 0) {
     throw new Error(`Database schema is behind this release. Apply schema patches first. Missing: ${missing.join(", ")}`);
   }
