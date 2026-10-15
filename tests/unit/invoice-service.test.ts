@@ -85,3 +85,28 @@ test("prints a prominent VOIDED watermark for voided invoices", () => {
 
   assert.match(pdf.toString("latin1"), /\(VOIDED\) Tj/);
 });
+
+test("prints cohort session dates as a bullet list", () => {
+  const pdf = buildInvoicePdf({
+    issuer: { displayName: "RocketPD", legalName: "In Demand Group, LLC", email: "info@rocketpd.com", website: "rocketpd.com" },
+    documentType: "invoice",
+    invoiceNumber: "KM-2026-363",
+    status: "DRAFT",
+    organizationName: "NYCDOE Flushing International HS",
+    organizationAddressLines: [],
+    cohortTitle: "Rethinking Teacher Supervision",
+    sessionDates: ["September 24, 2026", "October 8, 2026"],
+    issueDate: "10/15/2026",
+    dueDate: "-",
+    lineItems: [{ description: "Rethinking Teacher Supervision", quantity: 3, unitAmount: "$795.00", totalAmount: "$2,385.00" }],
+    subtotalAmount: "$2,385.00",
+    taxAmount: "$0.00",
+    totalAmount: "$2,385.00",
+    paidAmount: "$0.00",
+    balanceAmount: "$2,385.00"
+  }).toString("latin1");
+
+  assert.match(pdf, /\(Session dates:\) Tj/);
+  assert.match(pdf, /\(- September 24, 2026\) Tj/);
+  assert.match(pdf, /\(- October 8, 2026\) Tj/);
+});

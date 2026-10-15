@@ -35,7 +35,7 @@ export const invoiceDraftInputSchema = z.object({
 
 function invoiceInclude() {
   return {
-    cohort: { include: { presenter: true } },
+    cohort: { include: { presenter: true, sessions: { orderBy: { startTime: "asc" as const } } } },
     registration: { include: { organization: true } },
     organization: true,
     lineItems: true
@@ -53,6 +53,15 @@ function invoiceTotals(lineItems: Array<{ quantity: unknown; unitAmount: unknown
 
 function formatDate(value: unknown) {
   return value ? new Date(value as string | Date).toLocaleDateString() : "-";
+}
+
+function formatSessionDate(value: Date, timezone?: string | null) {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+    timeZone: timezone || "America/New_York"
+  }).format(value);
 }
 
 function money(value: unknown) {
@@ -402,6 +411,7 @@ async function invoicePdfInput(invoice: Awaited<ReturnType<typeof createInvoiceD
     contactEmail: invoice.registration?.billingContactEmail ?? invoice.registration?.primaryContactEmail,
     cohortTitle: invoice.cohort.title,
     cohortDescription: invoice.cohort.description,
+    sessionDates: invoice.cohort.sessions.map((session) => formatSessionDate(session.startTime, session.timezone)),
     purchaseOrderNumber: invoice.purchaseOrderNumber,
     issueDate: formatDate(invoice.issueDate),
     dueDate: formatDate(invoice.dueDate),

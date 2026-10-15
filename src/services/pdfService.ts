@@ -350,6 +350,7 @@ export type InvoicePdfInput = {
   contactEmail?: string | null;
   cohortTitle: string;
   cohortDescription?: string | null;
+  sessionDates?: string[];
   purchaseOrderNumber?: string | null;
   issueDate: string;
   dueDate: string;
@@ -435,7 +436,10 @@ export function buildInvoicePdf(input: InvoicePdfInput) {
     const titleLines = wrapText(itemTitle, 48).slice(0, 3);
     const detailLines = wrapText(detail, 54).slice(0, 5);
     const detailStartY = y - titleLines.length * 15 - 9;
-    const rowHeight = Math.max(104, titleLines.length * 15 + (detailLines.length ? 13 + detailLines.length * 14 : 0) + 28);
+    const sessionDates = index === 0 ? (input.sessionDates ?? []).slice(0, 8) : [];
+    const sessionsStartY = detailStartY - detailLines.length * 14 - (detailLines.length ? 9 : 0);
+    const sessionLineCount = sessionDates.length ? sessionDates.length + 1 : 0;
+    const rowHeight = Math.max(104, titleLines.length * 15 + (detailLines.length ? 13 + detailLines.length * 14 : 0) + sessionLineCount * 13 + 34);
 
     content.push(pdfText(`ITEM ${index + 1}`, 44, y, { size: 9, color: ink }));
     titleLines.forEach((line, lineIndex) => {
@@ -444,6 +448,12 @@ export function buildInvoicePdf(input: InvoicePdfInput) {
     detailLines.forEach((line, lineIndex) => {
       content.push(pdfText(line, 112, detailStartY - lineIndex * 14, { size: 9, color: muted }));
     });
+    if (sessionDates.length) {
+      content.push(pdfText("Session dates:", 112, sessionsStartY, { size: 9, font: "F2", color: ink }));
+      sessionDates.forEach((date, dateIndex) => {
+        content.push(pdfText(`- ${date}`, 120, sessionsStartY - (dateIndex + 1) * 13, { size: 9, color: muted }));
+      });
+    }
     content.push(pdfText(String(item.quantity), quantityX, y, { size: 10, color: ink, align: "right" }));
     content.push(pdfText(item.unitAmount, priceX, y, { size: 10, color: ink, align: "right" }));
     content.push(input.taxAmount === "$0.00" ? "" : pdfText(input.taxAmount, taxX, y, { size: 10, font: "F2", color: ink, align: "right" }));
