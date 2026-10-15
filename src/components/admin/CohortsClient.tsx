@@ -187,12 +187,16 @@ function cohortFinanceSummary(row: AdminRow) {
     return registrationStatus !== "CANCELLED" && !["CANCELLED", "REFUNDED"].includes(paymentStatus);
   });
   const totalSales = billableRegistrations.reduce((sum: number, registration: AdminRow) => sum + Number(registration.totalAmount ?? 0), 0);
+  const collectibleSales = billableRegistrations
+    .filter((registration: AdminRow) => String(registration.paymentStatus ?? "").toUpperCase() !== "UNCOLLECTIBLE")
+    .reduce((sum: number, registration: AdminRow) => sum + Number(registration.totalAmount ?? 0), 0);
   const paidAmount = (row.paymentRecords ?? [])
     .filter((payment: AdminRow) => payment.status === "PAID")
     .reduce((sum: number, payment: AdminRow) => sum + Number(payment.amount ?? 0), 0);
-  const paidPercent = totalSales > 0 ? Math.round((paidAmount / totalSales) * 100) : 0;
+  const paidPercent = collectibleSales > 0 ? Math.min(100, Math.round((paidAmount / collectibleSales) * 100)) : 100;
+  const outstandingAmount = Math.max(0, collectibleSales - paidAmount);
 
-  return { totalSales, paidAmount, paidPercent };
+  return { totalSales, collectibleSales, paidAmount, paidPercent, outstandingAmount };
 }
 
 function isEndedCohort(row: AdminRow) {
@@ -201,7 +205,7 @@ function isEndedCohort(row: AdminRow) {
 
 function hasOutstandingCollection(row: AdminRow) {
   const finance = cohortFinanceSummary(row);
-  return finance.totalSales > 0 && finance.paidAmount < finance.totalSales;
+  return finance.outstandingAmount > 0;
 }
 
 function money(value: unknown) {
@@ -1035,7 +1039,7 @@ export function CohortsClient() {
                 </div>
                 {expanded && (
                   <div className="cohort-reference-details">
-                    <div><span>Open balance</span><strong>{money(Math.max(0, finance.totalSales - finance.paidAmount))}</strong></div>
+                    <div><span>Open balance</span><strong>{money(finance.outstandingAmount)}</strong></div>
                     <div><span>Roster readiness</span><strong>{completeRosters} of {row.registrations?.length ?? row._count?.registrations ?? 0} complete</strong></div>
                     <div><span>Upcoming session</span><strong>{nextSession ? `${formatDate(nextSession.startTime)} · ${nextSession.title}` : "No upcoming session"}</strong></div>
                   </div>
