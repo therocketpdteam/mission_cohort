@@ -1484,6 +1484,8 @@ export function CohortDetailClient({ id }: { id: string }) {
   const [registrationRemovalAction, setRegistrationRemovalAction] = useState<{ action: "archive" | "delete"; row: AdminRow } | null>(null);
   const [paymentReminderRegistration, setPaymentReminderRegistration] = useState<AdminRow | null>(null);
   const [sendingPaymentReminder, setSendingPaymentReminder] = useState(false);
+  const [uncollectibleRegistration, setUncollectibleRegistration] = useState<AdminRow | null>(null);
+  const [markingUncollectible, setMarkingUncollectible] = useState(false);
   const [registrationDialogOpen, setRegistrationDialogOpen] = useState(false);
   const [editingRegistration, setEditingRegistration] = useState<AdminRow | null>(null);
   const [registrationThread, setRegistrationThread] = useState<AdminRow[]>([]);
@@ -1688,15 +1690,18 @@ export function CohortDetailClient({ id }: { id: string }) {
     }
   }
 
-  async function markUncollectible(registration: AdminRow) {
-    const confirmed = window.confirm(`Mark the unpaid balance for ${registration.primaryContactName || registration.primaryContactEmail} as uncollectible?\n\nParticipants remain enrolled. Invoice history is preserved. Payment reminders stop, and the unpaid balance is removed from collectible reporting.`);
-    if (!confirmed) return;
+  async function markUncollectible() {
+    if (!uncollectibleRegistration?.id) return;
+    setMarkingUncollectible(true);
     try {
-      await adminApi("/api/registrations", { method: "PATCH", body: { id: registration.id, action: "markUncollectible" } });
-      notifySuccess("Registration balance marked uncollectible");
+      await adminApi("/api/registrations", { method: "PATCH", body: { id: uncollectibleRegistration.id, action: "markUncollectible" } });
+      notifySuccess("Registration balance marked uncollectible.");
+      setUncollectibleRegistration(null);
       await load();
     } catch (error) {
       notifyError((error as Error).message);
+    } finally {
+      setMarkingUncollectible(false);
     }
   }
 
@@ -3045,7 +3050,12 @@ export function CohortDetailClient({ id }: { id: string }) {
                 disabled: ["PAID", "REFUNDED", "CANCELLED", "UNCOLLECTIBLE"].includes(String(registrationBillingStatus(params.row, payments, invoiceDrafts)).toUpperCase()),
                 onClick: () => setPaymentReminderRegistration(params.row)
               },
-              { label: "Mark uncollectible", color: "warning", onClick: () => void markUncollectible(params.row) },
+              {
+                label: "Mark uncollectible",
+                color: "warning",
+                disabled: !["PENDING", "INVOICED", "PARTIALLY_PAID"].includes(String(registrationBillingStatus(params.row, payments, invoiceDrafts)).toUpperCase()),
+                onClick: () => setUncollectibleRegistration(params.row)
+              },
               { label: "Remove registration", icon: <ArchiveOutlined fontSize="small" />, onClick: () => setRegistrationRemovalAction({ action: "archive", row: params.row }) },
               { label: "Delete permanently", icon: <DeleteOutline fontSize="small" />, color: "error", onClick: () => setRegistrationRemovalAction({ action: "delete", row: params.row }) }
             ]}
@@ -4147,6 +4157,38 @@ export function CohortDetailClient({ id }: { id: string }) {
           <Button variant="outlined" onClick={() => setPaymentReminderRegistration(null)} disabled={sendingPaymentReminder}>Cancel</Button>
           <Button onClick={() => void sendPaymentReminder()} disabled={sendingPaymentReminder}>
             {sendingPaymentReminder ? "Sending" : "Send Reminder"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+      <Dialog open={Boolean(uncollectibleRegistration)} onClose={() => !markingUncollectible && setUncollectibleRegistration(null)} maxWidth="sm" fullWidth>
+        <DialogTitle>Mark Balance Uncollectible</DialogTitle>
+        <DialogContent>
+          {uncollectibleRegistration ? (
+            <Stack spacing={2}>
+              <Typography color="text.secondary">
+                Review the impact before changing this balance. No email will be sent.
+              </Typography>
+              <div className="quick-view-grid">
+                <DetailField label="Registration" value={uncollectibleRegistration.primaryContactName || uncollectibleRegistration.primaryContactEmail} proper />
+                <DetailField label="Cohort" value={uncollectibleRegistration.cohort?.shortName || uncollectibleRegistration.cohort?.title || cohort?.shortName || cohort?.title} />
+                <DetailField label="Invoice" value={uncollectibleRegistration.invoiceNumber || "No invoice number"} />
+                <DetailField
+                  label="Outstanding balance"
+                  value={money(Math.max(registrationRevenueAmount(uncollectibleRegistration) - registrationCollectedAmount(uncollectibleRegistration, payments, invoiceDrafts), 0))}
+                />
+                <DetailField label="Participants" value={`${uncollectibleRegistration.participantCount ?? 0} remain enrolled`} />
+                <DetailField label="Client notification" value="None" />
+              </div>
+              <Alert severity="warning">
+                The registration and its unpaid payment records will be marked uncollectible. Scheduled payment reminders will be cancelled, the unpaid balance will be excluded from collectible and thought-leader payout calculations, invoice history will remain available, and the updated status will be queued for CRM sync.
+              </Alert>
+            </Stack>
+          ) : null}
+        </DialogContent>
+        <DialogActions>
+          <Button variant="outlined" onClick={() => setUncollectibleRegistration(null)} disabled={markingUncollectible}>Keep Collectible</Button>
+          <Button color="warning" onClick={() => void markUncollectible()} disabled={markingUncollectible}>
+            {markingUncollectible ? "Updating" : "Mark Uncollectible"}
           </Button>
         </DialogActions>
       </Dialog>

@@ -42,6 +42,10 @@ const prisma = new PrismaClient({
 
 const patches = [
   {
+    name: "uncollectible payment status",
+    sql: `ALTER TYPE "PaymentStatus" ADD VALUE IF NOT EXISTS 'UNCOLLECTIBLE';`
+  },
+  {
     name: "registration delivery jobs",
     sql: `ALTER TYPE "IntegrationJobType" ADD VALUE IF NOT EXISTS 'REGISTRATION_DELIVERY';`
   },
