@@ -33,7 +33,7 @@ test("uses payment-specific cancellation instructions", () => {
     paymentReceived: true,
     paymentMethod: "CREDIT_CARD",
     cancellationDate: "October 16, 2026"
-  }).text, /Stripe.*original method.*10 days from October 16, 2026/i);
+  }).text, /original method.*10 days from October 16, 2026/i);
 
   assert.match(cancellationPaymentMessage({
     paymentReceived: true,

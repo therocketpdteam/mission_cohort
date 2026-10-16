@@ -41,7 +41,7 @@ export function cancellationPaymentMessage(input: {
   }
 
   if (input.paymentMethod === "CREDIT_CARD") {
-    const text = `We received your credit card payment. We will issue the refund through Stripe to the original method of payment. Please allow up to 10 days from ${input.cancellationDate} for the refund to appear on your account.`;
+    const text = `We received your credit card payment. We will issue the refund to the original method of payment. Please allow up to 10 days from ${input.cancellationDate} for the refund to appear on your account.`;
     return { kind: "credit_card" as const, text, html: `<p>${text}</p>` };
   }
 
