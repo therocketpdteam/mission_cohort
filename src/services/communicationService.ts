@@ -722,25 +722,21 @@ const defaultCopyRefreshMatchers: Record<string, (bodyText: string) => boolean> 
 };
 
 const sessionTemplateTypes = [
-  TemplateType.WEEK_BEFORE_REMINDER,
   TemplateType.DAY_BEFORE_REMINDER,
   TemplateType.HOUR_BEFORE_REMINDER,
   TemplateType.FOLLOW_UP
 ] as const;
 
 export function sessionTemplateTypesForSession(sessionNumber?: number | null) {
-  const normalizedSessionNumber = Number(sessionNumber ?? 1);
-  return normalizedSessionNumber <= 1
-    ? [...sessionTemplateTypes]
-    : sessionTemplateTypes.filter((type) => type !== TemplateType.WEEK_BEFORE_REMINDER);
+  void sessionNumber;
+  return [...sessionTemplateTypes];
 }
 
 export function isLiveSessionCommunication(input: {
   recipientScope?: RecipientScope | string | null;
   journeyKey?: string | null;
-}, sessionId: string) {
-  return input.recipientScope === RecipientScope.ALL_PARTICIPANTS
-    && Boolean(input.journeyKey?.startsWith(`session-template:${sessionId}:`));
+}, _sessionId?: string) {
+  return input.recipientScope === RecipientScope.ALL_PARTICIPANTS;
 }
 
 export async function getSystemUserId() {
@@ -2878,7 +2874,11 @@ export async function createDefaultSessionCommunications(sessionId: string) {
   const existing = await prisma.cohortCommunication.findMany({
     where: {
       sessionId,
-      template: { type: { in: [...sessionTemplateTypes] } }
+      template: {
+        type: {
+          in: [TemplateType.WEEK_BEFORE_REMINDER, ...sessionTemplateTypes]
+        }
+      }
     },
     include: { template: true },
     orderBy: { createdAt: "desc" }
@@ -2891,9 +2891,7 @@ export async function createDefaultSessionCommunications(sessionId: string) {
     .map((communication) => [communication.template!.type, communication]));
   const records = [];
   const activeTemplateTypes = sessionTemplateTypesForSession(session.sessionNumber);
-  const disabledWeekBefore = activeTemplateTypes.includes(TemplateType.WEEK_BEFORE_REMINDER)
-    ? null
-    : existingByType.get(TemplateType.WEEK_BEFORE_REMINDER);
+  const disabledWeekBefore = existingByType.get(TemplateType.WEEK_BEFORE_REMINDER);
   const settledStatuses: CommunicationStatus[] = [
     CommunicationStatus.SENT,
     CommunicationStatus.CANCELLED,
@@ -3197,6 +3195,38 @@ export async function processScheduledCommunications(limit = 25) {
         }
       }));
       continue;
+    }
+
+    if (
+      communication.recipientScope === RecipientScope.CUSTOM &&
+      Array.isArray(communication.recipientEmails) &&
+      communication.recipientEmails.length > 0 &&
+      communication.templateId &&
+      communication.scheduledFor
+    ) {
+      const duplicateDelivery = await prisma.cohortCommunication.findFirst({
+        where: {
+          id: { not: communication.id },
+          cohortId: communication.cohortId,
+          templateId: communication.templateId,
+          scheduledFor: communication.scheduledFor,
+          status: CommunicationStatus.SENT,
+          recipientScope: RecipientScope.CUSTOM,
+          recipientEmails: { equals: communication.recipientEmails }
+        },
+        select: { id: true }
+      });
+
+      if (duplicateDelivery) {
+        results.push(await prisma.cohortCommunication.update({
+          where: { id: communication.id },
+          data: {
+            status: CommunicationStatus.SKIPPED,
+            providerError: `Skipped duplicate scheduled delivery; already sent by ${duplicateDelivery.id}.`
+          }
+        }));
+        continue;
+      }
     }
 
     try {

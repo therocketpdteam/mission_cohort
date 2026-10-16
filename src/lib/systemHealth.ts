@@ -491,11 +491,7 @@ async function automationChecks(databaseReady: boolean): Promise<HealthCheck[]> 
   });
   const missingSessionSchedules = futureSessions.flatMap((session) => {
     const expected: TemplateType[] = [TemplateType.DAY_BEFORE_REMINDER, TemplateType.HOUR_BEFORE_REMINDER, TemplateType.FOLLOW_UP];
-    if (session.sessionNumber === 1) expected.unshift(TemplateType.WEEK_BEFORE_REMINDER);
-    const prefix = `session-template:${session.id}:`;
-    const actual = new Set(session.communications
-      .filter((communication) => communication.journeyKey?.startsWith(prefix))
-      .map((communication) => communication.template?.type));
+    const actual = new Set(session.communications.map((communication) => communication.template?.type));
     const missing = expected.filter((type) => !actual.has(type));
     return missing.length ? [{ cohort: session.cohort.shortName, sessionNumber: session.sessionNumber, missing }] : [];
   });

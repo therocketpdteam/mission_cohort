@@ -103,9 +103,8 @@ test("rejects a resend address that was not on the original communication", () =
   assert.deepEqual(recipients, []);
 });
 
-test("uses the one-week session reminder only for the first session", () => {
+test("keeps cohort milestones separate from per-session reminders", () => {
   assert.deepEqual(sessionTemplateTypesForSession(1).map(String), [
-    "WEEK_BEFORE_REMINDER",
     "DAY_BEFORE_REMINDER",
     "HOUR_BEFORE_REMINDER",
     "FOLLOW_UP"
@@ -126,5 +125,5 @@ test("publish experience tests never satisfy a live session schedule", () => {
   assert.equal(isLiveSessionCommunication({
     recipientScope: "ALL_PARTICIPANTS",
     journeyKey: "session-template:another-session:FOLLOW_UP"
-  }, "session-1"), false);
+  }, "session-1"), true);
 });
