@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { cancellationInvoiceDisposition, registrationCancellationEmail } from "../../src/config/registrationCancellation";
+import { cancellationInvoiceDisposition, cancellationPaymentMessage, registrationCancellationEmail } from "../../src/config/registrationCancellation";
 import { renderMergeFields, sampleMergeContext, validateMergeFields } from "../../src/modules/email";
 
 test("registration cancellation email uses supported merge fields and renders its POC details", () => {
@@ -18,9 +18,34 @@ test("registration cancellation email uses supported merge fields and renders it
   assert.match(body, /Hello Avery,/);
   assert.match(body, /Northview School District/);
   assert.match(body, /INV-1001/);
-  assert.match(body, /issue a refund to the mailing address provided with your registration/);
-  assert.match(body, /disregard the invoice we previously sent/);
   assert.doesNotMatch(body, /\{\{/);
+});
+
+test("uses payment-specific cancellation instructions", () => {
+  assert.match(cancellationPaymentMessage({
+    paymentReceived: false,
+    paymentMethod: "INVOICE",
+    invoiceNumber: "PL-2026-437",
+    cancellationDate: "October 16, 2026"
+  }).text, /not received payment.*No balance is due.*PL-2026-437 has been voided/i);
+
+  assert.match(cancellationPaymentMessage({
+    paymentReceived: true,
+    paymentMethod: "CREDIT_CARD",
+    cancellationDate: "October 16, 2026"
+  }).text, /Stripe.*original method.*10 days from October 16, 2026/i);
+
+  assert.match(cancellationPaymentMessage({
+    paymentReceived: true,
+    paymentMethod: "CHECK",
+    cancellationDate: "October 16, 2026"
+  }).text, /recipient's name.*mailing address.*check or ACH/i);
+
+  assert.match(cancellationPaymentMessage({
+    paymentReceived: true,
+    paymentMethod: "ACH",
+    cancellationDate: "October 16, 2026"
+  }).text, /ACH to the original account or by check/i);
 });
 
 test("voids and attaches only unpaid active invoices during cancellation", () => {

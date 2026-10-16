@@ -18,7 +18,7 @@ import { deletePrivateAppFile } from "./storageService";
 import { addCommunicationAttachment, getSystemUserId, sendCommunication } from "./communicationService";
 import { generateInvoicePdf } from "./invoiceService";
 import { renderMergeFields } from "@/modules/email/mergeFields";
-import { cancellationInvoiceDisposition, registrationCancellationEmail } from "@/config/registrationCancellation";
+import { cancellationInvoiceDisposition, cancellationPaymentMessage, registrationCancellationEmail } from "@/config/registrationCancellation";
 import { queueIntegrationJob } from "./integrationService";
 import { ensureRegistrationDeliveryJobType } from "./registrationDeliveryJobService";
 
@@ -344,6 +344,7 @@ export async function previewRegistrationCancellation(id: string) {
       },
       organization: true,
       participants: true,
+      paymentRecords: true,
       invoiceDrafts: { orderBy: { updatedAt: "desc" }, take: 1 },
       communications: {
         where: {
@@ -356,11 +357,27 @@ export async function previewRegistrationCancellation(id: string) {
   });
   const firstName = registration.primaryContactName.trim().split(/\s+/)[0] || registration.primaryContactName;
   const latestInvoice = registration.invoiceDrafts[0] ?? null;
+  const collectedPayments = registration.paymentRecords.filter((payment) => payment.status === PaymentStatus.PAID || payment.status === PaymentStatus.PARTIALLY_PAID);
+  const paymentRecordAmount = collectedPayments.reduce((sum, payment) => sum + Number(payment.amount ?? 0), 0);
+  const receivedAmount = Math.max(paymentRecordAmount, Number(latestInvoice?.paidAmount ?? 0));
+  const paymentMethod = collectedPayments.find((payment) => payment.method !== "UNKNOWN")?.method ?? registration.paymentMethod;
   const invoiceDisposition = cancellationInvoiceDisposition({
     hasInvoice: Boolean(latestInvoice),
     invoiceStatus: latestInvoice?.status,
-    paidAmount: Number(latestInvoice?.paidAmount ?? 0),
+    paidAmount: receivedAmount,
     paymentStatus: registration.paymentStatus
+  });
+  const paymentMessage = cancellationPaymentMessage({
+    paymentReceived: receivedAmount > 0 || registration.paymentStatus === PaymentStatus.PAID || registration.paymentStatus === PaymentStatus.PARTIALLY_PAID,
+    paymentMethod,
+    invoiceNumber: latestInvoice?.invoiceNumber ?? registration.invoiceNumber,
+    receivedAmount,
+    cancellationDate: new Intl.DateTimeFormat("en-US", {
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+      timeZone: "America/New_York"
+    }).format(new Date())
   });
   const participantRoster = registration.participants.map((participant) => ({
     name: `${participant.firstName} ${participant.lastName}`.trim(),
@@ -436,8 +453,13 @@ export async function previewRegistrationCancellation(id: string) {
     email: {
       to: registration.primaryContactEmail.trim().toLowerCase(),
       subject: renderedSubject,
-      bodyHtml: renderedBodyHtml.replace("<p>The participants associated", `${rosterHtml}<p>The participants associated`),
-      bodyText: renderedBodyText.replace("\nThe participants associated", `${rosterText}\nThe participants associated`)
+      bodyHtml: renderedBodyHtml
+        .replace("<p>The participants associated", `${rosterHtml}<p>The participants associated`)
+        .replace("<p>Thank you,", `${paymentMessage.html}<p>Thank you,`),
+      bodyText: renderedBodyText
+        .replace("\nThe participants associated", `${rosterText}\nThe participants associated`)
+        .replace("\nThank you,", `\n${paymentMessage.text}\n\nThank you,`),
+      paymentMessageKind: paymentMessage.kind
     },
     blockers: [
       registration.status === RegistrationStatus.CANCELLED ? "This registration is already cancelled." : "",

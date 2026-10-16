@@ -10,7 +10,6 @@ export const registrationCancellationEmail = {
   <li>Invoice: {{registration.invoiceNumber}}</li>
 </ul>
 <p>The participants associated with this registration have been removed from future cohort calendar events and will not receive additional automated cohort messages.</p>
-<p>If we have already received your payment, we will issue a refund to the mailing address provided with your registration. If payment has not been sent or processed, no further action is needed and you may disregard the invoice we previously sent.</p>
 <p>Thank you,<br>{{support.teamName}}</p>`,
   bodyText: `Hello {{registration.primaryContactFirstName}},
 
@@ -24,11 +23,41 @@ Cancellation details
 
 The participants associated with this registration have been removed from future cohort calendar events and will not receive additional automated cohort messages.
 
-If we have already received your payment, we will issue a refund to the mailing address provided with your registration. If payment has not been sent or processed, no further action is needed and you may disregard the invoice we previously sent.
-
 Thank you,
 {{support.teamName}}`
 };
+
+export function cancellationPaymentMessage(input: {
+  paymentReceived: boolean;
+  paymentMethod?: string | null;
+  invoiceNumber?: string | null;
+  receivedAmount?: number | null;
+  cancellationDate: string;
+}) {
+  const invoice = input.invoiceNumber ? ` Invoice ${input.invoiceNumber} has been voided.` : "";
+  if (!input.paymentReceived) {
+    const text = `We have not received payment for this registration. No balance is due, and no further action is required.${invoice}`;
+    return { kind: "unpaid" as const, text, html: `<p>${text}</p>` };
+  }
+
+  if (input.paymentMethod === "CREDIT_CARD") {
+    const text = `We received your credit card payment. We will issue the refund through Stripe to the original method of payment. Please allow up to 10 days from ${input.cancellationDate} for the refund to appear on your account.`;
+    return { kind: "credit_card" as const, text, html: `<p>${text}</p>` };
+  }
+
+  if (input.paymentMethod === "CHECK") {
+    const text = "We received your payment by check. Please reply to confirm the refund recipient's name, mailing address, and whether you prefer the refund by check or ACH. If you prefer ACH, please do not email banking information; we will provide a secure way to share the required details.";
+    return { kind: "check" as const, text, html: `<p>${text}</p>` };
+  }
+
+  if (input.paymentMethod === "ACH") {
+    const text = "We received your payment by ACH. Please reply to confirm whether you prefer the refund by ACH to the original account or by check. If you prefer a check, include the refund recipient's name and mailing address. Please do not email banking information; we will provide a secure way to confirm any required ACH details.";
+    return { kind: "ach" as const, text, html: `<p>${text}</p>` };
+  }
+
+  const text = "We received payment for this registration. Please reply to confirm whether you prefer the refund by check or ACH. For a check, include the refund recipient's name and mailing address. Please do not email banking information; we will provide a secure way to share any required ACH details.";
+  return { kind: "confirmation_required" as const, text, html: `<p>${text}</p>` };
+}
 
 export function cancellationInvoiceDisposition(input: {
   hasInvoice: boolean;
