@@ -2883,12 +2883,13 @@ export async function createDefaultSessionCommunications(sessionId: string) {
     include: { template: true },
     orderBy: { createdAt: "desc" }
   });
-  const existingByType = new Map(existing
-    .filter((communication) =>
-      communication.template?.type &&
-      isLiveSessionCommunication(communication, session.id)
-    )
-    .map((communication) => [communication.template!.type, communication]));
+  const existingByType = new Map<TemplateType, (typeof existing)[number]>();
+  for (const communication of existing) {
+    const type = communication.template?.type;
+    if (type && isLiveSessionCommunication(communication, session.id) && !existingByType.has(type)) {
+      existingByType.set(type, communication);
+    }
+  }
   const records = [];
   const activeTemplateTypes = sessionTemplateTypesForSession(session.sessionNumber);
   const disabledWeekBefore = existingByType.get(TemplateType.WEEK_BEFORE_REMINDER);
