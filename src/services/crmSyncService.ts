@@ -31,78 +31,25 @@ export async function queueCrmSyncEvent(input: {
 }
 
 export async function queueRegistrationCrmSync(registrationId: string, eventType = "registration.updated") {
-  const registration = await prisma.registration.findUnique({
-    where: { id: registrationId },
-    include: { cohort: true, organization: true, participants: true, paymentRecords: true }
-  });
-
-  if (!registration) {
-    return null;
-  }
-
-  return queueCrmSyncEvent({
-    eventType,
-    entityType: "Registration",
-    entityId: registration.id,
-    registrationId: registration.id,
-    organizationId: registration.organizationId,
-    payload: {
-      missionControlId: registration.id,
-      cohort: { id: registration.cohort.id, title: registration.cohort.title, slug: registration.cohort.slug },
-      organization: { id: registration.organization.id, name: registration.organization.name, type: registration.organization.type },
-      primaryContact: {
-        name: registration.primaryContactName,
-        email: registration.primaryContactEmail,
-        phone: registration.primaryContactPhone,
-        title: registration.primaryContactTitle
-      },
-      registration: {
-        status: registration.status,
-        source: registration.source,
-        participantCount: registration.participantCount,
-        participantListStatus: registration.participantListStatus,
-        paymentStatus: registration.paymentStatus,
-        totalAmount: Number(registration.totalAmount)
-      }
-    }
-  });
+  return queueRegistrationToCrmWebhook(registrationId, eventType);
 }
 
 export async function queueParticipantCrmSync(participantId: string, eventType = "participant.updated") {
   const participant = await prisma.participant.findUnique({
     where: { id: participantId },
-    include: { cohort: true, organization: true, registration: true }
+    select: { registrationId: true }
   });
 
   if (!participant) {
     return null;
   }
 
-  return queueCrmSyncEvent({
-    eventType,
-    entityType: "Participant",
-    entityId: participant.id,
-    participantId: participant.id,
-    registrationId: participant.registrationId,
-    organizationId: participant.organizationId,
-    payload: {
-      missionControlId: participant.id,
-      firstName: participant.firstName,
-      lastName: participant.lastName,
-      email: participant.email,
-      title: participant.title,
-      phone: participant.phone,
-      status: participant.status,
-      cohort: { id: participant.cohort.id, title: participant.cohort.title, slug: participant.cohort.slug },
-      organization: { id: participant.organization.id, name: participant.organization.name },
-      registration: { id: participant.registration.id, primaryContactEmail: participant.registration.primaryContactEmail }
-    }
-  });
+  return queueRegistrationToCrmWebhook(participant.registrationId, eventType);
 }
 
 export async function processCrmSyncEvents(
   limit = 25,
-  options: { shortNames?: string[]; eventTypes?: string[]; retryFailed?: boolean } = {}
+  options: { shortNames?: string[]; eventTypes?: string[]; retryFailed?: boolean; missionOnly?: boolean } = {}
 ) {
   const staleSendingBefore = new Date(Date.now() - 15 * 60 * 1000);
   await prisma.crmSyncEvent.updateMany({
@@ -148,6 +95,7 @@ export async function processCrmSyncEvents(
       event,
       missionPayload: isCrmRegistrationWebhookPayload(event.payload)
     }))
+    .filter(({ missionPayload }) => !options.missionOnly || missionPayload)
     .sort((a, b) => {
       if (a.missionPayload !== b.missionPayload) {
         return a.missionPayload ? -1 : 1;
@@ -208,7 +156,8 @@ export async function processCrmSyncEvents(
         ? await fetch(url, {
             method: "POST",
             headers: crmRegistrationWebhookHeaders(secret, env.CRM_MISSION_COHORT_VERCEL_BYPASS_SECRET),
-            body: JSON.stringify(event.payload)
+            body: JSON.stringify(event.payload),
+            signal: AbortSignal.timeout(30_000)
           })
         : await fetch(url, {
             method: "POST",
@@ -221,7 +170,8 @@ export async function processCrmSyncEvents(
               entityType: event.entityType,
               entityId: event.entityId,
               payload: event.payload
-            })
+            }),
+            signal: AbortSignal.timeout(30_000)
           });
 
       if (!response.ok) {
@@ -447,12 +397,23 @@ export async function finalizeCrmBacklogReview(options: { dryRun?: boolean } = {
   await ensureCrmReviewSchema();
   const dryRun = options.dryRun !== false;
   const audit = await auditCrmSyncBacklog();
+  const pendingPayloads = await prisma.crmSyncEvent.findMany({
+    where: { status: { notIn: [CrmSyncEventStatus.SENT, CrmSyncEventStatus.REVIEWED] } },
+    select: { id: true, payload: true }
+  });
+  const legacyGenericIds = new Set(pendingPayloads
+    .filter((event) => !isCrmRegistrationWebhookPayload(event.payload))
+    .map((event) => event.id));
   const reviewable = audit.rows.filter((row) =>
+    legacyGenericIds.has(row.id)
+    ||
     ["missing_entity", "superseded_by_newer", "superseded_by_sent"].includes(row.category)
     || row.entityType === "Organization"
   );
   const byReason = reviewable.reduce<Record<string, number>>((counts, row) => {
-    const reason = row.entityType === "Organization"
+    const reason = legacyGenericIds.has(row.id)
+      ? "legacy_generic_crm_event"
+      : row.entityType === "Organization"
       ? "organization_embedded_in_registration_snapshot"
       : row.category;
     counts[reason] = (counts[reason] ?? 0) + 1;
@@ -463,7 +424,14 @@ export async function finalizeCrmBacklogReview(options: { dryRun?: boolean } = {
 
   for (const [reason] of Object.entries(byReason)) {
     const ids = reviewable
-      .filter((row) => (row.entityType === "Organization" ? "organization_embedded_in_registration_snapshot" : row.category) === reason)
+      .filter((row) => {
+        const rowReason = legacyGenericIds.has(row.id)
+          ? "legacy_generic_crm_event"
+          : row.entityType === "Organization"
+            ? "organization_embedded_in_registration_snapshot"
+            : row.category;
+        return rowReason === reason;
+      })
       .map((row) => row.id);
     await prisma.crmSyncEvent.updateMany({
       where: { id: { in: ids }, status: { notIn: [CrmSyncEventStatus.SENT, CrmSyncEventStatus.REVIEWED] } },

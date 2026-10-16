@@ -735,6 +735,14 @@ export function sessionTemplateTypesForSession(sessionNumber?: number | null) {
     : sessionTemplateTypes.filter((type) => type !== TemplateType.WEEK_BEFORE_REMINDER);
 }
 
+export function isLiveSessionCommunication(input: {
+  recipientScope?: RecipientScope | string | null;
+  journeyKey?: string | null;
+}, sessionId: string) {
+  return input.recipientScope === RecipientScope.ALL_PARTICIPANTS
+    && Boolean(input.journeyKey?.startsWith(`session-template:${sessionId}:`));
+}
+
 export async function getSystemUserId() {
   const user = await prisma.user.upsert({
     where: { email: "system@mission-control.local" },
@@ -2876,7 +2884,10 @@ export async function createDefaultSessionCommunications(sessionId: string) {
     orderBy: { createdAt: "desc" }
   });
   const existingByType = new Map(existing
-    .filter((communication) => communication.template?.type)
+    .filter((communication) =>
+      communication.template?.type &&
+      isLiveSessionCommunication(communication, session.id)
+    )
     .map((communication) => [communication.template!.type, communication]));
   const records = [];
   const activeTemplateTypes = sessionTemplateTypesForSession(session.sessionNumber);

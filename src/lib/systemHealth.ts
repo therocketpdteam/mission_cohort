@@ -4,7 +4,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase";
 import { getGoogleCalendarSetup, getQuickBooksSetup, getSendGridSetup } from "@/services/integrationSetupService";
 import { listIntegrationStatuses } from "@/services/integrationService";
 import { getOutboundLockState } from "@/lib/outboundLock";
-import { CommunicationStatus, CrmSyncEventStatus } from "@prisma/client";
+import { CohortStatus, CommunicationStatus, CrmSyncEventStatus, RecipientScope, TemplateType } from "@prisma/client";
 
 export type HealthStatus = "healthy" | "warning" | "blocked";
 
@@ -471,6 +471,34 @@ async function automationChecks(databaseReady: boolean): Promise<HealthCheck[]> 
   const staleCrmSending = await prisma.crmSyncEvent.count({
       where: { status: CrmSyncEventStatus.SENDING, updatedAt: { lt: staleSendingCutoff } }
     });
+  const futureSessions = await prisma.cohortSession.findMany({
+    where: {
+      startTime: { gt: now },
+      cohort: { status: { in: [CohortStatus.PUBLISHED, CohortStatus.ACTIVE] } }
+    },
+    select: {
+      id: true,
+      sessionNumber: true,
+      cohort: { select: { shortName: true } },
+      communications: {
+        where: {
+          recipientScope: RecipientScope.ALL_PARTICIPANTS,
+          status: { notIn: [CommunicationStatus.CANCELLED, CommunicationStatus.SKIPPED] }
+        },
+        select: { journeyKey: true, template: { select: { type: true } } }
+      }
+    }
+  });
+  const missingSessionSchedules = futureSessions.flatMap((session) => {
+    const expected: TemplateType[] = [TemplateType.DAY_BEFORE_REMINDER, TemplateType.HOUR_BEFORE_REMINDER, TemplateType.FOLLOW_UP];
+    if (session.sessionNumber === 1) expected.unshift(TemplateType.WEEK_BEFORE_REMINDER);
+    const prefix = `session-template:${session.id}:`;
+    const actual = new Set(session.communications
+      .filter((communication) => communication.journeyKey?.startsWith(prefix))
+      .map((communication) => communication.template?.type));
+    const missing = expected.filter((type) => !actual.has(type));
+    return missing.length ? [{ cohort: session.cohort.shortName, sessionNumber: session.sessionNumber, missing }] : [];
+  });
 
   const heartbeatCheck = (key: string, label: string, heartbeat: { createdAt: Date } | null): HealthCheck => {
     const current = Boolean(heartbeat && heartbeat.createdAt >= heartbeatCutoff);
@@ -499,6 +527,17 @@ async function automationChecks(databaseReady: boolean): Promise<HealthCheck[]> 
         ? `${overdueCommunications} scheduled communication(s) are past due.`
         : "No scheduled communications are past due.",
       nextAction: overdueCommunications > 0 ? "Review every overdue recipient before allowing the worker to send." : undefined
+    },
+    {
+      key: "sessionCommunicationSchedules",
+      label: "Future session communication schedules",
+      status: missingSessionSchedules.length > 0 ? "blocked" : "healthy",
+      detail: missingSessionSchedules.length > 0
+        ? `${missingSessionSchedules.length} future session(s) are missing one or more live participant communications.`
+        : "Every future session in a live cohort has its required participant communication schedule.",
+      nextAction: missingSessionSchedules.length > 0
+        ? `Rebuild and verify: ${missingSessionSchedules.slice(0, 5).map((row) => `${row.cohort} session ${row.sessionNumber} (${row.missing.join(", ")})`).join("; ")}.`
+        : undefined
     },
     {
       key: "crmQueued",

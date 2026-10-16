@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { EmailEventType } from "@prisma/client";
-import { buildManualCustomEmailRecipientGroups, buildRecipientDeliveryRows, emailEventSummary, isolatedResendRecipients, sessionTemplateTypesForSession } from "../../src/services/communicationService";
+import { buildManualCustomEmailRecipientGroups, buildRecipientDeliveryRows, emailEventSummary, isolatedResendRecipients, isLiveSessionCommunication, sessionTemplateTypesForSession } from "../../src/services/communicationService";
 
 test("summarizes unreviewed failed and bounced email events", () => {
   const summary = emailEventSummary([
@@ -115,4 +115,16 @@ test("uses the one-week session reminder only for the first session", () => {
     "HOUR_BEFORE_REMINDER",
     "FOLLOW_UP"
   ]);
+});
+
+test("publish experience tests never satisfy a live session schedule", () => {
+  assert.equal(isLiveSessionCommunication({ recipientScope: "CUSTOM", journeyKey: null }, "session-1"), false);
+  assert.equal(isLiveSessionCommunication({
+    recipientScope: "ALL_PARTICIPANTS",
+    journeyKey: "session-template:session-1:FOLLOW_UP"
+  }, "session-1"), true);
+  assert.equal(isLiveSessionCommunication({
+    recipientScope: "ALL_PARTICIPANTS",
+    journeyKey: "session-template:another-session:FOLLOW_UP"
+  }, "session-1"), false);
 });

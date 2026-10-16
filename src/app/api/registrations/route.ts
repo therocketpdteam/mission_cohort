@@ -135,7 +135,8 @@ export async function PATCH(request: Request) {
         type: body.type,
         fileKey: body.fileKey,
         fileName: body.fileName,
-        contentType: body.contentType
+        contentType: body.contentType,
+        purchaseOrderNumber: body.purchaseOrderNumber
       }));
     }
 

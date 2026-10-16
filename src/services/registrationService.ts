@@ -7,7 +7,6 @@ import { registrationCreateSchema, registrationUpdateSchema } from "@/validators
 import { logAuditEventAsync } from "./auditService";
 import { createDefaultRegistrationOperationsTasks } from "./operationsTaskService";
 import { queueParticipantCrmSync, queueRegistrationCrmSync } from "./crmSyncService";
-import { syncRegistrationToCrmWebhook } from "./crmRegistrationWebhookService";
 import { voidRegistrationQuickBooksInvoice } from "./quickBooksService";
 import { automaticRegistrationJourneyOptions, cancelRegistrationJourneys, planRegistrationJourneys } from "./registrationJourneyService";
 import { syncRegistrationParticipantListStatus } from "./participantService";
@@ -197,9 +196,6 @@ export async function createRegistration(
   }
 
   void queueRegistrationCrmSync(registration.id, "registration.created").catch(() => undefined);
-  void syncRegistrationToCrmWebhook(registration.id, "registration.created").catch((error) => {
-    console.error("CRM registration webhook scheduling failed", { registrationId: registration.id, error: error instanceof Error ? error.message : "Unknown error" });
-  });
   const journey = await planAutomaticRegistrationJourney(registration.id, registration.cohortId);
   return { ...registration, participantListStatus: roster?.status ?? registration.participantListStatus, journey };
 }
@@ -224,9 +220,6 @@ export async function updateRegistration(
   );
   const roster = await syncRegistrationParticipantListStatus(registration.id);
   void queueRegistrationCrmSync(registration.id, "registration.updated").catch(() => undefined);
-  void syncRegistrationToCrmWebhook(registration.id, "registration.updated").catch((error) => {
-    console.error("CRM registration webhook scheduling failed", { registrationId: registration.id, error: error instanceof Error ? error.message : "Unknown error" });
-  });
   if (options.deferNotifications) {
     const cohort = await prisma.cohort.findUniqueOrThrow({ where: { id: registration.cohortId }, select: { status: true } });
     if (shouldDeferRegistrationDelivery(cohort.status)) {
@@ -281,7 +274,6 @@ export async function markRegistrationUncollectible(id: string) {
     metadata: { paymentRecordsUpdated: result.paymentRecords, paymentRemindersCancelled: result.reminders }
   });
   void queueRegistrationCrmSync(id, "registration.marked_uncollectible").catch(() => undefined);
-  void syncRegistrationToCrmWebhook(id, "registration.marked_uncollectible").catch(() => undefined);
   return result;
 }
 
@@ -806,9 +798,6 @@ export async function bulkUpdateRegistrations(input: {
 
   for (const id of ids) {
     void queueRegistrationCrmSync(id, "registration.bulk_updated").catch(() => undefined);
-    void syncRegistrationToCrmWebhook(id, "registration.bulk_updated").catch((error) => {
-      console.error("CRM registration webhook scheduling failed", { registrationId: id, error: error instanceof Error ? error.message : "Unknown error" });
-    });
     if (input.action === "restore") {
       const registration = await prisma.registration.findUnique({ where: { id }, select: { cohortId: true } });
       if (registration) {
@@ -935,9 +924,6 @@ export async function bulkMoveRegistrationsToCohort(input: { ids: string[]; targ
       }
     });
     void queueRegistrationCrmSync(registration.id, "registration.moved").catch(() => undefined);
-    void syncRegistrationToCrmWebhook(registration.id, "registration.moved").catch((error) => {
-      console.error("CRM registration webhook scheduling failed", { registrationId: registration.id, error: error instanceof Error ? error.message : "Unknown error" });
-    });
     for (const participant of registration.participants) {
       void queueParticipantCrmSync(participant.id, "participant.moved").catch(() => undefined);
     }
@@ -1036,6 +1022,7 @@ export async function updateRegistrationDocuments(id: string, input: {
   fileKey?: string | null;
   fileName?: string | null;
   contentType?: string | null;
+  purchaseOrderNumber?: string | null;
 }) {
   if (!(["purchaseOrder", "checkPayment"] as const).includes(input.type)) {
     throw Object.assign(new Error("Unsupported registration document type."), { code: "BAD_REQUEST", status: 400 });
@@ -1048,7 +1035,7 @@ export async function updateRegistrationDocuments(id: string, input: {
   const previous = await prisma.registration.findUniqueOrThrow({ where: { id } });
   const isPurchaseOrder = input.type === "purchaseOrder";
   const previousFileKey = isPurchaseOrder ? previous.purchaseOrderFileKey : previous.checkPaymentFileKey;
-  const registration = await prisma.registration.update({
+  await prisma.registration.update({
     where: { id },
     data: isPurchaseOrder
       ? {
@@ -1062,6 +1049,12 @@ export async function updateRegistrationDocuments(id: string, input: {
         }
   });
 
+  if (isPurchaseOrder && input.purchaseOrderNumber !== undefined) {
+    await updateRegistration(id, {
+      purchaseOrderNumber: input.purchaseOrderNumber?.trim() || null
+    }, { deferNotifications: true });
+  }
+
   if (previousFileKey && previousFileKey !== input.fileKey) {
     await deletePrivateAppFile(previousFileKey).catch(() => undefined);
   }
@@ -1071,8 +1064,14 @@ export async function updateRegistrationDocuments(id: string, input: {
     entityId: id,
     action: input.fileKey ? "DOCUMENT_UPLOADED" : "DOCUMENT_REMOVED",
     description: `${isPurchaseOrder ? "Purchase order" : "Check payment proof"} ${input.fileKey ? "saved" : "removed"}`,
-    metadata: { type: input.type, fileName: input.fileName ?? null }
+    metadata: {
+      type: input.type,
+      fileName: input.fileName ?? null,
+      purchaseOrderNumber: isPurchaseOrder && input.purchaseOrderNumber !== undefined
+        ? input.purchaseOrderNumber?.trim() || null
+        : undefined
+    }
   });
 
-  return registration;
+  return prisma.registration.findUniqueOrThrow({ where: { id } });
 }

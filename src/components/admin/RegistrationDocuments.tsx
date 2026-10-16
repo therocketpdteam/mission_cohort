@@ -1,9 +1,9 @@
 "use client";
 
 import { ArticleOutlined, DeleteOutline, VisibilityOutlined } from "@/components/ui/icons";
-import { Box, Button, Stack, Typography } from "@/components/ui/primitives";
+import { Box, Button, Stack, TextField, Typography } from "@/components/ui/primitives";
 import { adminApi, uploadAdminFile } from "@/lib/adminApi";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { AdminRow } from "./common";
 import { SectionCard } from "./common";
 
@@ -15,6 +15,11 @@ export function RegistrationDocuments({ registration, onChanged, onError }: {
   onError: (message: string) => void;
 }) {
   const [working, setWorking] = useState<DocumentType | "">("");
+  const [purchaseOrderNumber, setPurchaseOrderNumber] = useState(String(registration.purchaseOrderNumber ?? ""));
+
+  useEffect(() => {
+    setPurchaseOrderNumber(String(registration.purchaseOrderNumber ?? ""));
+  }, [registration.id, registration.purchaseOrderNumber]);
 
   async function upload(type: DocumentType, file?: File) {
     if (!file) return;
@@ -29,7 +34,8 @@ export function RegistrationDocuments({ registration, onChanged, onError }: {
           type,
           fileKey: result.fileKey,
           fileName: file.name,
-          contentType: file.type
+          contentType: file.type,
+          purchaseOrderNumber: type === "purchaseOrder" ? purchaseOrderNumber.trim() || null : undefined
         }
       });
       await onChanged();
@@ -90,6 +96,17 @@ export function RegistrationDocuments({ registration, onChanged, onError }: {
               </Box>
             </Stack>
             <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
+              {document.type === "purchaseOrder" ? (
+                <TextField
+                  size="small"
+                  label="PO number"
+                  value={purchaseOrderNumber}
+                  onChange={(event) => setPurchaseOrderNumber(event.target.value)}
+                  disabled={Boolean(working)}
+                  helperText="Upload stages the number for Apply Changes"
+                  sx={{ minWidth: { xs: "100%", sm: 210 } }}
+                />
+              ) : null}
               {document.fileKey ? (
                 <Button
                   size="small"
