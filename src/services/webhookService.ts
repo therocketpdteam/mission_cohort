@@ -91,7 +91,7 @@ export async function validateWebhookSecret(request: Request) {
 
 export async function processRegistrationWebhook(
   payload: Record<string, any>,
-  options?: { existingEventId?: string; suppressAutomations?: boolean }
+  options?: { existingEventId?: string; suppressAutomations?: boolean; normalizedInput?: boolean }
 ) {
   const isJotformPayload = Boolean(
     stringValue(payload.source).toLowerCase() === "jotform" ||
@@ -118,7 +118,9 @@ export async function processRegistrationWebhook(
   try {
     const mappings = isJotformPayload ? await listActiveJotformFormMappings() : [];
     const normalized =
-      isJotformPayload
+      options?.normalizedInput
+        ? payload
+        : isJotformPayload
         ? normalizeJotformRegistrationPayload(payload, mappings)
         : payload;
     const formId = stringValue(normalized.routing?.formId);
