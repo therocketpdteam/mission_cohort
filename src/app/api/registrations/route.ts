@@ -114,6 +114,7 @@ export async function PATCH(request: Request) {
     if (body.action === "syncCalendar") {
       return ok(await planRegistrationJourneys(body.id, {
         sendPocConfirmation: false,
+        planPocConfirmation: false,
         retryFailed: true,
         planMilestones: false
       }), { status: 202 });
