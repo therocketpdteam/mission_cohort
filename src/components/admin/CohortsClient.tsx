@@ -234,6 +234,7 @@ type CohortStatusChangePreview = {
   recentSentCommunications: AdminRow[];
   linkedCalendarEvents: AdminRow[];
   warnings: string[];
+  blockers?: string[];
 };
 
 function shortDateTime(value?: string | null) {
@@ -828,13 +829,12 @@ export function CohortsClient() {
       return;
     }
 
-    const { row, nextStatus, previousStatus } = statusChangeReview;
+    const { row, nextStatus } = statusChangeReview;
     setApplyingStatusChange(true);
     try {
-      await adminApi(`/api/cohorts/${row.id}`, { method: "PATCH", body: { status: nextStatus } });
+      await adminApi(`/api/cohorts/${row.id}`, { method: "PATCH", body: nextStatus === "CANCELLED" ? { action: "cancel" } : { status: nextStatus } });
       if (nextStatus === "CANCELLED") {
-        setArchiveUndo({ id: row.id, title: row.title, previousStatus });
-        notifySuccess("Cohort marked Cancelled. No email was sent.");
+        notifySuccess("Cancellation notices sent, calendar invitations removed, and cohort registrations and participants cancelled.");
       } else {
         notifySuccess("Cohort status updated");
       }
@@ -1165,7 +1165,7 @@ export function CohortsClient() {
                     <div>
                       <span>Automatic emails</span>
                       <strong>{statusChangeReview.preview.automaticEmails.length}</strong>
-                      <small>No email is sent by this status change.</small>
+                      <small>POCs receive administrative details; participants receive the general notice.</small>
                     </div>
                     <div>
                       <span>Unsent emails paused</span>
@@ -1175,7 +1175,7 @@ export function CohortsClient() {
                     <div>
                       <span>Linked calendar events</span>
                       <strong>{statusChangeReview.preview.linkedCalendarEvents.length}</strong>
-                      <small>Calendar cancellations are separate.</small>
+                      <small>Invitations are removed after the email notices succeed.</small>
                     </div>
                   </div>
                   {statusChangeReview.preview.recentSentCommunications.length > 0 ? (
@@ -1204,9 +1204,18 @@ export function CohortsClient() {
                   ) : null}
                   {statusChangeReview.preview.linkedCalendarEvents.length > 0 ? (
                     <Alert severity="info">
-                      This will keep Google Calendar events as-is. Use calendar cancellation separately only if you want Google to notify invitees.
+                      Google will notify attendees as invitations are removed. The cohort and its registrations and participants are marked Cancelled only after the email and calendar steps succeed.
                     </Alert>
                   ) : null}
+                  {statusChangeReview.preview.warnings.map((warning) => <Alert severity="info" key={warning}>{warning}</Alert>)}
+                  {(statusChangeReview.preview.blockers ?? []).map((blocker) => <Alert severity="error" key={blocker}>{blocker}</Alert>)}
+                  {statusChangeReview.preview.automaticEmails.map((notice) => (
+                    <details className="stage-review-panel" key={notice.journeyKey}>
+                      <summary>{notice.role === "poc" ? "POC" : "Participant"}: {notice.email}</summary>
+                      <Typography variant="subtitle2">{notice.subject}</Typography>
+                      <Typography component="div" sx={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{notice.bodyText}</Typography>
+                    </details>
+                  ))}
                 </>
               ) : null}
             </Stack>
@@ -1222,9 +1231,9 @@ export function CohortsClient() {
           <Button
             color="error"
             onClick={() => void applyReviewedStatusChange()}
-            disabled={applyingStatusChange || loadingStatusChangeReview || !statusChangeReview?.preview}
+            disabled={applyingStatusChange || loadingStatusChangeReview || !statusChangeReview?.preview || Boolean(statusChangeReview?.preview?.blockers?.length)}
           >
-            {applyingStatusChange ? "Updating" : "Mark Cancelled - No Email"}
+            {applyingStatusChange ? "Cancelling" : "Send Notices & Cancel Cohort"}
           </Button>
         </DialogActions>
       </Dialog>

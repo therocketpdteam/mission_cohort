@@ -4104,7 +4104,7 @@ export function CohortDetailClient({ id }: { id: string }) {
         <DialogTitle>Send Cohort Cancellation Notice</DialogTitle>
         <DialogContent>
           <Typography color="text.secondary">
-            Send the editable “Cohort Cancellation” template to all active participants in this cohort. This sends email only and does not change Google Calendar.
+            Send the cohort cancellation notice to participants and a separate administrative notice to each POC with their registration and payment details. A POC who is also a participant receives the administrative version. This sends email only; use the cohort stage review to complete calendar and status cancellation.
           </Typography>
           <Alert severity="warning" sx={{ mt: 2 }}>
             SendGrid safety mode applies. Every recipient must be allowlisted unless live email sending is enabled.

@@ -110,10 +110,20 @@ Also open these routes as an admin:
 - Cohort `Prepare Invites` uses Google automatically when connected, adds active participants from non-archived registrations as attendees, and asks Google to email all guests. ICS fallback prepares files only and must not be treated as a delivered invitation.
 - Google access tokens are refreshed server-side from the saved refresh token. If refresh authorization is unavailable, reconnect Google Calendar from Connected Tools.
 - Linked Google events update automatically when a session is edited. Cancellation uses Google Events delete with attendee updates enabled; single-session and full-cohort cancellations are available from the cohort Sessions surface and remain subject to the recipient safety allowlist.
-- Calendar cancellation also sends an editable, tracked SendGrid notice using the `Session Cancellation` or `Cohort Cancellation` template. A prior calendar-only cancellation can send its notice later from the cohort Communications tab without touching Google Calendar again.
+- Single-session calendar cancellation sends the tracked `Session Cancellation` notice. Full-cohort notices use the participant and POC templates in `src/config/cohortCancellation.ts`, including the registration-specific payment instructions.
 - Editing a linked session saves a pending provider change and reschedules unsent reminder records without notifying participants. Cohort `Apply Changes` updates every affected Google event with normal attendee notifications and sends one consolidated SendGrid summary. The production Vercel cron calls the scheduled-communications job every five minutes; `CRON_SECRET` secures that request.
 - SendGrid and Google Calendar default to outbound safety mode. Cohort delivery is blocked unless every recipient is explicitly allowlisted in Connected Tools or a super admin intentionally enables live sending.
 - Resetting cohort automation cancels only unsent/scheduled/failed communication records and clears ICS-only preparation. Sent history and Google event references are preserved to prevent hidden duplicate sends or cancellation notices.
+
+## Full Cohort Cancellation
+
+- The Cohorts stage review shows each participant and POC notice before the operator selects `Send Notices & Cancel Cohort`.
+- The cancellation action pauses unsent reminders, sends notices, removes linked Google Calendar invitations, then marks cohort, registrations, and participants Cancelled. A failure stops before later phases.
+- POCs receive their registration's administrative and payment details. Participants who are POCs receive the administrative version only; other participant addresses are deduplicated. Historical data-only records remain excluded from outbound messages.
+- Durable communication journey keys preserve already accepted notices on retry. Failed or uncertain deliveries require review in Communications before the workflow continues. An interrupted in-progress operations task requires operator review before restarting.
+- The existing outbound lock and recipient allowlists apply. Deployment does not unlock sending or initiate cancellation.
+- Paid invoice/payment history is preserved. Unpaid local invoices are voided during finalization; refund and linked QuickBooks follow-ups remain open finance tasks. The cancellation action does not issue refunds or automatically void external invoices.
+- `Send Cancellation Notice` on cohort detail sends only the role-specific notices. The stage review completes the calendar and status phases. Session-only cancellation behavior is unchanged.
 
 If a feature shows `Blocked`, keep the UI compatibility fallback in place and do not mark the roadmap item done until production reports ready.
 

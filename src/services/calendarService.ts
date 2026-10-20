@@ -786,6 +786,13 @@ async function connectedGoogleEventDetails(sessionIds: string[]) {
   return { details, accessToken, calendarId: setup.calendarId };
 }
 
+export async function preflightCohortCalendarCancellation(cohortId: string) {
+  const sessions = await prisma.cohortSession.findMany({ where: { cohortId }, select: { id: true } });
+  const { details } = await connectedGoogleEventDetails(sessions.map((session) => session.id));
+  const recipients = details.flatMap(({ googleEvent }) => (googleEvent?.attendees ?? []).map((attendee) => attendee.email ?? ""));
+  await assertOutboundRecipientsAllowed("GOOGLE_CALENDAR", recipients);
+}
+
 export async function cancelGoogleCalendarInvites(input: { sessionId?: string; cohortId?: string }, options: { notifyAttendees: true }) {
   const sessions = await prisma.cohortSession.findMany({
     where: input.sessionId ? { id: input.sessionId } : input.cohortId ? { cohortId: input.cohortId } : { id: "" },

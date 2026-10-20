@@ -252,6 +252,9 @@ export async function getCohortStatusChangePreview(id: string, nextStatus: Cohor
       }))
   );
 
+  const cancellation = nextStatus === CohortStatus.CANCELLED
+    ? await (await import("./cohortCancellationService")).getCohortCancellationPreview(id)
+    : null;
   return {
     cohort: {
       id: cohort.id,
@@ -261,7 +264,8 @@ export async function getCohortStatusChangePreview(id: string, nextStatus: Cohor
       participantCount: cohort._count.participants,
       registrationCount: cohort._count.registrations
     },
-    automaticEmails: [],
+    automaticEmails: cancellation?.notices ?? [],
+    blockers: cancellation?.blockers ?? [],
     unsentCommunications: unsentCommunications.map((communication) => ({
       id: communication.id,
       subject: communication.subject,
@@ -284,9 +288,9 @@ export async function getCohortStatusChangePreview(id: string, nextStatus: Cohor
     linkedCalendarEvents,
     warnings: nextStatus === CohortStatus.CANCELLED
       ? [
-        "Changing the cohort status to Cancelled will not send email automatically.",
-        "Unsent draft, scheduled, failed, or sending communications will be cancelled so they do not send later.",
-        "Linked Google Calendar events are not removed by this status change. Use calendar cancellation separately only if you want Google to notify invitees."
+        "Cancellation first sends the participant and POC notices shown in this review, then removes calendar invitations, then marks the cohort, registrations, and participants Cancelled.",
+        "Unsent reminders are paused. A failed email or calendar step stops cancellation; sent notices are preserved on retry.",
+        "Refunds are not issued automatically. Finance follow-up tasks remain open for refunds and linked QuickBooks invoices."
       ]
       : []
   };

@@ -17,6 +17,7 @@ import { deletePrivateAppFile } from "@/services/storageService";
 import { assertCohortDeliveryAllowed, assertOutboundRecipientsAllowed, getSendGridSetup } from "@/services/integrationSetupService";
 import { getOrganizationInvoiceProfile } from "./appSettingsService";
 import { registrationConfirmationDocumentReadiness } from "./registrationDocumentReadiness";
+import { cancellationBlocksDelivery } from "@/modules/cohorts/cancellation";
 
 type DefaultTemplate = {
   type: TemplateType;
@@ -1842,6 +1843,12 @@ export async function sendCommunication(id: string, options?: { recipients?: str
     throw Object.assign(new Error("Communication not found"), { code: "NOT_FOUND", status: 404 });
   }
 
+  const cancellationTask = await prisma.operationsTask.findUnique({
+    where: { id: `cohort-cancellation:${communication.cohortId}` }, select: { status: true }
+  });
+  if (cancellationBlocksDelivery(communication.cohortId, communication.journeyKey, cancellationTask?.status)) {
+    throw Object.assign(new Error("Normal cohort messages are paused while cancellation is in progress or awaiting review."), { code: "CANCELLATION_IN_PROGRESS", status: 409 });
+  }
   const registrationContext = await preflightPocRegistrationConfirmation(communication);
   const paymentReminderRegistrationContext = registrationContext ?? await preflightPaymentReminder(communication);
   const refreshedAttachments = paymentReminderRegistrationContext
@@ -1866,7 +1873,7 @@ export async function sendCommunication(id: string, options?: { recipients?: str
       });
     }
 
-    if (options?.bypassCohortStatus) {
+    if (options?.bypassCohortStatus || communication.journeyKey?.startsWith(`cohort:${communication.cohortId}:cancellation:`)) {
       await assertOutboundRecipientsAllowed("SENDGRID", recipients);
     } else {
       await assertCohortDeliveryAllowed("SENDGRID", communication.cohort.status, recipients);
@@ -2099,6 +2106,9 @@ export async function cancelCommunication(input: { id: string }) {
 }
 
 export async function sendCalendarCancellationNotice(input: { cohortId: string; sessionId?: string }) {
+  if (!input.sessionId) {
+    return (await import("./cohortCancellationService")).sendCohortCancellationNotices(input.cohortId);
+  }
   await ensureDefaultCommunicationTemplates();
   const templateName = input.sessionId ? "Session Cancellation" : "Cohort Cancellation";
   const template = await prisma.communicationTemplate.findFirst({

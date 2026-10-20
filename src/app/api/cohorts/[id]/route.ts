@@ -3,6 +3,10 @@ import { CohortStatus } from "@prisma/client";
 import { getCohortById, getCohortStatusChangePreview, moveCohortBackToDraft, publishCohort, updateCohort } from "@/services/cohortService";
 import { syncCohortTotalsToCrm } from "@/services/crmRegistrationWebhookService";
 import { ensureCohortQuickBooksProject, reconcileCohortQuickBooksProject, syncQuickBooksInvoice } from "@/services/quickBooksService";
+import { MUTATION_ROLES, requireRole } from "@/lib/auth";
+import { cancelCohortWithNotices } from "@/services/cohortCancellationService";
+
+export const maxDuration = 300;
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -35,6 +39,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   try {
     const { id } = await params;
     const body = await request.json();
+    if (body.action === "cancel") {
+      const user = await requireRole(MUTATION_ROLES);
+      return ok(await cancelCohortWithNotices(id, user.id));
+    }
     if (body.action === "publish") {
       return ok(await publishCohort(id));
     }

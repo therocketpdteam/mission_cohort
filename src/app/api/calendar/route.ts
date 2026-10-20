@@ -91,15 +91,11 @@ export async function PATCH(request: Request) {
     }
 
     if (body.action === "cancelCohortInvites" && body.cohortId) {
+      // Cohort notices explain the decision before Google sends its mechanical
+      // event cancellations. An email failure must leave invitations intact.
+      await sendCalendarCancellationNotice({ cohortId: body.cohortId });
       const calendar = await cancelGoogleCalendarInvites({ cohortId: body.cohortId }, { notifyAttendees: true });
-      let cancellationEmail: { status: string; error?: string };
-      try {
-        await sendCalendarCancellationNotice({ cohortId: body.cohortId });
-        cancellationEmail = { status: "sent" };
-      } catch (error) {
-        cancellationEmail = { status: "failed", error: error instanceof Error ? error.message : "Cancellation email failed" };
-      }
-      return ok({ ...calendar, cancellationEmail });
+      return ok({ ...calendar, cancellationEmail: { status: "sent" } });
     }
 
     if (body.action === "sendCohortCancellationNotice" && body.cohortId) {
