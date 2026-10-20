@@ -48,6 +48,7 @@ import { PocCommunicationHistory } from "./PocCommunicationHistory";
 import { RegistrationCommunicationJourney } from "./RegistrationCommunicationJourney";
 import { RegistrationDocuments } from "./RegistrationDocuments";
 import { RegistrationEditor, RegistrationRemovalDialog } from "./RegistrationsClient";
+import { CohortCancellationDialog } from "./CohortCancellationDialog";
 import { cohortEditFields } from "./CohortsClient";
 import type { ParsedRosterParticipant } from "@/lib/rosterParser";
 import {
@@ -1540,6 +1541,7 @@ export function CohortDetailClient({ id }: { id: string }) {
   const [creatingSessionEmails, setCreatingSessionEmails] = useState(false);
   const [publishingCohort, setPublishingCohort] = useState(false);
   const [movingCohortToDraft, setMovingCohortToDraft] = useState(false);
+  const [cohortCancellationOpen, setCohortCancellationOpen] = useState(false);
   const [applyingSessionChanges, setApplyingSessionChanges] = useState(false);
   const { notifySuccess, notifyError, snackbar } = useNotifier();
 
@@ -3282,6 +3284,17 @@ export function CohortDetailClient({ id }: { id: string }) {
           </Button>
         ) : null}
       />
+      {cohortCancellationOpen && cohort ? (
+        <CohortCancellationDialog
+          key={cohort.id}
+          cohort={{ id: cohort.id, title: cohort.title, status: cohort.status }}
+          onClose={() => setCohortCancellationOpen(false)}
+          onCancelled={async () => {
+            notifySuccess("Cancellation notices sent, calendar invitations removed, and cohort registrations and participants cancelled.");
+            await load().catch((error) => notifyError(error.message));
+          }}
+        />
+      ) : null}
       <Tabs value={tab} onChange={(_event, value) => setTab(value)} variant="scrollable" scrollButtons="auto">
         {detailTabs.map((label) => (
           <Tab label={label} key={label} />
@@ -3356,24 +3369,39 @@ export function CohortDetailClient({ id }: { id: string }) {
             </SectionCard>
             <SectionCard
               title="Publish Readiness"
-              action={showPublishAction ? (
-                <Button
-                  disabled={!cohort?.readiness?.ready || publishingCohort}
-                  onClick={publishReadyCohort}
-                  startIcon={<SendOutlined />}
-                >
-                  {publishingCohort ? "Publishing" : "Publish Cohort"}
-                </Button>
-              ) : canMoveBackToDraft ? (
-                <Button
-                  variant="outlined"
-                  color="warning"
-                  disabled={movingCohortToDraft}
-                  onClick={moveBackToDraft}
-                >
-                  {movingCohortToDraft ? "Moving" : "Move back to Draft"}
-                </Button>
-              ) : null}
+              action={
+                <div className="action-group">
+                  {showPublishAction ? (
+                    <Button
+                      disabled={!cohort?.readiness?.ready || publishingCohort}
+                      onClick={publishReadyCohort}
+                      startIcon={<SendOutlined />}
+                    >
+                      {publishingCohort ? "Publishing" : "Publish Cohort"}
+                    </Button>
+                  ) : canMoveBackToDraft ? (
+                    <Button
+                      variant="outlined"
+                      color="warning"
+                      disabled={movingCohortToDraft}
+                      onClick={moveBackToDraft}
+                    >
+                      {movingCohortToDraft ? "Moving" : "Move back to Draft"}
+                    </Button>
+                  ) : null}
+                  {cohort && cohortStatus !== "CANCELLED" ? (
+                    <Button
+                      variant="outlined"
+                      color="error"
+                      startIcon={<CancelOutlined />}
+                      disabled={publishingCohort || movingCohortToDraft}
+                      onClick={() => setCohortCancellationOpen(true)}
+                    >
+                      Cancel Cohort
+                    </Button>
+                  ) : null}
+                </div>
+              }
             >
               <div className="readiness-command">
                 <div className="readiness-summary">

@@ -1,5 +1,6 @@
 "use client";
 
+import { CohortCancellationDialog } from "./CohortCancellationDialog";
 import { AddIcon } from "@/components/ui/icons";
 import { ArchiveOutlined, CalendarMonthOutlined, GroupsOutlined, InsightsOutlined } from "@/components/ui/icons";
 import { EditOutlined, ExpandLessOutlined, ExpandMoreOutlined } from "@/components/ui/icons";
@@ -218,27 +219,6 @@ function displayShortName(value?: string | null) {
 
 function statusCount(rows: AdminRow[], value: string) {
   return rows.filter((row) => row.status === value).length;
-}
-
-type CohortStatusChangePreview = {
-  cohort: {
-    id: string;
-    title: string;
-    currentStatus: string;
-    nextStatus: string;
-    participantCount: number;
-    registrationCount: number;
-  };
-  automaticEmails: AdminRow[];
-  unsentCommunications: AdminRow[];
-  recentSentCommunications: AdminRow[];
-  linkedCalendarEvents: AdminRow[];
-  warnings: string[];
-  blockers?: string[];
-};
-
-function shortDateTime(value?: string | null) {
-  return value ? new Date(value).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" }) : "Not scheduled";
 }
 
 function CreateCohortWizard({
@@ -751,9 +731,7 @@ export function CohortsClient() {
   const [status, setStatus] = useState("CURRENT");
   const [presenterId, setPresenterId] = useState("");
   const [archiveUndo, setArchiveUndo] = useState<{ id: string; title: string; previousStatus: string } | null>(null);
-  const [statusChangeReview, setStatusChangeReview] = useState<{ row: AdminRow; nextStatus: string; previousStatus: string; preview?: CohortStatusChangePreview } | null>(null);
-  const [loadingStatusChangeReview, setLoadingStatusChangeReview] = useState(false);
-  const [applyingStatusChange, setApplyingStatusChange] = useState(false);
+  const [cancellationTarget, setCancellationTarget] = useState<AdminRow | null>(null);
   const [expandedCohortId, setExpandedCohortId] = useState("");
   const [pageView, setPageView] = useState<"cohorts" | "distribution">("cohorts");
   const { notifySuccess, notifyError, snackbar } = useNotifier();
@@ -807,45 +785,6 @@ export function CohortsClient() {
     { label: `All (${rows.length})`, value: "" },
     ...statusOptions.map((value) => ({ label: `${formatStatusLabel(value)} (${statusCount(rows, value)})`, value }))
   ];
-
-  async function openStatusChangeReview(row: AdminRow, nextStatus: string) {
-    const previousStatus = row.storedStatus ?? row.status;
-    setStatusChangeReview({ row, nextStatus, previousStatus });
-    setLoadingStatusChangeReview(true);
-
-    try {
-      const preview = await adminApi<CohortStatusChangePreview>(`/api/cohorts/${row.id}?action=statusChangePreview&nextStatus=${encodeURIComponent(nextStatus)}`);
-      setStatusChangeReview({ row, nextStatus, previousStatus, preview });
-    } catch (error) {
-      notifyError((error as Error).message);
-      setStatusChangeReview(null);
-    } finally {
-      setLoadingStatusChangeReview(false);
-    }
-  }
-
-  async function applyReviewedStatusChange() {
-    if (!statusChangeReview) {
-      return;
-    }
-
-    const { row, nextStatus } = statusChangeReview;
-    setApplyingStatusChange(true);
-    try {
-      await adminApi(`/api/cohorts/${row.id}`, { method: "PATCH", body: nextStatus === "CANCELLED" ? { action: "cancel" } : { status: nextStatus } });
-      if (nextStatus === "CANCELLED") {
-        notifySuccess("Cancellation notices sent, calendar invitations removed, and cohort registrations and participants cancelled.");
-      } else {
-        notifySuccess("Cohort status updated");
-      }
-      setStatusChangeReview(null);
-      await load();
-    } catch (error) {
-      notifyError((error as Error).message);
-    } finally {
-      setApplyingStatusChange(false);
-    }
-  }
 
   const columns: GridColDef[] = [
     {
@@ -934,7 +873,7 @@ export function CohortsClient() {
                   const previousStatus = params.row.storedStatus ?? params.row.status;
 
                   if (nextStatus === "CANCELLED") {
-                    await openStatusChangeReview(params.row, nextStatus);
+                    setCancellationTarget(params.row);
                     return;
                   }
 
@@ -1035,7 +974,12 @@ export function CohortsClient() {
                   <span>{finance.paidPercent}%</span>
                   <span>{money(finance.totalSales)}</span>
                   <StatusChip value={row.status === "ACTIVE" || row.status === "PUBLISHED" ? "Current" : row.status === "COMPLETED" && hasOutstandingCollection(row) ? "Ended" : row.status} />
-                  <Button size="small" variant="outlined" onClick={() => router.push(`/cohorts/${row.id}`)}>Open</Button>
+                  <div className="cohort-reference-actions">
+                    <Button size="small" variant="outlined" onClick={() => router.push(`/cohorts/${row.id}`)}>Open</Button>
+                    {row.status !== "CANCELLED" ? (
+                      <Button size="small" variant="outlined" color="error" onClick={() => setCancellationTarget(row)}>Cancel Cohort</Button>
+                    ) : null}
+                  </div>
                 </div>
                 {expanded && (
                   <div className="cohort-reference-details">
@@ -1149,94 +1093,17 @@ export function CohortsClient() {
           await load();
         }}
       />
-      <Dialog open={Boolean(statusChangeReview)} onClose={() => !applyingStatusChange && setStatusChangeReview(null)} maxWidth="lg" fullWidth>
-        <DialogTitle>Review Cohort Stage Change</DialogTitle>
-        <DialogContent>
-          {statusChangeReview ? (
-            <Stack spacing={2}>
-              <Alert severity="warning">
-                {statusChangeReview.row.title} will move from {formatStatusLabel(statusChangeReview.previousStatus)} to {formatStatusLabel(statusChangeReview.nextStatus)}.
-              </Alert>
-              {loadingStatusChangeReview ? (
-                <Typography color="text.secondary">Checking emails, scheduled actions, and calendar links...</Typography>
-              ) : statusChangeReview.preview ? (
-                <>
-                  <div className="stage-review-summary">
-                    <div>
-                      <span>Automatic emails</span>
-                      <strong>{statusChangeReview.preview.automaticEmails.length}</strong>
-                      <small>POCs receive administrative details; participants receive the general notice.</small>
-                    </div>
-                    <div>
-                      <span>Unsent emails paused</span>
-                      <strong>{statusChangeReview.preview.unsentCommunications.length}</strong>
-                      <small>Draft, scheduled, failed, or sending messages will not send later.</small>
-                    </div>
-                    <div>
-                      <span>Linked calendar events</span>
-                      <strong>{statusChangeReview.preview.linkedCalendarEvents.length}</strong>
-                      <small>Invitations are removed after the email notices succeed.</small>
-                    </div>
-                  </div>
-                  {statusChangeReview.preview.recentSentCommunications.length > 0 ? (
-                    <div className="stage-review-panel">
-                      <span>Recently Sent Emails</span>
-                      {statusChangeReview.preview.recentSentCommunications.slice(0, 5).map((communication) => (
-                        <div className="stage-review-row" key={communication.id}>
-                          <strong>{communication.subject}</strong>
-                          <small>{shortDateTime(communication.sentAt)}{communication.templateName ? ` · ${communication.templateName}` : ""}</small>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <Alert severity="info">No sent emails were found for this cohort yet.</Alert>
-                  )}
-                  {statusChangeReview.preview.unsentCommunications.length > 0 ? (
-                    <div className="stage-review-panel">
-                      <span>Emails That Will Be Paused</span>
-                      {statusChangeReview.preview.unsentCommunications.slice(0, 6).map((communication) => (
-                        <div className="stage-review-row" key={communication.id}>
-                          <strong>{communication.subject}</strong>
-                          <small>{formatStatusLabel(communication.status)} · {shortDateTime(communication.scheduledFor)}{communication.sessionTitle ? ` · ${communication.sessionTitle}` : ""}</small>
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
-                  {statusChangeReview.preview.linkedCalendarEvents.length > 0 ? (
-                    <Alert severity="info">
-                      Google will notify attendees as invitations are removed. The cohort and its registrations and participants are marked Cancelled only after the email and calendar steps succeed.
-                    </Alert>
-                  ) : null}
-                  {statusChangeReview.preview.warnings.map((warning) => <Alert severity="info" key={warning}>{warning}</Alert>)}
-                  {(statusChangeReview.preview.blockers ?? []).map((blocker) => <Alert severity="error" key={blocker}>{blocker}</Alert>)}
-                  {statusChangeReview.preview.automaticEmails.map((notice) => (
-                    <details className="stage-review-panel" key={notice.journeyKey}>
-                      <summary>{notice.role === "poc" ? "POC" : "Participant"}: {notice.email}</summary>
-                      <Typography variant="subtitle2">{notice.subject}</Typography>
-                      <Typography component="div" sx={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{notice.bodyText}</Typography>
-                    </details>
-                  ))}
-                </>
-              ) : null}
-            </Stack>
-          ) : null}
-        </DialogContent>
-        <DialogActions>
-          <Button variant="outlined" onClick={() => setStatusChangeReview(null)} disabled={applyingStatusChange}>Back</Button>
-          {statusChangeReview?.row.id ? (
-            <Button variant="outlined" href={`/cohorts/${statusChangeReview.row.id}`} disabled={applyingStatusChange}>
-              Open Cohort
-            </Button>
-          ) : null}
-          <Button
-            color="error"
-            onClick={() => void applyReviewedStatusChange()}
-            disabled={applyingStatusChange || loadingStatusChangeReview || !statusChangeReview?.preview || Boolean(statusChangeReview?.preview?.blockers?.length)}
-          >
-            {applyingStatusChange ? "Cancelling" : "Send Notices & Cancel Cohort"}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      {cancellationTarget ? (
+        <CohortCancellationDialog
+          key={cancellationTarget.id}
+          cohort={{ id: cancellationTarget.id, title: cancellationTarget.title, status: cancellationTarget.status }}
+          onClose={() => setCancellationTarget(null)}
+          onCancelled={async () => {
+            notifySuccess("Cancellation notices sent, calendar invitations removed, and cohort registrations and participants cancelled.");
+            await load().catch((error) => notifyError(error.message));
+          }}
+        />
+      ) : null}
       <MutationDialog
         title="Edit Cohort"
         open={Boolean(editing)}
