@@ -2530,6 +2530,11 @@ export function SettingsClient() {
                   </div>
                   {provider.provider === "SENDGRID" && (
                     <div className="integration-setup-form">
+                      {provider.setup?.qaBccEmail ? (
+                        <Alert severity="info">
+                          Hidden QA copies are enabled for {provider.setup.qaBccEmail}. Live emails keep their original recipients and content. QA opens and clicks are excluded from customer reporting.
+                        </Alert>
+                      ) : null}
                       <Alert severity={setupForms.SENDGRID?.liveSendingEnabled ? "warning" : "info"}>
                         {setupForms.SENDGRID?.liveSendingEnabled
                           ? "Live email sending is enabled. Messages may go to any resolved recipient."

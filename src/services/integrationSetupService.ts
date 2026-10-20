@@ -2,6 +2,8 @@ import { IntegrationConnectionStatus, IntegrationProvider } from "@prisma/client
 import { Prisma } from "@prisma/client";
 import { decryptSecret } from "@/lib/integrationCrypto";
 import { prisma } from "@/lib/prisma";
+import { env, getAppEnvironmentKind } from "@/lib/env";
+import { productionQaBccEmail } from "@/modules/email/qaCopy";
 import { normalizeSendGridApiKey } from "@/modules/email/sendgridProvider";
 import { upsertIntegrationConnection } from "@/services/integrationService";
 
@@ -45,6 +47,7 @@ export async function getSendGridSetup() {
     configured: Boolean(connection?.accessToken && data.fromEmail),
     fromEmail: String(data.fromEmail ?? ""),
     fromName: String(data.fromName ?? connection?.accountName ?? ""),
+    qaBccEmail: productionQaBccEmail(getAppEnvironmentKind(), env.PRODUCTION_QA_BCC_EMAIL) ?? null,
     webhookPublicKey: "",
     liveSendingEnabled: data.liveSendingEnabled === true,
     webhookIngestionEnabled: data.webhookIngestionEnabled === true,

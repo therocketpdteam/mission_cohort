@@ -12,6 +12,7 @@ const envSchema = z.object({
   SUPABASE_SERVICE_ROLE_KEY: optionalString,
   SENDGRID_API_KEY: optionalString,
   SENDGRID_FROM_EMAIL: optionalString,
+  PRODUCTION_QA_BCC_EMAIL: optionalString,
   GOOGLE_CALENDAR_CLIENT_ID: optionalString,
   GOOGLE_CALENDAR_CLIENT_SECRET: optionalString,
   GOOGLE_CALENDAR_REDIRECT_URI: optionalString,

@@ -18,6 +18,7 @@ import { assertCohortDeliveryAllowed, assertOutboundRecipientsAllowed, getSendGr
 import { getOrganizationInvoiceProfile } from "./appSettingsService";
 import { registrationConfirmationDocumentReadiness } from "./registrationDocumentReadiness";
 import { cancellationBlocksDelivery } from "@/modules/cohorts/cancellation";
+import { isQaBccEvent } from "@/modules/email/qaCopy";
 
 type DefaultTemplate = {
   type: TemplateType;
@@ -3251,8 +3252,9 @@ export async function processScheduledCommunications(limit = 25) {
 }
 
 export async function recordSendGridEvents(events: Array<Record<string, unknown>>) {
+  const customerEvents = events.filter((event) => !isQaBccEvent(event));
   const records = await Promise.all(
-    events.map(async (event) => {
+    customerEvents.map(async (event) => {
       const providerMessageId = String(event.sg_message_id ?? event["smtp-id"] ?? "");
       const recipientEmail = String(event.email ?? "");
       const eventName = String(event.event ?? "sent").toLowerCase();
@@ -3289,7 +3291,7 @@ export async function recordSendGridEvents(events: Array<Record<string, unknown>
     })
   );
 
-  return { processed: records.length };
+  return { processed: records.length, qaSkipped: events.length - customerEvents.length };
 }
 
 export async function sendCommunicationPlaceholder(id: string) {

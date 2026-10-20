@@ -1,6 +1,7 @@
-import { env } from "@/lib/env";
+import { env, getAppEnvironmentKind } from "@/lib/env";
 import { decryptSecret } from "@/lib/integrationCrypto";
 import { prisma } from "@/lib/prisma";
+import { productionQaBccEmail } from "./qaCopy";
 
 export type SendEmailInput = {
   to: string | string[];
@@ -26,7 +27,8 @@ async function getSendGridConfig() {
   return {
     apiKey: normalizeSendGridApiKey(decryptSecret(connection?.accessToken) ?? env.SENDGRID_API_KEY),
     fromEmail: String(metadata.fromEmail ?? env.SENDGRID_FROM_EMAIL ?? ""),
-    fromName: String(metadata.fromName ?? connection?.accountName ?? "")
+    fromName: String(metadata.fromName ?? connection?.accountName ?? ""),
+    qaBccEmail: productionQaBccEmail(getAppEnvironmentKind(), env.PRODUCTION_QA_BCC_EMAIL)
   };
 }
 
@@ -56,11 +58,22 @@ function normalizeRecipients(to: string | string[]) {
   return recipients;
 }
 
-export function buildSendGridMailPayload(input: SendEmailInput, config: { fromEmail: string; fromName?: string }) {
+export function buildSendGridMailPayload(input: SendEmailInput, config: { fromEmail: string; fromName?: string; qaBccEmail?: string }) {
   const recipients = normalizeRecipients(input.to);
+  const qaEmail = productionQaBccEmail("production", config.qaBccEmail);
+  // Every envelope in this request has the same already-rendered content.
+  // Add one hidden copy without repeating an address across personalizations,
+  // changing the customer To headers, or duplicating a real send to the QA user.
+  const addQaCopy = qaEmail && !recipients.includes(qaEmail);
 
   return {
-    personalizations: recipients.map((email) => ({ to: [{ email }] })),
+    personalizations: recipients.map((email, index) => ({
+      to: [{ email }],
+      ...(addQaCopy && index === 0 ? {
+        bcc: [{ email: qaEmail }],
+        custom_args: { mc_qa_bcc_email: qaEmail, mc_intended_recipient: email }
+      } : {})
+    })),
     from: { email: input.from ?? config.fromEmail, ...(config.fromName ? { name: config.fromName } : {}) },
     subject: input.subject,
     content: [

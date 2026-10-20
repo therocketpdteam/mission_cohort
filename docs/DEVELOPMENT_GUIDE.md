@@ -125,6 +125,15 @@ Also open these routes as an admin:
 - Paid invoice/payment history is preserved. Unpaid local invoices are voided during finalization; refund and linked QuickBooks follow-ups remain open finance tasks. The cancellation action does not issue refunds or automatically void external invoices.
 - `Send Cancellation Notice` on cohort detail sends only the role-specific notices. The stage review completes the calendar and status phases. Session-only cancellation behavior is unchanged.
 
+## Hidden Copies Of Live Emails For QA
+
+- Set `PRODUCTION_QA_BCC_EMAIL` on Vercel Production to the authorized internal QA inbox. Leave empty to disable; staging and local environments never apply this live-copy setting.
+- The shared SendGrid provider adds a hidden BCC after the message has been rendered, preserving the customer's To header, subject, HTML/text, and attachments. This covers POC/participant confirmations, team changes, cancellation/removal notices, invoice/payment reminders, and scheduled session/preparation/follow-up emails.
+- One already-rendered message sent identically to several private recipients gets one QA copy of that content. Individually personalized POC or participant sends each get their own copy. If the QA inbox is already an intended recipient, it is not BCC'd again.
+- Original delivery authorization, outbound locking, and staging capture are unchanged. QA copies do not add registrations, participants, calendar guests, or new scheduled jobs, and they do not replay historical messages.
+- Provider metadata marks the QA envelope so QA delivery, open, click, bounce, and unsubscribe events are excluded from customer reporting. Events where the QA address was the actual intended recipient remain normal recipient events.
+- Settings > Connected Tools > SendGrid displays the active hidden QA copy address. This covers app-generated SendGrid messages; Google-generated calendar notifications and authentication emails from other providers are separate.
+
 If a feature shows `Blocked`, keep the UI compatibility fallback in place and do not mark the roadmap item done until production reports ready.
 
 ## Registration Communication Journeys
