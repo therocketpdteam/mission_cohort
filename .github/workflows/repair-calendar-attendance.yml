@@ -1,0 +1,77 @@
+name: Repair calendar attendance silently
+run-name: Calendar attendance ${{ inputs.mode }} for ${{ inputs.email }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      email:
+        description: Participant email
+        required: true
+        type: string
+      reference_invoice:
+        description: Invoice identifying the existing cohort (may belong to a cancelled duplicate)
+        required: true
+        type: string
+      mode:
+        description: Preview first; apply requires the registration ID from preview
+        required: true
+        type: choice
+        default: preview
+        options:
+          - preview
+          - apply
+      registration_id:
+        description: Active paid registration ID returned by preview
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: repair-calendar-attendance
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Preview or repair attendance without notifications
+        env:
+          CRON_SECRET: ${{ secrets.PRODUCTION_CRON_SECRET }}
+          REPAIR_EMAIL: ${{ inputs.email }}
+          REFERENCE_INVOICE: ${{ inputs.reference_invoice }}
+          REPAIR_MODE: ${{ inputs.mode }}
+          REGISTRATION_ID: ${{ inputs.registration_id }}
+        run: |
+          python3 - <<'PY'
+          import json, os, sys, urllib.error, urllib.request
+          secret = os.environ.get('CRON_SECRET')
+          if not secret:
+              raise SystemExit('Production job authentication is unavailable.')
+          body = {
+              'email': os.environ['REPAIR_EMAIL'],
+              'referenceInvoiceNumber': os.environ['REFERENCE_INVOICE'],
+              'mode': os.environ['REPAIR_MODE']
+          }
+          if os.environ.get('REGISTRATION_ID'):
+              body['registrationId'] = os.environ['REGISTRATION_ID']
+          request = urllib.request.Request(
+              'https://mission-cohort-six.vercel.app/api/jobs/repair-calendar-attendance',
+              data=json.dumps(body).encode(), method='POST',
+              headers={'Authorization': 'Bearer ' + secret, 'Content-Type': 'application/json'}
+          )
+          try:
+              with urllib.request.urlopen(request, timeout=240) as response:
+                  result = json.load(response)
+          except urllib.error.HTTPError as error:
+              print(error.read().decode())
+              raise SystemExit('The application rejected the repair request.')
+          print('REPAIR_RESULT_JSON=' + json.dumps(result))
+          print(json.dumps(result, indent=2))
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write('```json\n' + json.dumps(result, indent=2) + '\n```\n')
+          if not result.get('success'):
+              raise SystemExit('Calendar repair did not succeed.')
+          PY

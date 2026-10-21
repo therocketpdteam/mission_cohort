@@ -237,10 +237,39 @@ export async function getGoogleCalendarEvent(input: { accessToken?: string; cale
 
   return response.json() as Promise<{
     id: string;
+    etag?: string;
+    status?: string;
     htmlLink?: string;
     attendees?: Array<{ email?: string; displayName?: string; responseStatus?: string; optional?: boolean; comment?: string; additionalGuests?: number; resource?: boolean }>;
     attendeesOmitted?: boolean;
   }>;
+}
+
+// A targeted repair must not rewrite session details or notify guests.
+// If-Match prevents overwriting an attendee change made after our read.
+export async function patchGoogleCalendarAttendeesSilently(input: {
+  accessToken: string;
+  calendarId: string;
+  providerEventId: string;
+  etag: string;
+  attendees: NonNullable<GoogleCalendarEventInput["attendees"]>;
+}) {
+  if (!input.accessToken || !input.calendarId || !input.etag) {
+    throw Object.assign(new Error("Connected calendar credentials and the current event version are required."), { code: "BAD_REQUEST", status: 400 });
+  }
+  const url = new URL(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(input.calendarId)}/events/${encodeURIComponent(input.providerEventId)}`);
+  url.searchParams.set("sendUpdates", "none");
+  const response = await fetch(url, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${input.accessToken}`, "Content-Type": "application/json", "If-Match": input.etag },
+    body: JSON.stringify({ attendees: input.attendees })
+  });
+  if (!response.ok) {
+    throw Object.assign(new Error(response.status === 412
+      ? "The calendar event changed during repair. Review the current guest list and retry."
+      : `Silent calendar attendee repair failed with status ${response.status}.`), { code: "BAD_REQUEST", status: response.status === 412 ? 409 : 400 });
+  }
+  return { updated: true };
 }
 
 export async function deleteGoogleCalendarEvent(input: {
