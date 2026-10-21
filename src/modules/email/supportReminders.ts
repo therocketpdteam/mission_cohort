@@ -52,6 +52,7 @@ Please join 15–20 minutes before the session starts to complete these checks w
 
 - Confirm that you have the Zoom host or co-host permissions needed to support the session.
 - Test screen sharing and confirm that slides and other materials display correctly.
+- Test breakout rooms: confirm that you can create, open, and close rooms, assign participants, and return everyone to the main session.
 - Check microphones, speakers, and the Thought Leader’s audio. Listen for clarity, volume, and echo.
 - If videos will be used, play a short sample with Share sound enabled and confirm that attendees will hear it clearly.
 - Confirm that cloud recording is available, and remember to start the cloud recording when the session begins.
