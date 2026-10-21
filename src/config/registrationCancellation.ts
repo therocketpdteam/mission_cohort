@@ -1,27 +1,27 @@
 export const registrationCancellationEmail = {
   subject: "Registration cancelled: {{cohort.title}}",
   bodyHtml: `<p>Hello {{registration.primaryContactFirstName}},</p>
-<p>This email confirms that your registration for <strong>{{cohort.title}}</strong> has been cancelled.</p>
+<p>This email confirms that the registration detailed below for <strong>{{cohort.title}}</strong> has been cancelled.</p>
 <p><strong>Cancellation details</strong></p>
 <ul>
   <li>Organization: {{organization.name}}</li>
   <li>Registration contact: {{registration.primaryContactName}}</li>
-  <li>Participants removed: {{registration.participantCount}}</li>
+  <li>Seats on cancelled registration: {{registration.participantCount}}</li>
   <li>Invoice: {{registration.invoiceNumber}}</li>
 </ul>
-<p>The participants associated with this registration have been removed from future cohort calendar events and will not receive additional automated cohort messages.</p>
+<p>This cancellation applies only to this registration. Any separate active registrations remain in place.</p>
 <p>Thank you,<br>{{support.teamName}}</p>`,
   bodyText: `Hello {{registration.primaryContactFirstName}},
 
-This email confirms that your registration for {{cohort.title}} has been cancelled.
+This email confirms that the registration detailed below for {{cohort.title}} has been cancelled.
 
 Cancellation details
 - Organization: {{organization.name}}
 - Registration contact: {{registration.primaryContactName}}
-- Participants removed: {{registration.participantCount}}
+- Seats on cancelled registration: {{registration.participantCount}}
 - Invoice: {{registration.invoiceNumber}}
 
-The participants associated with this registration have been removed from future cohort calendar events and will not receive additional automated cohort messages.
+This cancellation applies only to this registration. Any separate active registrations remain in place.
 
 Thank you,
 {{support.teamName}}`
@@ -71,4 +71,41 @@ export function cancellationInvoiceDisposition(input: {
   }
   if (input.invoiceStatus === "VOIDED" || input.invoiceStatus === "CANCELLED") return "already_voided" as const;
   return "void_and_attach" as const;
+}
+
+
+export function registrationCancellationAttendanceMessage(input: {
+  participants: Array<{ name: string; email: string }>;
+  requestedEmails: string[];
+  emailsKeptForActiveEnrollment: string[];
+  primaryContactEmail: string;
+}) {
+  const normalize = (email: string) => email.trim().toLowerCase();
+  const kept = new Set(input.emailsKeptForActiveEnrollment.map(normalize));
+  const names = new Map(input.participants.map((participant) => [normalize(participant.email), participant.name]));
+  const candidates = Array.from(new Set(input.requestedEmails.map(normalize)));
+  const removed = candidates.filter((email) => !kept.has(email));
+  const retained = candidates.filter((email) => kept.has(email));
+  const escape = (value: string) => value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]!));
+  const label = (email: string) => names.get(email) ? `${names.get(email)} - ${email}` : email;
+  const html: string[] = [];
+  const text: string[] = [];
+
+  if (retained.length > 0) {
+    const explanation = kept.has(normalize(input.primaryContactEmail))
+      ? "Your separate active enrollment in this cohort remains in place. You can continue attending and receiving participant communications through that registration."
+      : "The following participants remain enrolled through another active registration. Their calendar attendance and automated participant communications remain active.";
+    html.push(`<p>${explanation}</p><p><strong>Participants remaining enrolled</strong></p><ul>${retained.map((email) => `<li>${escape(label(email))}</li>`).join("")}</ul>`);
+    text.push(explanation, "Participants remaining enrolled", ...retained.map((email) => `- ${label(email)}`));
+  }
+  if (removed.length > 0) {
+    html.push(`<p><strong>Participants leaving this cohort</strong></p><ul>${removed.map((email) => `<li>${escape(label(email))}</li>`).join("")}</ul><p>These participants have no other active enrollment in this cohort. Their attendance on future linked calendar events and automated participant messages will stop.</p>`);
+    text.push("Participants leaving this cohort", ...removed.map((email) => `- ${label(email)}`), "These participants have no other active enrollment in this cohort. Their attendance on future linked calendar events and automated participant messages will stop.");
+  }
+  if (candidates.length === 0) {
+    const explanation = "No participant calendar attendance is affected. Automated messages associated with this cancelled registration will stop.";
+    html.push(`<p>${explanation}</p>`);
+    text.push(explanation);
+  }
+  return { html: html.join(""), text: text.join("\n\n") };
 }

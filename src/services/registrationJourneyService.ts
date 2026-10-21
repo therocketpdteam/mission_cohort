@@ -136,8 +136,8 @@ const cancellableJourneyStatuses = [
   CommunicationStatus.FAILED
 ];
 
-export async function cancelRegistrationJourneys(registrationId: string, reason: string) {
-  return prisma.cohortCommunication.updateMany({
+export async function cancelRegistrationJourneys(registrationId: string, reason: string, client = prisma) {
+  return client.cohortCommunication.updateMany({
     where: {
       registrationId,
       journeyKey: { not: null },

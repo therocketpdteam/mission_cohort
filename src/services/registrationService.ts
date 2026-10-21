@@ -12,12 +12,12 @@ import { automaticRegistrationJourneyOptions, cancelRegistrationJourneys, planRe
 import { syncRegistrationParticipantListStatus } from "./participantService";
 import { syncPaymentRecordsToRegistrationStatus } from "./paymentService";
 import { shouldDeferRegistrationDelivery, stageParticipantAddition, stageRegistrationFieldChanges } from "./registrationChangeService";
-import { removeFutureGoogleCalendarAttendees, syncFutureLinkedGoogleCalendarInvitesForCohort } from "./calendarService";
+import { planFutureGoogleCalendarAttendeeRemoval, removeFutureGoogleCalendarAttendees, syncFutureLinkedGoogleCalendarInvitesForCohort } from "./calendarService";
 import { deletePrivateAppFile } from "./storageService";
 import { addCommunicationAttachment, getSystemUserId, sendCommunication } from "./communicationService";
 import { generateInvoicePdf } from "./invoiceService";
 import { renderMergeFields } from "@/modules/email/mergeFields";
-import { cancellationInvoiceDisposition, cancellationPaymentMessage, registrationCancellationEmail } from "@/config/registrationCancellation";
+import { cancellationInvoiceDisposition, cancellationPaymentMessage, registrationCancellationAttendanceMessage, registrationCancellationEmail } from "@/config/registrationCancellation";
 import { queueIntegrationJob } from "./integrationService";
 import { ensureRegistrationDeliveryJobType } from "./registrationDeliveryJobService";
 
@@ -319,8 +319,8 @@ export async function confirmRegistration(id: string) {
   return registration;
 }
 
-export async function previewRegistrationCancellation(id: string) {
-  const registration = await prisma.registration.findUniqueOrThrow({
+export async function previewRegistrationCancellation(id: string, client = prisma) {
+  const registration = await client.registration.findUniqueOrThrow({
     where: { id },
     include: {
       cohort: {
@@ -375,12 +375,16 @@ export async function previewRegistrationCancellation(id: string) {
     name: `${participant.firstName} ${participant.lastName}`.trim(),
     email: participant.email.trim().toLowerCase()
   }));
-  const calendarEmails = Array.from(new Set([
-    ...registration.participants.map((participant) => participant.email.trim().toLowerCase()),
-    ...(registration.participantCount <= 1 && registration.participants.length === 0
-      ? [registration.primaryContactEmail.trim().toLowerCase()]
-      : [])
-  ].filter(Boolean)));
+  const calendarPlan = await planFutureGoogleCalendarAttendeeRemoval({
+    cohortId: registration.cohortId,
+    registrationId: id
+  }, client);
+  const attendanceMessage = registrationCancellationAttendanceMessage({
+    participants: participantRoster,
+    requestedEmails: calendarPlan.requestedEmails,
+    emailsKeptForActiveEnrollment: calendarPlan.emailsKeptForActiveEnrollment,
+    primaryContactEmail: registration.primaryContactEmail
+  });
   const context = {
     cohort: registration.cohort,
     organization: registration.organization,
@@ -394,12 +398,6 @@ export async function previewRegistrationCancellation(id: string) {
   const renderedSubject = renderMergeFields(registrationCancellationEmail.subject, context).output;
   const renderedBodyHtml = renderMergeFields(registrationCancellationEmail.bodyHtml, context).output;
   const renderedBodyText = renderMergeFields(registrationCancellationEmail.bodyText, context).output;
-  const rosterHtml = participantRoster.length > 0
-    ? `<p><strong>Participants removed</strong></p><ul>${participantRoster.map((participant) => `<li>${escapeHtml(participant.name)} - ${escapeHtml(participant.email)}</li>`).join("")}</ul>`
-    : "";
-  const rosterText = participantRoster.length > 0
-    ? `\nParticipants removed\n${participantRoster.map((participant) => `- ${participant.name} - ${participant.email}`).join("\n")}\n`
-    : "";
 
   return {
     registration: {
@@ -422,13 +420,14 @@ export async function previewRegistrationCancellation(id: string) {
       alreadyCancelled: registration.status === RegistrationStatus.CANCELLED
     },
     effects: {
-      futureCalendarSessions: registration.cohort.sessions.map((session) => ({
+      futureCalendarSessions: (calendarPlan.emailsToRemove.length > 0 ? registration.cohort.sessions : []).map((session) => ({
         id: session.id,
         sessionNumber: session.sessionNumber,
         title: session.title,
         startTime: session.startTime
       })),
-      calendarEmails,
+      calendarEmails: calendarPlan.emailsToRemove,
+      calendarEmailsPreserved: calendarPlan.emailsKeptForActiveEnrollment,
       communicationsToCancel: registration.communications,
       participantEmailsSent: 0,
       calendarNotificationsSent: 0,
@@ -446,11 +445,9 @@ export async function previewRegistrationCancellation(id: string) {
       to: registration.primaryContactEmail.trim().toLowerCase(),
       subject: renderedSubject,
       bodyHtml: renderedBodyHtml
-        .replace("<p>The participants associated", `${rosterHtml}<p>The participants associated`)
-        .replace("<p>Thank you,", `${paymentMessage.html}<p>Thank you,`),
+        .replace("<p>Thank you,", `${attendanceMessage.html}${paymentMessage.html}<p>Thank you,`),
       bodyText: renderedBodyText
-        .replace("\nThe participants associated", `${rosterText}\nThe participants associated`)
-        .replace("\nThank you,", `\n${paymentMessage.text}\n\nThank you,`),
+        .replace("\nThank you,", `\n${attendanceMessage.text}\n\n${paymentMessage.text}\n\nThank you,`),
       paymentMessageKind: paymentMessage.kind
     },
     blockers: [

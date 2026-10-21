@@ -2044,7 +2044,7 @@ export function RegistrationRemovalDialog({
                   <div className="registration-detail-grid">
                     <DetailTile label="Cohort" value={cancellationPreview.registration?.cohortShortName ?? cancellationPreview.registration?.cohortTitle} />
                     <DetailTile label="Organization" value={cancellationPreview.registration?.organizationName} />
-                    <DetailTile label="Participants affected" value={cancellationPreview.registration?.participantCount} />
+                    <DetailTile label="Seats on cancelled registration" value={cancellationPreview.registration?.participantCount} />
                     <DetailTile label="Current value" value={money(cancellationPreview.registration?.totalAmount)} />
                     <DetailTile label="Reporting value afterward" value="$0" tone="success" />
                     <DetailTile label="CRM status afterward" value="Cancelled" tone="success" />
@@ -2066,9 +2066,14 @@ export function RegistrationRemovalDialog({
                   <Box>
                     <Typography variant="subtitle2">Calendar attendees removed</Typography>
                     <Typography color="text.secondary">
-                      {(cancellationPreview.effects?.calendarEmails ?? []).join(", ") || "No participant calendar attendees were found."}
+                      {(cancellationPreview.effects?.calendarEmails ?? []).join(", ") || "No calendar attendees will be removed."}
                     </Typography>
                   </Box>
+                  {(cancellationPreview.effects?.calendarEmailsPreserved ?? []).length > 0 ? (
+                    <Alert severity="info">
+                      Remaining enrolled through another active registration: {(cancellationPreview.effects.calendarEmailsPreserved as string[]).join(", ")}. Their calendar attendance and participant communications remain active.
+                    </Alert>
+                  ) : null}
                   <Box>
                     <Typography variant="subtitle2">POC cancellation email</Typography>
                     <Typography><strong>To:</strong> {cancellationPreview.email?.to}</Typography>

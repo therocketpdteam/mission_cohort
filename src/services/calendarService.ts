@@ -71,12 +71,17 @@ export async function getConnectedGoogleCalendarAccessToken() {
   return token.access_token;
 }
 
-async function getCohortCalendarAttendees(cohortId: string) {
-  const registrations = await prisma.registration.findMany({
+async function getCohortCalendarAttendees(
+  cohortId: string,
+  exclusions: { registrationId?: string; participantIds?: string[] } = {},
+  client = prisma
+) {
+  const registrations = await client.registration.findMany({
     where: {
       cohortId,
       archivedAt: null,
-      status: { not: RegistrationStatus.CANCELLED }
+      status: { not: RegistrationStatus.CANCELLED },
+      ...(exclusions.registrationId ? { id: { not: exclusions.registrationId } } : {})
     },
     select: {
       primaryContactEmail: true,
@@ -84,7 +89,10 @@ async function getCohortCalendarAttendees(cohortId: string) {
       participantCount: true,
       _count: { select: { participants: true } },
       participants: {
-        where: { status: ParticipantStatus.REGISTERED },
+        where: {
+          status: ParticipantStatus.REGISTERED,
+          ...(exclusions.participantIds?.length ? { id: { notIn: exclusions.participantIds } } : {})
+        },
         select: { email: true, firstName: true, lastName: true }
       }
     }
@@ -175,24 +183,32 @@ async function futureLinkedGoogleSessions(cohortId: string) {
   });
 }
 
-export async function removeFutureGoogleCalendarAttendees(input: {
+type CalendarAttendeeRemovalInput = {
   cohortId: string;
   registrationId?: string;
   participantIds?: string[];
   emails?: string[];
   reason?: string;
-}) {
+};
+
+// Resolve attendance after the selected registration/participants leave, even
+// though callers have not changed their database statuses yet.
+export async function planFutureGoogleCalendarAttendeeRemoval(input: CalendarAttendeeRemovalInput, client = prisma) {
   const requestedEmails = uniqueNormalizedEmails(input.emails ?? []);
 
   if (input.registrationId) {
-    const registration = await prisma.registration.findUnique({
+    const registration = await client.registration.findUnique({
       where: { id: input.registrationId },
       select: {
+        cohortId: true,
         primaryContactEmail: true,
         participantCount: true,
         participants: { select: { email: true } }
       }
     });
+    if (registration && registration.cohortId !== input.cohortId) {
+      throw Object.assign(new Error("The registration does not belong to this cohort."), { code: "BAD_REQUEST", status: 400 });
+    }
     if (registration) {
       requestedEmails.push(...uniqueNormalizedEmails([
         ...registration.participants.map((participant) => participant.email),
@@ -202,20 +218,34 @@ export async function removeFutureGoogleCalendarAttendees(input: {
   }
 
   if (input.participantIds?.length) {
-    const participants = await prisma.participant.findMany({
-      where: { id: { in: input.participantIds } },
+    const participants = await client.participant.findMany({
+      where: { id: { in: input.participantIds }, cohortId: input.cohortId },
       select: { email: true }
     });
     requestedEmails.push(...uniqueNormalizedEmails(participants.map((participant) => participant.email)));
   }
 
-  const emailsToRemove = uniqueNormalizedEmails(requestedEmails);
+  const candidates = uniqueNormalizedEmails(requestedEmails);
+  if (candidates.length === 0) return { requestedEmails: [], emailsToRemove: [], emailsKeptForActiveEnrollment: [] };
+
+  const activeAttendees = await getCohortCalendarAttendees(input.cohortId, input, client);
+  const activeEmails = new Set(activeAttendees.map((attendee) => attendee.email));
+  return {
+    requestedEmails: candidates,
+    emailsToRemove: candidates.filter((email) => !activeEmails.has(email)),
+    emailsKeptForActiveEnrollment: candidates.filter((email) => activeEmails.has(email))
+  };
+}
+
+export async function removeFutureGoogleCalendarAttendees(input: CalendarAttendeeRemovalInput, client = prisma) {
+  const { emailsToRemove, emailsKeptForActiveEnrollment } = await planFutureGoogleCalendarAttendeeRemoval(input, client);
   if (emailsToRemove.length === 0) {
     return {
       cohortId: input.cohortId,
       registrationId: input.registrationId ?? null,
       participantIds: input.participantIds ?? [],
       emailsToRemove,
+      emailsKeptForActiveEnrollment,
       sessionsScanned: 0,
       sessionsUpdated: 0,
       attendeesRemoved: 0,
@@ -231,6 +261,7 @@ export async function removeFutureGoogleCalendarAttendees(input: {
       registrationId: input.registrationId ?? null,
       participantIds: input.participantIds ?? [],
       emailsToRemove,
+      emailsKeptForActiveEnrollment,
       sessionsScanned: 0,
       sessionsUpdated: 0,
       attendeesRemoved: 0,
@@ -362,6 +393,7 @@ export async function removeFutureGoogleCalendarAttendees(input: {
       registrationId: input.registrationId ?? null,
       participantIds: input.participantIds ?? [],
       emailsToRemove,
+      emailsKeptForActiveEnrollment,
       reason: input.reason ?? null,
       sessionsScanned: sessions.length,
       sessionsUpdated,
@@ -376,6 +408,7 @@ export async function removeFutureGoogleCalendarAttendees(input: {
     registrationId: input.registrationId ?? null,
     participantIds: input.participantIds ?? [],
     emailsToRemove,
+    emailsKeptForActiveEnrollment,
     sessionsScanned: sessions.length,
     sessionsUpdated,
     attendeesRemoved,
