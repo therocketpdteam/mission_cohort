@@ -2,7 +2,7 @@
 
 import { CohortCancellationDialog } from "./CohortCancellationDialog";
 import { AddIcon } from "@/components/ui/icons";
-import { ArchiveOutlined, CalendarMonthOutlined, GroupsOutlined, InsightsOutlined } from "@/components/ui/icons";
+import { ArchiveOutlined, ArticleOutlined, CalendarMonthOutlined, CancelOutlined, GroupsOutlined, InsightsOutlined } from "@/components/ui/icons";
 import { EditOutlined, ExpandLessOutlined, ExpandMoreOutlined } from "@/components/ui/icons";
 import { VisibilityOutlined } from "@/components/ui/icons";
 import {
@@ -732,6 +732,8 @@ export function CohortsClient() {
   const [presenterId, setPresenterId] = useState("");
   const [archiveUndo, setArchiveUndo] = useState<{ id: string; title: string; previousStatus: string } | null>(null);
   const [cancellationTarget, setCancellationTarget] = useState<AdminRow | null>(null);
+  const [draftTarget, setDraftTarget] = useState<AdminRow | null>(null);
+  const [movingToDraft, setMovingToDraft] = useState(false);
   const [expandedCohortId, setExpandedCohortId] = useState("");
   const [pageView, setPageView] = useState<"cohorts" | "distribution">("cohorts");
   const { notifySuccess, notifyError, snackbar } = useNotifier();
@@ -785,6 +787,21 @@ export function CohortsClient() {
     { label: `All (${rows.length})`, value: "" },
     ...statusOptions.map((value) => ({ label: `${formatStatusLabel(value)} (${statusCount(rows, value)})`, value }))
   ];
+
+  async function confirmMoveToDraft() {
+    if (!draftTarget || movingToDraft) return;
+    setMovingToDraft(true);
+    try {
+      const result = await adminApi<AdminRow>(`/api/cohorts/${draftTarget.id}`, { method: "PATCH", body: { action: "moveToDraft" } });
+      notifySuccess(`Cohort moved back to Draft. ${Number(result.pausedCommunications ?? 0)} unsent emails paused.`);
+      setDraftTarget(null);
+      await load();
+    } catch (error) {
+      notifyError((error as Error).message);
+    } finally {
+      setMovingToDraft(false);
+    }
+  }
 
   const columns: GridColDef[] = [
     {
@@ -975,10 +992,15 @@ export function CohortsClient() {
                   <span>{money(finance.totalSales)}</span>
                   <StatusChip value={row.status === "ACTIVE" || row.status === "PUBLISHED" ? "Current" : row.status === "COMPLETED" && hasOutstandingCollection(row) ? "Ended" : row.status} />
                   <div className="cohort-reference-actions">
-                    <Button size="small" variant="outlined" onClick={() => router.push(`/cohorts/${row.id}`)}>Open</Button>
-                    {row.status !== "CANCELLED" ? (
-                      <Button size="small" variant="outlined" color="error" onClick={() => setCancellationTarget(row)}>Cancel Cohort</Button>
-                    ) : null}
+                    <RowActionMenu actions={[
+                      { label: "Open", icon: <VisibilityOutlined fontSize="small" />, onClick: () => router.push(`/cohorts/${row.id}`) },
+                      ...(["PUBLISHED", "ACTIVE"].includes(row.status) && ["PUBLISHED", "ACTIVE"].includes(row.storedStatus ?? row.status) ? [{
+                        label: "Move back to Draft", icon: <ArticleOutlined fontSize="small" />, onClick: () => setDraftTarget(row)
+                      }] : []),
+                      ...(row.status !== "CANCELLED" ? [{
+                        label: "Cancel Cohort", icon: <CancelOutlined fontSize="small" />, color: "error" as const, onClick: () => setCancellationTarget(row)
+                      }] : [])
+                    ]} />
                   </div>
                 </div>
                 {expanded && (
@@ -1104,6 +1126,22 @@ export function CohortsClient() {
           }}
         />
       ) : null}
+      <Dialog open={Boolean(draftTarget)} onClose={() => !movingToDraft && setDraftTarget(null)} fullWidth maxWidth="sm">
+        <DialogTitle>Move cohort back to Draft?</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2}>
+            <Typography><strong>{draftTarget?.title}</strong></Typography>
+            <Alert severity="warning">This pauses unsent cohort emails until you publish the cohort again.</Alert>
+            <Typography>Existing calendar invitations and registrations stay in place.</Typography>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button variant="outlined" disabled={movingToDraft} onClick={() => setDraftTarget(null)}>Go back</Button>
+          <Button color="warning" disabled={movingToDraft || !draftTarget} onClick={() => void confirmMoveToDraft()}>
+            {movingToDraft ? "Moving" : "Move back to Draft"}
+          </Button>
+        </DialogActions>
+      </Dialog>
       <MutationDialog
         title="Edit Cohort"
         open={Boolean(editing)}

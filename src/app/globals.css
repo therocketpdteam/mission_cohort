@@ -3990,7 +3990,7 @@ body {
 .cohort-reference-head,
 .cohort-reference-row {
   display: grid;
-  grid-template-columns: 42px minmax(260px, 2.2fr) minmax(125px, 0.9fr) 145px 70px 90px 88px 58px 92px 92px 132px;
+  grid-template-columns: 42px minmax(260px, 2.2fr) minmax(125px, 0.9fr) 145px 70px 90px 88px 58px 92px 92px 72px;
   gap: 10px;
   align-items: center;
 }
@@ -4017,9 +4017,8 @@ body {
 
 .cohort-reference-actions {
   display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 5px;
+  align-items: center;
+  justify-content: center;
 }
 
 .cohort-reference-row > span:not(.status-chip) {
