@@ -2,6 +2,7 @@ import { CohortStatus, CommunicationStatus, EmailEventType, OperationsTaskStatus
 import { ok } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { isMissingEmailReviewColumn } from "@/lib/prismaCompatibility";
+import { getDashboardRegistrationActivity } from "@/services/dashboardRegistrationActivityService";
 import { deriveCohortStatus } from "@/services/cohortLifecycle";
 
 function parseDashboardRange(request: Request) {
@@ -151,7 +152,8 @@ export async function GET(request: Request) {
     communicationIssues,
     paymentSnapshot,
     paymentRecords,
-    activity
+    activity,
+    registrationActivity
   ] = await Promise.all([
     prisma.cohort.findMany({
       where: cohortWhere,
@@ -218,7 +220,8 @@ export async function GET(request: Request) {
     prisma.auditLog.findMany({
       orderBy: { createdAt: "desc" },
       take: 8
-    })
+    }),
+    getDashboardRegistrationActivity(cohortRelationWhere, now)
   ]);
   const activeCohortStatuses: CohortStatus[] = [CohortStatus.PUBLISHED, CohortStatus.ACTIVE];
   const activeCohorts = lifecycleCohorts.filter((cohort) => activeCohortStatuses.includes(deriveCohortStatus(cohort)) && cohortOverlapsRange(cohort, range)).length;
@@ -236,6 +239,7 @@ export async function GET(request: Request) {
     },
     upcomingSessions: sessions,
     recentRegistrations: registrations,
+    registrationActivity,
     cohortsNeedingAttention: cohorts,
     openOperationsTasks: tasks,
     communicationIssues,

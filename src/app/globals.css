@@ -12533,7 +12533,7 @@ button.dashboard-activity-item {
   z-index: 1;
   display: grid;
   height: 100%;
-  grid-template-columns: repeat(8, minmax(24px, 1fr));
+  grid-template-columns: repeat(10, minmax(36px, 1fr));
   gap: 14px;
   align-items: end;
 }
@@ -12567,8 +12567,15 @@ button.dashboard-activity-item {
   white-space: nowrap;
 }
 
+.dashboard-chart-empty {
+  margin: 10px 0 0;
+  color: var(--color-slate-500);
+  font-size: 0.75rem;
+}
+
 .dashboard-chart-legend {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 7px;
   border-top: 1px solid #e1e7ed;
@@ -12580,8 +12587,14 @@ button.dashboard-activity-item {
 .dashboard-chart-legend i {
   width: 7px;
   height: 7px;
+  flex-shrink: 0;
   border-radius: 2px;
   background: #7860a7;
+}
+
+.dashboard-chart-legend strong {
+  font-weight: 500;
+  white-space: nowrap;
 }
 
 .dashboard-chart-legend span {
@@ -12696,7 +12709,22 @@ button.dashboard-activity-item {
   }
 
   .dashboard-chart-bars {
-    min-width: 560px;
+    grid-template-columns: repeat(10, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .dashboard-chart-column {
+    grid-template-rows: 18px minmax(0, 1fr) 32px;
+  }
+
+  .dashboard-chart-column small {
+    white-space: normal;
+    text-align: center;
+  }
+
+  .dashboard-chart-legend span {
+    width: 100%;
+    margin-left: 14px;
   }
 
   .dashboard-registration-table {

@@ -17,6 +17,7 @@ import Link from "next/link";
 import type { Route } from "next";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
+import type { RegistrationActivity } from "@/lib/registrationActivity";
 import { adminApi } from "@/lib/adminApi";
 import { formatProperDisplay, formatRegistrationPaymentStatus, formatStatusLabel } from "@/lib/formatting";
 import {
@@ -302,40 +303,34 @@ function PaymentSnapshot({ finance }: { finance: AdminRow }) {
   );
 }
 
-function RegistrationActivityPanel({ registrations }: { registrations: AdminRow[] }) {
-  const buckets = useMemo(() => {
-    const counts = new Map<string, number>();
-    registrations.forEach((registration) => {
-      const date = new Date(registration.createdAt);
-      if (!Number.isFinite(date.getTime())) return;
-      const key = date.toISOString().slice(0, 10);
-      counts.set(key, (counts.get(key) ?? 0) + 1);
-    });
-    const sorted = Array.from(counts.entries()).sort(([a], [b]) => a.localeCompare(b)).slice(-8);
-    return sorted.length ? sorted : [[new Date().toISOString().slice(0, 10), 0] as [string, number]];
-  }, [registrations]);
-  const max = Math.max(1, ...buckets.map(([, count]) => count));
-  const points = buckets.map(([, count], index) => {
-    const x = buckets.length === 1 ? 50 : (index / (buckets.length - 1)) * 100;
-    const y = 92 - (count / max) * 76;
-    return { x, y, count };
-  });
-  const path = points.map((point, index) => `${index ? "L" : "M"} ${point.x} ${point.y}`).join(" ");
-
+function RegistrationActivityPanel({ activity, loading }: { activity: RegistrationActivity | null; loading: boolean }) {
+  const buckets = activity?.buckets ?? [];
+  const max = Math.max(1, ...buckets.map((bucket) => bucket.count));
   return (
     <DashboardPanel title="Registration activity" actionLabel="Last 10 weeks" className="dashboard-panel-registration-activity">
-      <div className="dashboard-activity-chart" role="img" aria-label="Recent registration activity">
-        <div className="dashboard-chart-grid" aria-hidden="true"><i /><i /><i /></div>
-        <svg className="dashboard-chart-line" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-          <path className="dashboard-chart-area" d={`${path} L 100 92 L 0 92 Z`} />
-          <path className="dashboard-chart-stroke" d={path} />
-          {points.map((point, index) => <circle key={buckets[index][0]} cx={point.x} cy={point.y} r="1.35" />)}
-        </svg>
-        <div className="dashboard-chart-labels">
-          {buckets.map(([date]) => <small key={date}>{new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date(`${date}T12:00:00`))}</small>)}
-        </div>
-      </div>
-      <div className="dashboard-chart-legend"><i /> Registrations <span>New registrations by week</span></div>
+      {activity ? (
+        <>
+          <div className="dashboard-activity-chart" role="list" aria-label="New registrations by week for the last 10 weeks, Eastern time">
+            <div className="dashboard-chart-grid" aria-hidden="true"><i /><i /><i /></div>
+            <div className="dashboard-chart-bars">
+              {buckets.map((bucket) => {
+                const description = `Week of ${bucket.label}: ${bucket.count} registration${bucket.count === 1 ? "" : "s"}${bucket.currentWeek ? " (current week, in progress)" : ""}`;
+                return (
+                  <div className="dashboard-chart-column" key={bucket.weekStart} role="listitem" aria-label={description} title={description}>
+                    <strong>{bucket.count}</strong>
+                    <span aria-hidden="true" style={{ height: `${bucket.count / max * 100}%`, minHeight: bucket.count ? 3 : 0 }} />
+                    <small>{bucket.label}</small>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          <div className="dashboard-chart-legend"><i /><strong>{activity.total} registration{activity.total === 1 ? "" : "s"}</strong><span>Weekly totals · current week in progress · Eastern time</span></div>
+          {activity.total === 0 ? <p className="dashboard-chart-empty">No registrations in this period.</p> : null}
+        </>
+      ) : (
+        <EmptyState title={loading ? "Loading registration activity" : "Registration activity unavailable"} description={loading ? "Loading the full 10-week period." : "Refresh the dashboard to try again."} />
+      )}
     </DashboardPanel>
   );
 }
@@ -605,7 +600,7 @@ export function DashboardClient() {
       {loading && <LoadingState label="Loading dashboard" />}
 
       <section className="dashboard-insight-grid">
-        <RegistrationActivityPanel registrations={data?.recentRegistrations ?? []} />
+        <RegistrationActivityPanel activity={data?.registrationActivity ?? null} loading={loading} />
         <PaymentSnapshot finance={financeSummary} />
       </section>
 
