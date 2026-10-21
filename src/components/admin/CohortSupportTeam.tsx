@@ -8,7 +8,7 @@ import { supportReminderTemplate, type SupportPerson, type SupportReminderKind }
 import { Alert, Button, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem, Stack, TextField } from "@/components/ui/primitives";
 import { type AdminRow, SectionCard, StatusChip } from "./common";
 
-type Team = { revision: string | null; members: SupportPerson[]; reminders: AdminRow[] };
+type Team = { revision: string | null; members: SupportPerson[]; reminders: AdminRow[]; calendar?: { status: string; error?: string; checked?: number; updated?: number } };
 type EditablePerson = { id?: string; name: string; email: string; localKey: string };
 const comparable = (members: Array<{ id?: string; name: string; email: string }>) => JSON.stringify(members.map(({ id, name, email }) => ({ id, name, email })));
 
@@ -17,6 +17,7 @@ export function CohortSupportTeam({ cohort, sessions }: { cohort: AdminRow; sess
   const [people, setPeople] = useState<EditablePerson[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [preview, setPreview] = useState(false);
@@ -46,7 +47,7 @@ export function CohortSupportTeam({ cohort, sessions }: { cohort: AdminRow; sess
     // Session edits refresh delivery dates without discarding unsaved team
     // edits or advancing the revision used to detect conflicting saves.
     if (team) void adminApi<Team>(endpoint).then((value) => {
-      if (!ignore) setTeam((previous) => previous?.revision === value.revision ? { ...previous, reminders: value.reminders } : previous);
+      if (!ignore) setTeam((previous) => previous?.revision === value.revision ? { ...previous, reminders: value.reminders, calendar: value.calendar } : previous);
     }).catch(() => {
       if (!ignore) setError("The reminder schedule could not be refreshed. Reload the team to try again.");
     });
@@ -59,9 +60,18 @@ export function CohortSupportTeam({ cohort, sessions }: { cohort: AdminRow; sess
     setSaving(true); setError(""); setNotice("");
     try {
       accept(await adminApi<Team>(endpoint, { method: "PATCH", body: { revision: team.revision, members: people.map(({ id, name, email }) => ({ id, name, email })) } }));
-      setNotice("Support team saved. Future reminders have been updated. No email was sent now.");
+      setNotice("Support team saved. Future reminders have been updated and calendar invitation sync requested.");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to save the support team."); }
     finally { setSaving(false); }
+  }
+
+  async function syncInvitations() {
+    setSyncing(true); setError("");
+    try {
+      const calendar = await adminApi<NonNullable<Team["calendar"]>>(endpoint, { method: "POST" });
+      setTeam((previous) => previous ? { ...previous, calendar } : previous);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to sync calendar invitations."); }
+    finally { setSyncing(false); }
   }
 
   const selectedSession = sessions.find((session) => session.id === sessionId) ?? sessions[0];
@@ -76,9 +86,12 @@ export function CohortSupportTeam({ cohort, sessions }: { cohort: AdminRow; sess
   const issues = team?.reminders.filter((reminder) => reminder.status === "FAILED").length ?? 0;
 
   return (
-    <SectionCard title="Support Team" action={<Button variant="outlined" onClick={() => setPreview(true)} disabled={!sessions.length}>Preview reminders</Button>}>
+    <SectionCard title="Support Team" action={<><Button variant="outlined" onClick={() => void syncInvitations()} disabled={loading || saving || syncing || dirty}>{syncing ? "Syncing invitations…" : "Sync calendar invitations"}</Button><Button variant="outlined" onClick={() => setPreview(true)} disabled={!sessions.length}>Preview reminders</Button></>}>
       <Stack spacing={2}>
         <p className="cohort-support-description">Assign the people supporting Zoom sessions. Each person receives a separate 24-hour and 60-minute reminder for every session. Support assignments do not create participant registrations or use seats.</p>
+        <p className="cohort-support-description">Session calendar invitations include the Thought Leader{cohort.presenter?.email ? ` (${cohort.presenter.email})` : ""} and assigned support people.</p>
+        {team?.calendar?.status === "synced" && <Alert severity="success">Calendar invitations verified for {team.calendar.checked ?? 0} upcoming session{team.calendar.checked === 1 ? "" : "s"}.</Alert>}
+        {team?.calendar && team.calendar.status !== "synced" && <Alert severity={team.calendar.status === "failed" ? "warning" : "info"}>{team.calendar.error || (team.calendar.status === "busy" || team.calendar.status === "syncing" ? "Calendar invitations are being synced." : "Calendar invitations are pending sync.")}</Alert>}
         {error && <Alert severity="error">{error} <Button size="small" onClick={() => void reload()} disabled={saving}>Reload team</Button></Alert>}
         {notice && <Alert severity="success">{notice}</Alert>}
         {loading ? <p>Loading support team…</p> : team && (
@@ -96,7 +109,7 @@ export function CohortSupportTeam({ cohort, sessions }: { cohort: AdminRow; sess
               <Button type="submit" disabled={!dirty || saving}>{saving ? "Saving…" : "Save support team"}</Button>
               {dirty && <Button type="button" variant="text" disabled={saving} onClick={() => accept(team)}>Discard changes</Button>}
             </div>
-            <p className="cohort-support-description">Changes take effect when saved. Removing a person stops their pending reminders. Only reminder times still ahead when an assignment is saved will be scheduled. Reminders send while the cohort is published.</p>
+            <p className="cohort-support-description">Saving updates future calendar invitations and reminders. Google may send invitation or update notifications. Removing a person stops their pending reminders and removes them from future invitations unless they remain a participant or Thought Leader. Only future reminder times are scheduled, and delivery requires a published cohort.</p>
             {!!people.length && sessions.some((session) => new Date(session.startTime) > new Date() && !session.meetingUrl) && <Alert severity="warning">Add a Zoom / meeting link to each upcoming session so its support reminders can be delivered.</Alert>}
           </form>
         )}

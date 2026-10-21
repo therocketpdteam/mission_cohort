@@ -2069,6 +2069,7 @@ export function RegistrationRemovalDialog({
                       {(cancellationPreview.effects?.calendarEmails ?? []).join(", ") || "No calendar attendees will be removed."}
                     </Typography>
                   </Box>
+                  {(cancellationPreview.effects?.calendarEmailsKeptForStaffRole ?? []).length > 0 && <Alert severity="info">Calendar invitations remain active through a Thought Leader or support team role: {cancellationPreview.effects.calendarEmailsKeptForStaffRole.join(", ")}. Participant messages for this registration will stop.</Alert>}
                   {(cancellationPreview.effects?.calendarEmailsPreserved ?? []).length > 0 ? (
                     <Alert severity="info">
                       Remaining enrolled through another active registration: {(cancellationPreview.effects.calendarEmailsPreserved as string[]).join(", ")}. Their calendar attendance and participant communications remain active.

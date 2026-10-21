@@ -12,7 +12,7 @@ concurrency:
 jobs:
   process:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
     steps:
       - name: Process scheduled communications
         env:
@@ -35,3 +35,14 @@ jobs:
             --max-time 240 \
             -H "Authorization: Bearer ${CRON_SECRET}" \
             "https://mission-cohort-rocket-pd.vercel.app/api/jobs/process-crm-sync?limit=10&missionOnly=true"
+
+      - name: Sync Thought Leader and support team calendar invitations
+        if: always()
+        continue-on-error: true
+        env:
+          CRON_SECRET: ${{ secrets.PRODUCTION_CRON_SECRET }}
+        run: |
+          curl --fail-with-body --silent --show-error \
+            --max-time 120 \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "https://mission-cohort-rocket-pd.vercel.app/api/jobs/sync-cohort-staff-invites"

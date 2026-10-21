@@ -30,6 +30,8 @@ type Enrollment = typeof individual;
 function readOnlyClient(others: Enrollment[] = [individual], target = bundle) {
   const queries: any[] = [];
   const client = {
+    cohort: { findUnique: async () => ({ presenter: { email: "tl@example.com", firstName: "Thought", lastName: "Leader" } }) },
+    appSetting: { findUnique: async () => null },
     registration: {
       findUnique: async ({ where }: any) => where.id === target.id ? target : null,
       findUniqueOrThrow: async () => target,

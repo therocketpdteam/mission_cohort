@@ -78,18 +78,27 @@ export function registrationCancellationAttendanceMessage(input: {
   participants: Array<{ name: string; email: string }>;
   requestedEmails: string[];
   emailsKeptForActiveEnrollment: string[];
+  emailsKeptForStaffRole?: string[];
   primaryContactEmail: string;
 }) {
   const normalize = (email: string) => email.trim().toLowerCase();
   const kept = new Set(input.emailsKeptForActiveEnrollment.map(normalize));
+  const staff = new Set((input.emailsKeptForStaffRole ?? []).map(normalize));
   const names = new Map(input.participants.map((participant) => [normalize(participant.email), participant.name]));
   const candidates = Array.from(new Set(input.requestedEmails.map(normalize)));
-  const removed = candidates.filter((email) => !kept.has(email));
+  const removed = candidates.filter((email) => !kept.has(email) && !staff.has(email));
   const retained = candidates.filter((email) => kept.has(email));
   const escape = (value: string) => value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]!));
   const label = (email: string) => names.get(email) ? `${names.get(email)} - ${email}` : email;
   const html: string[] = [];
   const text: string[] = [];
+
+  const staffRetained = candidates.filter((email) => staff.has(email) && !kept.has(email));
+  if (staffRetained.length) {
+    const explanation = "These people remain on session calendar invitations through their Thought Leader or support team role. Their participant registration is cancelled and participant messages for it will stop.";
+    html.push(`<p>${explanation}</p><ul>${staffRetained.map((email) => `<li>${escape(label(email))}</li>`).join("")}</ul>`);
+    text.push(explanation, ...staffRetained.map((email) => `- ${label(email)}`));
+  }
 
   if (retained.length > 0) {
     const explanation = kept.has(normalize(input.primaryContactEmail))

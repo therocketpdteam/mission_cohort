@@ -11,6 +11,7 @@ export type GoogleCalendarEventInput = {
   accessToken?: string;
   calendarId?: string;
   providerEventId?: string | null;
+  etag?: string;
   attendees?: Array<{
     email: string;
     displayName?: string;
@@ -194,7 +195,8 @@ export async function upsertGoogleCalendarEvent(input: GoogleCalendarEventInput)
     method: input.providerEventId ? "PATCH" : "POST",
     headers: {
       Authorization: `Bearer ${input.accessToken}`,
-      "Content-Type": "application/json"
+      "Content-Type": "application/json",
+      ...(input.providerEventId && input.etag ? { "If-Match": input.etag } : {})
     },
     body: JSON.stringify(body)
   });
@@ -254,11 +256,22 @@ export async function patchGoogleCalendarAttendeesSilently(input: {
   etag: string;
   attendees: NonNullable<GoogleCalendarEventInput["attendees"]>;
 }) {
+  return patchGoogleCalendarAttendees({ ...input, sendUpdates: "none" });
+}
+
+export async function patchGoogleCalendarAttendees(input: {
+  accessToken: string;
+  calendarId: string;
+  providerEventId: string;
+  etag: string;
+  attendees: NonNullable<GoogleCalendarEventInput["attendees"]>;
+  sendUpdates: "all" | "none";
+}) {
   if (!input.accessToken || !input.calendarId || !input.etag) {
     throw Object.assign(new Error("Connected calendar credentials and the current event version are required."), { code: "BAD_REQUEST", status: 400 });
   }
   const url = new URL(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(input.calendarId)}/events/${encodeURIComponent(input.providerEventId)}`);
-  url.searchParams.set("sendUpdates", "none");
+  url.searchParams.set("sendUpdates", input.sendUpdates);
   const response = await fetch(url, {
     method: "PATCH",
     headers: { Authorization: `Bearer ${input.accessToken}`, "Content-Type": "application/json", "If-Match": input.etag },
@@ -266,8 +279,8 @@ export async function patchGoogleCalendarAttendeesSilently(input: {
   });
   if (!response.ok) {
     throw Object.assign(new Error(response.status === 412
-      ? "The calendar event changed during repair. Review the current guest list and retry."
-      : `Silent calendar attendee repair failed with status ${response.status}.`), { code: "BAD_REQUEST", status: response.status === 412 ? 409 : 400 });
+      ? (input.sendUpdates === "none" ? "The calendar event changed during repair. Review the current guest list and retry." : "The calendar event changed during the attendee update. Review the current guest list and retry.")
+      : `Calendar attendee update failed with status ${response.status}.`), { code: "BAD_REQUEST", status: response.status === 412 ? 409 : 400 });
   }
   return { updated: true };
 }

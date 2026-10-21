@@ -1,10 +1,11 @@
 import { CalendarInviteStatus, IntegrationConnectionStatus, IntegrationProvider, OperationsTaskCategory, OperationsTaskStatus, ParticipantStatus, RegistrationStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { assertOutboundUnlocked } from "@/lib/outboundLock";
-import { buildSessionCalendarDescription, deleteGoogleCalendarEvent, exchangeGoogleCalendarCode, generateSessionIcs, getGoogleCalendarConnectUrl, getGoogleCalendarEvent, listGoogleCalendars, refreshGoogleCalendarToken, uniqueCalendarAttendees, upsertGoogleCalendarEvent } from "@/modules/calendar";
+import { buildSessionCalendarDescription, deleteGoogleCalendarEvent, exchangeGoogleCalendarCode, generateSessionIcs, getGoogleCalendarConnectUrl, getGoogleCalendarEvent, listGoogleCalendars, planStaffCalendarGuests, refreshGoogleCalendarToken, uniqueCalendarAttendees, upsertGoogleCalendarEvent } from "@/modules/calendar";
 import { getDecryptedIntegrationConnection, upsertIntegrationConnection } from "@/services/integrationService";
 import { assertCohortDeliveryAllowed, assertOutboundRecipientsAllowed, resolveGoogleCalendarSetup } from "@/services/integrationSetupService";
 import { logAuditEvent } from "@/services/auditService";
+import { readCohortSupportTeam } from "./cohortSupportService";
 
 async function googleSetupWithEnvFallback() {
   const setup = await resolveGoogleCalendarSetup();
@@ -71,7 +72,7 @@ export async function getConnectedGoogleCalendarAccessToken() {
   return token.access_token;
 }
 
-async function getCohortCalendarAttendees(
+export async function getCohortEnrollmentCalendarAttendees(
   cohortId: string,
   exclusions: { registrationId?: string; participantIds?: string[] } = {},
   client = prisma
@@ -111,6 +112,25 @@ async function getCohortCalendarAttendees(
   });
 
   return uniqueCalendarAttendees(rows);
+}
+
+export async function getCohortCalendarStaffAttendees(cohortId: string, client = prisma) {
+  const [cohort, team] = await Promise.all([
+    client.cohort.findUnique({ where: { id: cohortId }, select: { presenter: { select: { email: true, firstName: true, lastName: true } } } }),
+    readCohortSupportTeam(cohortId, client)
+  ]);
+  return uniqueCalendarAttendees([
+    ...(cohort ? [{ email: cohort.presenter.email, displayName: [cohort.presenter.firstName, cohort.presenter.lastName].filter(Boolean).join(" ") }] : []),
+    ...(team?.members ?? []).map((member) => ({ email: member.email, displayName: member.name }))
+  ]);
+}
+
+export async function getCohortCalendarAttendees(cohortId: string, exclusions: { registrationId?: string; participantIds?: string[] } = {}, client = prisma) {
+  const [enrolled, staff] = await Promise.all([
+    getCohortEnrollmentCalendarAttendees(cohortId, exclusions, client),
+    getCohortCalendarStaffAttendees(cohortId, client)
+  ]);
+  return uniqueCalendarAttendees([...enrolled, ...staff]);
 }
 
 function missingCalendarAttendees(
@@ -226,19 +246,24 @@ export async function planFutureGoogleCalendarAttendeeRemoval(input: CalendarAtt
   }
 
   const candidates = uniqueNormalizedEmails(requestedEmails);
-  if (candidates.length === 0) return { requestedEmails: [], emailsToRemove: [], emailsKeptForActiveEnrollment: [] };
+  if (candidates.length === 0) return { requestedEmails: [], emailsToRemove: [], emailsKeptForActiveEnrollment: [], emailsKeptForStaffRole: [] };
 
-  const activeAttendees = await getCohortCalendarAttendees(input.cohortId, input, client);
+  const [activeAttendees, staff] = await Promise.all([
+    getCohortEnrollmentCalendarAttendees(input.cohortId, input, client),
+    getCohortCalendarStaffAttendees(input.cohortId, client)
+  ]);
   const activeEmails = new Set(activeAttendees.map((attendee) => attendee.email));
+  const staffEmails = new Set(staff.map((attendee) => attendee.email));
   return {
     requestedEmails: candidates,
-    emailsToRemove: candidates.filter((email) => !activeEmails.has(email)),
-    emailsKeptForActiveEnrollment: candidates.filter((email) => activeEmails.has(email))
+    emailsToRemove: candidates.filter((email) => !activeEmails.has(email) && !staffEmails.has(email)),
+    emailsKeptForActiveEnrollment: candidates.filter((email) => activeEmails.has(email)),
+    emailsKeptForStaffRole: candidates.filter((email) => !activeEmails.has(email) && staffEmails.has(email))
   };
 }
 
 export async function removeFutureGoogleCalendarAttendees(input: CalendarAttendeeRemovalInput, client = prisma) {
-  const { emailsToRemove, emailsKeptForActiveEnrollment } = await planFutureGoogleCalendarAttendeeRemoval(input, client);
+  const { emailsToRemove, emailsKeptForActiveEnrollment, emailsKeptForStaffRole } = await planFutureGoogleCalendarAttendeeRemoval(input, client);
   if (emailsToRemove.length === 0) {
     return {
       cohortId: input.cohortId,
@@ -246,6 +271,7 @@ export async function removeFutureGoogleCalendarAttendees(input: CalendarAttende
       participantIds: input.participantIds ?? [],
       emailsToRemove,
       emailsKeptForActiveEnrollment,
+      emailsKeptForStaffRole,
       sessionsScanned: 0,
       sessionsUpdated: 0,
       attendeesRemoved: 0,
@@ -262,6 +288,7 @@ export async function removeFutureGoogleCalendarAttendees(input: CalendarAttende
       participantIds: input.participantIds ?? [],
       emailsToRemove,
       emailsKeptForActiveEnrollment,
+      emailsKeptForStaffRole,
       sessionsScanned: 0,
       sessionsUpdated: 0,
       attendeesRemoved: 0,
@@ -394,6 +421,7 @@ export async function removeFutureGoogleCalendarAttendees(input: CalendarAttende
       participantIds: input.participantIds ?? [],
       emailsToRemove,
       emailsKeptForActiveEnrollment,
+      emailsKeptForStaffRole,
       reason: input.reason ?? null,
       sessionsScanned: sessions.length,
       sessionsUpdated,
@@ -409,6 +437,7 @@ export async function removeFutureGoogleCalendarAttendees(input: CalendarAttende
     participantIds: input.participantIds ?? [],
     emailsToRemove,
     emailsKeptForActiveEnrollment,
+    emailsKeptForStaffRole,
     sessionsScanned: sessions.length,
     sessionsUpdated,
     attendeesRemoved,
@@ -437,7 +466,9 @@ export async function createCalendarInvitePlaceholder(sessionId?: string, mode: 
 
   try {
     if (mode === "google") {
-      const attendees = await getCohortCalendarAttendees(session.cohortId);
+      const attendees = session.startTime > new Date()
+        ? await getCohortCalendarAttendees(session.cohortId)
+        : await getCohortEnrollmentCalendarAttendees(session.cohortId);
       await assertCohortDeliveryAllowed("GOOGLE_CALENDAR", session.cohort.status, attendees.map((attendee) => attendee.email));
       const existing = await prisma.calendarEvent.findFirst({
         where: { sessionId: session.id, provider: "google" },
@@ -450,11 +481,9 @@ export async function createCalendarInvitePlaceholder(sessionId?: string, mode: 
             providerEventId: existing.providerEventId
           })
         : null;
-      const existingResponses = new Map(
-        (existingGoogleEvent?.attendees ?? [])
-          .filter((attendee) => attendee.email)
-          .map((attendee) => [attendee.email!.toLowerCase(), attendee.responseStatus])
-      );
+      assertCompleteGoogleAttendeeList(existingGoogleEvent?.attendeesOmitted);
+      const mergedAttendees = planStaffCalendarGuests({ current: existingGoogleEvent?.attendees ?? [], staff: attendees, previouslyManaged: [], enrolledEmails: [] }).attendees;
+      await assertCohortDeliveryAllowed("GOOGLE_CALENDAR", session.cohort.status, mergedAttendees.map((attendee) => attendee.email));
       const existingEmails = new Set(
         (existingGoogleEvent?.attendees ?? []).flatMap((attendee) => attendee.email ? [attendee.email.toLowerCase()] : [])
       );
@@ -491,17 +520,15 @@ export async function createCalendarInvitePlaceholder(sessionId?: string, mode: 
         accessToken: await getConnectedGoogleCalendarAccessToken(),
         calendarId: (await googleSetupWithEnvFallback()).calendarId,
         providerEventId: existingGoogleEvent ? existing?.providerEventId : null,
-        attendees: attendees.map((attendee) => ({
-          ...attendee,
-          responseStatus: existingResponses.get(attendee.email.toLowerCase())
-        })),
+        etag: existingGoogleEvent?.etag,
+        attendees: mergedAttendees,
         sendUpdates: options.sendUpdates === true
       });
       const verifiedGoogleEvent = await getGoogleCalendarEvent({
         accessToken: await getConnectedGoogleCalendarAccessToken(),
         calendarId: (await googleSetupWithEnvFallback()).calendarId,
         providerEventId: result.id,
-        maxAttendees: attendees.length + 5
+        maxAttendees: 2500
       }) ?? result;
       const calendarEvent = existing
         ? await prisma.calendarEvent.update({
@@ -616,12 +643,13 @@ export async function auditCohortGoogleCalendarInvites(cohortId?: string) {
     throw Object.assign(new Error("cohortId is required"), { code: "BAD_REQUEST", status: 400 });
   }
 
-  const [cohort, attendees, accessToken, setup] = await Promise.all([
+  const [cohort, attendees, enrolled, accessToken, setup] = await Promise.all([
     prisma.cohort.findUnique({
       where: { id: cohortId },
       select: { id: true, title: true, shortName: true, slug: true, status: true }
     }),
     getCohortCalendarAttendees(cohortId),
+    getCohortEnrollmentCalendarAttendees(cohortId),
     getConnectedGoogleCalendarAccessToken(),
     googleSetupWithEnvFallback()
   ]);
@@ -644,16 +672,17 @@ export async function auditCohortGoogleCalendarInvites(cohortId?: string) {
 
   const expectedEmails = attendees.map((attendee) => attendee.email);
   const sessionsAudit = await Promise.all(sessions.map(async (session) => {
+    const expectedAttendees = session.startTime > new Date() ? attendees : enrolled;
     const calendarRecord = session.calendarEvents[0] ?? null;
     const googleEvent = calendarRecord?.providerEventId
       ? await getGoogleCalendarEvent({
           accessToken,
           calendarId: setup.calendarId,
           providerEventId: calendarRecord.providerEventId,
-          maxAttendees: attendees.length + 5
+          maxAttendees: 2500
         })
       : null;
-    const missingAttendees = missingCalendarAttendees(attendees, googleEvent?.attendees, googleEvent?.attendeesOmitted);
+    const missingAttendees = missingCalendarAttendees(expectedAttendees, googleEvent?.attendees, googleEvent?.attendeesOmitted);
     const googleAttendeeCount = googleEvent?.attendees?.filter((attendee) => attendee.email).length ?? 0;
 
     return {
@@ -667,7 +696,7 @@ export async function auditCohortGoogleCalendarInvites(cohortId?: string) {
       htmlLink: googleEvent?.htmlLink ?? calendarRecord?.htmlLink ?? null,
       active: Boolean(googleEvent),
       attendeesOmitted: Boolean(googleEvent?.attendeesOmitted),
-      expectedAttendeeCount: attendees.length,
+      expectedAttendeeCount: expectedAttendees.length,
       googleAttendeeCount,
       missingAttendeeCount: missingAttendees.length,
       missingAttendees

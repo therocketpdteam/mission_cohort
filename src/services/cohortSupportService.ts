@@ -12,7 +12,7 @@ const membersSchema = z.array(memberSchema).max(50).superRefine((members, contex
     context.addIssue({ code: "custom", message: "Each support email can be assigned only once per cohort." });
   }
 });
-const storedSchema = z.object({ revision: z.string().uuid(), updatedById: z.string().min(1), members: membersSchema });
+const storedSchema = z.object({ revision: z.string().uuid(), updatedById: z.string().min(1), members: membersSchema, calendarHistoryEmails: z.array(z.string().email()).default([]) });
 export const supportTeamUpdateSchema = z.object({
   revision: z.string().uuid().nullable(),
   members: z.array(memberSchema.omit({ id: true }).extend({ id: z.string().uuid().optional() })).max(50)
@@ -108,7 +108,7 @@ export async function saveCohortSupportTeam(cohortId: string, input: unknown, up
         // history or a queued message to a different person.
         return { ...member, id: old?.email === member.email ? old.id : randomUUID() };
       }));
-      const value = { revision: randomUUID(), updatedById, members };
+      const value = { revision: randomUUID(), updatedById, members, calendarHistoryEmails: [...new Set([...(previous?.calendarHistoryEmails ?? []), ...(previous?.members ?? []).map((member) => member.email), ...members.map((member) => member.email)])] };
       if (previous) {
         const updated = await tx.appSetting.updateMany({
           where: { key: settingKey(cohortId), value: { path: ["revision"], equals: previous.revision } },

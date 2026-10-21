@@ -383,6 +383,7 @@ export async function previewRegistrationCancellation(id: string, client = prism
     participants: participantRoster,
     requestedEmails: calendarPlan.requestedEmails,
     emailsKeptForActiveEnrollment: calendarPlan.emailsKeptForActiveEnrollment,
+    emailsKeptForStaffRole: calendarPlan.emailsKeptForStaffRole,
     primaryContactEmail: registration.primaryContactEmail
   });
   const context = {
@@ -428,6 +429,7 @@ export async function previewRegistrationCancellation(id: string, client = prism
       })),
       calendarEmails: calendarPlan.emailsToRemove,
       calendarEmailsPreserved: calendarPlan.emailsKeptForActiveEnrollment,
+      calendarEmailsKeptForStaffRole: calendarPlan.emailsKeptForStaffRole,
       communicationsToCancel: registration.communications,
       participantEmailsSent: 0,
       calendarNotificationsSent: 0,
