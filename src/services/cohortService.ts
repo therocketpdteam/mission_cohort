@@ -11,6 +11,7 @@ import { activateCohortRegistrationJourneys } from "./registrationJourneyService
 import { syncCohortQuickBooksProjectAfterCreate } from "./quickBooksService";
 import { syncCohortTotalsToCrm } from "./crmRegistrationWebhookService";
 import { calculateDistributionTotals } from "@/lib/distributionTotals";
+import { reconcileCohortSupportReminders } from "./cohortSupportService";
 
 const nestedSessionCreateSchema = z.object({
   title: z.string().min(1),
@@ -192,6 +193,7 @@ export async function updateCohort(id: string, input: z.input<typeof cohortUpdat
   void syncCohortTotalsToCrm(cohort.id, "cohort.updated").catch((error) => {
     console.error("CRM Mission Cohort cohort sync scheduling failed", { cohortId: cohort.id, error: error instanceof Error ? error.message : "Unknown error" });
   });
+  if (data.status && data.status !== existing.status) await reconcileCohortSupportReminders(cohort.id);
   return cohort;
 }
 

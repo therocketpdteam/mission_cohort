@@ -49,6 +49,7 @@ import { RegistrationCommunicationJourney } from "./RegistrationCommunicationJou
 import { RegistrationDocuments } from "./RegistrationDocuments";
 import { RegistrationEditor, RegistrationRemovalDialog } from "./RegistrationsClient";
 import { CohortCancellationDialog } from "./CohortCancellationDialog";
+import { CohortSupportTeam } from "./CohortSupportTeam";
 import { cohortEditFields } from "./CohortsClient";
 import type { ParsedRosterParticipant } from "@/lib/rosterParser";
 import {
@@ -3451,6 +3452,7 @@ export function CohortDetailClient({ id }: { id: string }) {
               </div>
             </SectionCard>
           </div>
+          {cohort && <CohortSupportTeam cohort={cohort} sessions={sessions} />}
           <SectionCard
             title="Registration Evolution"
             action={

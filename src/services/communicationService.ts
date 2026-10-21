@@ -19,6 +19,8 @@ import { getOrganizationInvoiceProfile } from "./appSettingsService";
 import { registrationConfirmationDocumentReadiness } from "./registrationDocumentReadiness";
 import { cancellationBlocksDelivery } from "@/modules/cohorts/cancellation";
 import { isQaBccEvent } from "@/modules/email/qaCopy";
+import { isSupportReminder } from "@/modules/email/supportReminders";
+import { deliverSupportReminder } from "./supportReminderDeliveryService";
 
 type DefaultTemplate = {
   type: TemplateType;
@@ -1183,6 +1185,10 @@ export async function updateCommunicationDraft(input: z.input<typeof communicati
     throw Object.assign(new Error("Communication not found"), { code: "NOT_FOUND", status: 404 });
   }
 
+  if (isSupportReminder(existing.journeyKey)) {
+    throw Object.assign(new Error("Manage support reminders from the cohort’s Support Team section."), { code: "BAD_REQUEST", status: 400 });
+  }
+
   if (existing.status !== CommunicationStatus.DRAFT || existing.sentAt) {
     throw Object.assign(new Error("Only unsent draft communications can be edited."), { code: "BAD_REQUEST", status: 400 });
   }
@@ -1850,6 +1856,12 @@ export async function sendCommunication(id: string, options?: { recipients?: str
   if (cancellationBlocksDelivery(communication.cohortId, communication.journeyKey, cancellationTask?.status)) {
     throw Object.assign(new Error("Normal cohort messages are paused while cancellation is in progress or awaiting review."), { code: "CANCELLATION_IN_PROGRESS", status: 409 });
   }
+  if (isSupportReminder(communication.journeyKey)) {
+    if (options?.recipients || options?.context || options?.bypassCohortStatus) {
+      throw Object.assign(new Error("Support reminders can only be sent to the current assigned support person."), { code: "BAD_REQUEST", status: 400 });
+    }
+    return deliverSupportReminder(communication);
+  }
   const registrationContext = await preflightPocRegistrationConfirmation(communication);
   const paymentReminderRegistrationContext = registrationContext ?? await preflightPaymentReminder(communication);
   const refreshedAttachments = paymentReminderRegistrationContext
@@ -2024,6 +2036,9 @@ export async function sendCommunicationToRecipient(input: { communicationId: str
     throw Object.assign(new Error("Communication not found"), { code: "NOT_FOUND", status: 404 });
   }
 
+  if (isSupportReminder(original.journeyKey)) {
+    throw Object.assign(new Error("Support reminders are tied to their assignment and session time. Review delivery from the cohort’s Support Team section."), { code: "BAD_REQUEST", status: 400 });
+  }
   const resendRecipients = isolatedResendRecipients({
     selectedEmail: recipientEmail,
     recipientEmails: original.recipientEmails,

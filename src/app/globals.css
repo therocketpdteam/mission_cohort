@@ -12982,3 +12982,68 @@ button.dashboard-activity-item {
     flex-direction: column;
   }
 }
+
+.cohort-support-description {
+  margin: 0;
+  color: var(--color-slate-500);
+  font-size: 0.82rem;
+  line-height: 1.6;
+}
+
+.cohort-support-form {
+  display: grid;
+  gap: 16px;
+}
+
+.cohort-support-person {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) auto;
+  align-items: end;
+  gap: 12px;
+}
+
+.cohort-support-actions {
+  justify-content: flex-start;
+}
+
+.cohort-support-schedule summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.cohort-support-reminder {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--color-slate-200);
+  overflow-wrap: anywhere;
+}
+
+.cohort-support-reminder > div {
+  display: grid;
+  gap: 4px;
+  font-size: 0.8rem;
+}
+
+.cohort-support-reminder small,
+.cohort-support-reminder span {
+  color: var(--color-slate-500);
+}
+
+.cohort-support-preview {
+  white-space: pre-wrap;
+  line-height: 1.6;
+  font-size: 0.9rem;
+}
+
+@media (max-width: 720px) {
+  .cohort-support-person {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .cohort-support-person > button {
+    justify-self: start;
+  }
+}

@@ -68,6 +68,7 @@ const allowedFields = new Set([
   "registration.w9Url",
   "registration.invoiceUrl",
   "support.email",
+  "support.name",
   "support.phone",
   "support.teamName"
 ]);
@@ -140,6 +141,7 @@ export const sampleMergeContext: MergeFieldContext = {
     invoiceUrl: "https://rocketpd.com/invoices/INV-1001.pdf"
   },
   support: {
+    name: "Alex Morgan",
     email: "info@rocketpd.com",
     phone: "(855) 757-6253",
     teamName: "The RocketPD Team"

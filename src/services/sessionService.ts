@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { sessionCreateSchema, sessionUpdateSchema } from "@/validators/session";
 import { logAuditEventAsync } from "./auditService";
 import { createDefaultSessionCommunications, rescheduleUnsentSessionCommunications } from "./communicationService";
+import { reconcileCohortSupportReminders } from "./cohortSupportService";
 
 const calendarRelevantFields = ["title", "description", "startTime", "endTime", "timezone", "meetingUrl", "location"] as const;
 
@@ -52,6 +53,7 @@ export async function createSession(input: z.input<typeof sessionCreateSchema>) 
   });
   await syncCohortScheduleRange(session.cohortId);
   await createDefaultSessionCommunications(session.id);
+  await reconcileCohortSupportReminders(session.cohortId);
   return session;
 }
 
@@ -67,6 +69,7 @@ export async function updateSession(id: string, input: z.input<typeof sessionUpd
   let session = await prisma.cohortSession.update({ where: { id }, data });
   await syncCohortScheduleRange(session.cohortId);
   const detailsChanged = calendarDetailsChanged(existingSession, session);
+  await reconcileCohortSupportReminders(session.cohortId);
   const reminderSync = existingSession.startTime.getTime() !== session.startTime.getTime()
     ? await rescheduleUnsentSessionCommunications(id, session.startTime)
     : { updated: 0 };
@@ -86,6 +89,7 @@ export async function updateSession(id: string, input: z.input<typeof sessionUpd
 export async function deleteSession(id: string) {
   const session = await prisma.cohortSession.delete({ where: { id } });
   await syncCohortScheduleRange(session.cohortId);
+  await reconcileCohortSupportReminders(session.cohortId);
   return session;
 }
 
