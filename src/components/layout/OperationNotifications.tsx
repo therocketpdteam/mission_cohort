@@ -34,7 +34,10 @@ export function OperationNotifications() {
     return () => window.removeEventListener("beforeunload", beforeUnload);
   }, []);
   function open(operation: AdminOperation) {
-    router.push(operation.href as Route);
+    const destination = new URL(operation.href, window.location.origin);
+    const registrationId = destination.searchParams.get("id");
+    if (pathname === "/registrations" && destination.pathname === pathname && registrationId) window.dispatchEvent(new CustomEvent("mission-open-registration", { detail: { id: registrationId } }));
+    else router.push(operation.href as Route);
     if (operation.state === "error" && operation.change && operation.method !== "DELETE") { setDraft({ ...operation.change.values }); setReviewId(operation.id); }
   }
   async function retry() {

@@ -56,11 +56,12 @@ export function mutationOutcome(value: unknown): { state: "success" | "warning";
   if (!value || typeof value !== "object") return { state: "success" };
   const row = value as Record<string, any>;
   const status = String(row.status ?? "").toLowerCase();
-  if (["failed", "needs_attention", "needs_review", "error"].includes(status) || row.error || row.providerError || (Array.isArray(row.failed) && row.failed.length) || (typeof row.failed === "number" && row.failed > 0)) return { state: "warning", detail: String(row.error ?? row.providerError ?? "Some follow-up work needs review.") };
+  if (row.success === false || ["failed", "needs_attention", "needs_review", "error", "blocked", "partial", "warning"].includes(status) || row.error || row.providerError || (Array.isArray(row.failed) && row.failed.length) || (typeof row.failed === "number" && row.failed > 0)) return { state: "warning", detail: String(row.error ?? row.providerError ?? "Some follow-up work needs review.") };
+  if (["confirmationFailures", "emailFailures", "calendarFailures", "failedCount"].some((key) => Number(row[key] ?? 0) > 0) || ["errors", "failures", "blockers"].some((key) => Array.isArray(row[key]) && row[key].length)) return { state: "warning", detail: "Some follow-up work needs review. Open the record for details." };
   if (["pending", "paused", "syncing", "busy", "queued"].includes(status)) return { state: "warning", detail: String(row.error ?? "Saved. Follow-up processing is still pending.") };
   if (status === "pending_apply") return { state: "warning", detail: "Saved. Review and apply the registration’s delivery changes." };
   if (row.deliveryJob?.id && row.deliveryJob.status !== "COMPLETED") return row.deliveryJob.status === "FAILED" ? { state: "warning", detail: "Saved, but registration delivery needs review." } : { state: "warning", detail: "Saved. Registration delivery is continuing in the background." };
-  for (const key of ["journey", "calendar", "calendarSync", "communication", "delivery"]) {
+  for (const key of ["journey", "calendar", "calendarSync", "communication", "delivery", "cancellationEmail", "calendarCleanup"]) {
     const child = row[key];
     if (child === "pending") return { state: "warning", detail: "Saved. Follow-up changes are pending review." };
     const outcome = mutationOutcome(child);
@@ -131,17 +132,20 @@ export function notifyLegacy(message: string, state: "success" | "error" | "warn
 }
 export function resetOperations() { operations = []; persist(); changed(); }
 
-export function projectEntityRows<T extends Record<string, any>>(base: T[], entries: AdminOperation[], entity: string, scope: Record<string, string> = {}, acknowledged = new Set<string>()) {
+export function projectEntityRows<T extends Record<string, any>>(base: T[], entries: AdminOperation[], entity: string, scope: Record<string, string> = {}) {
   let rows: Record<string, any>[] = [...base];
   for (const operation of entries) {
     const change = operation.change;
-    if (!change || change.entity !== entity || operation.state === "error" || acknowledged.has(operation.id)) continue;
+    if (!change || change.entity !== entity || operation.state === "error") continue;
     const confirmed = operation.state !== "pending";
     const result = confirmed ? operation.result ?? {} : {};
     const id = change.id ?? result.id ?? `pending:${operation.id}`;
     const index = rows.findIndex((row) => row.id === id || row._operationId === operation.id);
     if (change.method === "DELETE") { rows = rows.filter((row) => row.id !== change.id); continue; }
     if (change.method !== "POST" && index < 0) continue;
+    // Compare each snapshot afresh. Permanently acknowledging an earlier GET
+    // would let a slower stale GET undo a later confirmed edit.
+    if (confirmed && index >= 0 && result.updatedAt && rows[index].updatedAt && new Date(rows[index].updatedAt) >= new Date(result.updatedAt)) continue;
     const row: Record<string, any> = { ...(index >= 0 ? rows[index] : {}), ...change.values, ...result, id, _optimistic: !confirmed, _operationId: operation.id };
     if (Object.entries(scope).some(([key, value]) => row[key] !== value)) { if (index >= 0) rows.splice(index, 1); continue; }
     if (index >= 0) rows[index] = row; else rows.unshift({ participants: [], sessions: [], registrations: [], _count: { participants: 0, registrations: 0 }, status: entity === "participants" ? "REGISTERED" : entity === "registrations" ? "NEW" : entity === "tasks" ? "OPEN" : "DRAFT", createdAt: new Date(operation.createdAt).toISOString(), ...row });

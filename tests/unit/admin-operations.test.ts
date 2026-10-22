@@ -53,6 +53,9 @@ test("queued delivery, pending apply, calendar failures and partial failures are
   assert.equal(mutationOutcome({ calendar: { status: "pending" } }).state, "warning");
   assert.equal(mutationOutcome({ calendar: { status: "failed", error: "Google unavailable" } }).detail, "Google unavailable");
   assert.equal(mutationOutcome({ failed: ["one"] }).state, "warning");
+  assert.equal(mutationOutcome({ confirmationFailures: 1 }).state, "warning");
+  assert.equal(mutationOutcome({ status: "blocked", blockers: ["Calendar unavailable"] }).state, "warning");
+  assert.equal(mutationOutcome({ cancellationEmail: { status: "failed" } }).state, "warning");
   assert.equal(mutationOutcome({ id: "p", calendar: { status: "synced" } }).state, "success");
 });
 test("delete rollback and subsequent edits preserve order without changing other rows", () => {
@@ -97,4 +100,20 @@ test("requests with different delivery instructions are not deduplicated", async
   globalThis.fetch = (async (_path, options) => { bodies.push(JSON.parse(String(options?.body))); return Response.json({ success: true, data: { id: "r" } }); }) as typeof fetch;
   await Promise.all([adminApi("/api/registrations", { method: "PATCH", body: { id: "r", participantCount: 2, deferNotifications: true } }), adminApi("/api/registrations", { method: "PATCH", body: { id: "r", participantCount: 2, deferNotifications: false } })]);
   assert.equal(bodies.length, 2); assert.deepEqual(bodies.map((body) => body.deferNotifications), [true, false]);
+});
+
+test("a stale refresh cannot undo a confirmed edit, while a newer server version wins", () => {
+  browser();
+  const operation = beginOperation("/api/participants", "PATCH", { id: "p", firstName: "Latest" }, "/participants");
+  finishOperation(operation.id, { id: "p", firstName: "Latest", updatedAt: "2026-10-22T14:02:00Z" });
+  const canonical = [{ id: "p", firstName: "Latest", updatedAt: "2026-10-22T14:02:00Z" }];
+  assert.equal(projectEntityRows<Record<string, any>>(canonical, operationSnapshot(), "participants")[0].firstName, "Latest");
+  assert.equal(projectEntityRows<Record<string, any>>([{ id: "p", firstName: "Old", updatedAt: "2026-10-22T14:01:00Z" }], operationSnapshot(), "participants")[0].firstName, "Latest");
+  assert.equal(projectEntityRows<Record<string, any>>([{ id: "p", firstName: "Newer external edit", updatedAt: "2026-10-22T14:03:00Z" }], operationSnapshot(), "participants")[0].firstName, "Newer external edit");
+});
+test("a stale refresh cannot resurrect a confirmed deletion", () => {
+  browser(); const removed = beginOperation("/api/participants?id=p", "DELETE", undefined, "/participants");
+  finishOperation(removed.id, { id: "p" });
+  assert.equal(projectEntityRows<Record<string, any>>([], operationSnapshot(), "participants").length, 0);
+  assert.equal(projectEntityRows<Record<string, any>>([{ id: "p", firstName: "Stale" }], operationSnapshot(), "participants").length, 0);
 });

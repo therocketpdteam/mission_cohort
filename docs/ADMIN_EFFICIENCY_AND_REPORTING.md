@@ -11,7 +11,7 @@ explicit field allowlist. Integration credentials and send/cancellation actions
 are excluded. Ambiguous create failures require checking for an existing record
 before creating a copy. Duplicate pending submissions share one request; edits
 to the same record run in order. New drafts are preserved when earlier saves
-finish. Financial, cancellation, and send confirmation flows remain in place.
+finish, and stale refreshes cannot undo newer confirmed edits or deletions. Financial, cancellation, and send confirmation flows remain in place.
 Support team assignments persist before calendar sync runs after the response;
 the existing calendar reconciliation job also retries persisted assignments.
 
@@ -53,7 +53,7 @@ release does not edit external forms.
 
 ## Verification
 
-- 282 unit tests, Prisma generation, TypeScript checks, and production build.
+- 284 unit tests, Prisma generation, TypeScript checks, and production build.
 - Real-browser checks with intercepted synthetic APIs at 1600, 1024, 390, and
   320 pixels: delayed saves, rollback, recovery, preserving newer drafts, chart
   keyboard details, empty periods, task counts, health severity, generic reports,
