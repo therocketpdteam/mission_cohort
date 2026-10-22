@@ -9,6 +9,7 @@ export type SendEmailInput = {
   html: string;
   text?: string;
   from?: string;
+  suppressQaBcc?: boolean;
   attachments?: Array<{
     content: string;
     filename: string;
@@ -64,7 +65,7 @@ export function buildSendGridMailPayload(input: SendEmailInput, config: { fromEm
   // Every envelope in this request has the same already-rendered content.
   // Add one hidden copy without repeating an address across personalizations,
   // changing the customer To headers, or duplicating a real send to the QA user.
-  const addQaCopy = qaEmail && !recipients.includes(qaEmail);
+  const addQaCopy = !input.suppressQaBcc && qaEmail && !recipients.includes(qaEmail);
 
   return {
     personalizations: recipients.map((email, index) => ({

@@ -17,6 +17,7 @@ export async function sendEmail(input: {
   context?: MergeFieldContext;
   attachments?: Array<{ fileName: string; contentType?: string | null; url?: string | null; content?: string | Buffer | null }>;
   outboundContext?: { communicationId?: string };
+  suppressQaBcc?: boolean;
 }) {
   const recipients = Array.isArray(input.to) ? input.to : [input.to];
   const renderedHtml = renderTemplate(input.bodyHtml, input.context ?? {}).output;
@@ -44,7 +45,8 @@ export async function sendEmail(input: {
     subject: delivery.subject,
     html: delivery.html,
     text: delivery.text,
-    attachments
+    attachments,
+    suppressQaBcc: input.suppressQaBcc
   });
 
   return {

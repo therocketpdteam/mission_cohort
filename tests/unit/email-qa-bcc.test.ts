@@ -51,6 +51,15 @@ test("missing or malformed QA configuration leaves the customer's request unchan
   assert.deepEqual(buildSendGridMailPayload(message, { fromEmail: config.fromEmail, qaBccEmail: productionQaBccEmail("staging", qaEmail) }), normal);
 });
 
+test("a caller can suppress duplicate QA copies after the first personalized envelope", () => {
+  const first = buildSendGridMailPayload(message, config);
+  const later = buildSendGridMailPayload({ ...message, to: "jordan@example.com", suppressQaBcc: true }, config);
+  assert.deepEqual(first.personalizations[0].bcc, [{ email: qaEmail }]);
+  assert.ok(!later.personalizations[0].bcc);
+  assert.ok(!later.personalizations[0].custom_args);
+  assert.deepEqual(later.personalizations[0].to, [{ email: "jordan@example.com" }]);
+});
+
 test("personalized POC and participant messages each carry their exact rendered content into the QA copy", () => {
   const poc = renderMergeFields("Hello {{registration.primaryContactFirstName}}, your invoice {{registration.invoiceNumber}} is ready.", sampleMergeContext).output;
   const participant = renderMergeFields("Hello {{participant.firstName}}, your session starts in 60 minutes.", sampleMergeContext).output;

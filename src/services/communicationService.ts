@@ -1918,7 +1918,7 @@ export async function sendCommunication(id: string, options?: { recipients?: str
       const providerMessageIds: string[] = [];
       attemptedRecipients = targetRecipients;
 
-      for (const target of targets) {
+      for (const [targetIndex, target] of targets.entries()) {
         attemptedRecipients = [target.recipientEmail];
         const result = await sendEmail({
           to: target.recipientEmail,
@@ -1927,6 +1927,7 @@ export async function sendCommunication(id: string, options?: { recipients?: str
           bodyText: communication.bodyText ?? undefined,
           attachments: refreshedAttachments,
           outboundContext: { communicationId: communication.id },
+          suppressQaBcc: targetIndex > 0,
           context: {
             ...baseContext,
             participant: participantMergeContext(target.participant),
