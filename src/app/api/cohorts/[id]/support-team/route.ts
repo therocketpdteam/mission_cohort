@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { handleApiError, ok } from "@/lib/api";
 import { ADMIN_ROLES, MUTATION_ROLES, requireRole } from "@/lib/auth";
 import { getCohortSupportTeam, saveCohortSupportTeam } from "@/services/cohortSupportService";
@@ -18,7 +19,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const user = await requireRole(MUTATION_ROLES);
     const { id } = await params;
     const team = await saveCohortSupportTeam(id, await request.json(), user.id);
-    const calendar = await syncCohortStaffCalendar(id).catch((error) => ({ status: "failed", error: error instanceof Error ? error.message : "Calendar sync is pending. Retry Sync calendar invitations." }));
+    after(async () => { await syncCohortStaffCalendar(id).catch(() => undefined); });
+    const calendar = { status: "pending", error: "Support team saved. Calendar invitation sync is queued; use Sync calendar invitations to check it." };
     return ok({ ...team, calendar });
   } catch (error) { return handleApiError(error); }
 }

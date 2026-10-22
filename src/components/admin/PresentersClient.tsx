@@ -1,5 +1,8 @@
 "use client";
 
+import { useOptimisticEntityRows } from "./useOptimisticEntity";
+import { startImmediateSave, useFormVersion } from "./common";
+
 import { EditOutlined } from "@/components/ui/icons";
 import { PersonOffOutlined } from "@/components/ui/icons";
 import { Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem, TextField, Typography } from "@/components/ui/primitives";
@@ -71,12 +74,15 @@ function PresenterDialog({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  const formVersion = useFormVersion(open, presenter?.id);
+
   useEffect(() => {
     if (open) {
+      setSaving(false);
       setValues(presenterInitialValues(presenter));
       setError("");
     }
-  }, [open, presenter]);
+  }, [open, presenter?.id]);
 
   function setValue(name: string, value: unknown) {
     setValues((current) => ({ ...current, [name]: value }));
@@ -91,13 +97,13 @@ function PresenterDialog({
 
     setSaving(true);
     setError("");
+    const version = formVersion.current;
     try {
-      await onSubmit(values);
-      onClose();
+      await startImmediateSave(() => onSubmit(values), () => { if (formVersion.current === version) onClose(); });
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Unable to save presenter.");
+      if (formVersion.current === version) setError(submitError instanceof Error ? submitError.message : "Unable to save presenter.");
     } finally {
-      setSaving(false);
+      if (formVersion.current === version) setSaving(false);
     }
   }
 
@@ -159,7 +165,7 @@ function PresenterDialog({
 }
 
 export function PresentersClient({ embedded = false }: { embedded?: boolean } = {}) {
-  const [rows, setRows] = useState<AdminRow[]>([]);
+  const [rows, setRows] = useOptimisticEntityRows<AdminRow>("presenters");
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<AdminRow | null>(null);
@@ -233,7 +239,7 @@ export function PresentersClient({ embedded = false }: { embedded?: boolean } = 
         body: editing ? { ...values, id: editing.id } : values
       });
       notifySuccess(editing ? "Presenter updated" : "Presenter created");
-      setEditing(null);
+      setEditing((current) => current?.id === editing?.id ? null : current);
       await load();
     } catch (error) {
       notifyError((error as Error).message);

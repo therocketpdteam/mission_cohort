@@ -24,6 +24,7 @@ import { usePathname, useRouter } from "next/navigation";
 import type { CSSProperties, MouseEvent, ReactNode } from "react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { resetOperations } from "@/lib/adminOperations";
 import { adminApi } from "@/lib/adminApi";
 import { NewVersionPrompt } from "./NewVersionPrompt";
 import { RegistrationDeliveryProgress } from "./RegistrationDeliveryProgress";
@@ -551,7 +552,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, [themeMode]);
 
   async function logout() {
-    await adminApi("/api/auth/logout", { method: "POST" }).catch(() => undefined);
+    await adminApi("/api/auth/logout", { method: "POST", notify: false }).catch(() => undefined);
+    resetOperations();
+    window.localStorage.removeItem("mission-cohort-registration-delivery-jobs");
     setMenuOpen(false);
     setUser(null);
     router.replace("/login");

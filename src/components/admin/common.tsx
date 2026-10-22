@@ -12,7 +12,6 @@ import {
   FormControlLabel,
   IconButton,
   MenuItem,
-  Snackbar,
   Switch,
   TextField,
   Tooltip
@@ -21,6 +20,7 @@ import type { FormEvent, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { formatProperDisplay, formatRegistrationSource, formatStatusLabel } from "@/lib/formatting";
+import { notifyLegacy, operationSnapshot } from "@/lib/adminOperations";
 import { uploadAdminFile } from "@/lib/adminApi";
 import { dateTimeInputInZoneToIso, dateToDateInput, dateToDateTimeInputInZone, formatDateInZone } from "@/lib/timezones";
 
@@ -522,32 +522,27 @@ export function DetailField({ label, value, proper = false }: { label: string; v
 }
 
 export function useNotifier() {
-  const [notice, setNotice] = useState<{ message: string; severity: "success" | "error" } | null>(null);
-  const close = useCallback(() => setNotice(null), []);
-
-  useEffect(() => {
-    if (!notice) {
-      return;
-    }
-
-    const timeout = window.setTimeout(() => setNotice(null), notice.severity === "error" ? 9000 : 4500);
-    return () => window.clearTimeout(timeout);
-  }, [notice]);
-
   return {
-    notifySuccess: useCallback((message: string) => setNotice({ message, severity: "success" }), []),
-    notifyError: useCallback((message: string) => setNotice({ message, severity: "error" }), []),
-    snackbar: (
-      <Snackbar open={Boolean(notice)}>
-        <Alert severity={notice?.severity ?? "success"} className="ui-alert-toast">
-          <span>{notice?.message}</span>
-          <IconButton type="button" size="small" aria-label="Dismiss notification" onClick={close}>
-            <CloseIcon fontSize="small" />
-          </IconButton>
-        </Alert>
-      </Snackbar>
-    )
+    notifySuccess: useCallback((message: string) => notifyLegacy(message, "success"), []),
+    notifyError: useCallback((message: string) => notifyLegacy(message, "error"), []),
+    snackbar: null
   };
+}
+
+// A routine request owns its recoverable draft and optimistic row once it
+// starts. Keep validation failures and other dialogs open until confirmed.
+export function useFormVersion(open: boolean, identity?: string) {
+  const version = useRef(0);
+  useEffect(() => { version.current++; }, [open, identity]);
+  return version;
+}
+
+export function startImmediateSave<T>(action: () => Promise<T>, onStarted: () => void) {
+  const previous = new Set(operationSnapshot().map((entry) => entry.id));
+  const promise = action();
+  const started = operationSnapshot().some((entry) => !previous.has(entry.id) && entry.change && entry.method !== "DELETE");
+  if (started) onStarted();
+  return promise.then((result) => { if (!started) onStarted(); return result; });
 }
 
 export function ToolbarButton({ children, onClick }: { children: ReactNode; onClick: () => void }) {
@@ -605,7 +600,7 @@ export function AppDataGrid<R extends AdminRow = AdminRow>({
   }, [pageSize, rows.length]);
 
   const selectedIds = rowSelectionModel.ids;
-  const selectableIds = useMemo(() => rows.map((row, index) => row.id ?? index), [rows]);
+  const selectableIds = useMemo(() => rows.filter((row) => !row._optimistic).map((row) => row.id ?? rows.indexOf(row)), [rows]);
   const selectedSelectableCount = selectableIds.filter((id) => selectedIds.has(id)).length;
   const allRowsSelected = selectableIds.length > 0 && selectedSelectableCount === selectableIds.length;
   const someRowsSelected = selectedSelectableCount > 0 && !allRowsSelected;
@@ -676,23 +671,23 @@ export function AppDataGrid<R extends AdminRow = AdminRow>({
             {visibleRows.map((row) => {
               const id = row.id ?? rows.indexOf(row);
               return (
-                <tr key={String(id)} className={onRowClick ? "app-table-row-clickable" : undefined} onClick={() => onRowClick?.({ row, id })}>
+                <tr key={String(id)} aria-busy={Boolean(row._optimistic)} className={`${onRowClick ? "app-table-row-clickable" : ""}${row._optimistic ? " is-saving" : ""}`} onClick={() => !row._optimistic && onRowClick?.({ row, id })}>
                   {checkboxSelection && (
                     <td onClick={(event) => event.stopPropagation()}>
-                      <input type="checkbox" checked={selectedIds.has(id)} onChange={() => toggleSelection(id)} aria-label="Select row" />
+                      <input type="checkbox" disabled={Boolean(row._optimistic)} checked={selectedIds.has(id)} onChange={() => toggleSelection(id)} aria-label="Select row" />
                     </td>
                   )}
-                  {columns.map((column) => {
+                  {columns.map((column, columnIndex) => {
                     const value = getCellValue(column, row);
                     const rendered = Boolean(column.renderCell);
                     const content = column.renderCell ? column.renderCell({ row, value, field: column.field }) : column.valueFormatter ? column.valueFormatter(value, row) : value;
                     return (
-                      <td key={column.field}>
+                      <td key={column.field} inert={Boolean(row._optimistic)}>
                         <div
                           className={`app-table-cell-content${rendered ? " app-table-cell-rendered" : ""}`}
                           title={typeof content === "string" || typeof content === "number" ? String(content) : undefined}
                         >
-                          {content as ReactNode}
+                          {content as ReactNode}{row._optimistic && columnIndex === 0 && <span className="optimistic-saving-label">Saving…</span>}
                         </div>
                       </td>
                     );
@@ -738,10 +733,12 @@ export function MutationDialog({
   const [values, setValues] = useState<AdminRow>(() => normalizeInitialFieldValues(fields, initialValues));
   const [saving, setSaving] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const formVersion = useRef(0);
 
   useEffect(() => {
-    if (open) setValues(normalizeInitialFieldValues(fields, initialValues));
-  }, [initialValues, open]);
+    formVersion.current++;
+    if (open) { setValues(normalizeInitialFieldValues(fields, initialValues)); setSaving(false); setSubmitError(null); }
+  }, [initialValues?.id, open]);
 
   function setValue(name: string, value: unknown) {
     setValues((current) => ({ ...current, [name]: value }));
@@ -752,6 +749,7 @@ export function MutationDialog({
       return;
     }
 
+    const version = formVersion.current;
     setSaving(true);
     setSubmitError(null);
     try {
@@ -759,11 +757,11 @@ export function MutationDialog({
       if (!uploaded.url) {
         throw new Error("Image upload did not return a URL");
       }
-      setValue(name, uploaded.url);
+      if (formVersion.current === version) setValue(name, uploaded.url);
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : "Unable to upload image");
+      if (formVersion.current === version) setSubmitError(error instanceof Error ? error.message : "Unable to upload image");
     } finally {
-      setSaving(false);
+      if (formVersion.current === version) setSaving(false);
     }
   }
 
@@ -775,6 +773,7 @@ export function MutationDialog({
       return;
     }
 
+    const version = formVersion.current;
     setSaving(true);
     setSubmitError(null);
     try {
@@ -784,12 +783,11 @@ export function MutationDialog({
         return current;
       }, {});
       const payload = normalizeSubmitFieldValues(fields, rawPayload);
-      await onSubmit(payload);
-      onClose();
+      await startImmediateSave(() => onSubmit(payload), () => { if (formVersion.current === version) onClose(); });
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : "Unable to save changes");
+      if (formVersion.current === version) setSubmitError(error instanceof Error ? error.message : "Unable to save changes");
     } finally {
-      setSaving(false);
+      if (formVersion.current === version) setSaving(false);
     }
   }
 

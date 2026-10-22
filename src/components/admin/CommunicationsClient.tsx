@@ -951,14 +951,15 @@ function ComposeMessageDialog({
   );
 }
 
-export function CommunicationsClient() {
+export function CommunicationsClient({ requestedTab }: { requestedTab?: string } = {}) {
   const [templates, setTemplates] = useState<AdminRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [cohorts, setCohorts] = useState<AdminRow[]>([]);
   const [communications, setCommunications] = useState<AdminRow[]>([]);
   const [selectedCohortId, setSelectedCohortId] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
-  const [activeTab, setActiveTab] = useState(0);
+  const [activeTab, setActiveTab] = useState(requestedTab === "issues" ? 1 : 0);
+  useEffect(() => { setActiveTab(requestedTab === "issues" ? 1 : 0); }, [requestedTab]);
   const [messageSearch, setMessageSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [composeOpen, setComposeOpen] = useState(false);

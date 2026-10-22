@@ -1,5 +1,8 @@
 "use client";
 
+import { useOptimisticEntityRows, useOptimisticProjection } from "./useOptimisticEntity";
+import { startImmediateSave, useFormVersion } from "./common";
+
 import { DeleteOutline } from "@/components/ui/icons";
 import { ArrowRightLeftOutlined } from "@/components/ui/icons";
 import { ArticleOutlined } from "@/components/ui/icons";
@@ -63,13 +66,15 @@ function ParticipantEditor({
   const [values, setValues] = useState<AdminRow>({ status: "REGISTERED", certificateIssued: false });
   const [error, setError] = useState<string | null>(null);
 
+  const formVersion = useFormVersion(open, editing?.id);
+
   useEffect(() => {
     if (open) {
       setValues(editing ?? { status: "REGISTERED", certificateIssued: false });
       setRegistration(registrations.find((row) => row.id === editing?.registrationId) ?? editing?.registration ?? null);
       setError(null);
     }
-  }, [editing, open, registrations]);
+  }, [editing?.id, open]);
 
   function setValue(name: string, value: unknown) {
     setValues((current) => ({ ...current, [name]: value }));
@@ -81,8 +86,9 @@ function ParticipantEditor({
       return;
     }
 
+    const version = formVersion.current;
     try {
-      await adminApi("/api/participants", {
+      await startImmediateSave(() => adminApi("/api/participants", {
         method: editing ? "PATCH" : "POST",
         body: {
           ...values,
@@ -92,11 +98,10 @@ function ParticipantEditor({
           organizationId: registration.organizationId,
           deferNotifications: ["PUBLISHED", "ACTIVE"].includes(String(registration.cohort?.derivedStatus ?? registration.cohort?.status))
         }
-      });
+      }), () => { if (formVersion.current === version) onClose(); });
       await onSaved();
-      onClose();
     } catch (saveError) {
-      setError((saveError as Error).message);
+      if (formVersion.current === version) setError((saveError as Error).message);
     }
   }
 
@@ -314,15 +319,16 @@ function ParticipantTile({ label, value }: { label: string; value?: unknown }) {
   );
 }
 
-export function ParticipantsClient() {
-  const [rows, setRows] = useState<AdminRow[]>([]);
+export function ParticipantsClient({ participantId }: { participantId?: string } = {}) {
+  const [rows, setRows] = useOptimisticEntityRows<AdminRow>("participants");
   const [loading, setLoading] = useState(true);
   const [registrations, setRegistrations] = useState<AdminRow[]>([]);
   const [allCohorts, setAllCohorts] = useState<AdminRow[]>([]);
   const [templates, setTemplates] = useState<AdminRow[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<AdminRow | null>(null);
-  const [detail, setDetail] = useState<AdminRow | null>(null);
+  const [detailBase, setDetail] = useState<AdminRow | null>(null);
+  const detail = useOptimisticProjection<AdminRow>(detailBase ? [detailBase] : [], "participants", {}, false)[0] ?? null;
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [moveDialogOpen, setMoveDialogOpen] = useState(false);
   const [moveTargetCohortId, setMoveTargetCohortId] = useState("");
@@ -345,6 +351,11 @@ export function ParticipantsClient() {
   const [organizationId, setOrganizationId] = useState("");
   const [registrationPoc, setRegistrationPoc] = useState("");
   const { notifySuccess, notifyError, snackbar } = useNotifier();
+
+  useEffect(() => {
+    const requested = participantId;
+    if (!loading && requested) setDetail(rows.find((row) => row.id === requested) ?? null);
+  }, [loading, participantId]);
 
   async function load() {
     const [participantRows, registrationRows, templateRows, cohortRows] = await Promise.all([

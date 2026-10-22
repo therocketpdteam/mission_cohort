@@ -1,3 +1,5 @@
+import { getAttributionRules } from "./attributionRuleService";
+import { resolveRegistrationAttribution, summarizeAttribution, type AttributionInput, type AttributionRule, type ResolvedAttribution } from "@/lib/registrationAttribution";
 import { randomBytes } from "node:crypto";
 import { ParticipantListStatus, PaymentStatus, Prisma, RegistrationStatus, ReportShareStatus } from "@prisma/client";
 import { normalizeJotformRegistrationPayload, normalizeUsStateCode } from "@/modules/jotform";
@@ -13,7 +15,7 @@ const openRosterStatuses = new Set<ParticipantListStatus>([
   ParticipantListStatus.NEEDED,
   ParticipantListStatus.PARTIAL
 ]);
-const internalReportColumns = new Set(["pocEmail", "pocPhone", "paymentMethod", "notes", "invoiceRefs", "participantNames"]);
+const internalReportColumns = new Set(["pocEmail", "pocPhone", "paymentMethod", "notes", "invoiceRefs", "participantNames", "landingPageUrl", "referrerUrl"]);
 const excludedRevenuePaymentStatuses = new Set<PaymentStatus>([
   PaymentStatus.CANCELLED,
   PaymentStatus.REFUNDED
@@ -27,12 +29,8 @@ type TopStateReportYear = {
   totals: { registrations: number; seats: number; amount: number; states: number; missingStateRegistrations: number };
 };
 
-type TopStateReportInput = {
-  presenterShortName?: string;
-  presenterName?: string;
-  years?: number[];
-  limit?: number;
-};
+type TopStateReportInput = { cohortId?: string; presenterId?: string; years?: number[]; limit?: number };
+
 
 type CohortRegistrationReportInput = {
   cohortId: string;
@@ -91,8 +89,17 @@ function reportSeatCount(registration: { participantCount?: number | null; parti
   return Number(registration.participantCount ?? registration.participants?.length ?? 0);
 }
 
-function sourceLabel(registration: { source?: string | null; utmSource?: string | null; utmCampaign?: string | null; externalSource?: string | null }) {
-  return registration.utmCampaign || registration.utmSource || registration.source || registration.externalSource || "Unknown";
+export function reportRegistrationAttribution(registration: AttributionInput & { webhookEvents?: Array<{ payload: Prisma.JsonValue }> }, mappings: Awaited<ReturnType<typeof listActiveJotformFormMappings>>, rules: AttributionRule[]) {
+  const recovered: AttributionInput = {};
+  const fields = ["utmSource", "utmMedium", "utmCampaign", "utmContent", "utmTerm", "landingPageUrl", "referrerUrl"] as const;
+  for (const event of registration.webhookEvents ?? []) {
+    try {
+      const normalized = normalizeJotformRegistrationPayload(event.payload as Record<string, unknown>, mappings).registration;
+      for (const field of fields) if (!recovered[field] && normalized[field]) recovered[field] = normalized[field];
+    } catch { /* Incomplete historical submissions cannot supply attribution. */ }
+  }
+  for (const field of fields) if (registration[field]?.trim()) recovered[field] = registration[field];
+  return resolveRegistrationAttribution({ ...registration, ...recovered }, rules);
 }
 
 function normalizedLookupValue(value?: string | null) {
@@ -346,22 +353,7 @@ export async function getCohortRegistrationReport(input: CohortRegistrationRepor
   const city = input.city?.trim();
   const state = input.state?.trim();
   const zip = input.zip?.trim();
-  const andFilters: Prisma.RegistrationWhereInput[] = [];
-
   const source = input.source?.trim();
-  if (source) {
-    const sourceFilter: Prisma.RegistrationWhereInput[] = [
-      { source: { contains: source, mode: "insensitive" } },
-      { utmSource: { contains: source, mode: "insensitive" } },
-      { utmCampaign: { contains: source, mode: "insensitive" } },
-      { externalSource: { contains: source, mode: "insensitive" } }
-    ];
-    andFilters.push({ OR: sourceFilter });
-  }
-
-  if (andFilters.length > 0) {
-    where.AND = [...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []), ...andFilters];
-  }
 
   const cohort = await prisma.cohort.findUnique({
     where: { id: input.cohortId },
@@ -399,7 +391,9 @@ export async function getCohortRegistrationReport(input: CohortRegistrationRepor
     const zipMatches = zip ? geography.zip.toLowerCase() === zip.toLowerCase() : true;
     return textMatches && cityMatches && stateMatches && zipMatches;
   };
-  const registrations = cohort.registrations.filter(matchesLocation);
+  const { rules } = await getAttributionRules();
+  const attribution = new Map(cohort.registrations.map((row) => [row.id, reportRegistrationAttribution(row, mappings, rules)]));
+  const registrations = cohort.registrations.filter((row) => matchesLocation(row) && (!source || Object.values(attribution.get(row.id)!).some((value) => String(value).toLowerCase().includes(source.toLowerCase()))));
   const summary = registrations.reduce(
     (acc, registration) => {
       const totalAmount = reportRevenueAmount(registration);
@@ -432,13 +426,8 @@ export async function getCohortRegistrationReport(input: CohortRegistrationRepor
     return acc;
   }, {}));
 
-  const sourceBreakdown = Object.values(registrations.reduce<Record<string, { label: string; registrations: number; amount: number }>>((acc, registration) => {
-    const key = sourceLabel(registration);
-    acc[key] = acc[key] ?? { label: key, registrations: 0, amount: 0 };
-    acc[key].registrations += 1;
-    acc[key].amount += reportRevenueAmount(registration);
-    return acc;
-  }, {})).sort((a, b) => b.registrations - a.registrations);
+  const marketingAttribution = summarizeAttribution(registrations.filter(isReportableRegistration).map((row) => ({ attribution: attribution.get(row.id)!, seats: reportSeatCount(row), amount: reportRevenueAmount(row) })));
+  const sourceBreakdown = marketingAttribution.sources;
 
   const strongestMonth = monthlyBreakdown.slice().sort((a, b) => b.registrations - a.registrations)[0];
   const strongestSource = sourceBreakdown[0];
@@ -492,47 +481,37 @@ export async function getCohortRegistrationReport(input: CohortRegistrationRepor
       paymentMethod: audience === "internal" ? registration.paymentMethod : undefined,
       rosterStatus: registration.participantListStatus,
       registrationStatus: registration.status,
-      source: sourceLabel(registration),
+      source: attribution.get(registration.id)!.label,
+      marketingOwner: attribution.get(registration.id)!.ownerLabel,
+      utmSource: attribution.get(registration.id)!.source,
+      utmMedium: attribution.get(registration.id)!.medium,
+      utmCampaign: attribution.get(registration.id)!.campaign,
+      attributionBasis: attribution.get(registration.id)!.basis,
+      ...(audience === "internal" ? { landingPageUrl: registration.landingPageUrl, referrerUrl: registration.referrerUrl } : {}),
       createdAt: registration.createdAt.toISOString(),
       archivedAt: registration.archivedAt?.toISOString() ?? null
     })),
     monthlyBreakdown,
     sourceBreakdown,
+    marketingAttribution,
     recommendedOutreachNote
   };
 }
 
-export async function getThoughtLeaderTopStateReport(input: TopStateReportInput = {}) {
+export async function getCohortInsightsReport(input: TopStateReportInput = {}) {
   const nowYear = new Date().getUTCFullYear();
-  const years = (input.years?.length ? input.years : [nowYear - 1, nowYear])
-    .map((year) => Number(year))
-    .filter((year) => Number.isInteger(year));
+  const years = input.years?.length ? input.years : [nowYear - 1, nowYear];
+  if (years.length > 20 || years.some((year) => !Number.isInteger(year) || year < 1900 || year > nowYear + 10)) throw Object.assign(new Error("Choose up to 20 valid cohort start years."), { status: 400, code: "BAD_REQUEST" });
   const uniqueYears = Array.from(new Set(years)).sort((a, b) => a - b);
-  const limit = Math.max(1, Math.min(Number(input.limit ?? 5), 20));
-  const presenterShortName = (input.presenterShortName ?? "KM").trim();
-  const presenterName = (input.presenterName ?? "Kim Marshall").trim();
-  const [firstName = "", ...lastNameParts] = presenterName.split(/\s+/).filter(Boolean);
-  const lastName = lastNameParts.join(" ");
-  const presenterNameFilters: Prisma.CohortWhereInput[] = firstName && lastName
-    ? [{ presenter: { firstName: { equals: firstName, mode: Prisma.QueryMode.insensitive }, lastName: { equals: lastName, mode: Prisma.QueryMode.insensitive } } }]
-    : [];
-
-  if (uniqueYears.length === 0) {
-    return { presenterShortName, presenterName, years: [] as TopStateReportYear[] };
-  }
+  const requestedLimit = Number(input.limit ?? 5);
+  if (!Number.isFinite(requestedLimit)) throw Object.assign(new Error("Choose a valid state limit."), { status: 400, code: "BAD_REQUEST" });
+  const limit = Math.max(1, Math.min(requestedLimit, 100));
 
   const cohorts = await prisma.cohort.findMany({
     where: {
-      OR: [
-        { shortName: { startsWith: presenterShortName + "-", mode: Prisma.QueryMode.insensitive } },
-        { shortName: { startsWith: presenterShortName + " ", mode: Prisma.QueryMode.insensitive } },
-        { presenter: { shortName: { equals: presenterShortName, mode: Prisma.QueryMode.insensitive } } },
-        ...presenterNameFilters
-      ],
-      startDate: {
-        gte: new Date(Date.UTC(Math.min(...uniqueYears), 0, 1)),
-        lt: new Date(Date.UTC(Math.max(...uniqueYears) + 1, 0, 1))
-      }
+      ...(input.cohortId ? { id: input.cohortId } : {}),
+      ...(input.presenterId ? { presenterId: input.presenterId } : {}),
+      startDate: { gte: new Date(Date.UTC(Math.min(...uniqueYears), 0, 1)), lt: new Date(Date.UTC(Math.max(...uniqueYears) + 1, 0, 1)) }
     },
     include: {
       presenter: true,
@@ -551,7 +530,8 @@ export async function getThoughtLeaderTopStateReport(input: TopStateReportInput 
     }
   });
 
-  const mappings = await listActiveJotformFormMappings();
+  const [mappings, { rules }] = await Promise.all([listActiveJotformFormMappings(), getAttributionRules()]);
+  const marketingRows: Array<{ year: number; attribution: ResolvedAttribution; seats: number; amount: number }> = [];
   const yearBuckets = new Map<number, Map<string, { state: string; registrations: number; seats: number; amount: number }>>();
   const totals = new Map<number, TopStateReportYear["totals"]>();
 
@@ -574,6 +554,7 @@ export async function getThoughtLeaderTopStateReport(input: TopStateReportInput 
       const seats = reportSeatCount(registration);
       const amount = reportRevenueAmount(registration);
 
+      marketingRows.push({ year, attribution: reportRegistrationAttribution(registration, mappings, rules), seats, amount });
       total.registrations += 1;
       total.seats += seats;
       total.amount += amount;
@@ -592,8 +573,8 @@ export async function getThoughtLeaderTopStateReport(input: TopStateReportInput 
   }
 
   return {
-    presenterShortName,
-    presenterName,
+    scope: { cohortId: input.cohortId ?? "", presenterId: input.presenterId ?? "", label: input.cohortId ? cohorts[0]?.title ?? "Selected cohort" : input.presenterId ? [cohorts[0]?.presenter?.firstName, cohorts[0]?.presenter?.lastName].filter(Boolean).join(" ") || "Selected Thought Leader" : "All cohorts" },
+    marketingAttribution: summarizeAttribution(marketingRows),
     generatedAt: new Date().toISOString(),
     years: uniqueYears.map((year) => {
       const states = Array.from(yearBuckets.get(year)?.values() ?? [])
@@ -602,7 +583,8 @@ export async function getThoughtLeaderTopStateReport(input: TopStateReportInput 
 
       return {
         year,
-        states: states.slice(0, limit),
+        states: states.slice(0, limit).map((row) => ({ ...row, percentage: total.registrations ? Math.round(row.registrations / total.registrations * 1000) / 10 : 0 })),
+        marketingAttribution: summarizeAttribution(marketingRows.filter((row) => row.year === year)),
         totals: { ...total, states: states.length }
       };
     })

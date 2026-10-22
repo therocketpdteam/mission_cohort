@@ -1,5 +1,8 @@
 "use client";
 
+import { useOptimisticEntityRows, useOptimisticProjection } from "./useOptimisticEntity";
+import { startImmediateSave, useFormVersion } from "./common";
+
 import { AddIcon } from "@/components/ui/icons";
 import { ArchiveOutlined } from "@/components/ui/icons";
 import { CancelOutlined } from "@/components/ui/icons";
@@ -307,6 +310,8 @@ export function RegistrationEditor({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const formVersion = useFormVersion(open, editing?.id);
+
   useEffect(() => {
     if (open) {
       const nextValues = editing ?? emptyRegistration();
@@ -320,12 +325,13 @@ export function RegistrationEditor({
       setOrganizationProfile(organizationProfileFromRow(selectedOrganization));
       setLastAutoTotal(registrationTotalForCohort(selectedCohort, nextValues.participantCount));
       setAttributionOpen(Boolean(editing?.utmSource || editing?.utmMedium || editing?.utmCampaign || editing?.utmContent || editing?.utmTerm || editing?.landingPageUrl || editing?.referrerUrl));
+      setSaving(false);
       setCreationStep("edit");
       setManualRosterText("");
       setManualParticipants([]);
       setError(null);
     }
-  }, [cohorts, defaultCohortId, editing, open, organizations]);
+  }, [defaultCohortId, editing?.id, open]);
 
   function setValue(name: string, value: unknown) {
     setValues((current) => ({ ...current, [name]: value }));
@@ -511,6 +517,7 @@ export function RegistrationEditor({
 
     setSaving(true);
     setError(null);
+    const version = formVersion.current;
     try {
       let savedOrganization = organization;
       const organizationPayload = organizationProfilePayload(organizationProfile);
@@ -519,11 +526,10 @@ export function RegistrationEditor({
           method: "PATCH",
           body: { id: organization.id, ...organizationPayload }
         });
-        setOrganization(savedOrganization);
-        setOrganizationProfile(organizationProfileFromRow(savedOrganization));
+        if (formVersion.current === version) { setOrganization(savedOrganization); setOrganizationProfile(organizationProfileFromRow(savedOrganization)); }
       }
 
-      const saved = await adminApi<AdminRow>("/api/registrations", {
+      const saved = await startImmediateSave(() => adminApi<AdminRow>("/api/registrations", {
         method: editing ? "PATCH" : "POST",
         body: {
           ...values,
@@ -537,18 +543,17 @@ export function RegistrationEditor({
           ...(!editing ? { backgroundDelivery: true } : {}),
           deferNotifications: Boolean(editing && ["PUBLISHED", "ACTIVE"].includes(String(cohort.derivedStatus ?? cohort.status)))
         }
-      });
+      }), () => { if (formVersion.current === version) onClose(); });
       if (!editing && saved.deliveryJob?.id) {
         window.dispatchEvent(new CustomEvent("registration-delivery-job", {
-          detail: { id: saved.deliveryJob.id, label: `${cohortDropdownLabel(cohort)} · ${manualParticipants.length} participants` }
+          detail: { id: saved.deliveryJob.id, entityId: saved.id, label: `${cohortDropdownLabel(cohort)} · ${manualParticipants.length} participants` }
         }));
       }
       await onSaved();
-      onClose();
     } catch (saveError) {
-      setError((saveError as Error).message);
+      if (formVersion.current === version) setError((saveError as Error).message);
     } finally {
-      setSaving(false);
+      if (formVersion.current === version) setSaving(false);
     }
   }
 
@@ -901,7 +906,7 @@ export function RegistrationEditor({
 }
 
 function RegistrationDetailDialog({
-  registration,
+  registration: registrationBase,
   open,
   onClose,
   onChanged,
@@ -923,6 +928,9 @@ function RegistrationDetailDialog({
   onSuccess: (message: string) => void;
   onError: (message: string) => void;
 }) {
+  const projectedRegistrations = useOptimisticProjection<AdminRow>(registrationBase ? [registrationBase] : [], "registrations", {}, false);
+  const projectedParticipants = useOptimisticProjection<AdminRow>(registrationBase?.participants ?? [], "participants", { registrationId: registrationBase?.id ?? "" });
+  const registration: AdminRow | null = projectedRegistrations[0] ? { ...projectedRegistrations[0], participants: projectedParticipants } : null;
   const [participant, setParticipant] = useState({ firstName: "", lastName: "", email: "", title: "", phone: "" });
   const [editingParticipantId, setEditingParticipantId] = useState("");
   const [participantEdit, setParticipantEdit] = useState({ firstName: "", lastName: "", email: "", title: "", phone: "" });
@@ -993,7 +1001,7 @@ function RegistrationDetailDialog({
     }
 
     try {
-      await adminApi("/api/participants", {
+      await startImmediateSave(() => adminApi("/api/participants", {
         method: "POST",
         body: {
           ...participant,
@@ -1002,7 +1010,7 @@ function RegistrationDetailDialog({
           organizationId: registration.organizationId,
           deferNotifications: ["PUBLISHED", "ACTIVE"].includes(String(registration.cohort?.derivedStatus ?? registration.cohort?.status))
         }
-      });
+      }), () => setParticipant({ firstName: "", lastName: "", email: "", title: "", phone: "" }));
       const projectedCount = (registration.participants?.length ?? 0) + 1;
       if (projectedCount > Number(registration.participantCount ?? 0)) {
         await adminApi("/api/registrations", {
@@ -1015,7 +1023,6 @@ function RegistrationDetailDialog({
           }
         });
       }
-      setParticipant({ firstName: "", lastName: "", email: "", title: "", phone: "" });
       await onChanged();
     } catch (addError) {
       setError((addError as Error).message);
@@ -1095,7 +1102,7 @@ function RegistrationDetailDialog({
     setError(null);
 
     try {
-      await adminApi("/api/participants", {
+      await startImmediateSave(() => adminApi("/api/participants", {
         method: "PATCH",
         body: {
           id: row.id,
@@ -1106,9 +1113,7 @@ function RegistrationDetailDialog({
           phone: participantEdit.phone.trim(),
           deferNotifications: ["PUBLISHED", "ACTIVE"].includes(String(registration?.cohort?.derivedStatus ?? registration?.cohort?.status))
         }
-      });
-      setEditingParticipantId("");
-      setParticipantEdit({ firstName: "", lastName: "", email: "", title: "", phone: "" });
+      }), () => { setEditingParticipantId(""); setParticipantEdit({ firstName: "", lastName: "", email: "", title: "", phone: "" }); });
       onSuccess("Participant updated.");
       await onChanged();
     } catch (saveError) {
@@ -1663,7 +1668,7 @@ function RegistrationDetailDialog({
                   const editing = editingParticipantId === row.id;
 
                   return (
-                    <div className={`quick-view-list-row ${editing ? "is-editing-participant" : ""}`} key={row.id}>
+                    <div aria-busy={Boolean(row._optimistic)} className={`quick-view-list-row ${editing ? "is-editing-participant" : ""}`} key={row.id}>
                       {editing ? (
                         <div className="participant-inline-editor">
                           <TextField label="First name" value={participantEdit.firstName} onChange={(event) => setParticipantEdit((current) => ({ ...current, firstName: event.target.value }))} />
@@ -1674,7 +1679,7 @@ function RegistrationDetailDialog({
                         </div>
                       ) : (
                         <div>
-                          <strong>{formatProperDisplay(`${row.firstName} ${row.lastName}`)}</strong>
+                          <strong>{formatProperDisplay(`${row.firstName} ${row.lastName}`)}{row._optimistic && <span className="optimistic-saving-label">Saving…</span>}</strong>
                           <span>{[row.email, row.title].filter(Boolean).join(" · ") || "No contact details"}</span>
                         </div>
                       )}
@@ -1688,8 +1693,8 @@ function RegistrationDetailDialog({
                           </>
                         ) : (
                           <>
-                            <Button size="small" variant="outlined" startIcon={<EditOutlined />} onClick={() => startParticipantEdit(row)}>Edit</Button>
-                            <Button size="small" variant="text" color="error" startIcon={<DeleteOutline />} onClick={() => removeParticipant(row.id)}>Remove</Button>
+                            <Button size="small" disabled={Boolean(row._optimistic)} variant="outlined" startIcon={<EditOutlined />} onClick={() => startParticipantEdit(row)}>Edit</Button>
+                            <Button size="small" disabled={Boolean(row._optimistic)} variant="text" color="error" startIcon={<DeleteOutline />} onClick={() => removeParticipant(row.id)}>Remove</Button>
                           </>
                         )}
                       </Stack>
@@ -2129,8 +2134,8 @@ export function RegistrationRemovalDialog({
   );
 }
 
-export function RegistrationsClient() {
-  const [rows, setRows] = useState<AdminRow[]>([]);
+export function RegistrationsClient({ requestedRegistrationId }: { requestedRegistrationId?: string } = {}) {
+  const [rows, setRows] = useOptimisticEntityRows<AdminRow>("registrations");
   const [loading, setLoading] = useState(true);
   const [cohorts, setCohorts] = useState<AdminRow[]>([]);
   const [organizations, setOrganizations] = useState<AdminRow[]>([]);
@@ -2267,7 +2272,8 @@ export function RegistrationsClient() {
       }
     };
 
-    openFromLocation();
+    if (requestedRegistrationId) openDetail(requestedRegistrationId, { syncUrl: false });
+    else openFromLocation();
     window.addEventListener("popstate", openFromLocation);
     window.addEventListener("mission-open-registration", openFromSearch);
 
@@ -2275,7 +2281,7 @@ export function RegistrationsClient() {
       window.removeEventListener("popstate", openFromLocation);
       window.removeEventListener("mission-open-registration", openFromSearch);
     };
-  }, [openDetail]);
+  }, [openDetail, requestedRegistrationId]);
 
   const filteredRows = useMemo(
     () =>

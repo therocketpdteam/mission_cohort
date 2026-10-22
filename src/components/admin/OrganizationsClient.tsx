@@ -1,5 +1,7 @@
 "use client";
 
+import { useOptimisticEntityRows } from "./useOptimisticEntity";
+
 import { EditOutlined } from "@/components/ui/icons";
 import { VisibilityOutlined } from "@/components/ui/icons";
 import { Box, TextField } from "@/components/ui/primitives";
@@ -34,7 +36,7 @@ const orgFields: FieldConfig[] = [
 ];
 
 export function OrganizationsClient() {
-  const [rows, setRows] = useState<AdminRow[]>([]);
+  const [rows, setRows] = useOptimisticEntityRows<AdminRow>("organizations");
   const [loading, setLoading] = useState(true);
   const [payments, setPayments] = useState<AdminRow[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -103,7 +105,7 @@ export function OrganizationsClient() {
         body: editing ? { ...values, id: editing.id } : values
       });
       notifySuccess(editing ? "Organization updated" : "Organization created");
-      setEditing(null);
+      setEditing((current) => current?.id === editing?.id ? null : current);
       await load();
     } catch (error) {
       notifyError((error as Error).message);

@@ -549,14 +549,15 @@ function readUrlSearchParam(value: unknown, param: string): string {
   }
 
   try {
-    return new URL(rawUrl).searchParams.get(param) ?? "";
+    return new URL(rawUrl.replace(/&amp;/gi, "&")).searchParams.get(param) ?? "";
   } catch {
     return "";
   }
 }
 
 function readUtmValue(flat: UnknownRecord, fieldMap: FieldMap, target: string, aliases: string[], sourceUrls: unknown[]): string {
-  const direct = readString(mappedFirstValue(flat, flat, fieldMap, target, aliases));
+  const nested = flat.registration && typeof flat.registration === "object" ? flat.registration as UnknownRecord : flat;
+  const direct = readString(mappedFirstValue(flat, nested, fieldMap, target, aliases)) || readString(firstValue(flat, aliases));
 
   if (direct) {
     return direct;

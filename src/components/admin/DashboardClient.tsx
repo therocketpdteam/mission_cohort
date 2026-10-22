@@ -18,8 +18,10 @@ import type { Route } from "next";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import type { RegistrationActivity } from "@/lib/registrationActivity";
+import { dashboardOperationalRows } from "@/lib/dashboardPresentation";
+import { RegistrationActivityChart } from "./RegistrationActivityChart";
 import { adminApi } from "@/lib/adminApi";
-import { formatProperDisplay, formatRegistrationPaymentStatus, formatStatusLabel } from "@/lib/formatting";
+import { formatProperDisplay, formatRegistrationPaymentStatus, formatRegistrationSource, formatStatusLabel } from "@/lib/formatting";
 import {
   AdminRow,
   DetailField,
@@ -183,7 +185,7 @@ function MetricGrid({ data, finance }: { data: AdminRow | null; finance: AdminRo
     openRegistrations: data?.metrics?.openRegistrations ?? "-",
     totalParticipants: data?.metrics?.totalParticipants ?? "-",
     outstanding: formatMoney(finance.outstanding),
-    attention: (data?.metrics?.openOperationsTasks ?? 0) + (data?.metrics?.communicationIssues ?? 0)
+    attention: data ? (data.metrics?.openOperationsTasks ?? 0) + (data.metrics?.communicationIssues ?? 0) : "-"
   };
 
   return (
@@ -304,42 +306,18 @@ function PaymentSnapshot({ finance }: { finance: AdminRow }) {
 }
 
 function RegistrationActivityPanel({ activity, loading }: { activity: RegistrationActivity | null; loading: boolean }) {
-  const buckets = activity?.buckets ?? [];
-  const max = Math.max(1, ...buckets.map((bucket) => bucket.count));
   return (
     <DashboardPanel title="Registration activity" actionLabel="Last 10 weeks" className="dashboard-panel-registration-activity">
-      {activity ? (
-        <>
-          <div className="dashboard-activity-chart" role="list" aria-label="New registrations by week for the last 10 weeks, Eastern time">
-            <div className="dashboard-chart-grid" aria-hidden="true"><i /><i /><i /></div>
-            <div className="dashboard-chart-bars">
-              {buckets.map((bucket) => {
-                const description = `Week of ${bucket.label}: ${bucket.count} registration${bucket.count === 1 ? "" : "s"}${bucket.currentWeek ? " (current week, in progress)" : ""}`;
-                return (
-                  <div className="dashboard-chart-column" key={bucket.weekStart} role="listitem" aria-label={description} title={description}>
-                    <strong>{bucket.count}</strong>
-                    <span aria-hidden="true" style={{ height: `${bucket.count / max * 100}%`, minHeight: bucket.count ? 3 : 0 }} />
-                    <small>{bucket.label}</small>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-          <div className="dashboard-chart-legend"><i /><strong>{activity.total} registration{activity.total === 1 ? "" : "s"}</strong><span>Weekly totals · current week in progress · Eastern time</span></div>
-          {activity.total === 0 ? <p className="dashboard-chart-empty">No registrations in this period.</p> : null}
-        </>
-      ) : (
-        <EmptyState title={loading ? "Loading registration activity" : "Registration activity unavailable"} description={loading ? "Loading the full 10-week period." : "Refresh the dashboard to try again."} />
-      )}
+      {activity ? <RegistrationActivityChart activity={activity} /> : <EmptyState title={loading ? "Loading registration activity" : "Registration activity unavailable"} description={loading ? "Loading the full 10-week period." : "Refresh the dashboard to try again."} />}
     </DashboardPanel>
   );
 }
 
 function OperationalTasksPanel({ rows, onOpen }: { rows: AdminRow[]; onOpen: (row: AdminRow) => void }) {
   return (
-    <DashboardPanel title="Operational tasks" actionLabel={`${rows.length} need attention`} className="dashboard-panel-operational-tasks">
+    <DashboardPanel title="Operational tasks" actionLabel={`${rows.reduce((sum, row) => sum + row.tasks.length, 0)} items across ${rows.length} cohort${rows.length === 1 ? "" : "s"}`} className="dashboard-panel-operational-tasks">
       <div className="dashboard-operational-list">
-        {rows.slice(0, 3).map((row) => (
+        {rows.map((row) => (
           <button type="button" key={row.cohort.id} onClick={() => onOpen(row)}>
             <span className="dashboard-operational-icon"><WarningAmberOutlined /></span>
             <span><strong>{row.tasks.length} item{row.tasks.length === 1 ? "" : "s"} need follow-up</strong><small>{row.cohort.title}</small></span>
@@ -352,16 +330,18 @@ function OperationalTasksPanel({ rows, onOpen }: { rows: AdminRow[]; onOpen: (ro
   );
 }
 
-function SystemHealthPanel({ data }: { data: AdminRow | null }) {
-  const issueCount = data?.metrics?.communicationIssues ?? data?.communicationIssues?.length ?? 0;
+function SystemHealthPanel({ data, health, loading }: { data: AdminRow | null; health: AdminRow | null; loading: boolean }) {
+  const count = data?.metrics?.communicationIssues ?? 0;
+  const available = !!data && data.communicationIssuesAvailable !== false;
+  const delivery = { key: "delivery", label: available ? count ? `${count} delivery issue${count === 1 ? "" : "s"} need review` : "No unresolved delivery issues" : "Delivery status unavailable", status: !available ? "unknown" : count ? "error" : "healthy", detail: "Unreviewed failed or bounced recipients, excluding later recoveries.", href: "/communications?tab=issues" };
+  const checks = [delivery, ...(health?.checks ?? [{ key: "checks", label: loading ? "Checking scheduler and queues…" : "Scheduler and queue checks unavailable", status: "unknown", detail: "Open System Health to inspect the current checks.", href: "/settings?tab=health" }])];
+  const needsAttention = checks.filter((check) => ["error", "warning"].includes(check.status)).length;
+  const unknown = checks.some((check) => check.status === "unknown");
   return (
     <section className="dashboard-system-health">
-      <div><h2>System health</h2><span className={issueCount ? "is-warning" : ""}><i />{issueCount ? `${issueCount} delivery issue${issueCount === 1 ? "" : "s"}` : "All systems operational"}</span></div>
-      <div className="dashboard-health-items">
-        <span><i />Background jobs monitored</span>
-        <span><i />Delivery queue connected</span>
-        <span><i />Application data available</span>
-        <small>Controlled environment</small>
+      <div><h2>System health</h2><Link href={(count ? "/communications?tab=issues" : "/settings?tab=health") as Route} className={needsAttention ? "is-warning" : unknown ? "is-unknown" : ""}><i />{count ? `${count} delivery issue${count === 1 ? "" : "s"}` : needsAttention ? `${needsAttention} checks need attention` : unknown ? "Some checks unavailable" : "Checks passed"}</Link></div>
+      <div className="dashboard-health-checks">
+        {checks.map((check) => <Link href={check.href as Route} key={check.key} className={`dashboard-health-check is-${check.status}`} title={check.detail}><i /><span><strong>{check.label}</strong><small>{check.detail}</small></span><em>Review</em></Link>)}
       </div>
     </section>
   );
@@ -458,6 +438,8 @@ function RecentActivityPanel({ data, onOpenRegistration }: { data: AdminRow | nu
 
 export function DashboardClient() {
   const [data, setData] = useState<AdminRow | null>(null);
+  const [health, setHealth] = useState<AdminRow | null>(null);
+  const [healthLoading, setHealthLoading] = useState(true);
   const [templates, setTemplates] = useState<AdminRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [readinessCohort, setReadinessCohort] = useState<AdminRow | null>(null);
@@ -481,46 +463,11 @@ export function DashboardClient() {
       .catch((error) => notifyError(error.message));
   }, [notifyError]);
 
-  const readinessRows = useMemo(() => {
-    const taskRows = (data?.openOperationsTasks ?? []).filter((task: AdminRow) => task.category !== "CALENDAR_INVITE");
-    const grouped = new Map<string, AdminRow>();
+  useEffect(() => {
+    adminApi<AdminRow>("/api/dashboard-health").then(setHealth).catch(() => setHealth(null)).finally(() => setHealthLoading(false));
+  }, []);
 
-    for (const cohort of data?.cohortsNeedingAttention ?? []) {
-      grouped.set(cohort.id, {
-        cohort,
-        tasks: [],
-        nextSession: (data?.upcomingSessions ?? []).find((session: AdminRow) => session.cohortId === cohort.id),
-        registrationCount: cohort._count?.registrations ?? 0,
-        participantCount: cohort._count?.participants ?? 0
-      });
-    }
-
-    for (const task of taskRows) {
-      const cohortId = task.cohortId ?? task.cohort?.id ?? "operations";
-      const current = grouped.get(cohortId) ?? {
-        cohort: task.cohort ?? { id: cohortId, title: "Operations" },
-        tasks: [],
-        nextSession: (data?.upcomingSessions ?? []).find((session: AdminRow) => session.cohortId === cohortId),
-        registrationCount: 0,
-        participantCount: 0
-      };
-      current.tasks = [...current.tasks, task];
-      grouped.set(cohortId, current);
-    }
-
-    return Array.from(grouped.values())
-      .sort((a, b) => {
-        const aTime = a.nextSession?.startTime ? new Date(a.nextSession.startTime).getTime() : Number.MAX_SAFE_INTEGER;
-        const bTime = b.nextSession?.startTime ? new Date(b.nextSession.startTime).getTime() : Number.MAX_SAFE_INTEGER;
-
-        if (aTime !== bTime) {
-          return aTime - bTime;
-        }
-
-        return (b.tasks?.length ?? 0) - (a.tasks?.length ?? 0);
-      })
-      .slice(0, 6);
-  }, [data]);
+  const readinessRows = useMemo(() => dashboardOperationalRows(data?.openOperationsTasks ?? [], data?.upcomingSessions ?? []), [data]);
 
   const financeSummary = useMemo(() => {
     return (data?.paymentRecordsSnapshot ?? []).reduce(
@@ -610,14 +557,14 @@ export function DashboardClient() {
       </section>
 
       <OperationalTasksPanel rows={readinessRows} onOpen={setReadinessCohort} />
-      <SystemHealthPanel data={data} />
+      <SystemHealthPanel data={data} health={health} loading={healthLoading} />
 
       <Dialog open={Boolean(readinessCohort)} onClose={() => setReadinessCohort(null)} fullWidth maxWidth="md">
         <DialogTitle>{readinessCohort?.cohort?.title ?? "Cohort Readiness"}</DialogTitle>
         <DialogContent>
           <div className="dashboard-modal-summary">
-            <MetadataPill>{readinessCohort?.registrationCount ?? 0} registrations</MetadataPill>
-            <MetadataPill>{readinessCohort?.participantCount ?? 0} participants</MetadataPill>
+            <MetadataPill>{readinessCohort?.cohort?._count?.registrations ?? "—"} registrations</MetadataPill>
+            <MetadataPill>{readinessCohort?.cohort?._count?.participants ?? "—"} participants</MetadataPill>
             <MetadataPill>{readinessCohort?.nextSession ? `Next ${shortDate(readinessCohort.nextSession.startTime)}` : "No upcoming session"}</MetadataPill>
           </div>
           <Divider />
@@ -635,6 +582,7 @@ export function DashboardClient() {
                 </div>
                 <div className="dashboard-task-actions">
                   <StatusChip value={task.status} />
+                  <Button component={Link} href={(task.registrationId ? `/registrations?id=${task.registrationId}` : `/cohorts/${task.cohortId ?? readinessCohort?.cohort?.id}`) as Route} size="small" variant="outlined">Open to resolve</Button>
                   <Button
                     size="small"
                     variant="outlined"
@@ -666,7 +614,7 @@ export function DashboardClient() {
               <Grid size={{ xs: 12, sm: 6 }}><DetailField label="Cohort" value={recentRegistration.cohort?.title} /></Grid>
               <Grid size={{ xs: 12, sm: 6 }}><DetailField label="Participants" value={`${recentRegistration.participants?.length ?? 0} of ${recentRegistration.participantCount ?? 0}`} /></Grid>
               <Grid size={{ xs: 12, sm: 6 }}><DetailField label="Payment" value={formatRegistrationPaymentStatus(recentRegistration)} /></Grid>
-              <Grid size={{ xs: 12, sm: 6 }}><DetailField label="Source" value={recentRegistration.utmCampaign || recentRegistration.utmSource || recentRegistration.landingPageUrl || recentRegistration.source} /></Grid>
+              <Grid size={{ xs: 12, sm: 6 }}><DetailField label="Source" value={formatRegistrationSource(recentRegistration)} /></Grid>
               <Grid size={{ xs: 12, sm: 6 }}><DetailField label="Amount" value={`$${Number(recentRegistration.totalAmount ?? 0).toLocaleString()}`} /></Grid>
             </Grid>
           )}

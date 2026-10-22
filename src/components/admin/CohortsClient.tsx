@@ -1,5 +1,8 @@
 "use client";
 
+import { useOptimisticEntityRows, useOptimisticProjection } from "./useOptimisticEntity";
+import { startImmediateSave, useFormVersion } from "./common";
+
 import { CohortCancellationDialog } from "./CohortCancellationDialog";
 import { AddIcon } from "@/components/ui/icons";
 import { ArchiveOutlined, ArticleOutlined, CalendarMonthOutlined, CancelOutlined, GroupsOutlined, InsightsOutlined } from "@/components/ui/icons";
@@ -261,6 +264,8 @@ function CreateCohortWizard({
   const [thumbnailUploading, setThumbnailUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const formVersion = useFormVersion(open, duplicateSource?.id);
+
   useEffect(() => {
     if (!slugTouched) {
       if (duplicateSource) {
@@ -274,6 +279,7 @@ function CreateCohortWizard({
 
   useEffect(() => {
     if (!open) {
+      setSaving(false);
       setActiveStep(0);
       setTitle("");
       setShortName("");
@@ -475,10 +481,11 @@ function CreateCohortWizard({
 
     setSaving(true);
     setError(null);
+    const version = formVersion.current;
     try {
       const firstSession = sessions[0]!;
       const lastSession = sessions[sessions.length - 1]!;
-      await adminApi("/api/cohorts", {
+      await startImmediateSave(() => adminApi("/api/cohorts", {
         method: "POST",
         body: {
           title,
@@ -509,13 +516,12 @@ function CreateCohortWizard({
             location: session.location || undefined
           }))
         }
-      });
+      }), () => { if (formVersion.current === version) onClose(); });
       await onCreated();
-      onClose();
     } catch (saveError) {
-      setError((saveError as Error).message);
+      if (formVersion.current === version) setError((saveError as Error).message);
     } finally {
-      setSaving(false);
+      if (formVersion.current === version) setSaving(false);
     }
   }
 
@@ -721,7 +727,7 @@ function CreateCohortWizard({
 
 export function CohortsClient() {
   const router = useRouter();
-  const [rows, setRows] = useState<AdminRow[]>([]);
+  const [rows, setRows] = useOptimisticEntityRows<AdminRow>("cohorts");
   const [loading, setLoading] = useState(true);
   const [presenters, setPresenters] = useState<AdminRow[]>([]);
   const [wizardOpen, setWizardOpen] = useState(false);
@@ -930,7 +936,7 @@ export function CohortsClient() {
     try {
       await adminApi(`/api/cohorts/${editing?.id}`, { method: "PATCH", body: values });
       notifySuccess("Cohort updated");
-      setEditing(null);
+      setEditing((current) => current?.id === editing?.id ? null : current);
       await load();
     } catch (error) {
       notifyError((error as Error).message);
@@ -975,13 +981,13 @@ export function CohortsClient() {
             const completeRosters = (row.registrations ?? []).filter((registration: AdminRow) => registration.participantListStatus === "COMPLETE").length;
             return (
               <div className="cohort-reference-record" key={row.id}>
-                <div className="cohort-reference-row">
-                  <button className="cohort-reference-expand" type="button" onClick={() => setExpandedCohortId(expanded ? "" : row.id)} aria-label={`${expanded ? "Collapse" : "Expand"} ${row.title}`}>
+                <div className={`cohort-reference-row${row._optimistic ? " is-saving" : ""}`} aria-busy={Boolean(row._optimistic)}>
+                  <button className="cohort-reference-expand" type="button" disabled={Boolean(row._optimistic)} onClick={() => setExpandedCohortId(expanded ? "" : row.id)} aria-label={`${expanded ? "Collapse" : "Expand"} ${row.title}`}>
                     {expanded ? <ExpandLessOutlined /> : <ExpandMoreOutlined />}
                   </button>
-                  <button className="cohort-reference-name" type="button" onClick={() => router.push(`/cohorts/${row.id}`)}>
+                  <button className="cohort-reference-name" type="button" disabled={Boolean(row._optimistic)} onClick={() => router.push(`/cohorts/${row.id}`)}>
                     {row.thumbnailUrl ? <img src={row.thumbnailUrl} alt="" /> : <span className="cohort-reference-avatar">{String(row.presenter?.firstName ?? row.title ?? "C").slice(0, 1)}</span>}
-                    <span><strong>{row.title}</strong><small>{displayShortName(row.shortName)}</small></span>
+                    <span><strong>{row.title}{row._optimistic && <span className="optimistic-saving-label">Saving…</span>}</strong><small>{displayShortName(row.shortName)}</small></span>
                   </button>
                   <span>{formatProperDisplay(`${row.presenter?.firstName ?? ""} ${row.presenter?.lastName ?? ""}`)}</span>
                   <span>{formatCohortDateRange(row)}</span>
@@ -991,7 +997,7 @@ export function CohortsClient() {
                   <span>{finance.paidPercent}%</span>
                   <span>{money(finance.totalSales)}</span>
                   <StatusChip value={row.status === "ACTIVE" || row.status === "PUBLISHED" ? "Current" : row.status === "COMPLETED" && hasOutstandingCollection(row) ? "Ended" : row.status} />
-                  <div className="cohort-reference-actions">
+                  <div className="cohort-reference-actions" inert={Boolean(row._optimistic)}>
                     <RowActionMenu actions={[
                       { label: "Open", icon: <VisibilityOutlined fontSize="small" />, onClick: () => router.push(`/cohorts/${row.id}`) },
                       ...(["PUBLISHED", "ACTIVE"].includes(row.status) && ["PUBLISHED", "ACTIVE"].includes(row.storedStatus ?? row.status) ? [{
@@ -1111,7 +1117,6 @@ export function CohortsClient() {
         }}
         onCreated={async () => {
           notifySuccess(duplicateSource ? "Cohort duplicated as a new Draft" : "Cohort and sessions created");
-          setDuplicateSource(null);
           await load();
         }}
       />

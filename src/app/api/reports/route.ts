@@ -4,7 +4,7 @@ import {
   getCohortRegistrationReport,
   getCohortRegistrationReportOptions,
   getCohortReport,
-  getThoughtLeaderTopStateReport,
+  getCohortInsightsReport,
   listReportShareLinks,
   revokeReportShareLink
 } from "@/services/reportService";
@@ -14,6 +14,10 @@ export async function GET(request: Request) {
     const url = new URL(request.url);
     const cohortId = url.searchParams.get("cohortId") ?? undefined;
     const includeLinks = url.searchParams.get("includeLinks") === "true";
+
+    if (url.searchParams.get("reportType") === "cohort_insights") {
+      return ok(await getCohortInsightsReport({ cohortId, presenterId: url.searchParams.get("presenterId") || undefined, years: url.searchParams.get("years")?.split(",").map(Number), limit: Number(url.searchParams.get("limit") ?? 5) }));
+    }
 
     if (url.searchParams.get("reportType") === "cohort_registration_options") {
       if (!cohortId) {
@@ -48,9 +52,6 @@ export async function GET(request: Request) {
 
     return ok({
       reports: await getCohortReport(cohortId),
-      topStateReports: {
-        km: await getThoughtLeaderTopStateReport({ presenterShortName: "KM", presenterName: "Kim Marshall", limit: 5 })
-      },
       links: includeLinks ? await listReportShareLinks() : []
     });
   } catch (error) {

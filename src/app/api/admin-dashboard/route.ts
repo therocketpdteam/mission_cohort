@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { isMissingEmailReviewColumn } from "@/lib/prismaCompatibility";
 import { getDashboardRegistrationActivity } from "@/services/dashboardRegistrationActivityService";
 import { deriveCohortStatus } from "@/services/cohortLifecycle";
+import { unresolvedDeliveryRecipients } from "@/lib/dashboardPresentation";
 
 function parseDashboardRange(request: Request) {
   const params = new URL(request.url).searchParams;
@@ -103,22 +104,29 @@ function cohortOverlapsRange(cohort: { startDate: Date; endDate: Date; sessions?
 async function dashboardCommunicationIssues(where: Record<string, unknown>, filters: ReturnType<typeof parseDashboardFilters>) {
   const cohort = dashboardCohortWhere(filters);
   try {
-    return await prisma.emailEvent.findMany({
+    const failures = await prisma.emailEvent.findMany({
       where: {
         eventType: { in: [EmailEventType.BOUNCED, EmailEventType.FAILED] },
         ...where,
+        reviewedAt: null,
         ...(Object.keys(cohort).length ? { communication: { cohort } } : {})
       },
       orderBy: { createdAt: "desc" },
-      take: 8,
       include: { communication: { include: { cohort: true, session: true } } }
     });
+    if (!failures.length) return { available: true, issues: [] };
+    const recoveries = await prisma.emailEvent.findMany({
+      where: { OR: [{ communicationId: { in: [...new Set(failures.flatMap((event) => event.communicationId ? [event.communicationId] : []))] } }, ...failures.filter((event) => !event.communicationId && event.providerMessageId).map((event) => ({ communicationId: null, provider: event.provider, providerMessageId: event.providerMessageId }))], eventType: { in: [EmailEventType.SENT, EmailEventType.DELIVERED, EmailEventType.OPENED, EmailEventType.CLICKED] }, createdAt: { gte: failures[failures.length - 1].createdAt } },
+      select: { communicationId: true, provider: true, providerMessageId: true, recipientEmail: true, eventType: true, createdAt: true }
+    });
+    const issues = unresolvedDeliveryRecipients(failures, recoveries);
+    return { available: true, issues };
   } catch (error) {
     if (!isMissingEmailReviewColumn(error)) {
       throw error;
     }
 
-    return [];
+    return { available: false, issues: [] };
   }
 }
 
@@ -136,6 +144,7 @@ export async function GET(request: Request) {
   const scheduledCommunicationWhere = rangeDateWhere ? { scheduledFor: rangeDateWhere } : {};
   const paymentSnapshotWhere = paymentRangeWhere(range);
   const openTaskSnapshotWhere = taskRangeWhere(range);
+  const openTaskWhere = { status: { in: [OperationsTaskStatus.OPEN, OperationsTaskStatus.IN_PROGRESS] }, ...cohortRelationWhere, AND: [openTaskSnapshotWhere, { OR: [{ registrationId: null }, { registration: { archivedAt: null, status: { not: RegistrationStatus.CANCELLED } } }] }] };
 
   const [
     lifecycleCohorts,
@@ -169,7 +178,7 @@ export async function GET(request: Request) {
     prisma.participant.count({ where: { ...participantMetricWhere, ...cohortRelationWhere } }),
     prisma.paymentRecord.count({ where: { status: { in: [PaymentStatus.PENDING, PaymentStatus.INVOICED, PaymentStatus.PARTIALLY_PAID] }, ...paymentSnapshotWhere, ...cohortRelationWhere } }),
     prisma.cohortCommunication.count({ where: { status: CommunicationStatus.SCHEDULED, ...scheduledCommunicationWhere, ...cohortRelationWhere } }),
-    prisma.operationsTask.count({ where: { status: { in: [OperationsTaskStatus.OPEN, OperationsTaskStatus.IN_PROGRESS] }, ...openTaskSnapshotWhere, ...cohortRelationWhere } }),
+    prisma.operationsTask.count({ where: openTaskWhere }),
     prisma.cohortSession.findMany({
       where: { startTime: { gte: now }, ...cohortRelationWhere },
       orderBy: { startTime: "asc" },
@@ -195,10 +204,9 @@ export async function GET(request: Request) {
       include: { presenter: true, _count: { select: { registrations: true, participants: true } } }
     }),
     prisma.operationsTask.findMany({
-      where: { status: { in: [OperationsTaskStatus.OPEN, OperationsTaskStatus.IN_PROGRESS] }, ...cohortRelationWhere },
+      where: openTaskWhere,
       orderBy: [{ priority: "desc" }, { dueDate: "asc" }, { createdAt: "desc" }],
-      take: 8,
-      include: { cohort: true, registration: { include: { organization: true } }, session: true }
+      include: { cohort: { include: { _count: { select: { registrations: true, participants: true } } } }, registration: { include: { organization: true } }, session: true }
     }),
     dashboardCommunicationIssues(communicationIssueWhere, filters),
     prisma.paymentRecord.groupBy({
@@ -235,14 +243,15 @@ export async function GET(request: Request) {
       pendingPayments,
       scheduledCommunications,
       openOperationsTasks,
-      communicationIssues: communicationIssues.length
+      communicationIssues: communicationIssues.issues.length
     },
     upcomingSessions: sessions,
     recentRegistrations: registrations,
     registrationActivity,
     cohortsNeedingAttention: cohorts,
     openOperationsTasks: tasks,
-    communicationIssues,
+    communicationIssues: communicationIssues.issues,
+    communicationIssuesAvailable: communicationIssues.available,
     paymentStatusSnapshot: paymentSnapshot,
     paymentRecordsSnapshot: paymentRecords,
     recentActivity: activity

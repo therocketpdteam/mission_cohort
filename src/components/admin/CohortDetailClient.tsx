@@ -1,5 +1,8 @@
 "use client";
 
+import { useOptimisticEntityRows, useOptimisticEntityRow, useOptimisticProjection } from "./useOptimisticEntity";
+import { startImmediateSave } from "./common";
+
 import { AddIcon } from "@/components/ui/icons";
 import { ArrowRightLeftOutlined } from "@/components/ui/icons";
 import { ArticleOutlined } from "@/components/ui/icons";
@@ -1442,23 +1445,23 @@ export function CohortDetailClient({ id }: { id: string }) {
     return new URLSearchParams(window.location.search).get("tab")?.toLowerCase() === "distribution" ? 4 : 0;
   });
   const [loading, setLoading] = useState(true);
-  const [cohort, setCohort] = useState<AdminRow | null>(null);
+  const [cohort, setCohort] = useOptimisticEntityRow<AdminRow>("cohorts");
   const [presenters, setPresenters] = useState<AdminRow[]>([]);
   const [cohortEditOpen, setCohortEditOpen] = useState(false);
   const [allCohorts, setAllCohorts] = useState<AdminRow[]>([]);
   const [organizations, setOrganizations] = useState<AdminRow[]>([]);
   const [allParticipants, setAllParticipants] = useState<AdminRow[]>([]);
-  const [sessions, setSessions] = useState<AdminRow[]>([]);
-  const [registrations, setRegistrations] = useState<AdminRow[]>([]);
+  const [sessions, setSessions] = useOptimisticEntityRows<AdminRow>("sessions", { cohortId: id });
+  const [registrations, setRegistrations] = useOptimisticEntityRows<AdminRow>("registrations", { cohortId: id });
   const [compareRegistrations, setCompareRegistrations] = useState<AdminRow[]>([]);
-  const [participants, setParticipants] = useState<AdminRow[]>([]);
+  const [participants, setParticipants] = useOptimisticEntityRows<AdminRow>("participants", { cohortId: id });
   const [communications, setCommunications] = useState<AdminRow[]>([]);
   const [templates, setTemplates] = useState<AdminRow[]>([]);
   const [payments, setPayments] = useState<AdminRow[]>([]);
   const [invoiceDrafts, setInvoiceDrafts] = useState<AdminRow[]>([]);
   const [distribution, setDistribution] = useState<AdminRow | null>(null);
-  const [tasks, setTasks] = useState<AdminRow[]>([]);
-  const [resources, setResources] = useState<AdminRow[]>([]);
+  const [tasks, setTasks] = useOptimisticEntityRows<AdminRow>("tasks", { cohortId: id });
+  const [resources, setResources] = useOptimisticEntityRows<AdminRow>("resources", { cohortId: id });
   const [activity, setActivity] = useState<AdminRow[]>([]);
   const [sessionDialogOpen, setSessionDialogOpen] = useState(false);
   const [editingSession, setEditingSession] = useState<AdminRow | null>(null);
@@ -1479,7 +1482,10 @@ export function CohortDetailClient({ id }: { id: string }) {
   const [bulkRegistrationPaymentStatus, setBulkRegistrationPaymentStatus] = useState("");
   const [updatingBulkRegistrations, setUpdatingBulkRegistrations] = useState(false);
   const [paymentDetail, setPaymentDetail] = useState<AdminRow | null>(null);
-  const [registrationDetail, setRegistrationDetail] = useState<AdminRow | null>(null);
+  const [registrationDetailBase, setRegistrationDetail] = useState<AdminRow | null>(null);
+  const detailParticipants = useOptimisticProjection<AdminRow>(registrationDetailBase?.participants ?? [], "participants", { registrationId: registrationDetailBase?.id ?? "" });
+  const projectedRegistrationDetail = useOptimisticProjection<AdminRow>(registrationDetailBase ? [registrationDetailBase] : [], "registrations", {}, false)[0];
+  const registrationDetail: AdminRow | null = projectedRegistrationDetail ? { ...projectedRegistrationDetail, participants: detailParticipants } : null;
   const [registrationDetailOpen, setRegistrationDetailOpen] = useState(false);
   const [registrationDetailLoading, setRegistrationDetailLoading] = useState(false);
   const registrationDetailRequestRef = useRef(0);
@@ -1497,7 +1503,8 @@ export function CohortDetailClient({ id }: { id: string }) {
   const [editingRegistrationParticipantId, setEditingRegistrationParticipantId] = useState("");
   const [registrationParticipantEdit, setRegistrationParticipantEdit] = useState({ firstName: "", lastName: "", email: "", title: "", phone: "", status: "REGISTERED" });
   const [savingRegistrationParticipantId, setSavingRegistrationParticipantId] = useState("");
-  const [participantDetail, setParticipantDetail] = useState<AdminRow | null>(null);
+  const [participantDetailBase, setParticipantDetail] = useState<AdminRow | null>(null);
+  const participantDetail = useOptimisticProjection<AdminRow>(participantDetailBase ? [participantDetailBase] : [], "participants", {}, false)[0] ?? null;
   const [participantSelection, setParticipantSelection] = useState<GridRowSelectionModel>({ type: "include", ids: new Set() });
   const [bulkParticipantStatus, setBulkParticipantStatus] = useState("REGISTERED");
   const [moveDialogOpen, setMoveDialogOpen] = useState(false);
@@ -1876,7 +1883,7 @@ export function CohortDetailClient({ id }: { id: string }) {
     setSavingRegistrationParticipantId(participant.id);
 
     try {
-      await adminApi("/api/participants", {
+      await startImmediateSave(() => adminApi("/api/participants", {
         method: "PATCH",
         body: {
           id: participant.id,
@@ -1888,9 +1895,7 @@ export function CohortDetailClient({ id }: { id: string }) {
           status: registrationParticipantEdit.status,
           deferNotifications: ["PUBLISHED", "ACTIVE"].includes(String(cohort?.derivedStatus ?? cohort?.status))
         }
-      });
-      setEditingRegistrationParticipantId("");
-      setRegistrationParticipantEdit({ firstName: "", lastName: "", email: "", title: "", phone: "", status: "REGISTERED" });
+      }), () => { setEditingRegistrationParticipantId(""); setRegistrationParticipantEdit({ firstName: "", lastName: "", email: "", title: "", phone: "", status: "REGISTERED" }); });
       notifySuccess("Participant updated.");
       if (registrationDetail?.id) {
         await openRegistrationDetail(registrationDetail);
@@ -3182,7 +3187,7 @@ export function CohortDetailClient({ id }: { id: string }) {
         await adminApi(`/api/cohorts/${id}/sessions`, { method: "POST", body: values });
         notifySuccess("Session added");
       }
-      setEditingSession(null);
+      setEditingSession((current) => current?.id === editingSession?.id ? null : current);
       await load();
     } catch (error) {
       notifyError((error as Error).message);
@@ -3266,7 +3271,6 @@ export function CohortDetailClient({ id }: { id: string }) {
     try {
       await adminApi(`/api/cohorts/${id}`, { method: "PATCH", body: values });
       notifySuccess("Cohort updated");
-      setCohortEditOpen(false);
       await load();
     } catch (error) {
       notifyError((error as Error).message);

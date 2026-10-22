@@ -1,9 +1,11 @@
 "use client";
 
-import { AddLinkOutlined, BlockOutlined, InsightsOutlined } from "@/components/ui/icons";
+import { AddLinkOutlined, BlockOutlined } from "@/components/ui/icons";
 import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Grid, MenuItem, Stack, TextField, Typography } from "@/components/ui/primitives";
 import { GridColDef } from "./common";
 import { useEffect, useMemo, useState } from "react";
+import { CohortInsightsPreview, MarketingAttributionSummary } from "./CohortInsightsPreview";
+import { AttributionRulesDialog } from "./AttributionRulesDialog";
 import { adminApi } from "@/lib/adminApi";
 import { formatProperDisplay, formatRegistrationPaymentStatus, formatStatusLabel } from "@/lib/formatting";
 import { AdminRow, AppDataGrid, EmptyState, PageHeader, PageStack, RowActionMenu, SectionCard, StatusChip, TableShell, cohortDropdownLabel, cohortDropdownSearchText, useNotifier } from "./common";
@@ -32,7 +34,14 @@ const columnOptions = [
   { key: "paymentStatus", label: "Payment status" },
   { key: "rosterStatus", label: "Roster status" },
   { key: "createdAt", label: "Registration date" },
-  { key: "source", label: "Source" },
+  { key: "source", label: "Marketing source" },
+  { key: "utmSource", label: "Source tag" },
+  { key: "utmMedium", label: "Medium" },
+  { key: "utmCampaign", label: "Campaign" },
+  { key: "marketingOwner", label: "Marketing credit" },
+  { key: "attributionBasis", label: "Attribution evidence" },
+  { key: "landingPageUrl", label: "Landing page", internalOnly: true },
+  { key: "referrerUrl", label: "Referrer", internalOnly: true },
   { key: "registrationStatus", label: "Registration status" },
   { key: "pocEmail", label: "POC email", internalOnly: true },
   { key: "pocPhone", label: "POC phone", internalOnly: true },
@@ -50,19 +59,6 @@ function shortDate(value?: string | null) {
   if (!value) return "-";
   return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(value));
 }
-function stateReportAnswer(report: AdminRow | null) {
-  const years = Array.isArray(report?.years) ? report.years : [];
-  return years.map((yearReport: AdminRow) => {
-    const top = Array.isArray(yearReport.states) ? yearReport.states.slice(0, 5).map((row: AdminRow) => row.state).filter(Boolean) : [];
-    return top.length ? String(yearReport.year) + ": " + top.join(", ") : String(yearReport.year) + ": No state data yet";
-  }).join(" · ");
-}
-
-function stateReportMissingCount(report: AdminRow | null) {
-  const years = Array.isArray(report?.years) ? report.years : [];
-  return years.reduce((sum: number, yearReport: AdminRow) => sum + Number(yearReport.totals?.missingStateRegistrations ?? 0), 0);
-}
-
 function cityState(row: AdminRow) {
   return [row.city, row.state].filter(Boolean).join(", ") || "-";
 }
@@ -100,7 +96,14 @@ function reportCell(row: AdminRow, column: string) {
     case "createdAt":
       return shortDate(row.createdAt);
     case "source":
-      return row.source ?? "-";
+    case "utmSource":
+    case "utmMedium":
+    case "utmCampaign":
+    case "marketingOwner":
+    case "attributionBasis":
+    case "landingPageUrl":
+    case "referrerUrl":
+      return row[column] || "Unknown";
     case "pocEmail":
       return row.pocEmail ?? "-";
     case "pocPhone":
@@ -166,6 +169,7 @@ function RegistrationReportPreview({ report, columns }: { report: AdminRow; colu
         <SummaryTile label="Geographic Matches" value={report.summary?.geographicMatches ?? 0} />
       </section>
 
+      {report.marketingAttribution && <MarketingAttributionSummary summary={report.marketingAttribution} />}
       <section className="registration-report-table-wrap">
         <h2>Registration List</h2>
         <table className="registration-report-table">
@@ -212,7 +216,12 @@ export function ReportsClient() {
   const [reportOpen, setReportOpen] = useState(false);
   const [reportLoading, setReportLoading] = useState(false);
   const [reports, setReports] = useState<AdminRow[]>([]);
-  const [topStateReports, setTopStateReports] = useState<AdminRow>({});
+  const [reportView, setReportView] = useState("registrations");
+  const [previewView, setPreviewView] = useState("registrations");
+  const [presenterId, setPresenterId] = useState("");
+  const [years, setYears] = useState(() => `${new Date().getFullYear() - 1}, ${new Date().getFullYear()}`);
+  const [stateLimit, setStateLimit] = useState("5");
+  const [rulesOpen, setRulesOpen] = useState(false);
   const [links, setLinks] = useState<AdminRow[]>([]);
   const [locationOptions, setLocationOptions] = useState<{ states: string[]; zips: string[]; cities: string[] }>({ states: [], zips: [], cities: [] });
   const { notifySuccess, notifyError, snackbar } = useNotifier();
@@ -227,7 +236,6 @@ export function ReportsClient() {
     ]);
     setCohorts(cohortRows);
     setReports(reportDataRows.reports ?? []);
-    setTopStateReports(reportDataRows.topStateReports ?? {});
     setLinks(reportDataRows.links ?? []);
   }
 
@@ -259,8 +267,8 @@ export function ReportsClient() {
   }, [audience]);
 
   const currentReport = reports[0];
-  const kmTopStateReport = topStateReports.km ?? null;
-  const kmTopStateMissingCount = stateReportMissingCount(kmTopStateReport);
+  const presenters = Array.from(new Map(cohorts.filter((row) => row.presenter?.id).map((row) => [row.presenter.id, row.presenter])).values());
+  const reportCohorts = presenterId ? cohorts.filter((row) => row.presenterId === presenterId) : cohorts;
   const metrics = useMemo(() => {
     if (!currentReport) return [];
 
@@ -306,6 +314,18 @@ export function ReportsClient() {
   }
 
   async function generateReport() {
+    if (reportView !== "registrations") {
+      const selectedYears = years.split(",").map((year) => Number(year.trim()));
+      if (!selectedYears.length || selectedYears.length > 20 || selectedYears.some((year) => !Number.isInteger(year) || year < 1900 || year > new Date().getFullYear() + 10)) { notifyError("Enter valid cohort start years, separated by commas."); return; }
+      const params = new URLSearchParams({ reportType: "cohort_insights", years: selectedYears.join(","), limit: stateLimit });
+      if (selectedCohortId) params.set("cohortId", selectedCohortId);
+      if (presenterId) params.set("presenterId", presenterId);
+      setReportLoading(true);
+      try { setReportData(await adminApi<AdminRow>(`/api/reports?${params}`)); setPreviewView(reportView); setReportOpen(true); }
+      catch (error) { notifyError((error as Error).message); }
+      finally { setReportLoading(false); }
+      return;
+    }
     if (!selectedCohortId) {
       notifyError("Choose a cohort before generating a registration report.");
       return;
@@ -338,6 +358,7 @@ export function ReportsClient() {
     try {
       const nextReport = await adminApi<AdminRow>(`/api/reports?${params.toString()}`);
       setReportData(nextReport);
+      setPreviewView("registrations");
       setReportOpen(true);
     } catch (error) {
       notifyError((error as Error).message);
@@ -384,9 +405,11 @@ export function ReportsClient() {
         action={<Button startIcon={<AddLinkOutlined />} onClick={createShareLink}>Create Share Link</Button>}
       />
 
-      <SectionCard title="Cohort Registration Report Builder">
+      <SectionCard title="Cohort Report Builder" action={<Button variant="outlined" onClick={() => setRulesOpen(true)}>Attribution rules</Button>}>
         <div className="registration-report-builder">
           <div className="registration-report-builder-grid">
+            <TextField select label="Report type" value={reportView} onChange={(event) => setReportView(event.target.value)} fullWidth><MenuItem value="registrations">Registration list</MenuItem><MenuItem value="states">State breakdown</MenuItem><MenuItem value="marketing">Marketing attribution</MenuItem></TextField>
+            {reportView !== "registrations" && <TextField select label="Thought Leader" value={presenterId} onChange={(event) => { setPresenterId(event.target.value); setSelectedCohortId(""); }} fullWidth><MenuItem value="">All Thought Leaders</MenuItem>{presenters.map((presenter) => <MenuItem key={presenter.id} value={presenter.id}>{`${presenter.firstName} ${presenter.lastName}`}</MenuItem>)}</TextField>}
             <TextField
               select
               label="Cohort"
@@ -398,12 +421,12 @@ export function ReportsClient() {
                 setStateFilter("");
                 setZipFilter("");
                 load(nextCohortId);
-                loadLocationOptions(nextCohortId).catch((error) => notifyError(error.message));
+                if (reportView === "registrations") loadLocationOptions(nextCohortId).catch((error) => notifyError(error.message));
               }}
               fullWidth
             >
-              <MenuItem value="">Choose a cohort</MenuItem>
-              {cohorts.map((cohort) => (
+              <MenuItem value="">{reportView === "registrations" ? "Choose a cohort" : "All cohorts"}</MenuItem>
+              {(reportView === "registrations" ? cohorts : reportCohorts).map((cohort) => (
                 <MenuItem
                   value={cohort.id}
                   key={cohort.id}
@@ -414,6 +437,10 @@ export function ReportsClient() {
                 </MenuItem>
               ))}
             </TextField>
+            {reportView !== "registrations" ? <>
+              <TextField label="Cohort start years" value={years} onChange={(event) => setYears(event.target.value)} helperText="Comma-separated years, e.g. 2025, 2026" fullWidth />
+              {reportView === "states" && <TextField select label="States to show" value={stateLimit} onChange={(event) => setStateLimit(event.target.value)} fullWidth>{[5, 10, 20, 100].map((count) => <MenuItem key={count} value={String(count)}>{count === 100 ? "All states" : `Top ${count}`}</MenuItem>)}</TextField>}
+            </> : <>
             <TextField select label="Audience" value={audience} onChange={(event) => setAudience(event.target.value)} fullWidth>
               {audienceOptions.map((option) => <MenuItem value={option.value} key={option.value}>{option.label}</MenuItem>)}
             </TextField>
@@ -448,9 +475,10 @@ export function ReportsClient() {
             <TextField select label="Visibility" value={visibility} onChange={(event) => setVisibility(event.target.value)} fullWidth>
               {visibilityOptions.map((option) => <MenuItem value={option.value} key={option.value}>{option.label}</MenuItem>)}
             </TextField>
+            </>}
           </div>
 
-          <div className="registration-report-columns">
+          {reportView === "registrations" && <div className="registration-report-columns">
             <div>
               <h3>Report columns</h3>
               <p>{audience === "internal" ? "Internal mode unlocks operational fields." : "Public-safe mode hides emails, phone, notes, invoice refs, and participant names."}</p>
@@ -465,9 +493,10 @@ export function ReportsClient() {
             </div>
           </div>
 
+          }
           <div className="registration-report-actions">
-            <Button variant="outlined" onClick={() => setSelectedColumns(defaultColumns)}>Reset columns</Button>
-            <Button onClick={generateReport} disabled={reportLoading || !selectedCohortId}>{reportLoading ? "Generating" : "Preview report"}</Button>
+            {reportView === "registrations" && <Button variant="outlined" onClick={() => setSelectedColumns(defaultColumns)}>Reset columns</Button>}
+            <Button onClick={generateReport} disabled={reportLoading || (reportView === "registrations" && !selectedCohortId)}>{reportLoading ? "Generating" : "Preview report"}</Button>
           </div>
         </div>
       </SectionCard>
@@ -481,46 +510,6 @@ export function ReportsClient() {
           </Grid>
         ))}
 
-        <Grid size={{ xs: 12 }} className="reports-summary-wide">
-          <SectionCard
-            title="Top KM States"
-            action={<StatusChip value={kmTopStateMissingCount > 0 ? String(kmTopStateMissingCount) + " missing state" : "Ready"} />}
-          >
-            <div className="top-state-report">
-              <div className="top-state-report-intro">
-                <span className="top-state-report-icon"><InsightsOutlined fontSize="small" /></span>
-                <div>
-                  <h3>Five states with the most Kim Marshall registrations</h3>
-                  <p>{stateReportAnswer(kmTopStateReport) || "No KM registration state data yet."}</p>
-                </div>
-              </div>
-              <div className="top-state-report-years">
-                {(Array.isArray(kmTopStateReport?.years) ? kmTopStateReport.years : []).map((yearReport: AdminRow) => (
-                  <section className="top-state-report-year" key={String(yearReport.year)}>
-                    <div className="top-state-report-year-header">
-                      <strong>{yearReport.year}</strong>
-                      <span>{yearReport.totals?.registrations ?? 0} registrations · {yearReport.totals?.seats ?? 0} seats</span>
-                    </div>
-                    <div className="top-state-report-list">
-                      {(Array.isArray(yearReport.states) ? yearReport.states : []).map((row: AdminRow, index: number) => (
-                        <div className="top-state-report-row" key={String(yearReport.year) + "-" + String(row.state)}>
-                          <span className="top-state-report-rank">{index + 1}</span>
-                          <strong>{row.state || "Unknown"}</strong>
-                          <span>{row.registrations} registrations</span>
-                          <span>{row.seats} seats</span>
-                          <span>{money(row.amount)}</span>
-                        </div>
-                      ))}
-                      {(!Array.isArray(yearReport.states) || yearReport.states.length === 0) && (
-                        <p className="top-state-report-empty">No registrations with state data for this year.</p>
-                      )}
-                    </div>
-                  </section>
-                ))}
-              </div>
-            </div>
-          </SectionCard>
-        </Grid>
         <Grid size={{ xs: 12, lg: 6 }} className="reports-summary-half">
           <SectionCard title="Participants By Organization">
             {currentReport ? (
@@ -567,9 +556,9 @@ export function ReportsClient() {
         PaperProps={{ className: "registration-report-modal" }}
         BackdropProps={{ className: "registration-report-print-backdrop" }}
       >
-        <DialogTitle>Cohort Registration Report Preview</DialogTitle>
+        <DialogTitle>{previewView === "states" ? "State Breakdown" : previewView === "marketing" ? "Marketing Attribution" : "Cohort Registration Report Preview"}</DialogTitle>
         <DialogContent>
-          {reportData && <RegistrationReportPreview report={reportData} columns={safeSelectedColumns} />}
+          {reportData && (previewView === "registrations" ? <RegistrationReportPreview report={reportData} columns={safeSelectedColumns} /> : <CohortInsightsPreview report={reportData} mode={previewView} />)}
         </DialogContent>
         <DialogActions>
           <Button variant="outlined" onClick={() => setReportOpen(false)}>Close</Button>
@@ -577,6 +566,7 @@ export function ReportsClient() {
         </DialogActions>
       </Dialog>
 
+      <AttributionRulesDialog open={rulesOpen} onClose={() => setRulesOpen(false)} onSaved={() => { setReportData(null); setReportOpen(false); notifySuccess("Attribution rules saved. Generate a report to see the updated credit."); }} />
       {snackbar}
     </PageStack>
   );
