@@ -1826,7 +1826,7 @@ async function markRegistrationDocumentsSent(registrationId: string) {
   ]);
 }
 
-export async function sendCommunication(id: string, options?: { recipients?: string[]; context?: Parameters<typeof sendEmail>[0]["context"]; bypassCohortStatus?: boolean }) {
+export async function sendCommunication(id: string, options?: { recipients?: string[]; context?: Parameters<typeof sendEmail>[0]["context"]; bypassCohortStatus?: boolean; suppressQaBcc?: boolean }) {
   const communication = await prisma.cohortCommunication.findUnique({
     where: { id },
     include: {
@@ -1975,6 +1975,7 @@ export async function sendCommunication(id: string, options?: { recipients?: str
       bodyText: communication.bodyText ?? undefined,
       attachments: refreshedAttachments,
       outboundContext: { communicationId: communication.id },
+      suppressQaBcc: options?.suppressQaBcc,
       context: options?.context ?? baseContext
     });
 
@@ -3208,7 +3209,7 @@ export async function processScheduledCommunications(limit = 25) {
       ...(setup.liveSendingEnabled ? { cohort: { status: CohortStatus.PUBLISHED } } : {})
     },
     include: { template: true, session: true },
-    orderBy: { scheduledFor: "asc" },
+    orderBy: [{ scheduledFor: "asc" }, { createdAt: "asc" }, { id: "asc" }],
     take: limit
   });
   const results = [];
@@ -3258,13 +3259,37 @@ export async function processScheduledCommunications(limit = 25) {
     }
 
     try {
-      results.push(await sendCommunication(communication.id));
+      let suppressQaBcc = false;
+      if (
+        communication.recipientScope === RecipientScope.CUSTOM &&
+        communication.templateId &&
+        communication.scheduledFor
+      ) {
+        const qaCopyLeader = await prisma.cohortCommunication.findFirst({
+          where: {
+            cohortId: communication.cohortId,
+            templateId: communication.templateId,
+            scheduledFor: communication.scheduledFor,
+            recipientScope: RecipientScope.CUSTOM,
+            status: { in: [CommunicationStatus.SCHEDULED, CommunicationStatus.SENDING, CommunicationStatus.SENT] }
+          },
+          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+          select: { id: true }
+        });
+        suppressQaBcc = shouldSuppressScheduledQaCopy(communication.id, qaCopyLeader?.id);
+      }
+
+      results.push(await sendCommunication(communication.id, { suppressQaBcc }));
     } catch (error) {
       results.push({ id: communication.id, error: error instanceof Error ? error.message : "Unknown error" });
     }
   }
 
   return results;
+}
+
+export function shouldSuppressScheduledQaCopy(communicationId: string, leaderId?: string | null) {
+  return Boolean(leaderId && leaderId !== communicationId);
 }
 
 export async function recordSendGridEvents(events: Array<Record<string, unknown>>) {

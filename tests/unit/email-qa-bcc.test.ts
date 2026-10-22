@@ -3,7 +3,7 @@ import test from "node:test";
 import { productionQaBccEmail, isQaBccEvent } from "../../src/modules/email/qaCopy";
 import { buildSendGridMailPayload } from "../../src/modules/email/sendgridProvider";
 import { renderMergeFields, sampleMergeContext } from "../../src/modules/email/mergeFields";
-import { recordSendGridEvents } from "../../src/services/communicationService";
+import { recordSendGridEvents, shouldSuppressScheduledQaCopy } from "../../src/services/communicationService";
 
 const qaEmail = "gerardo@rocketpd.com";
 const config = { fromEmail: "info@rocketpd.com", fromName: "The RocketPD Team", qaBccEmail: qaEmail };
@@ -58,6 +58,12 @@ test("a caller can suppress duplicate QA copies after the first personalized env
   assert.ok(!later.personalizations[0].bcc);
   assert.ok(!later.personalizations[0].custom_args);
   assert.deepEqual(later.personalizations[0].to, [{ email: "jordan@example.com" }]);
+});
+
+test("only the deterministic scheduled milestone leader keeps the QA copy", () => {
+  assert.equal(shouldSuppressScheduledQaCopy("leader", "leader"), false);
+  assert.equal(shouldSuppressScheduledQaCopy("participant-2", "leader"), true);
+  assert.equal(shouldSuppressScheduledQaCopy("participant-2", null), false);
 });
 
 test("personalized POC and participant messages each carry their exact rendered content into the QA copy", () => {
