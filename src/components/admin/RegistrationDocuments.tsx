@@ -95,7 +95,7 @@ export function RegistrationDocuments({ registration, onChanged, onError }: {
                 <Typography component="span" color="text.secondary" sx={{ overflowWrap: "anywhere" }}>{document.fileName || "No document uploaded"}</Typography>
               </Box>
             </Stack>
-            <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
+            <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap alignItems="flex-start">
               {document.type === "purchaseOrder" ? (
                 <TextField
                   size="small"
@@ -104,7 +104,7 @@ export function RegistrationDocuments({ registration, onChanged, onError }: {
                   onChange={(event) => setPurchaseOrderNumber(event.target.value)}
                   disabled={Boolean(working)}
                   helperText="Upload stages the number for Apply Changes"
-                  sx={{ minWidth: { xs: "100%", sm: 210 } }}
+                  sx={{ width: 200, minWidth: 200, flexShrink: 0 }}
                 />
               ) : null}
               {document.fileKey ? (
