@@ -44,6 +44,7 @@ import { mergeFields, renderMergeFields, sampleMergeContext } from "@/modules/em
 import { textToEmailHtml } from "@/modules/email/templateFormatting";
 import { exportParticipantsCsv } from "@/lib/participantCsv";
 import { registrationTotalAfterSeatChange } from "@/config/cohortPricing";
+import { findDuplicateParticipantGroups, uniqueActiveParticipantCount } from "@/lib/duplicateParticipants";
 import { RosterWorkbench } from "./RosterWorkbench";
 import { RegistrationPendingChangesPanel } from "./RegistrationPendingChangesPanel";
 import { RegistrationDeliveryPreflight } from "./RegistrationDeliveryPreflight";
@@ -2022,13 +2023,18 @@ export function CohortDetailClient({ id }: { id: string }) {
     const totalAmount = financialRegistrations.reduce((sum, registration) => sum + registrationRevenueAmount(registration), 0);
     const paidAmount = financialRegistrations.reduce((sum, registration) => sum + registrationCollectedAmount(registration, payments, invoiceDrafts), 0);
     const invoicedAmount = Math.max(totalAmount - paidAmount, 0);
-    const participantSeats = registrations.reduce((sum, registration) => sum + Number(registration.participantCount ?? 0), 0);
+    const activeRegistrations = registrations.filter((registration) => !registration.archivedAt && registration.status !== "CANCELLED");
+    const participantSeats = activeRegistrations.reduce((sum, registration) => sum + Number(registration.participantCount ?? 0), 0);
+    const uniqueParticipants = uniqueActiveParticipantCount(participants);
     const rosterComplete = registrations.filter((registration) => registrationRosterStatus(registration) === "COMPLETE").length;
     const openPaymentFollowUps = tasks.filter((task) => task.status !== "COMPLETED" && task.category === "PAYMENT_FOLLOW_UP").length;
     const upcomingSessions = sessions.filter((session) => new Date(session.startTime).getTime() >= Date.now()).length;
 
-    return { totalAmount, paidAmount, invoicedAmount, participantSeats, rosterComplete, openPaymentFollowUps, upcomingSessions };
-  }, [invoiceDrafts, payments, registrations, sessions, tasks]);
+    return { totalAmount, paidAmount, invoicedAmount, participantSeats, uniqueParticipants, rosterComplete, openPaymentFollowUps, upcomingSessions };
+  }, [invoiceDrafts, participants, payments, registrations, sessions, tasks]);
+
+  const duplicateParticipantGroups = useMemo(() => findDuplicateParticipantGroups(participants), [participants]);
+  const duplicateParticipantRows = duplicateParticipantGroups.reduce((sum, group) => sum + group.participants.length - 1, 0);
 
   const compareCohort = allCohorts.find((item) => item.id === compareCohortId);
   const detailTabs = ["Overview", "Registrations", "Participants", "Communications", "Distribution"];
@@ -3308,10 +3314,23 @@ export function CohortDetailClient({ id }: { id: string }) {
 
       {tab === 0 && (
         <Stack spacing={2}>
+          {duplicateParticipantGroups.length > 0 ? (
+            <Alert severity="warning">
+              <strong>{duplicateParticipantGroups.length} potential duplicate participant{duplicateParticipantGroups.length === 1 ? "" : "s"} need review.</strong>{" "}
+              The unique-participant count below excludes repeated emails across active registrations; purchased seats and billing remain unchanged until you confirm the correct registration.
+            </Alert>
+          ) : null}
           <div className="cohort-overview-grid">
             {[
               { label: "Registrations", value: registrations.length, helper: "Organizations enrolled", icon: <InsightsOutlined /> },
-              { label: "Participant Seats", value: totals.participantSeats, helper: "Confirmed roster capacity", icon: <GroupsOutlined /> },
+              {
+                label: "Unique Participants",
+                value: totals.uniqueParticipants,
+                helper: duplicateParticipantRows > 0
+                  ? `${totals.participantSeats} purchased seats · ${duplicateParticipantRows} duplicate row${duplicateParticipantRows === 1 ? "" : "s"} under review`
+                  : `${totals.participantSeats} purchased seats`,
+                icon: <GroupsOutlined />
+              },
               { label: "Roster Completion", value: `${totals.rosterComplete}/${registrations.length}`, helper: "Participant lists collected", icon: <CheckCircleOutline /> },
               { label: "Upcoming Sessions", value: totals.upcomingSessions, helper: "Scheduled from today forward", icon: <CalendarMonthOutlined /> }
             ].map((metric) => (
@@ -3743,6 +3762,36 @@ export function CohortDetailClient({ id }: { id: string }) {
             </div>
           }
         >
+          {duplicateParticipantGroups.length > 0 ? (
+            <Alert severity="warning" sx={{ mb: 2 }}>
+              <strong>Potential duplicate participants</strong>
+              <div className="duplicate-participant-review-list">
+                {duplicateParticipantGroups.map((group) => (
+                  <div className="duplicate-participant-review-row" key={group.email}>
+                    <div>
+                      <strong>{formatProperDisplay(group.displayName)}</strong>
+                      <span>{group.email} · {group.registrationIds.length} active registrations</span>
+                    </div>
+                    <div className="action-group">
+                      {group.registrationIds.map((registrationId) => {
+                        const registration = registrations.find((row) => row.id === registrationId);
+                        return (
+                          <Button
+                            key={registrationId}
+                            size="small"
+                            variant="outlined"
+                            onClick={() => registration && void openRegistrationDetail(registration)}
+                          >
+                            {registration?.invoiceNumber || "Open registration"} · {formatRegistrationPaymentStatus(registration)}
+                          </Button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Alert>
+          ) : null}
           <div className="participant-bulk-bar">
             <span>{participantSelection.ids.size} selected</span>
             <TextField select label="Bulk status" value={bulkParticipantStatus} onChange={(event) => setBulkParticipantStatus(event.target.value)}>
