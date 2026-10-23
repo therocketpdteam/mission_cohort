@@ -2406,7 +2406,7 @@ export async function sendMilestoneTemplateToParticipants(input: {
     })
   ]);
 
-  if (!template || template.type !== TemplateType.WEEK_BEFORE_REMINDER) {
+  if (!template || (template.type !== TemplateType.WEEK_BEFORE_REMINDER && template.name !== "One Week Before Cohort")) {
     throw Object.assign(new Error("An active one-week milestone template is required."), { code: "BAD_REQUEST", status: 400 });
   }
   if (!session || session.sessionNumber !== 1) {
