@@ -200,6 +200,17 @@ function collectedAmount(result: PeopleSearchResult) {
   return Math.max(invoicePaid, paymentTotal);
 }
 
+function effectivePaymentStatus(result: PeopleSearchResult) {
+  return formatRegistrationPaymentStatus({
+    status: result.status,
+    paymentStatus: result.paymentStatus,
+    paymentMethod: result.paymentMethod,
+    archivedAt: result.archivedAt,
+    totalAmount: result.totalAmount,
+    participantCount: result.participantCount
+  });
+}
+
 function matchedParticipants(result: PeopleSearchResult, query: string) {
   const normalizedQuery = query.trim().toLowerCase();
   const emailQuery = exactEmailQuery(query);
@@ -432,7 +443,7 @@ function GlobalPeopleSearch() {
                             </div>
                             <div>
                               <span>{Number(registration.participantCount ?? 0)} seats · {Number(registration.savedParticipantCount ?? 0)} saved</span>
-                              <span>{formatRegistrationPaymentStatus(registration)} · {formatCurrency(collected)} / {formatCurrency(registration.totalAmount)}</span>
+                              <span>{effectivePaymentStatus(registration)} · {formatCurrency(collected)} / {formatCurrency(registration.totalAmount)}</span>
                               <span>Invoice {registrationInvoice?.invoiceNumber ?? registration.invoiceNumber ?? "-"}</span>
                             </div>
                             <Link href={registration.links.registration as Route} onClick={(event) => openRegistrationFromSearch(event, registration)}>Open</Link>
@@ -446,7 +457,7 @@ function GlobalPeopleSearch() {
                         <span>POC: {formatProperDisplay(result.primaryContactName)} · {result.primaryContactEmail}</span>
                         <span>Registered: {formatShortDate(result.createdAt)}</span>
                         <span>Registration: {formatStatusLabel(result.status)} · Roster {formatStatusLabel(result.participantListStatus)}</span>
-                        <span>Payment: {formatRegistrationPaymentStatus(result)} · {formatCurrency(result.totalAmount)}</span>
+                        <span>Payment: {effectivePaymentStatus(result)} · {formatCurrency(result.totalAmount)}</span>
                         <span>Invoice: {invoice?.invoiceNumber ?? result.invoiceNumber ?? "-"} · {invoice ? formatStatusLabel(invoice.status) : "No draft"}{invoice?.quickBooksInvoiceRef ? " · QBO linked" : ""}</span>
                         <span>PO: {invoice?.purchaseOrderNumber ?? result.purchaseOrderNumber ?? "-"}</span>
                       </div>
