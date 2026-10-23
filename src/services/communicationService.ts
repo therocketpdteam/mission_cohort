@@ -1662,6 +1662,43 @@ export async function auditCohortParticipantJourneyCoverage(cohortId: string) {
   };
 }
 
+export async function skipDuplicateScheduledParticipantAutomations(cohortId: string) {
+  const scheduled = await prisma.cohortCommunication.findMany({
+    where: {
+      cohortId,
+      status: CommunicationStatus.SCHEDULED,
+      recipientScope: RecipientScope.ALL_PARTICIPANTS,
+      sessionId: { not: null },
+      templateId: { not: null },
+      scheduledFor: { not: null }
+    },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }]
+  });
+  const keepers = new Set<string>();
+  const duplicates: string[] = [];
+
+  for (const communication of scheduled) {
+    const key = `${communication.sessionId}:${communication.templateId}:${communication.scheduledFor?.toISOString()}`;
+    if (keepers.has(key)) {
+      duplicates.push(communication.id);
+    } else {
+      keepers.add(key);
+    }
+  }
+
+  if (duplicates.length > 0) {
+    await prisma.cohortCommunication.updateMany({
+      where: { id: { in: duplicates }, status: CommunicationStatus.SCHEDULED },
+      data: {
+        status: CommunicationStatus.SKIPPED,
+        providerError: "Skipped duplicate participant automation; one canonical delivery remains scheduled."
+      }
+    });
+  }
+
+  return { cohortId, scanned: scheduled.length, kept: keepers.size, skipped: duplicates.length, duplicateIds: duplicates };
+}
+
 export async function listUnreviewedCommunicationIssues(input: { cohortId?: string | null; limit?: number } = {}) {
   const communications = await listCommunications({ ...input, issueOnly: true });
   return communications.flatMap((communication) => communication.issueRows).slice(0, input.limit ?? 100);
@@ -3378,6 +3415,36 @@ export async function processScheduledCommunications(limit = 25) {
   const results = [];
 
   for (const communication of communications) {
+    if (
+      communication.recipientScope === RecipientScope.ALL_PARTICIPANTS &&
+      communication.sessionId &&
+      communication.templateId &&
+      communication.scheduledFor
+    ) {
+      const canonical = await prisma.cohortCommunication.findFirst({
+        where: {
+          cohortId: communication.cohortId,
+          sessionId: communication.sessionId,
+          templateId: communication.templateId,
+          scheduledFor: communication.scheduledFor,
+          recipientScope: RecipientScope.ALL_PARTICIPANTS,
+          status: { in: [CommunicationStatus.SCHEDULED, CommunicationStatus.SENDING, CommunicationStatus.SENT] }
+        },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        select: { id: true }
+      });
+      if (canonical && canonical.id !== communication.id) {
+        results.push(await prisma.cohortCommunication.update({
+          where: { id: communication.id },
+          data: {
+            status: CommunicationStatus.SKIPPED,
+            providerError: `Skipped duplicate participant automation; canonical delivery is ${canonical.id}.`
+          }
+        }));
+        continue;
+      }
+    }
+
     if (communication.template?.type === TemplateType.WEEK_BEFORE_REMINDER && Number(communication.session?.sessionNumber ?? 1) > 1) {
       results.push(await prisma.cohortCommunication.update({
         where: { id: communication.id },

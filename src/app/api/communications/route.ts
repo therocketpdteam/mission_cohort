@@ -22,6 +22,7 @@ import {
   sendManualCustomEmail,
   sendManualTemplateToParticipants,
   sendMilestoneTemplateToParticipants,
+  skipDuplicateScheduledParticipantAutomations,
   sendTemplateToParticipant,
   sendTemplateToRegistrations,
   updateCommunicationDraft
@@ -167,6 +168,13 @@ export async function PATCH(request: Request) {
         return fail("templateId, sessionId, and participantIds are required", "BAD_REQUEST", 400);
       }
       return ok(await sendMilestoneTemplateToParticipants(body));
+    }
+
+    if (body.action === "skipDuplicateScheduledParticipantAutomations") {
+      if (!body.cohortId) {
+        return fail("cohortId is required", "BAD_REQUEST", 400);
+      }
+      return ok(await skipDuplicateScheduledParticipantAutomations(body.cohortId));
     }
 
     if (body.action === "sendTemplateToRegistrations") {
