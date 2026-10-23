@@ -88,6 +88,21 @@ function valueForJson(value: unknown): string | number | null {
   return String(value);
 }
 
+function effectiveTrackedValue(field: string, row: Record<string, unknown>) {
+  if (field === "billingContactName") {
+    return valueForJson(row.billingContactName) ?? valueForJson(row.primaryContactName);
+  }
+  if (field === "billingContactEmail") {
+    const value = valueForJson(row.billingContactEmail) ?? valueForJson(row.primaryContactEmail);
+    return typeof value === "string" ? value.trim().toLowerCase() : value;
+  }
+  if (field === "primaryContactEmail") {
+    const value = valueForJson(row.primaryContactEmail);
+    return typeof value === "string" ? value.trim().toLowerCase() : value;
+  }
+  return valueForJson(row[field]);
+}
+
 export function readRegistrationPendingChanges(value: Prisma.JsonValue | null | undefined): RegistrationPendingChanges | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return null;
@@ -170,8 +185,8 @@ export function mergeRegistrationFieldChanges(
 ) {
   const next = copyPending(pending);
   for (const field of trackedRegistrationFields) {
-    const beforeValue = valueForJson(before[field]);
-    const afterValue = valueForJson(after[field]);
+    const beforeValue = effectiveTrackedValue(field, before);
+    const afterValue = effectiveTrackedValue(field, after);
     if (beforeValue === afterValue) {
       continue;
     }

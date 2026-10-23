@@ -52,6 +52,26 @@ test("changing a registration field back to its original value removes it from r
   assert.equal(registrationPendingChangeCount(reverted), 0);
 });
 
+test("materializing the POC as the billing fallback is not a client-facing change", () => {
+  const changes = mergeRegistrationFieldChanges(
+    pending(),
+    {
+      primaryContactName: "Geneva Hinchliffe",
+      primaryContactEmail: "ghinchliffe@gallowayschool.org",
+      billingContactName: null,
+      billingContactEmail: null
+    },
+    {
+      primaryContactName: "Geneva Hinchliffe",
+      primaryContactEmail: "ghinchliffe@gallowayschool.org",
+      billingContactName: "Geneva Hinchliffe",
+      billingContactEmail: "GHINCHLIFFE@GALLOWAYSCHOOL.ORG"
+    }
+  );
+
+  assert.equal(registrationPendingChangeCount(changes), 0);
+});
+
 test("registration change copy describes a PO update without internal product language", () => {
   const changes = mergeRegistrationFieldChanges(
     pending(),

@@ -10,7 +10,13 @@ const fieldLabels: Record<string, string> = {
   participantCount: "Participant seats",
   totalAmount: "Registration total",
   purchaseOrderNumber: "PO number",
-  invoiceNumber: "Invoice number"
+  invoiceNumber: "Invoice number",
+  primaryContactName: "Primary contact name",
+  primaryContactEmail: "Primary contact email",
+  primaryContactPhone: "Primary contact phone",
+  primaryContactTitle: "Primary contact title",
+  billingContactName: "Billing contact name",
+  billingContactEmail: "Billing contact email"
 };
 
 function formatValue(field: string, value: unknown) {
