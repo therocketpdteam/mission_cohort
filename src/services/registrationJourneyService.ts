@@ -214,13 +214,31 @@ async function upsertJourneyCommunication(input: {
   skippedReason?: string;
   retryFailed?: boolean;
   reviveSkipped?: boolean;
+  reviveCancelled?: boolean;
+  dedupeSentAcrossCohort?: boolean;
 }) {
   const existing = await prisma.cohortCommunication.findUnique({ where: { journeyKey: input.journeyKey } });
+
+  if (input.dedupeSentAcrossCohort && existing?.status !== CommunicationStatus.SENT) {
+    const sentToParticipant = await prisma.cohortCommunication.findFirst({
+      where: {
+        cohortId: input.cohortId,
+        templateId: input.template.id,
+        status: CommunicationStatus.SENT,
+        recipientScope: RecipientScope.CUSTOM,
+        recipientEmails: { equals: [normalizeEmail(input.recipientEmail)] }
+      },
+      orderBy: { sentAt: "desc" }
+    });
+    if (sentToParticipant) {
+      return sentToParticipant;
+    }
+  }
 
   if (
     existing?.status === CommunicationStatus.SENT ||
     (existing?.status === CommunicationStatus.SKIPPED && !input.reviveSkipped) ||
-    existing?.status === CommunicationStatus.CANCELLED ||
+    (existing?.status === CommunicationStatus.CANCELLED && !input.reviveCancelled) ||
     (existing?.status === CommunicationStatus.FAILED && !input.retryFailed)
   ) {
     return existing;
@@ -1038,7 +1056,9 @@ export async function planRegistrationJourneys(
         status: milestone.eligible ? CommunicationStatus.SCHEDULED : CommunicationStatus.SKIPPED,
         skippedReason: milestone.eligible ? undefined : "Skipped because this participant was registered after the milestone date.",
         retryFailed: options.retryFailed,
-        reviveSkipped: milestone.catchUp
+        reviveSkipped: milestone.catchUp,
+        reviveCancelled: milestone.catchUp,
+        dedupeSentAcrossCohort: true
       }));
     }
   }
@@ -1126,15 +1146,17 @@ export async function reconcileCohortParticipantJourneys(cohortId: string) {
     select: { id: true }
   });
   const results = [];
+  const batchSize = 8;
 
-  for (const registration of registrations) {
-    results.push(await planRegistrationJourneys(registration.id, {
-      syncCalendar: false,
-      planPocConfirmation: false,
-      sendParticipantConfirmation: false,
-      sendPocConfirmation: false,
-      retryFailed: true
-    }));
+  for (let index = 0; index < registrations.length; index += batchSize) {
+    const batch = registrations.slice(index, index + batchSize);
+    results.push(...await Promise.all(batch.map((registration) => planRegistrationJourneys(registration.id, {
+        syncCalendar: false,
+        planPocConfirmation: false,
+        sendParticipantConfirmation: false,
+        sendPocConfirmation: false,
+        retryFailed: true
+      }))));
   }
 
   return {
