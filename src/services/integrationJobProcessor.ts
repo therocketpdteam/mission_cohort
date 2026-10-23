@@ -5,6 +5,7 @@ import { processCrmSyncEvents } from "@/services/crmSyncService";
 import { markIntegrationJobCompleted, markIntegrationJobFailed } from "@/services/integrationService";
 import { syncQuickBooksInvoice, voidRegistrationQuickBooksInvoice } from "@/services/quickBooksService";
 import { processRegistrationDeliveryJob } from "@/services/registrationDeliveryJobService";
+import { reconcileDueParticipantMilestoneJourneys } from "@/services/registrationJourneyService";
 
 export async function processIntegrationJobs(limit = 25) {
   const registrationJobs = await prisma.integrationSyncJob.findMany({
@@ -66,11 +67,12 @@ export async function processIntegrationJobs(limit = 25) {
 }
 
 export async function processAllIntegrationWork() {
+  const milestoneReconciliation = await reconcileDueParticipantMilestoneJourneys();
   const [jobs, scheduledCommunications, crm] = await Promise.all([
     processIntegrationJobs(),
     processScheduledCommunications(),
     processCrmSyncEvents()
   ]);
 
-  return { jobs, scheduledCommunications, crm };
+  return { jobs, milestoneReconciliation, scheduledCommunications, crm };
 }

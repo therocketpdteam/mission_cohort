@@ -58,6 +58,7 @@ export type RegistrationMilestone = {
   templateName: JourneyTemplateName;
   scheduledFor: Date;
   eligible: boolean;
+  catchUp: boolean;
 };
 
 export function buildRegistrationMilestones(firstSessionStart: Date | string, now = new Date()): RegistrationMilestone[] {
@@ -75,7 +76,19 @@ export function buildRegistrationMilestones(firstSessionStart: Date | string, no
     }
   ];
 
-  return rows.map((row) => ({ ...row, eligible: row.scheduledFor.getTime() > now.getTime() }));
+  const latestPastMilestone = [...rows]
+    .reverse()
+    .find((row) => row.scheduledFor.getTime() <= now.getTime());
+
+  return rows.map((row) => {
+    const catchUp = start.getTime() > now.getTime() && latestPastMilestone?.key === row.key;
+    return {
+      ...row,
+      scheduledFor: catchUp ? now : row.scheduledFor,
+      eligible: row.scheduledFor.getTime() > now.getTime() || catchUp,
+      catchUp
+    };
+  });
 }
 
 export function participantConfirmationJourneyKey(input: {
@@ -200,12 +213,13 @@ async function upsertJourneyCommunication(input: {
   status: CommunicationStatus;
   skippedReason?: string;
   retryFailed?: boolean;
+  reviveSkipped?: boolean;
 }) {
   const existing = await prisma.cohortCommunication.findUnique({ where: { journeyKey: input.journeyKey } });
 
   if (
     existing?.status === CommunicationStatus.SENT ||
-    existing?.status === CommunicationStatus.SKIPPED ||
+    (existing?.status === CommunicationStatus.SKIPPED && !input.reviveSkipped) ||
     existing?.status === CommunicationStatus.CANCELLED ||
     (existing?.status === CommunicationStatus.FAILED && !input.retryFailed)
   ) {
@@ -1023,7 +1037,8 @@ export async function planRegistrationJourneys(
         scheduledFor: milestone.scheduledFor,
         status: milestone.eligible ? CommunicationStatus.SCHEDULED : CommunicationStatus.SKIPPED,
         skippedReason: milestone.eligible ? undefined : "Skipped because this participant was registered after the milestone date.",
-        retryFailed: options.retryFailed
+        retryFailed: options.retryFailed,
+        reviveSkipped: milestone.catchUp
       }));
     }
   }
@@ -1131,6 +1146,30 @@ export async function reconcileCohortParticipantJourneys(cohortId: string) {
     skipped: results.reduce((sum, result) => sum + result.skipped, 0),
     results
   };
+}
+
+export async function reconcileDueParticipantMilestoneJourneys(now = new Date(), windowMs = 24 * 60 * 60 * 1000) {
+  const milestoneOffsets = [21, 7].map((days) => days * 24 * 60 * 60 * 1000);
+  const ranges = milestoneOffsets.map((offset) => ({
+    gte: new Date(now.getTime() + offset - windowMs),
+    lte: new Date(now.getTime() + offset + windowMs)
+  }));
+  const sessions = await prisma.cohortSession.findMany({
+    where: {
+      sessionNumber: 1,
+      cohort: { status: CohortStatus.PUBLISHED },
+      OR: ranges.map((startTime) => ({ startTime }))
+    },
+    select: { cohortId: true }
+  });
+  const cohortIds = Array.from(new Set(sessions.map((session) => session.cohortId)));
+  const results = [];
+
+  for (const cohortId of cohortIds) {
+    results.push(await reconcileCohortParticipantJourneys(cohortId));
+  }
+
+  return { checkedAt: now.toISOString(), cohorts: cohortIds.length, results };
 }
 
 export async function skipPocRegistrationConfirmationsForCohort(cohortId: string, reason: string) {

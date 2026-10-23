@@ -60,16 +60,19 @@ test("schedules both cohort milestones for an early registration", () => {
   assert.equal(milestones[1]?.scheduledFor.toISOString(), "2026-08-08T14:00:00.000Z");
 });
 
-test("skips the three-week message but keeps the one-week message for a late registration", () => {
+test("catches up the three-week message and keeps the one-week message for a late registration", () => {
   const milestones = buildRegistrationMilestones(cohortStart, new Date("2026-07-26T14:00:00.000Z"));
 
-  assert.deepEqual(milestones.map((milestone) => milestone.eligible), [false, true]);
+  assert.deepEqual(milestones.map((milestone) => milestone.eligible), [true, true]);
+  assert.deepEqual(milestones.map((milestone) => milestone.catchUp), [true, false]);
 });
 
-test("skips both cohort milestones for a registration made inside the final week", () => {
+test("catches up the one-week milestone for a registration made inside the final week", () => {
   const milestones = buildRegistrationMilestones(cohortStart, new Date("2026-08-12T14:00:00.000Z"));
 
-  assert.deepEqual(milestones.map((milestone) => milestone.eligible), [false, false]);
+  assert.deepEqual(milestones.map((milestone) => milestone.eligible), [false, true]);
+  assert.deepEqual(milestones.map((milestone) => milestone.catchUp), [false, true]);
+  assert.equal(milestones[1]?.scheduledFor.toISOString(), "2026-08-12T14:00:00.000Z");
 });
 
 test("cohort move participant confirmations use unique cohort and batch scoped journey keys", () => {
