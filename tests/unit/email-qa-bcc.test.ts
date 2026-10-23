@@ -3,7 +3,7 @@ import test from "node:test";
 import { productionQaBccEmail, isQaBccEvent } from "../../src/modules/email/qaCopy";
 import { buildSendGridMailPayload } from "../../src/modules/email/sendgridProvider";
 import { renderMergeFields, sampleMergeContext } from "../../src/modules/email/mergeFields";
-import { recordSendGridEvents, shouldSuppressScheduledQaCopy } from "../../src/services/communicationService";
+import { recordSendGridEvents, shouldSuppressParticipantBatchQaCopy, shouldSuppressScheduledQaCopy } from "../../src/services/communicationService";
 
 const qaEmail = "gerardo@rocketpd.com";
 const config = { fromEmail: "info@rocketpd.com", fromName: "The RocketPD Team", qaBccEmail: qaEmail };
@@ -64,6 +64,13 @@ test("only the deterministic scheduled milestone leader keeps the QA copy", () =
   assert.equal(shouldSuppressScheduledQaCopy("leader", "leader"), false);
   assert.equal(shouldSuppressScheduledQaCopy("participant-2", "leader"), true);
   assert.equal(shouldSuppressScheduledQaCopy("participant-2", null), false);
+});
+
+test("personalized whole-roster sends keep one QA copy unless the caller suppresses the entire batch", () => {
+  assert.equal(shouldSuppressParticipantBatchQaCopy(0), false);
+  assert.equal(shouldSuppressParticipantBatchQaCopy(1), true);
+  assert.equal(shouldSuppressParticipantBatchQaCopy(0, true), true);
+  assert.equal(shouldSuppressParticipantBatchQaCopy(200, true), true);
 });
 
 test("personalized POC and participant messages each carry their exact rendered content into the QA copy", () => {

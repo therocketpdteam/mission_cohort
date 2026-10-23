@@ -2046,7 +2046,7 @@ export async function sendCommunication(id: string, options?: { recipients?: str
           bodyText: communication.bodyText ?? undefined,
           attachments: refreshedAttachments,
           outboundContext: { communicationId: communication.id },
-          suppressQaBcc: targetIndex > 0,
+          suppressQaBcc: shouldSuppressParticipantBatchQaCopy(targetIndex, options?.suppressQaBcc),
           context: {
             ...baseContext,
             participant: participantMergeContext(target.participant),
@@ -2537,7 +2537,7 @@ export async function sendMilestoneTemplateToParticipants(input: {
 
   const createdById = await getSystemUserId();
   const results = [];
-  for (const [index, participant] of participants.entries()) {
+  for (const participant of participants) {
     const recipientEmail = participant.email.trim().toLowerCase();
     const existing = await prisma.cohortCommunication.findFirst({
       where: {
@@ -2576,7 +2576,7 @@ export async function sendMilestoneTemplateToParticipants(input: {
             createdById
           }
         });
-    results.push(await sendCommunication(communication.id, { suppressQaBcc: index > 0 }));
+    results.push(await sendCommunication(communication.id, { suppressQaBcc: true }));
   }
 
   return {
@@ -3520,6 +3520,10 @@ export async function processScheduledCommunications(limit = 25) {
 
 export function shouldSuppressScheduledQaCopy(communicationId: string, leaderId?: string | null) {
   return Boolean(leaderId && leaderId !== communicationId);
+}
+
+export function shouldSuppressParticipantBatchQaCopy(targetIndex: number, suppressAll?: boolean) {
+  return Boolean(suppressAll || targetIndex > 0);
 }
 
 export async function recordSendGridEvents(events: Array<Record<string, unknown>>) {
