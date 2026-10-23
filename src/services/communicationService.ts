@@ -2387,6 +2387,87 @@ export async function sendTemplateToParticipant(input: { templateId: string; par
   });
 }
 
+export async function sendMilestoneTemplateToParticipants(input: {
+  templateId: string;
+  sessionId: string;
+  participantIds: string[];
+}) {
+  const participantIds = Array.from(new Set(input.participantIds.filter(Boolean)));
+  const [template, session, participants] = await Promise.all([
+    prisma.communicationTemplate.findUnique({ where: { id: input.templateId } }),
+    prisma.cohortSession.findUnique({ where: { id: input.sessionId } }),
+    prisma.participant.findMany({
+      where: {
+        id: { in: participantIds },
+        status: ParticipantStatus.REGISTERED,
+        registration: { archivedAt: null, status: { not: RegistrationStatus.CANCELLED } }
+      },
+      select: { id: true, email: true, cohortId: true, registrationId: true }
+    })
+  ]);
+
+  if (!template || template.type !== TemplateType.WEEK_BEFORE_REMINDER) {
+    throw Object.assign(new Error("An active one-week milestone template is required."), { code: "BAD_REQUEST", status: 400 });
+  }
+  if (!session || session.sessionNumber !== 1) {
+    throw Object.assign(new Error("The first cohort session is required."), { code: "BAD_REQUEST", status: 400 });
+  }
+  if (participants.length !== participantIds.length || participants.some((participant) => participant.cohortId !== session.cohortId)) {
+    throw Object.assign(new Error("Every selected participant must be actively enrolled in the session cohort."), { code: "BAD_REQUEST", status: 400 });
+  }
+
+  const createdById = await getSystemUserId();
+  const results = [];
+  for (const [index, participant] of participants.entries()) {
+    const recipientEmail = participant.email.trim().toLowerCase();
+    const existing = await prisma.cohortCommunication.findFirst({
+      where: {
+        cohortId: session.cohortId,
+        templateId: template.id,
+        recipientScope: RecipientScope.CUSTOM,
+        recipientEmails: { equals: [recipientEmail] },
+        status: { in: [CommunicationStatus.SENT, CommunicationStatus.SCHEDULED, CommunicationStatus.DRAFT, CommunicationStatus.FAILED] }
+      },
+      orderBy: [{ sentAt: "desc" }, { createdAt: "desc" }]
+    });
+    if (existing?.status === CommunicationStatus.SENT) {
+      results.push(existing);
+      continue;
+    }
+
+    const communication = existing
+      ? await prisma.cohortCommunication.update({
+          where: { id: existing.id },
+          data: { sessionId: session.id, status: CommunicationStatus.DRAFT, providerError: null }
+        })
+      : await prisma.cohortCommunication.create({
+          data: {
+            cohortId: session.cohortId,
+            sessionId: session.id,
+            registrationId: participant.registrationId,
+            participantId: participant.id,
+            templateId: template.id,
+            journeyKey: `cohort:${session.cohortId}:participant:${recipientEmail}:week-before`,
+            subject: template.subject,
+            bodyHtml: template.bodyHtml,
+            bodyText: template.bodyText,
+            status: CommunicationStatus.DRAFT,
+            recipientScope: RecipientScope.CUSTOM,
+            recipientEmails: [recipientEmail],
+            createdById
+          }
+        });
+    results.push(await sendCommunication(communication.id, { suppressQaBcc: index > 0 }));
+  }
+
+  return {
+    requested: participantIds.length,
+    sent: results.filter((result) => result.status === CommunicationStatus.SENT).length,
+    failed: results.filter((result) => result.status === CommunicationStatus.FAILED).length,
+    results
+  };
+}
+
 export async function sendManualTemplateToParticipants(input: { templateId: string; participantIds: string[]; createdById: string }) {
   const participantIds = Array.from(new Set((input.participantIds ?? []).filter(Boolean)));
 

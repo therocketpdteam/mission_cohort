@@ -20,6 +20,7 @@ import {
   sendCommunicationTest,
   sendManualCustomEmail,
   sendManualTemplateToParticipants,
+  sendMilestoneTemplateToParticipants,
   sendTemplateToParticipant,
   sendTemplateToRegistrations,
   updateCommunicationDraft
@@ -151,6 +152,13 @@ export async function PATCH(request: Request) {
         participantIds: body.participantIds,
         createdById: user.id
       }));
+    }
+
+    if (body.action === "sendMilestoneTemplateToParticipants") {
+      if (!body.templateId || !body.sessionId || !Array.isArray(body.participantIds)) {
+        return fail("templateId, sessionId, and participantIds are required", "BAD_REQUEST", 400);
+      }
+      return ok(await sendMilestoneTemplateToParticipants(body));
     }
 
     if (body.action === "sendTemplateToRegistrations") {
