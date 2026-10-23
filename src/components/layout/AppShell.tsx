@@ -17,7 +17,7 @@ import {
   SunOutlined
 } from "@/components/ui/icons";
 import { Button, IconButton } from "@/components/ui/primitives";
-import { formatCurrency, formatProperDisplay, formatStatusLabel } from "@/lib/formatting";
+import { formatCurrency, formatProperDisplay, formatRegistrationPaymentStatus, formatStatusLabel } from "@/lib/formatting";
 import type { Route } from "next";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -432,7 +432,7 @@ function GlobalPeopleSearch() {
                             </div>
                             <div>
                               <span>{Number(registration.participantCount ?? 0)} seats · {Number(registration.savedParticipantCount ?? 0)} saved</span>
-                              <span>{formatStatusLabel(registration.paymentStatus)} · {formatCurrency(collected)} / {formatCurrency(registration.totalAmount)}</span>
+                              <span>{formatRegistrationPaymentStatus(registration)} · {formatCurrency(collected)} / {formatCurrency(registration.totalAmount)}</span>
                               <span>Invoice {registrationInvoice?.invoiceNumber ?? registration.invoiceNumber ?? "-"}</span>
                             </div>
                             <Link href={registration.links.registration as Route} onClick={(event) => openRegistrationFromSearch(event, registration)}>Open</Link>
@@ -446,7 +446,7 @@ function GlobalPeopleSearch() {
                         <span>POC: {formatProperDisplay(result.primaryContactName)} · {result.primaryContactEmail}</span>
                         <span>Registered: {formatShortDate(result.createdAt)}</span>
                         <span>Registration: {formatStatusLabel(result.status)} · Roster {formatStatusLabel(result.participantListStatus)}</span>
-                        <span>Payment: {formatStatusLabel(result.paymentStatus)} · {formatCurrency(result.totalAmount)}</span>
+                        <span>Payment: {formatRegistrationPaymentStatus(result)} · {formatCurrency(result.totalAmount)}</span>
                         <span>Invoice: {invoice?.invoiceNumber ?? result.invoiceNumber ?? "-"} · {invoice ? formatStatusLabel(invoice.status) : "No draft"}{invoice?.quickBooksInvoiceRef ? " · QBO linked" : ""}</span>
                         <span>PO: {invoice?.purchaseOrderNumber ?? result.purchaseOrderNumber ?? "-"}</span>
                       </div>
