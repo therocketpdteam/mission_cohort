@@ -1580,6 +1580,88 @@ export async function listCommunicationsByCohort(cohortId: string, limit?: numbe
   return listCommunications({ cohortId, limit });
 }
 
+export async function auditCohortParticipantJourneyCoverage(cohortId: string) {
+  const [participants, communications] = await Promise.all([
+    prisma.participant.findMany({
+      where: {
+        cohortId,
+        status: ParticipantStatus.REGISTERED,
+        registration: { archivedAt: null, status: { not: RegistrationStatus.CANCELLED } }
+      },
+      select: { email: true }
+    }),
+    prisma.cohortCommunication.findMany({
+      where: { cohortId },
+      select: {
+        status: true,
+        subject: true,
+        recipientEmails: true,
+        scheduledFor: true,
+        template: { select: { name: true, type: true } },
+        session: { select: { sessionNumber: true, startTime: true } },
+        emailEvents: { select: { recipientEmail: true } }
+      }
+    })
+  ]);
+  const activeEmails = Array.from(new Set(participants.map((participant) => normalizeEmail(participant.email))));
+  const sentRecipients = (matches: (communication: typeof communications[number]) => boolean) => new Set(
+    communications
+      .filter((communication) => communication.status === CommunicationStatus.SENT && matches(communication))
+      .flatMap((communication) => [
+        ...(Array.isArray(communication.recipientEmails)
+          ? communication.recipientEmails.filter((email): email is string => typeof email === "string")
+          : []),
+        ...communication.emailEvents.map((event) => event.recipientEmail)
+      ])
+      .map(normalizeEmail)
+      .filter(Boolean)
+  );
+  const confirmations = sentRecipients((communication) =>
+    communication.template?.name === "Participant Registration Confirmation" ||
+    communication.subject === "You're registered: {{cohort.title}}"
+  );
+  const oneWeek = sentRecipients((communication) =>
+    communication.template?.name === "One Week Before Cohort" ||
+    communication.subject === "Kick-off: {{cohort.title}}"
+  );
+  const futureAutomation = communications
+    .filter((communication) =>
+      communication.session &&
+      communication.session.startTime > new Date() &&
+      communication.recipientEmails === null &&
+      ([TemplateType.DAY_BEFORE_REMINDER, TemplateType.HOUR_BEFORE_REMINDER, TemplateType.FOLLOW_UP] as TemplateType[])
+        .includes(communication.template?.type as TemplateType)
+    )
+    .map((communication) => ({
+      sessionNumber: communication.session!.sessionNumber,
+      type: communication.template!.type,
+      status: communication.status,
+      scheduledFor: communication.scheduledFor
+    }));
+
+  return {
+    cohortId,
+    activeParticipantRows: participants.length,
+    uniqueActiveParticipants: activeEmails.length,
+    duplicateActiveRows: participants.length - activeEmails.length,
+    participantConfirmation: {
+      sent: activeEmails.filter((email) => confirmations.has(email)).length,
+      missing: activeEmails.filter((email) => !confirmations.has(email))
+    },
+    oneWeek: {
+      sent: activeEmails.filter((email) => oneWeek.has(email)).length,
+      missing: activeEmails.filter((email) => !oneWeek.has(email)),
+      stillQueued: communications
+        .filter((communication) =>
+          communication.status === CommunicationStatus.SCHEDULED &&
+          (communication.template?.name === "One Week Before Cohort" || communication.subject === "Kick-off: {{cohort.title}}")
+        )
+        .flatMap((communication) => Array.isArray(communication.recipientEmails) ? communication.recipientEmails : [])
+    },
+    futureAutomation
+  };
+}
+
 export async function listUnreviewedCommunicationIssues(input: { cohortId?: string | null; limit?: number } = {}) {
   const communications = await listCommunications({ ...input, issueOnly: true });
   return communications.flatMap((communication) => communication.issueRows).slice(0, input.limit ?? 100);

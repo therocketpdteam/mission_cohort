@@ -1,7 +1,8 @@
 import { fail, handleApiError, ok } from "@/lib/api";
-import { MUTATION_ROLES, requireRole } from "@/lib/auth";
+import { ADMIN_ROLES, MUTATION_ROLES, requireRole } from "@/lib/auth";
 import {
   addCommunicationAttachment,
+  auditCohortParticipantJourneyCoverage,
   attachResourceToCommunication,
   cancelCommunication,
   createDefaultCohortSessionCommunications,
@@ -31,6 +32,13 @@ export async function GET(request: Request) {
   try {
     const params = new URL(request.url).searchParams;
     const cohortId = params.get("cohortId");
+    if (params.get("action") === "auditParticipantJourneys") {
+      await requireRole(ADMIN_ROLES);
+      if (!cohortId) {
+        return fail("cohortId is required", "BAD_REQUEST", 400);
+      }
+      return ok(await auditCohortParticipantJourneyCoverage(cohortId));
+    }
     const limit = Number(params.get("limit") ?? 100);
     const issueOnly = params.get("issueOnly") === "1" || params.get("issueOnly") === "true";
     const search = params.get("search");
