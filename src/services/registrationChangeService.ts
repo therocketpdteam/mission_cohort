@@ -49,7 +49,13 @@ const trackedRegistrationFields = [
   "participantCount",
   "totalAmount",
   "purchaseOrderNumber",
-  "invoiceNumber"
+  "invoiceNumber",
+  "primaryContactName",
+  "primaryContactEmail",
+  "primaryContactPhone",
+  "primaryContactTitle",
+  "billingContactName",
+  "billingContactEmail"
 ] as const;
 
 function looksLikeRawJotformValue(value: unknown) {
@@ -254,7 +260,7 @@ function money(value: unknown) {
   return `$${Number(value ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-function changeSummaryRows(pending: RegistrationPendingChanges) {
+export function changeSummaryRows(pending: RegistrationPendingChanges) {
   const rows: string[] = [];
   if (pending.participantAdditions.length) {
     rows.push(`Added participants: ${pending.participantAdditions.map((row) => `${row.firstName} ${row.lastName} (${row.email})`).join(", ")}`);
@@ -266,14 +272,56 @@ function changeSummaryRows(pending: RegistrationPendingChanges) {
     participantCount: "Participant seats",
     totalAmount: "Registration total",
     purchaseOrderNumber: "PO number",
-    invoiceNumber: "Invoice number"
+    invoiceNumber: "Invoice number",
+    primaryContactName: "Primary contact name",
+    primaryContactEmail: "Primary contact email",
+    primaryContactPhone: "Primary contact phone",
+    primaryContactTitle: "Primary contact title",
+    billingContactName: "Billing contact name",
+    billingContactEmail: "Billing contact email"
   };
   for (const [field, change] of Object.entries(pending.fields)) {
     const before = field === "totalAmount" ? money(change.before) : String(change.before ?? "None");
     const after = field === "totalAmount" ? money(change.after) : String(change.after ?? "None");
-    rows.push(`${labels[field] ?? field}: ${before} to ${after}`);
+    rows.push(`${labels[field] ?? field}: ${before} → ${after}`);
   }
   return rows;
+}
+
+export function registrationChangeDeliveryNotes(
+  pending: RegistrationPendingChanges,
+  invoice?: { pdfUrl?: string | null } | null
+) {
+  const notes: string[] = [];
+  const added = pending.participantAdditions.length > 0;
+  const removed = pending.participantRemovals.length > 0;
+  const invoiceChanged = ["participantCount", "totalAmount", "purchaseOrderNumber", "invoiceNumber"]
+    .some((field) => Boolean(pending.fields[field]));
+  const contactChanged = [
+    "primaryContactName",
+    "primaryContactEmail",
+    "primaryContactPhone",
+    "primaryContactTitle",
+    "billingContactName",
+    "billingContactEmail"
+  ].some((field) => Boolean(pending.fields[field]));
+
+  if (added || removed) {
+    const actions = [added ? "added participants will receive cohort communications" : "", removed ? "removed participants will no longer receive future cohort communications" : ""]
+      .filter(Boolean)
+      .join(", and ");
+    notes.push(`The participant roster and calendar attendee list have been updated. ${actions.charAt(0).toUpperCase()}${actions.slice(1)}.`);
+  }
+  if (invoiceChanged) {
+    notes.push(invoice?.pdfUrl
+      ? "An updated invoice reflecting these changes is attached. Please use this version for your records."
+      : "The registration’s billing details have been updated to reflect these changes.");
+  }
+  if (contactChanged) {
+    notes.push("Future registration and billing communications will use the updated contact information shown above.");
+  }
+
+  return notes;
 }
 
 async function refreshSimpleInvoice(
@@ -519,13 +567,29 @@ export async function applyRegistrationChanges(registrationId: string) {
   if (invoice?.invoiceNumber && /-[A-Z]$/i.test(invoice.invoiceNumber)) {
     rows.push(`Supplemental invoice ${invoice.invoiceNumber}: ${money(invoice.totalAmount)} for the added balance only. The original paid invoice remains unchanged.`);
   }
-  const deliveryNote = attendeeChanges
-    ? calendarIssues.length
-      ? "Participant communications now reflect these updates. Calendar attendee updates need attention in Mission Control."
-      : "Calendar invitations and participant communications now reflect these updates."
-    : "Mission Control now reflects these registration updates.";
-  const summaryHtml = `<ul>${rows.map((row) => `<li>${escapeHtml(row)}</li>`).join("")}</ul><p>${deliveryNote}</p>`;
-  const summaryText = `${rows.map((row) => `- ${row}`).join("\n")}\n\n${deliveryNote}`;
+  const deliveryNotes = registrationChangeDeliveryNotes(pending, invoice);
+  const summaryHtml = [
+    "<p>Hello {{registration.primaryContactFirstName}},</p>",
+    "<p>We’ve completed the requested updates to your registration for <strong>{{cohort.title}}</strong>.</p>",
+    "<p>Here’s what changed:</p>",
+    `<ul>${rows.map((row) => `<li>${escapeHtml(row)}</li>`).join("")}</ul>`,
+    ...deliveryNotes.map((note) => `<p>${escapeHtml(note)}</p>`),
+    "<p>Questions? Reply to this message or contact <a href=\"mailto:info@rocketpd.com\">info@rocketpd.com</a>.</p>",
+    "<p>The RocketPD Team</p>"
+  ].join("");
+  const summaryText = [
+    "Hello {{registration.primaryContactFirstName}},",
+    "",
+    "We’ve completed the requested updates to your registration for {{cohort.title}}.",
+    "",
+    "Here’s what changed:",
+    ...rows.map((row) => `- ${row}`),
+    "",
+    ...deliveryNotes.flatMap((note) => [note, ""]),
+    "Questions? Reply to this message or contact info@rocketpd.com.",
+    "",
+    "The RocketPD Team"
+  ].join("\n");
   const journeyKey = `registration:${registrationId}:changes:${pending.batchId}`;
   let communication = await prisma.cohortCommunication.findUnique({ where: { journeyKey } });
   if (!communication) {
@@ -536,8 +600,8 @@ export async function applyRegistrationChanges(registrationId: string) {
         templateId: template.id,
         journeyKey,
         subject: template.subject,
-        bodyHtml: `${template.bodyHtml}${summaryHtml}`,
-        bodyText: `${template.bodyText ?? ""}\n\n${summaryText}`,
+        bodyHtml: summaryHtml,
+        bodyText: summaryText,
         status: CommunicationStatus.DRAFT,
         recipientScope: RecipientScope.CUSTOM,
         recipientEmails: [registration.primaryContactEmail.toLowerCase()],
@@ -549,8 +613,8 @@ export async function applyRegistrationChanges(registrationId: string) {
       where: { id: communication.id },
       data: {
         subject: template.subject,
-        bodyHtml: `${template.bodyHtml}${summaryHtml}`,
-        bodyText: `${template.bodyText ?? ""}\n\n${summaryText}`,
+        bodyHtml: summaryHtml,
+        bodyText: summaryText,
         recipientEmails: [registration.primaryContactEmail.toLowerCase()]
       }
     });

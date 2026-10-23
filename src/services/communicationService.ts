@@ -638,13 +638,9 @@ The RocketPD Team`
     type: TemplateType.CUSTOM,
     name: "Registration Changes Summary",
     subject: "Registration updates: {{cohort.title}}",
-    bodyText: `Hello {{registration.primaryContactName}},
+    bodyText: `Hello {{registration.primaryContactFirstName}},
 
-The requested registration updates have been applied for **{{cohort.title}}**.
-
-If this update affected participants, calendar invitations and participant communications will reflect the updated roster.
-
-If this update affected billing, your invoice/receipt information will be updated as needed.
+We’ve completed the requested updates to your registration for **{{cohort.title}}**.
 
 Questions? Reply to this message or contact info@rocketpd.com.
 
@@ -722,7 +718,11 @@ const defaultCopyRefreshMatchers: Record<string, (bodyText: string) => boolean> 
     bodyText.includes("This is a friendly reminder about payment for **{{cohort.title}}**.") ||
     bodyText.includes("Your invoice and RocketPD W-9 are attached to this email for your convenience.") ||
     bodyText.includes("Payment status: **{{registration.paymentStatus}}**") ||
-    bodyText.includes("Amount: **{{registration.totalAmount}}**\n\nI've attached")
+    bodyText.includes("Amount: **{{registration.totalAmount}}**\n\nI've attached"),
+  "Registration Changes Summary": (bodyText) =>
+    bodyText.includes("Hello {{registration.primaryContactName}}") ||
+    bodyText.includes("If this update affected participants") ||
+    bodyText.includes("If this update affected billing")
 };
 
 const sessionTemplateTypes = [

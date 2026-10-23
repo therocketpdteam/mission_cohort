@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  changeSummaryRows,
   mergeParticipantAddition,
   mergeParticipantRemoval,
   mergeRegistrationFieldChanges,
+  registrationChangeDeliveryNotes,
   registrationPendingChangeCount,
   sentParticipantConfirmationEmails,
   type RegistrationPendingChanges
@@ -48,6 +50,36 @@ test("changing a registration field back to its original value removes it from r
   const reverted = mergeRegistrationFieldChanges(first, { totalAmount: 1590 }, { totalAmount: 795 });
 
   assert.equal(registrationPendingChangeCount(reverted), 0);
+});
+
+test("registration change copy describes a PO update without internal product language", () => {
+  const changes = mergeRegistrationFieldChanges(
+    pending(),
+    { purchaseOrderNumber: null },
+    { purchaseOrderNumber: "9769" }
+  );
+
+  assert.deepEqual(changeSummaryRows(changes), ["PO number: None → 9769"]);
+  assert.deepEqual(registrationChangeDeliveryNotes(changes, { pdfUrl: "https://example.com/invoice.pdf" }), [
+    "An updated invoice reflecting these changes is attached. Please use this version for your records."
+  ]);
+});
+
+test("registration change copy explains only the relevant roster and contact effects", () => {
+  const changes = mergeParticipantAddition(
+    mergeRegistrationFieldChanges(
+      pending(),
+      { primaryContactEmail: "old@example.com" },
+      { primaryContactEmail: "new@example.com" }
+    ),
+    chris
+  );
+  const notes = registrationChangeDeliveryNotes(changes, null);
+
+  assert.equal(notes.length, 2);
+  assert.match(notes[0]!, /participant roster and calendar attendee list have been updated/i);
+  assert.match(notes[1]!, /updated contact information/i);
+  assert.doesNotMatch(notes.join(" "), /Mission Control/i);
 });
 
 test("sent participant confirmation recipients are normalized for replay protection", () => {
