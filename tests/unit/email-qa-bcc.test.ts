@@ -3,7 +3,7 @@ import test from "node:test";
 import { productionQaBccEmail, isQaBccEvent } from "../../src/modules/email/qaCopy";
 import { buildSendGridMailPayload } from "../../src/modules/email/sendgridProvider";
 import { renderMergeFields, sampleMergeContext } from "../../src/modules/email/mergeFields";
-import { recordSendGridEvents, shouldSuppressParticipantBatchQaCopy, shouldSuppressScheduledQaCopy } from "../../src/services/communicationService";
+import { recordSendGridEvents, shouldSuppressParticipantBatchQaCopy, shouldSuppressRegistrationTypeQaCopy, shouldSuppressScheduledQaCopy } from "../../src/services/communicationService";
 
 const qaEmail = "gerardo@rocketpd.com";
 const config = { fromEmail: "info@rocketpd.com", fromName: "The RocketPD Team", qaBccEmail: qaEmail };
@@ -71,6 +71,12 @@ test("personalized whole-roster sends keep one QA copy unless the caller suppres
   assert.equal(shouldSuppressParticipantBatchQaCopy(1), true);
   assert.equal(shouldSuppressParticipantBatchQaCopy(0, true), true);
   assert.equal(shouldSuppressParticipantBatchQaCopy(200, true), true);
+});
+
+test("separate participant communications keep one QA copy per registration and message type", () => {
+  assert.equal(shouldSuppressRegistrationTypeQaCopy("confirmation-1", "confirmation-1"), false);
+  assert.equal(shouldSuppressRegistrationTypeQaCopy("confirmation-2", "confirmation-1"), true);
+  assert.equal(shouldSuppressRegistrationTypeQaCopy("confirmation-15", "confirmation-1"), true);
 });
 
 test("personalized POC and participant messages each carry their exact rendered content into the QA copy", () => {

@@ -14,7 +14,13 @@ import {
 import { prisma } from "@/lib/prisma";
 import { createCalendarInvitePlaceholder } from "./calendarService";
 import { generateSessionIcs } from "@/modules/calendar";
-import { ensureDefaultCommunicationTemplates, getSystemUserId, sendCommunication } from "./communicationService";
+import {
+  ensureDefaultCommunicationTemplates,
+  getSystemUserId,
+  sendCommunication,
+  shouldSuppressParticipantBatchQaCopy,
+  shouldSuppressRegistrationTypeQaCopy
+} from "./communicationService";
 import { sendEmail } from "./emailService";
 import { getOrganizationInvoiceProfile } from "./appSettingsService";
 import { registrationConfirmationDocumentReadiness } from "./registrationDocumentReadiness";
@@ -571,7 +577,7 @@ async function sendRegistrationCalendarFiles(
   const systemUserId = await getSystemUserId();
   const presenterName = [registration.cohort.presenter.firstName, registration.cohort.presenter.lastName].filter(Boolean).join(" ");
 
-  for (const recipient of recipients) {
+  for (const [recipientIndex, recipient] of recipients.entries()) {
     const journeyKey = calendarFilesJourneyKey({
       registrationId: registration.id,
       participantEmail: recipient.email,
@@ -630,6 +636,7 @@ async function sendRegistrationCalendarFiles(
         subject,
         bodyHtml,
         bodyText,
+        suppressQaBcc: shouldSuppressParticipantBatchQaCopy(recipientIndex),
         attachments: sessions.map((session, index) => ({
           fileName: calendarFileName(session.sessionNumber ?? index + 1, session.title),
           contentType: "text/calendar; method=REQUEST",
@@ -772,6 +779,7 @@ async function sendCalendarFallbacks(
         subject,
         bodyHtml,
         bodyText,
+        suppressQaBcc: true,
         attachments: sessions.map((session, index) => ({
           fileName: calendarFileName(session.sessionNumber ?? index + 1, session.title),
           contentType: "text/calendar; method=REQUEST",
@@ -958,6 +966,7 @@ export async function planRegistrationJourneys(
   };
   const planned = [];
   const immediate = [];
+  const participantConfirmations = [];
   const pocEmail = normalizeEmail(registration.primaryContactEmail);
   let poc: Awaited<ReturnType<typeof upsertJourneyCommunication>> | null = null;
   let attachmentCount = 0;
@@ -1039,6 +1048,7 @@ export async function planRegistrationJourneys(
       retryFailed: options.retryFailed
     });
     planned.push(confirmation);
+    participantConfirmations.push(confirmation);
     if (options.sendParticipantConfirmation !== false) {
       immediate.push(confirmation);
     }
@@ -1065,11 +1075,18 @@ export async function planRegistrationJourneys(
 
   const sent = [];
   const failed: string[] = [];
+  const participantConfirmationQaLeaderId = participantConfirmations[0]?.id;
   if (deliveryAuthorized(registration.cohort.status) || options.bypassCohortStatusForImmediate) {
     for (const communication of immediate) {
       if (communication.status === CommunicationStatus.DRAFT) {
         try {
-          sent.push(await sendCommunication(communication.id, { bypassCohortStatus: options.bypassCohortStatusForImmediate }));
+          const isParticipantConfirmation = participantConfirmations.some((confirmation) => confirmation.id === communication.id);
+          sent.push(await sendCommunication(communication.id, {
+            bypassCohortStatus: options.bypassCohortStatusForImmediate,
+            suppressQaBcc: isParticipantConfirmation
+              ? shouldSuppressRegistrationTypeQaCopy(communication.id, participantConfirmationQaLeaderId)
+              : false
+          }));
         } catch {
           // The failed communication remains visible and retryable in Communications.
           failed.push(communication.id);

@@ -2630,8 +2630,10 @@ export async function sendManualTemplateToParticipants(input: { templateId: stri
   const bodyText = template.bodyText ?? "";
   const bodyHtml = template.bodyHtml ?? textToEmailHtml(bodyText);
   const results = [];
+  const qaCopiedRegistrationIds = new Set<string>();
 
   for (const target of targets) {
+    const qaCopyGroupKey = target.registrationId ?? target.participantId ?? target.recipientEmail;
     const communication = await prisma.cohortCommunication.create({
       data: {
         cohortId: target.cohortId,
@@ -2654,8 +2656,10 @@ export async function sendManualTemplateToParticipants(input: { templateId: stri
         subject,
         bodyHtml,
         bodyText,
+        suppressQaBcc: qaCopiedRegistrationIds.has(qaCopyGroupKey),
         context: manualEmailContext(target)
       });
+      qaCopiedRegistrationIds.add(qaCopyGroupKey);
 
       await prisma.emailEvent.create({
         data: {
@@ -2805,8 +2809,10 @@ export async function sendManualCustomEmail(input: {
 
   const bodyHtml = textToEmailHtml(bodyText);
   const results = [];
+  const qaCopiedRegistrationIds = new Set<string>();
 
   for (const target of targets) {
+    const qaCopyGroupKey = target.registrationId ?? target.participantId ?? target.recipientEmail;
     const communication = await prisma.cohortCommunication.create({
       data: {
         cohortId: target.cohortId,
@@ -2828,8 +2834,10 @@ export async function sendManualCustomEmail(input: {
         subject,
         bodyHtml,
         bodyText,
+        suppressQaBcc: qaCopiedRegistrationIds.has(qaCopyGroupKey),
         context: manualEmailContext(target)
       });
+      qaCopiedRegistrationIds.add(qaCopyGroupKey);
 
       await prisma.emailEvent.create({
         data: {
@@ -3498,6 +3506,7 @@ export async function processScheduledCommunications(limit = 25) {
         const qaCopyLeader = await prisma.cohortCommunication.findFirst({
           where: {
             cohortId: communication.cohortId,
+            registrationId: communication.registrationId,
             templateId: communication.templateId,
             scheduledFor: communication.scheduledFor,
             recipientScope: RecipientScope.CUSTOM,
@@ -3519,6 +3528,10 @@ export async function processScheduledCommunications(limit = 25) {
 }
 
 export function shouldSuppressScheduledQaCopy(communicationId: string, leaderId?: string | null) {
+  return Boolean(leaderId && leaderId !== communicationId);
+}
+
+export function shouldSuppressRegistrationTypeQaCopy(communicationId: string, leaderId?: string | null) {
   return Boolean(leaderId && leaderId !== communicationId);
 }
 
