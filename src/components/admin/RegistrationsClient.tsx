@@ -39,12 +39,14 @@ import { adminApi } from "@/lib/adminApi";
 import { activeEmailIssues } from "@/lib/emailIssueState";
 import { pricePerParticipantForCohort, registrationTotalAfterSeatChange, registrationTotalForCohort, sessionCountForPricing } from "@/config/cohortPricing";
 import { formatProperDisplay, formatRegistrationPaymentStatus, formatRegistrationSource, formatStatusLabel, matchesRegistrationPaymentFilter } from "@/lib/formatting";
+import type { CancellationNotificationMode } from "@/modules/cohorts/cancellation";
 import { RosterWorkbench } from "./RosterWorkbench";
 import { RegistrationPendingChangesPanel } from "./RegistrationPendingChangesPanel";
 import { RegistrationDeliveryPreflight } from "./RegistrationDeliveryPreflight";
 import { PocCommunicationHistory } from "./PocCommunicationHistory";
 import { RegistrationCommunicationJourney } from "./RegistrationCommunicationJourney";
 import { RegistrationDocuments } from "./RegistrationDocuments";
+import { BulkRegistrationCancellationDialog } from "./BulkRegistrationCancellationDialog";
 import { parseRosterText, type ParsedRosterParticipant } from "@/lib/rosterParser";
 import {
   AdminRow,
@@ -1946,8 +1948,14 @@ export function RegistrationRemovalDialog({
   const [busy, setBusy] = useState(false);
   const [cancellationPreview, setCancellationPreview] = useState<AdminRow | null>(null);
   const [previewError, setPreviewError] = useState("");
+  const [cancellationNotificationMode, setCancellationNotificationMode] = useState<CancellationNotificationMode>("notify");
+  const silentCancellation = cancellationNotificationMode === "silent";
+  const submittingRemoval = useRef(false);
+
+  useEffect(() => { if (open) setCancellationNotificationMode("notify"); }, [open, registration?.id, action]);
 
   useEffect(() => {
+    let active = true;
     if (open) {
       setNotify(false);
       setTemplateId(String(defaultTemplate?.id ?? ""));
@@ -1957,17 +1965,19 @@ export function RegistrationRemovalDialog({
       if (action === "cancel" && registration?.id) {
         adminApi<AdminRow>("/api/registrations", {
           method: "PATCH",
-          body: { id: registration.id, action: "previewCancellation" }
-        }).then(setCancellationPreview).catch((error) => setPreviewError((error as Error).message));
+          body: { id: registration.id, action: "previewCancellation", notificationMode: cancellationNotificationMode }
+        }).then(result => { if (active) setCancellationPreview(result); }).catch((error) => { if (active) setPreviewError((error as Error).message); });
       }
     }
-  }, [action, defaultTemplate?.id, open, registration?.id]);
+    return () => { active = false; };
+  }, [action, defaultTemplate?.id, open, registration?.id, cancellationNotificationMode]);
 
   async function runAction() {
-    if (!action || !registration?.id) {
+    if (!action || !registration?.id || submittingRemoval.current || (action === "cancel" && (!cancellationPreview || cancellationPreview.notificationMode !== cancellationNotificationMode || (cancellationPreview.blockers ?? []).length > 0))) {
       return;
     }
 
+    submittingRemoval.current = true;
     setBusy(true);
     try {
       if (notify && action !== "restore" && action !== "cancel") {
@@ -1984,13 +1994,13 @@ export function RegistrationRemovalDialog({
       if (action === "cancel") {
         const result = await adminApi<AdminRow>("/api/registrations", {
           method: "PATCH",
-          body: { id: registration.id, action: "cancel", sendPocCancellation: true }
+          body: { id: registration.id, action: "cancel", notificationMode: cancellationNotificationMode }
         });
         const emailError = result.cancellation?.communicationError;
         if (emailError) {
           onError(`Registration cancelled, but the POC email needs attention: ${emailError}`);
         } else {
-          onSuccess(`Registration cancelled and confirmation sent only to ${registration.primaryContactEmail}`);
+          onSuccess(silentCancellation ? "Registration cancelled silently; no cancellation emails or calendar notifications sent" : `Registration cancelled and confirmation sent only to ${registration.primaryContactEmail}`);
         }
       } else if (action === "delete") {
         await adminApi(`/api/registrations?id=${encodeURIComponent(String(registration.id))}`, { method: "DELETE" });
@@ -2012,6 +2022,7 @@ export function RegistrationRemovalDialog({
     } catch (error) {
       onError((error as Error).message);
     } finally {
+      submittingRemoval.current = false;
       setBusy(false);
     }
   }
@@ -2024,7 +2035,7 @@ export function RegistrationRemovalDialog({
       : action === "restore"
         ? "Restore"
         : action === "cancel"
-          ? "Cancel registration and notify POC"
+          ? silentCancellation ? "Cancel registration silently" : "Cancel registration and notify POC"
         : "Remove registration";
 
   return (
@@ -2039,6 +2050,14 @@ export function RegistrationRemovalDialog({
           </Typography>
           {action === "cancel" ? (
             <>
+              <TextField select fullWidth label="Cancellation notifications" value={cancellationNotificationMode} disabled={busy} onChange={event => {
+                setCancellationPreview(null);
+                setCancellationNotificationMode(event.target.value as CancellationNotificationMode);
+              }}>
+                <MenuItem value="notify">Send the POC a cancellation email</MenuItem>
+                <MenuItem value="silent">Cancel silently — people already notified</MenuItem>
+              </TextField>
+              {silentCancellation ? <Alert severity="info">No cancellation emails or calendar notifications will be sent. Pending messages for this registration stop; any other active registration remains intact. External invoices are preserved for finance review.</Alert> : null}
               {previewError ? <Alert severity="error">{previewError}</Alert> : null}
               {!cancellationPreview && !previewError ? <Alert severity="info">Loading the exact cancellation impact...</Alert> : null}
               {cancellationPreview ? (
@@ -2052,12 +2071,12 @@ export function RegistrationRemovalDialog({
                     <DetailTile label="Seats on cancelled registration" value={cancellationPreview.registration?.participantCount} />
                     <DetailTile label="Current value" value={money(cancellationPreview.registration?.totalAmount)} />
                     <DetailTile label="Reporting value afterward" value="$0" tone="success" />
-                    <DetailTile label="CRM status afterward" value="Cancelled" tone="success" />
+                    <DetailTile label="External status update" value={silentCancellation ? "No update sent" : "Cancelled"} tone="success" />
                     <DetailTile label="Future calendar sessions" value={cancellationPreview.effects?.futureCalendarSessions?.length ?? 0} />
                     <DetailTile label="Queued messages cancelled" value={cancellationPreview.effects?.communicationsToCancel?.length ?? 0} />
                     <DetailTile
                       label="Invoice action"
-                      value={cancellationPreview.invoice?.willAttachVoidedPdf
+                      value={silentCancellation && cancellationPreview.invoice?.disposition === "void_and_attach" ? "Void local invoice; no email" : cancellationPreview.invoice?.willAttachVoidedPdf
                         ? `Void and attach ${cancellationPreview.invoice?.invoiceNumber ?? "invoice"}`
                         : cancellationPreview.invoice?.requiresRefundHandling
                           ? "Keep paid invoice; refund follow-up required"
@@ -2080,14 +2099,14 @@ export function RegistrationRemovalDialog({
                       Remaining enrolled through another active registration: {(cancellationPreview.effects.calendarEmailsPreserved as string[]).join(", ")}. Their calendar attendance and participant communications remain active.
                     </Alert>
                   ) : null}
-                  <Box>
+                  {!silentCancellation ? <Box>
                     <Typography variant="subtitle2">POC cancellation email</Typography>
                     <Typography><strong>To:</strong> {cancellationPreview.email?.to}</Typography>
                     <Typography><strong>Subject:</strong> {cancellationPreview.email?.subject}</Typography>
                     <Box component="pre" sx={{ whiteSpace: "pre-wrap", fontFamily: "inherit", margin: 0, padding: 2, border: "1px solid", borderColor: "divider", borderRadius: 1, backgroundColor: "background.default" }}>
                       {cancellationPreview.email?.bodyText}
                     </Box>
-                  </Box>
+                  </Box> : null}
                   {(cancellationPreview.blockers ?? []).length > 0 ? (
                     <Alert severity="error">{(cancellationPreview.blockers ?? []).join(" ")}</Alert>
                   ) : null}
@@ -2126,7 +2145,7 @@ export function RegistrationRemovalDialog({
       </DialogContent>
       <DialogActions>
         <Button variant="outlined" onClick={onClose} disabled={busy}>{action === "cancel" ? "Go back" : "Cancel"}</Button>
-        <Button color={action === "delete" || action === "cancel" ? "error" : "primary"} onClick={runAction} disabled={busy || (action === "cancel" && (!cancellationPreview || Boolean(previewError) || (cancellationPreview.blockers ?? []).length > 0))}>
+        <Button color={action === "delete" || action === "cancel" ? "error" : "primary"} onClick={runAction} disabled={busy || (action === "cancel" && (!cancellationPreview || cancellationPreview.notificationMode !== cancellationNotificationMode || Boolean(previewError) || (cancellationPreview.blockers ?? []).length > 0))}>
           {buttonLabel}
         </Button>
       </DialogActions>
@@ -2141,6 +2160,7 @@ export function RegistrationsClient({ requestedRegistrationId }: { requestedRegi
   const [organizations, setOrganizations] = useState<AdminRow[]>([]);
   const [templates, setTemplates] = useState<AdminRow[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkCancellationOpen, setBulkCancellationOpen] = useState(false);
   const [bulkPaymentStatus, setBulkPaymentStatus] = useState("");
   const [bulkTemplateId, setBulkTemplateId] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -2517,7 +2537,7 @@ export function RegistrationsClient({ requestedRegistrationId }: { requestedRegi
           <Stack direction={{ xs: "column", lg: "row" }} flexWrap="wrap" useFlexGap gap={1.5} alignItems={{ xs: "stretch", lg: "center" }} sx={{ mb: 2 }}>
             <StatusChip value={`${selectedIds.length} selected`} />
             <Button size="small" variant="outlined" color="success" onClick={() => runBulkAction("confirm")}>Confirm</Button>
-            <Button size="small" variant="outlined" color="warning" onClick={() => runBulkAction("cancel")}>Cancel</Button>
+            <Button size="small" variant="outlined" color="warning" onClick={() => setBulkCancellationOpen(true)}>Cancel</Button>
             <Button size="small" variant="outlined" onClick={() => runBulkAction(visibility === "archived" ? "restore" : "archive")}>
               {visibility === "archived" ? "Restore" : "Archive"}
             </Button>
@@ -2600,6 +2620,7 @@ export function RegistrationsClient({ requestedRegistrationId }: { requestedRegi
         onSuccess={notifySuccess}
         onError={notifyError}
       />
+      {bulkCancellationOpen ? <BulkRegistrationCancellationDialog registrationIds={selectedIds} onClose={() => setBulkCancellationOpen(false)} onCancelled={async () => { setSelectedIds([]); await load(); }} onSuccess={notifySuccess} onError={notifyError} /> : null}
       <Box>{snackbar}</Box>
     </PageStack>
   );

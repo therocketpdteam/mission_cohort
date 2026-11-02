@@ -5,6 +5,7 @@ import { syncCohortTotalsToCrm } from "@/services/crmRegistrationWebhookService"
 import { ensureCohortQuickBooksProject, reconcileCohortQuickBooksProject, syncQuickBooksInvoice } from "@/services/quickBooksService";
 import { MUTATION_ROLES, requireRole } from "@/lib/auth";
 import { cancelCohortWithNotices } from "@/services/cohortCancellationService";
+import { cancellationNotificationMode } from "@/modules/cohorts/cancellation";
 
 export const maxDuration = 300;
 
@@ -20,7 +21,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         return fail("A valid nextStatus is required", "BAD_REQUEST", 400);
       }
 
-      return ok(await getCohortStatusChangePreview(id, nextStatus as CohortStatus));
+      return ok(await getCohortStatusChangePreview(id, nextStatus as CohortStatus, { notificationMode: cancellationNotificationMode(searchParams.get("notificationMode")) }));
     }
 
     const cohort = await getCohortById(id);
@@ -41,7 +42,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const body = await request.json();
     if (body.action === "cancel") {
       const user = await requireRole(MUTATION_ROLES);
-      return ok(await cancelCohortWithNotices(id, user.id));
+      return ok(await cancelCohortWithNotices(id, user.id, { notificationMode: cancellationNotificationMode(body.notificationMode) }));
     }
     if (body.action === "publish") {
       return ok(await publishCohort(id));

@@ -2,17 +2,19 @@ import { CohortStatus, CommunicationStatus, EmailEventType, InvoiceDraftStatus, 
 import { prisma } from "@/lib/prisma";
 import { assertOutboundUnlocked } from "@/lib/outboundLock";
 import { buildCohortCancellationPocEmail, cohortCancellationParticipantEmail, renderCohortCancellationEmail } from "@/config/cohortCancellation";
-import { cohortCancellationRecipients, cancellationNoticeCanSend, runCohortCancellationSteps } from "@/modules/cohorts/cancellation";
+import { cohortCancellationRecipients, cancellationNoticeCanSend, cancellationNotificationMode, runCohortCancellationSteps, type CancellationNotificationMode } from "@/modules/cohorts/cancellation";
 import { cancelGoogleCalendarInvites, preflightCohortCalendarCancellation } from "./calendarService";
 import { getSystemUserId, sendCommunication } from "./communicationService";
 import { assertOutboundRecipientsAllowed, getSendGridSetup } from "./integrationSetupService";
 import { logAuditEvent } from "./auditService";
 import { queueParticipantCrmSync, queueRegistrationCrmSync } from "./crmSyncService";
+import { assertCancellationDeliveryIdle, suppressSilentCancellationDelivery } from "./cancellationDeliveryService";
 
 const prefix = (id: string) => `cohort:${id}:cancellation:`;
 const conflict = (message: string) => Object.assign(new Error(message), { code: "CANCELLATION_BLOCKED", status: 409 });
 
-export async function getCohortCancellationPreview(cohortId: string, client: Pick<typeof prisma, "cohort" | "operationsTask"> = prisma) {
+export async function getCohortCancellationPreview(cohortId: string, client: Pick<typeof prisma, "cohort" | "operationsTask"> = prisma, options: { notificationMode?: CancellationNotificationMode } = {}) {
+  const notificationMode = cancellationNotificationMode(options.notificationMode);
   const cohort = await client.cohort.findUniqueOrThrow({
     where: { id: cohortId },
     include: {
@@ -25,7 +27,7 @@ export async function getCohortCancellationPreview(cohortId: string, client: Pic
   });
   const task = await client.operationsTask.findUnique({ where: { id: `cohort-cancellation:${cohortId}` } });
   const cancellationDate = new Intl.DateTimeFormat("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "America/New_York" }).format(task?.createdAt ?? new Date());
-  const recipients = cohortCancellationRecipients(cohort.registrations);
+  const recipients = cohortCancellationRecipients(cohort.registrations, notificationMode);
   const blockers: string[] = [];
   const notices = recipients.map((recipient) => {
     const registration = cohort.registrations.find((row) => row.id === recipient.registrationId)!;
@@ -65,23 +67,22 @@ export async function getCohortCancellationPreview(cohortId: string, client: Pic
     };
   });
   if (cohort.status === CohortStatus.CANCELLED) blockers.push("This cohort is already cancelled.");
-  return { cohort, notices, blockers: Array.from(new Set(blockers)) };
+  return { cohort, notices, notificationMode, blockers: Array.from(new Set(blockers)) };
 }
 
 async function preflight(cohortId: string, plan: Awaited<ReturnType<typeof getCohortCancellationPreview>>) {
   if (plan.blockers.length) throw conflict(plan.blockers.join(" "));
-  await assertOutboundUnlocked({ channel: "SENDGRID", action: "send cohort cancellation notices", entityType: "Cohort", entityId: cohortId });
+  await assertCancellationDeliveryIdle(plan.cohort.registrations.map(r => r.id), plan.cohort.registrations.flatMap(r => r.participants.map(p => p.id)), cohortId);
+  if (plan.notificationMode === "notify") await assertOutboundUnlocked({ channel: "SENDGRID", action: "send cohort cancellation notices", entityType: "Cohort", entityId: cohortId });
   if (plan.notices.length) {
     const setup = await getSendGridSetup();
     if (!setup.configured) throw conflict("Configure SendGrid before cancelling this cohort.");
     await assertOutboundRecipientsAllowed("SENDGRID", plan.notices.map((notice) => notice.email));
   }
-  if (plan.cohort.sessions.some((session) => session.calendarEvents.some((event) => event.provider === "google" && event.providerEventId))) {
+  if (plan.cohort.sessions.some((session) => session.endTime > new Date() && session.calendarEvents.some((event) => event.provider === "google" && event.providerEventId))) {
     await assertOutboundUnlocked({ channel: "GOOGLE_CALENDAR", action: "cancel cohort invitations", entityType: "Cohort", entityId: cohortId });
-    await preflightCohortCalendarCancellation(cohortId);
+    await preflightCohortCalendarCancellation(cohortId, { futureOnly: true });
   }
-  const sending = await prisma.cohortCommunication.count({ where: { cohortId, status: CommunicationStatus.SENDING } });
-  if (sending) throw conflict("A communication is currently sending. Wait for it to finish or review it in Communications before continuing.");
 }
 
 async function sendNotices(plan: Awaited<ReturnType<typeof getCohortCancellationPreview>>, createdById: string) {
@@ -123,7 +124,7 @@ async function withCancellationLock<T>(cohortId: string, operation: () => Promis
   const id = `cohort-cancellation:${cohortId}`;
   await prisma.operationsTask.upsert({
     where: { id }, update: {},
-    create: { id, cohortId, title: "Cohort cancellation: email, calendar, then status", category: OperationsTaskCategory.OTHER, priority: OperationsTaskPriority.HIGH, status: OperationsTaskStatus.OPEN }
+    create: { id, cohortId, title: "Cohort cancellation", category: OperationsTaskCategory.OTHER, priority: OperationsTaskPriority.HIGH, status: OperationsTaskStatus.OPEN }
   });
   const claim = await prisma.operationsTask.updateMany({ where: { id, status: { in: [OperationsTaskStatus.OPEN, OperationsTaskStatus.COMPLETED] } }, data: { status: OperationsTaskStatus.IN_PROGRESS, completedAt: null } });
   if (claim.count !== 1) throw conflict("Cohort cancellation is already in progress. Review its operations task before retrying an interrupted action.");
@@ -146,26 +147,27 @@ export async function sendCohortCancellationNotices(cohortId: string) {
   });
 }
 
-export async function cancelCohortWithNotices(cohortId: string, actorUserId: string) {
+export async function cancelCohortWithNotices(cohortId: string, actorUserId: string, options: { notificationMode?: CancellationNotificationMode } = {}) {
+  const notificationMode = cancellationNotificationMode(options.notificationMode);
   const existing = await prisma.cohort.findUniqueOrThrow({ where: { id: cohortId } });
   if (existing.status === CohortStatus.CANCELLED) return existing;
   return withCancellationLock(cohortId, async () => {
-    const plan = await getCohortCancellationPreview(cohortId);
+    const plan = await getCohortCancellationPreview(cohortId, prisma, { notificationMode });
     if (plan.cohort.status === CohortStatus.CANCELLED) return plan.cohort;
     const registrationIds = plan.cohort.registrations.map((registration) => registration.id);
     return runCohortCancellationSteps({
       preflight: () => preflight(cohortId, plan),
       pauseReminders: async () => {
         await prisma.cohortCommunication.updateMany({
-          where: { cohortId, status: { in: [CommunicationStatus.DRAFT, CommunicationStatus.SCHEDULED, CommunicationStatus.FAILED] }, OR: [{ journeyKey: null }, { journeyKey: { not: { startsWith: prefix(cohortId) } } }] },
+          where: { cohortId, status: { in: [CommunicationStatus.DRAFT, CommunicationStatus.SCHEDULED, CommunicationStatus.FAILED] }, ...(notificationMode === "notify" ? { OR: [{ journeyKey: null }, { journeyKey: { not: { startsWith: prefix(cohortId) } } }] } : {}) },
           data: { status: CommunicationStatus.CANCELLED, scheduledFor: null, providerError: "Paused for cohort cancellation." }
         });
       },
       sendNotices: async () => { await sendNotices(plan, actorUserId); },
       removeCalendar: async () => {
-        for (const session of plan.cohort.sessions) {
+        for (const session of plan.cohort.sessions.filter(session => session.endTime > new Date())) {
           if (session.calendarEvents.some((event) => event.provider === "google" && event.providerEventId)) {
-            await cancelGoogleCalendarInvites({ sessionId: session.id }, { notifyAttendees: true });
+            await cancelGoogleCalendarInvites({ sessionId: session.id }, { notifyAttendees: notificationMode === "notify" });
           }
         }
       },
@@ -182,36 +184,40 @@ export async function cancelCohortWithNotices(cohortId: string, actorUserId: str
             ...row.participants.filter((participant) => participant.status === ParticipantStatus.REGISTERED).map((participant) => `${participant.id}:${participant.email.trim().toLowerCase()}`)
           ]).sort().join("|");
           if (roster(current) !== roster(plan.cohort.registrations)) throw conflict("The registration roster changed during cancellation. Review the new roster and retry before cancelling statuses.");
+          if (notificationMode === "silent") await suppressSilentCancellationDelivery(tx, registrationIds, current.flatMap(r => r.participants.map(p => p.id)), cohortId);
           for (const registration of current) {
             const received = registration.paymentStatus === PaymentStatus.PAID || registration.paymentStatus === PaymentStatus.PARTIALLY_PAID || registration.paymentRecords.some((payment) => payment.status === PaymentStatus.PAID || payment.status === PaymentStatus.PARTIALLY_PAID) || registration.invoiceDrafts.some((invoice) => Number(invoice.paidAmount) > 0 || invoice.status === InvoiceDraftStatus.PAID);
-            if (!received && registration.paymentStatus !== PaymentStatus.REFUNDED) {
-              await tx.invoiceDraft.updateMany({ where: { registrationId: registration.id, paidAmount: 0, status: { in: [InvoiceDraftStatus.DRAFT, InvoiceDraftStatus.SENT] } }, data: { status: InvoiceDraftStatus.VOIDED, pdfUrl: null, pdfFileKey: null } });
-              await tx.registration.update({ where: { id: registration.id }, data: { paymentStatus: PaymentStatus.CANCELLED } });
+            if (!received || registration.paymentStatus === PaymentStatus.REFUNDED) {
+              await tx.invoiceDraft.updateMany({ where: { registrationId: registration.id, paidAmount: 0, status: { in: [InvoiceDraftStatus.DRAFT, InvoiceDraftStatus.SENT] } }, data: { status: InvoiceDraftStatus.VOIDED, ...(notificationMode === "notify" ? { pdfUrl: null, pdfFileKey: null } : {}) } });
+              if (registration.paymentStatus !== PaymentStatus.REFUNDED) await tx.registration.update({ where: { id: registration.id }, data: { paymentStatus: PaymentStatus.CANCELLED } });
             }
-            if ((received && registration.paymentStatus !== PaymentStatus.REFUNDED) || registration.quickBooksInvoiceRef || (registration.invoiceNumber && registration.invoiceDrafts.length === 0)) {
+            if (registration.paymentStatus === PaymentStatus.REFUNDED && !registration.quickBooksInvoiceRef && !registration.invoiceDrafts.some(invoice => invoice.quickBooksInvoiceRef)) {
+              await tx.operationsTask.updateMany({ where: { registrationId: registration.id, category: OperationsTaskCategory.PAYMENT_FOLLOW_UP, status: { in: [OperationsTaskStatus.OPEN, OperationsTaskStatus.IN_PROGRESS] } }, data: { status: OperationsTaskStatus.CANCELLED, completedAt: new Date() } });
+            }
+            if ((received && registration.paymentStatus !== PaymentStatus.REFUNDED) || registration.quickBooksInvoiceRef || registration.invoiceDrafts.some(invoice => invoice.quickBooksInvoiceRef) || (registration.invoiceNumber && registration.invoiceDrafts.length === 0)) {
               const id = `cohort-cancellation-finance:${registration.id}`;
               await tx.operationsTask.upsert({ where: { id }, update: {}, create: {
                 id, cohortId, registrationId: registration.id,
                 title: received && registration.paymentStatus !== PaymentStatus.REFUNDED ? "Arrange cancellation refund and review invoice balances" : "Review linked QuickBooks invoice after cohort cancellation",
-                description: "The POC has received cancellation instructions. Confirm refunds and external invoice handling with finance; no refund was issued automatically.",
+                description: notificationMode === "notify" ? "The POC has received cancellation instructions. Confirm refunds and external invoice handling with finance; no refund was issued automatically." : "Cancelled silently because notifications were handled separately. Verify any remaining refund or external invoice handling with finance; no refund or customer message was issued automatically.",
                 category: OperationsTaskCategory.PAYMENT_FOLLOW_UP, priority: OperationsTaskPriority.HIGH, status: OperationsTaskStatus.OPEN
               } });
             }
           }
           await tx.paymentRecord.updateMany({ where: { registrationId: { in: registrationIds }, status: { in: [PaymentStatus.PENDING, PaymentStatus.INVOICED] } }, data: { status: PaymentStatus.CANCELLED } });
           await tx.registration.updateMany({ where: { id: { in: registrationIds } }, data: { status: RegistrationStatus.CANCELLED } });
-          await tx.participant.updateMany({ where: { cohortId, status: ParticipantStatus.REGISTERED }, data: { status: ParticipantStatus.CANCELLED } });
+          await tx.participant.updateMany({ where: { cohortId, registrationId: { in: registrationIds }, status: ParticipantStatus.REGISTERED }, data: { status: ParticipantStatus.CANCELLED } });
           await tx.calendarEvent.deleteMany({ where: { cohortId, provider: "ics" } });
           await tx.operationsTask.updateMany({ where: { cohortId, status: { in: [OperationsTaskStatus.OPEN, OperationsTaskStatus.IN_PROGRESS] }, category: { notIn: [OperationsTaskCategory.PAYMENT_FOLLOW_UP, OperationsTaskCategory.QUICKBOOKS_REVIEW] }, id: { not: `cohort-cancellation:${cohortId}` } }, data: { status: OperationsTaskStatus.CANCELLED } });
           return tx.cohort.update({ where: { id: cohortId }, data: { status: CohortStatus.CANCELLED } });
         }, { timeout: 60000, isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
-        await logAuditEvent({ actorUserId, entityType: "Cohort", entityId: cohortId, action: "CANCELLED", description: "Sent role-specific cancellation notices, removed calendar invitations, and cancelled cohort registrations and participants.", metadata: { notices: plan.notices.length, registrations: registrationIds.length } });
-        for (const registration of plan.cohort.registrations) {
+        await logAuditEvent({ actorUserId, entityType: "Cohort", entityId: cohortId, action: "CANCELLED", description: notificationMode === "silent" ? "Cancelled silently; prior notifications were handled separately. Pending messages stopped and future invitations removed without attendee notifications." : "Sent role-specific cancellation notices, removed calendar invitations, and cancelled cohort registrations and participants.", metadata: { notificationMode, notices: plan.notices.length, calendarNotifications: notificationMode === "notify", crmSyncQueued: notificationMode === "notify", registrations: registrationIds.length } });
+        for (const registration of notificationMode === "notify" ? plan.cohort.registrations : []) {
           void queueRegistrationCrmSync(registration.id, "registration.cancelled").catch(() => undefined);
           for (const participant of registration.participants) void queueParticipantCrmSync(participant.id, "participant.cancelled").catch(() => undefined);
         }
         return result;
       }
-    });
+    }, notificationMode);
   });
 }

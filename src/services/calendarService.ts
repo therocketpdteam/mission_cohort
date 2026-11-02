@@ -848,14 +848,14 @@ async function connectedGoogleEventDetails(sessionIds: string[]) {
   return { details, accessToken, calendarId: setup.calendarId };
 }
 
-export async function preflightCohortCalendarCancellation(cohortId: string) {
-  const sessions = await prisma.cohortSession.findMany({ where: { cohortId }, select: { id: true } });
+export async function preflightCohortCalendarCancellation(cohortId: string, options: { futureOnly?: boolean } = {}) {
+  const sessions = await prisma.cohortSession.findMany({ where: { cohortId, ...(options.futureOnly ? { endTime: { gt: new Date() } } : {}) }, select: { id: true } });
   const { details } = await connectedGoogleEventDetails(sessions.map((session) => session.id));
   const recipients = details.flatMap(({ googleEvent }) => (googleEvent?.attendees ?? []).map((attendee) => attendee.email ?? ""));
   await assertOutboundRecipientsAllowed("GOOGLE_CALENDAR", recipients);
 }
 
-export async function cancelGoogleCalendarInvites(input: { sessionId?: string; cohortId?: string }, options: { notifyAttendees: true }) {
+export async function cancelGoogleCalendarInvites(input: { sessionId?: string; cohortId?: string }, options: { notifyAttendees: boolean }) {
   const sessions = await prisma.cohortSession.findMany({
     where: input.sessionId ? { id: input.sessionId } : input.cohortId ? { cohortId: input.cohortId } : { id: "" },
     select: { id: true }
@@ -908,7 +908,7 @@ export async function cancelGoogleCalendarInvites(input: { sessionId?: string; c
   return {
     sessionsMatched: sessionIds.length,
     googleEventsCancelled: details.filter(({ googleEvent }) => Boolean(googleEvent)).length,
-    recipientsNotified: new Set(recipientEmails.filter(Boolean).map((email) => email.toLowerCase())).size
+    recipientsNotified: options.notifyAttendees ? new Set(recipientEmails.filter(Boolean).map((email) => email.toLowerCase())).size : 0
   };
 }
 

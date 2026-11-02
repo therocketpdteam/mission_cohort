@@ -22,6 +22,7 @@ import { applyRegistrationChanges, discardRegistrationChanges } from "@/services
 import { syncRegistrationToCrm } from "@/services/crmRegistrationWebhookService";
 import { planRegistrationJourneys } from "@/services/registrationJourneyService";
 import { mergeRegistrations, previewRegistrationMerge } from "@/services/registrationMergeService";
+import { cancellationNotificationMode } from "@/modules/cohorts/cancellation";
 
 export async function GET(request: Request) {
   try {
@@ -76,7 +77,7 @@ export async function PATCH(request: Request) {
     }
 
     if (body.action === "cancel") {
-      return ok(await cancelRegistration(body.id, { sendPocCancellation: body.sendPocCancellation === true }));
+      return ok(await cancelRegistration(body.id, { notificationMode: cancellationNotificationMode(body.notificationMode, body.sendPocCancellation === true ? "notify" : "silent") }));
     }
 
     if (body.action === "markUncollectible") {
@@ -84,7 +85,7 @@ export async function PATCH(request: Request) {
     }
 
     if (body.action === "previewCancellation") {
-      return ok(await previewRegistrationCancellation(body.id));
+      return ok(await previewRegistrationCancellation(body.id, undefined, { notificationMode: cancellationNotificationMode(body.notificationMode) }));
     }
 
     if (body.action === "reconcileCancellation") {

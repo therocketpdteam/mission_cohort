@@ -54,6 +54,7 @@ import { RegistrationCommunicationJourney } from "./RegistrationCommunicationJou
 import { RegistrationDocuments } from "./RegistrationDocuments";
 import { RegistrationEditor, RegistrationRemovalDialog } from "./RegistrationsClient";
 import { CohortCancellationDialog } from "./CohortCancellationDialog";
+import { BulkRegistrationCancellationDialog } from "./BulkRegistrationCancellationDialog";
 import { CohortSupportTeam } from "./CohortSupportTeam";
 import { cohortEditFields } from "./CohortsClient";
 import type { ParsedRosterParticipant } from "@/lib/rosterParser";
@@ -1457,6 +1458,7 @@ export function CohortDetailClient({ id }: { id: string }) {
   const [registrationSelection, setRegistrationSelection] = useState<GridRowSelectionModel>({ type: "include", ids: new Set() });
   const [bulkRegistrationPaymentStatus, setBulkRegistrationPaymentStatus] = useState("");
   const [updatingBulkRegistrations, setUpdatingBulkRegistrations] = useState(false);
+  const [bulkCancellationOpen, setBulkCancellationOpen] = useState(false);
   const [paymentDetail, setPaymentDetail] = useState<AdminRow | null>(null);
   const [registrationDetailBase, setRegistrationDetail] = useState<AdminRow | null>(null);
   const detailParticipants = useOptimisticProjection<AdminRow>(registrationDetailBase?.participants ?? [], "participants", { registrationId: registrationDetailBase?.id ?? "" });
@@ -3667,7 +3669,7 @@ export function CohortDetailClient({ id }: { id: string }) {
                 Apply Payment
               </Button>
               <Button size="small" variant="outlined" disabled={updatingBulkRegistrations} onClick={() => bulkUpdateSelectedRegistrations({ bulkAction: "confirm" })}>Confirm</Button>
-              <Button size="small" variant="outlined" color="warning" disabled={updatingBulkRegistrations} onClick={() => bulkUpdateSelectedRegistrations({ bulkAction: "cancel" })}>Cancel</Button>
+              <Button size="small" variant="outlined" color="warning" disabled={updatingBulkRegistrations} onClick={() => setBulkCancellationOpen(true)}>Cancel</Button>
               <Button size="small" variant="outlined" color="error" disabled={updatingBulkRegistrations} onClick={() => bulkUpdateSelectedRegistrations({ bulkAction: "archive" })}>Archive</Button>
               <Button
                 size="small"
@@ -4788,6 +4790,7 @@ export function CohortDetailClient({ id }: { id: string }) {
           </>
         )}
       </QuickViewDrawer>
+      {bulkCancellationOpen ? <BulkRegistrationCancellationDialog registrationIds={selectedRegistrationIds} onClose={() => setBulkCancellationOpen(false)} onCancelled={async () => { setRegistrationSelection({ type: "include", ids: new Set() }); await load(); }} onSuccess={notifySuccess} onError={notifyError} /> : null}
       <Box>{snackbar}</Box>
     </PageStack>
   );

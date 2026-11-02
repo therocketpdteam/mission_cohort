@@ -11,6 +11,7 @@ import { activateCohortRegistrationJourneys } from "./registrationJourneyService
 import { syncCohortQuickBooksProjectAfterCreate } from "./quickBooksService";
 import { syncCohortTotalsToCrm } from "./crmRegistrationWebhookService";
 import { calculateDistributionTotals } from "@/lib/distributionTotals";
+import { cancellationNotificationMode, type CancellationNotificationMode } from "@/modules/cohorts/cancellation";
 import { reconcileCohortSupportReminders } from "./cohortSupportService";
 
 const nestedSessionCreateSchema = z.object({
@@ -197,7 +198,8 @@ export async function updateCohort(id: string, input: z.input<typeof cohortUpdat
   return cohort;
 }
 
-export async function getCohortStatusChangePreview(id: string, nextStatus: CohortStatus) {
+export async function getCohortStatusChangePreview(id: string, nextStatus: CohortStatus, options: { notificationMode?: CancellationNotificationMode } = {}) {
+  const notificationMode = cancellationNotificationMode(options.notificationMode);
   const cohort = await prisma.cohort.findUnique({
     where: { id },
     include: {
@@ -219,7 +221,7 @@ export async function getCohortStatusChangePreview(id: string, nextStatus: Cohor
     CommunicationStatus.SENDING,
     CommunicationStatus.FAILED
   ];
-  const [unsentCommunications, recentSentCommunications] = await Promise.all([
+  const [unsentCommunications, recentSentCommunications, unsentCommunicationCount] = await Promise.all([
     prisma.cohortCommunication.findMany({
       where: {
         cohortId: id,
@@ -239,11 +241,12 @@ export async function getCohortStatusChangePreview(id: string, nextStatus: Cohor
       orderBy: { sentAt: "desc" },
       take: 10,
       include: { template: true, session: true }
-    })
+    }),
+    prisma.cohortCommunication.count({ where: { cohortId: id, sentAt: null, status: { in: unsentStatuses } } })
   ]);
   const linkedCalendarEvents = cohort.sessions.flatMap((session) =>
     session.calendarEvents
-      .filter((event) => event.providerEventId && event.status !== "FAILED")
+      .filter((event) => event.providerEventId && event.status !== "FAILED" && session.endTime > new Date())
       .map((event) => ({
         id: event.id,
         sessionId: session.id,
@@ -255,7 +258,7 @@ export async function getCohortStatusChangePreview(id: string, nextStatus: Cohor
   );
 
   const cancellation = nextStatus === CohortStatus.CANCELLED
-    ? await (await import("./cohortCancellationService")).getCohortCancellationPreview(id)
+    ? await (await import("./cohortCancellationService")).getCohortCancellationPreview(id, prisma, { notificationMode })
     : null;
   return {
     cohort: {
@@ -263,9 +266,11 @@ export async function getCohortStatusChangePreview(id: string, nextStatus: Cohor
       title: cohort.title,
       currentStatus: cohort.status,
       nextStatus,
-      participantCount: cohort._count.participants,
-      registrationCount: cohort._count.registrations
+      participantCount: cancellation ? cancellation.cohort.registrations.flatMap(r => r.participants.filter(p => p.status === "REGISTERED")).length : cohort._count.participants,
+      registrationCount: cancellation?.cohort.registrations.length ?? cohort._count.registrations
     },
+    notificationMode,
+    unsentCommunicationCount,
     automaticEmails: cancellation?.notices ?? [],
     blockers: cancellation?.blockers ?? [],
     unsentCommunications: unsentCommunications.map((communication) => ({
@@ -290,7 +295,7 @@ export async function getCohortStatusChangePreview(id: string, nextStatus: Cohor
     linkedCalendarEvents,
     warnings: nextStatus === CohortStatus.CANCELLED
       ? [
-        "Cancellation first sends the participant and POC notices shown in this review, then removes calendar invitations, then marks the cohort, registrations, and participants Cancelled.",
+        notificationMode === "silent" ? "Cancel silently: no cancellation emails, Google attendee notifications, or CRM cancellation webhooks will be sent. Future invitations are removed silently, then the cohort and its current registrations and participants are marked Cancelled." : "Cancellation first sends the participant and POC notices shown in this review, then removes future calendar invitations, then marks the cohort, registrations, and participants Cancelled.",
         "Unsent reminders are paused. A failed email or calendar step stops cancellation; sent notices are preserved on retry.",
         "Refunds are not issued automatically. Finance follow-up tasks remain open for refunds and linked QuickBooks invoices."
       ]

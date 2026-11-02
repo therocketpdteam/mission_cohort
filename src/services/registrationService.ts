@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { CommunicationStatus, IntegrationJobType, IntegrationProvider, InvoiceDraftStatus, OperationsTaskStatus, ParticipantListStatus, ParticipantStatus, PaymentStatus, Prisma, RecipientScope, RegistrationStatus, SupportingDocumentStatus, TemplateType } from "@prisma/client";
+import { CommunicationStatus, IntegrationJobType, IntegrationProvider, InvoiceDraftStatus, OperationsTaskCategory, OperationsTaskPriority, OperationsTaskStatus, ParticipantListStatus, ParticipantStatus, PaymentStatus, Prisma, RecipientScope, RegistrationStatus, SupportingDocumentStatus, TemplateType } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { shouldDefaultPrimaryContactParticipant } from "@/lib/rosterStatus";
@@ -20,6 +20,8 @@ import { renderMergeFields } from "@/modules/email/mergeFields";
 import { cancellationInvoiceDisposition, cancellationPaymentMessage, registrationCancellationAttendanceMessage, registrationCancellationEmail } from "@/config/registrationCancellation";
 import { queueIntegrationJob } from "./integrationService";
 import { ensureRegistrationDeliveryJobType } from "./registrationDeliveryJobService";
+import { cancellationNotificationMode, type CancellationNotificationMode } from "@/modules/cohorts/cancellation";
+import { assertCancellationDeliveryIdle, suppressSilentCancellationDelivery } from "./cancellationDeliveryService";
 
 type BulkMoveRegistrationSummaryInput = Array<{
   id: string;
@@ -319,7 +321,8 @@ export async function confirmRegistration(id: string) {
   return registration;
 }
 
-export async function previewRegistrationCancellation(id: string, client = prisma) {
+export async function previewRegistrationCancellation(id: string, client = prisma, options: { notificationMode?: CancellationNotificationMode } = {}) {
+  const notificationMode = cancellationNotificationMode(options.notificationMode);
   const registration = await client.registration.findUniqueOrThrow({
     where: { id },
     include: {
@@ -401,6 +404,7 @@ export async function previewRegistrationCancellation(id: string, client = prism
   const renderedBodyText = renderMergeFields(registrationCancellationEmail.bodyText, context).output;
 
   return {
+    notificationMode,
     registration: {
       id: registration.id,
       primaryContactName: registration.primaryContactName,
@@ -434,13 +438,15 @@ export async function previewRegistrationCancellation(id: string, client = prism
       participantEmailsSent: 0,
       calendarNotificationsSent: 0,
       reportingValueAfterCancellation: 0,
-      crmStatus: "cancelled"
+      crmStatus: notificationMode === "silent" ? "unchanged" : "cancelled",
+      crmSyncQueued: notificationMode === "notify"
     },
     invoice: {
       disposition: invoiceDisposition,
       invoiceNumber: latestInvoice?.invoiceNumber ?? registration.invoiceNumber ?? null,
-      willGenerateVoidedPdf: invoiceDisposition === "void_and_attach",
-      willAttachVoidedPdf: invoiceDisposition === "void_and_attach",
+      willGenerateVoidedPdf: notificationMode === "notify" && invoiceDisposition === "void_and_attach",
+      willAttachVoidedPdf: notificationMode === "notify" && invoiceDisposition === "void_and_attach",
+      externalReviewRequired: Boolean(registration.quickBooksInvoiceRef || latestInvoice?.quickBooksInvoiceRef),
       requiresRefundHandling: invoiceDisposition === "refund_required"
     },
     email: {
@@ -454,12 +460,12 @@ export async function previewRegistrationCancellation(id: string, client = prism
     },
     blockers: [
       registration.status === RegistrationStatus.CANCELLED ? "This registration is already cancelled." : "",
-      !registration.primaryContactEmail.trim() ? "A POC email is required before cancellation." : ""
+      notificationMode === "notify" && !registration.primaryContactEmail.trim() ? "A POC email is required before cancellation." : ""
     ].filter(Boolean)
   };
 }
 
-export async function reconcileCancelledRegistrationState(id: string) {
+export async function reconcileCancelledRegistrationState(id: string, options: { suppressCrm?: boolean } = {}) {
   const registration = await prisma.registration.findUniqueOrThrow({
     where: { id },
     select: { id: true, status: true, paymentStatus: true }
@@ -504,7 +510,7 @@ export async function reconcileCancelledRegistrationState(id: string) {
     return { participants, tasks, paymentRegistrationUpdated: true, paymentRecordsCancelled: paymentRecords.count };
   });
 
-  await Promise.all(participantsToCancel.map((participant) => queueParticipantCrmSync(participant.id, "participant.cancelled")));
+  if (!options.suppressCrm) await Promise.all(participantsToCancel.map((participant) => queueParticipantCrmSync(participant.id, "participant.cancelled")));
   const result = {
     registrationId: id,
     paymentStatus: cancelUnpaidBilling ? PaymentStatus.CANCELLED : registration.paymentStatus,
@@ -525,18 +531,32 @@ export async function reconcileCancelledRegistrationState(id: string) {
   return result;
 }
 
-export async function cancelRegistration(id: string, options: { sendPocCancellation?: boolean } = {}) {
-  const preview = await previewRegistrationCancellation(id);
+export async function cancelRegistration(id: string, options: { sendPocCancellation?: boolean; notificationMode?: CancellationNotificationMode } = {}) {
+  const notificationMode = cancellationNotificationMode(options.notificationMode, options.sendPocCancellation ? "notify" : "silent");
+  const notify = notificationMode === "notify";
+  const preview = await previewRegistrationCancellation(id, prisma, { notificationMode });
   if (preview.blockers.length > 0) {
     throw Object.assign(new Error(preview.blockers.join(" ")), { code: "BAD_REQUEST", status: 400 });
   }
+  const participants = await prisma.participant.findMany({ where: { registrationId: id }, select: { id: true } });
+  const participantIds = participants.map(p => p.id);
+  await assertCancellationDeliveryIdle([id], participantIds);
   const calendar = await removeFutureGoogleCalendarAttendees({
     cohortId: (await prisma.registration.findUniqueOrThrow({ where: { id }, select: { cohortId: true } })).cohortId,
     registrationId: id,
     reason: "Registration cancelled."
   });
-  let registration = await updateRegistration(id, { status: RegistrationStatus.CANCELLED });
-  const reconciliation = await reconcileCancelledRegistrationState(id);
+  let registration = notify
+    ? await updateRegistration(id, { status: RegistrationStatus.CANCELLED })
+    : await prisma.$transaction(async tx => {
+      await suppressSilentCancellationDelivery(tx, [id], participantIds);
+      await tx.cohortCommunication.updateMany({
+        where: { OR: [{ registrationId: id }, { participantId: { in: participantIds } }], status: { in: [CommunicationStatus.DRAFT, CommunicationStatus.SCHEDULED, CommunicationStatus.FAILED] } },
+        data: { status: CommunicationStatus.CANCELLED, scheduledFor: null, providerError: "Registration cancelled silently; notification handled separately." }
+      });
+      return tx.registration.update({ where: { id }, data: { status: RegistrationStatus.CANCELLED } });
+    });
+  const reconciliation = await reconcileCancelledRegistrationState(id, { suppressCrm: !notify });
   registration = { ...registration, paymentStatus: reconciliation.paymentStatus };
 
   let cancellationInvoice = null;
@@ -548,15 +568,13 @@ export async function cancelRegistration(id: string, options: { sendPocCancellat
         data: {
           status: InvoiceDraftStatus.VOIDED,
           notes: [preview.registration.invoiceNotes, "VOIDED - Registration cancelled. This invoice is no longer payable."].filter(Boolean).join("\n\n"),
-          pdfFileKey: null,
-          pdfUrl: null
+          ...(notify ? { pdfFileKey: null, pdfUrl: null } : {})
         }
       });
-      cancellationInvoice = await generateInvoicePdf(preview.registration.invoiceId);
-      await prisma.registration.update({
-        where: { id: registration.id },
-        data: { invoiceUrl: cancellationInvoice.pdfUrl }
-      });
+      if (notify) {
+        cancellationInvoice = await generateInvoicePdf(preview.registration.invoiceId);
+        await prisma.registration.update({ where: { id: registration.id }, data: { invoiceUrl: cancellationInvoice.pdfUrl } });
+      }
     } catch (error) {
       invoiceError = error instanceof Error ? error.message : "The voided invoice PDF could not be generated.";
     }
@@ -564,7 +582,7 @@ export async function cancelRegistration(id: string, options: { sendPocCancellat
 
   let communication = null;
   let communicationError: string | null = null;
-  if (options.sendPocCancellation) {
+  if (notify) {
     try {
       if (preview.invoice.disposition === "void_and_attach" && (!cancellationInvoice?.pdfFileKey || !cancellationInvoice.pdfUrl)) {
         throw new Error(invoiceError || "The voided invoice PDF could not be generated, so the cancellation email was not sent.");
@@ -607,31 +625,39 @@ export async function cancelRegistration(id: string, options: { sendPocCancellat
     }
   }
 
-  if (registration.quickBooksInvoiceRef) {
+  if (registration.quickBooksInvoiceRef && notify) {
     void voidRegistrationQuickBooksInvoice(registration.id).catch(() => undefined);
+  } else if (!notify && preview.invoice.externalReviewRequired) {
+    await prisma.operationsTask.upsert({ where: { id: `silent-cancellation-finance:${registration.id}` }, update: {}, create: {
+      id: `silent-cancellation-finance:${registration.id}`, cohortId: registration.cohortId, registrationId: registration.id,
+      category: OperationsTaskCategory.QUICKBOOKS_REVIEW, priority: OperationsTaskPriority.HIGH, status: OperationsTaskStatus.OPEN,
+      title: "Review external invoice after silent cancellation",
+      description: "Cancelled without customer communications. The linked QuickBooks invoice was not changed automatically; verify any required finance adjustment separately."
+    } });
   }
 
   logAuditEventAsync({
     entityType: "Registration",
     entityId: registration.id,
     action: "CANCELLED",
-    description: "Registration cancelled by an administrator",
+    description: notify ? "Registration cancelled by an administrator" : "Registration cancelled silently; customer notifications handled separately",
     metadata: {
       cohortId: registration.cohortId,
       pocEmail: preview.email.to,
       participantEmails: preview.registration.participantEmails,
       calendar,
-      sendPocCancellation: Boolean(options.sendPocCancellation),
+      notificationMode,
+      sendPocCancellation: notify,
       communicationError,
       invoiceDisposition: preview.invoice.disposition,
       invoiceId: cancellationInvoice?.id ?? preview.registration.invoiceId,
       invoiceError,
-      crmStatus: "cancelled",
+      crmStatus: notify ? "cancelled" : "unchanged",
       reportingValue: 0
     }
   });
-  void queueRegistrationCrmSync(registration.id, "registration.cancelled").catch(() => undefined);
-  return { ...registration, cancellation: { preview, calendar, invoice: cancellationInvoice, invoiceError, communication, communicationError } };
+  if (notify) void queueRegistrationCrmSync(registration.id, "registration.cancelled").catch(() => undefined);
+  return { ...registration, cancellation: { notificationMode, preview, calendar, invoice: cancellationInvoice, invoiceError, communication, communicationError } };
 }
 
 export async function archiveRegistration(id: string, reason?: string) {
@@ -750,6 +776,7 @@ export async function bulkUpdateRegistrations(input: {
   action?: "confirm" | "cancel" | "archive" | "restore";
   paymentStatus?: PaymentStatus;
   supportingDocumentStatus?: SupportingDocumentStatus;
+  notificationMode?: CancellationNotificationMode;
 }) {
   const ids = input.ids.filter(Boolean);
 
@@ -760,10 +787,16 @@ export async function bulkUpdateRegistrations(input: {
   if (input.action === "confirm") {
     await prisma.registration.updateMany({ where: { id: { in: ids } }, data: { status: RegistrationStatus.CONFIRMED } });
   } else if (input.action === "cancel") {
+    const notificationMode = cancellationNotificationMode(input.notificationMode, "silent");
+    const previews = await Promise.all(ids.map(id => previewRegistrationCancellation(id, prisma, { notificationMode })));
+    const blockers = previews.flatMap(p => p.blockers);
+    if (blockers.length) throw Object.assign(new Error(blockers.join(" ")), { code: "CANCELLATION_BLOCKED", status: 409 });
+    const emailFailures = [];
     for (const id of ids) {
-      await cancelRegistration(id);
+      const result = await cancelRegistration(id, { notificationMode });
+      if (result.cancellation.communicationError) emailFailures.push({ id, error: result.cancellation.communicationError });
     }
-    return { count: ids.length };
+    return { count: ids.length, notificationMode, emailFailures };
   } else if (input.action === "archive") {
     for (const id of ids) {
       await archiveRegistration(id, "Registration archived from bulk action.");

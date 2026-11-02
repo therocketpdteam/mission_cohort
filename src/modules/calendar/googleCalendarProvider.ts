@@ -300,9 +300,7 @@ export async function deleteGoogleCalendarEvent(input: {
   const url = new URL(
     `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarIdValue)}/events/${encodeURIComponent(input.providerEventId)}`
   );
-  if (input.sendUpdates) {
-    url.searchParams.set("sendUpdates", "all");
-  }
+  url.searchParams.set("sendUpdates", input.sendUpdates ? "all" : "none");
 
   const response = await fetch(url, {
     method: "DELETE",

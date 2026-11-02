@@ -1,3 +1,11 @@
+export type CancellationNotificationMode = "notify" | "silent";
+
+export function cancellationNotificationMode(value: unknown, fallback: CancellationNotificationMode = "notify"): CancellationNotificationMode {
+  if (value === undefined || value === null) return fallback;
+  if (value === "notify" || value === "silent") return value;
+  throw Object.assign(new Error("Choose notify or silent for cancellation notifications."), { code: "BAD_REQUEST", status: 400 });
+}
+
 type Registration = {
   id: string;
   primaryContactEmail: string;
@@ -6,7 +14,8 @@ type Registration = {
   participants: Array<{ id: string; email: string; status: string }>;
 };
 
-export function cohortCancellationRecipients(registrations: Registration[]) {
+export function cohortCancellationRecipients(registrations: Registration[], mode: CancellationNotificationMode = "notify") {
+  if (mode === "silent") return [];
   registrations = registrations.filter((registration) => registration.source !== "historical_import" && registration.externalSource !== "historical_import");
   const normalize = (email: string) => email.trim().toLowerCase();
   const pocs = registrations.map((registration) => ({
@@ -45,10 +54,10 @@ export async function runCohortCancellationSteps<T>(steps: {
   sendNotices: () => Promise<void>;
   removeCalendar: () => Promise<void>;
   finalize: () => Promise<T>;
-}) {
+}, mode: CancellationNotificationMode = "notify") {
   await steps.preflight();
   await steps.pauseReminders();
-  await steps.sendNotices();
+  if (mode === "notify") await steps.sendNotices();
   await steps.removeCalendar();
   return steps.finalize();
 }
