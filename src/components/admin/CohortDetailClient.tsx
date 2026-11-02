@@ -37,6 +37,7 @@ import { Fragment } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { adminApi, uploadAdminFile } from "@/lib/adminApi";
 import { activeEmailIssues } from "@/lib/emailIssueState";
+import { calculateCohortFinance, registrationCollectedAmount, type CohortFinanceSummary } from "@/lib/cohortFinance";
 import { formatProperDisplay, formatRegistrationPaymentStatus, formatRegistrationSource, formatStatusLabel, isCompedRegistration, matchesRegistrationPaymentFilter } from "@/lib/formatting";
 import { formatDateInZone, formatDateTimeInZone, formatTimeInZone } from "@/lib/timezones";
 import { buildSessionCalendarDescription } from "@/modules/calendar/description";
@@ -316,30 +317,6 @@ function money(value: unknown) {
 
 function moneyNumber(value: unknown) {
   return Number(value ?? 0);
-}
-
-function registrationRelatedRows(registration: AdminRow, rows: AdminRow[] | undefined, fallbackKey: "paymentRecords" | "invoiceDrafts") {
-  const related = rows?.filter((row) => row.registrationId === registration.id);
-  return related?.length ? related : ((registration[fallbackKey] ?? []) as AdminRow[]);
-}
-
-function registrationCollectedAmount(registration: AdminRow, paymentRows?: AdminRow[], invoiceRows?: AdminRow[]) {
-  if (isCompedRegistration(registration)) {
-    return 0;
-  }
-
-  const paidFromRecords = registrationRelatedRows(registration, paymentRows, "paymentRecords")
-    .filter((payment) => ["PAID", "PARTIALLY_PAID"].includes(String(payment.status ?? "").toUpperCase()))
-    .reduce((sum, payment) => sum + moneyNumber(payment.amount), 0);
-  const paidFromInvoices = registrationRelatedRows(registration, invoiceRows, "invoiceDrafts")
-    .reduce((sum, invoice) => sum + moneyNumber(invoice.paidAmount), 0);
-  const explicitPaid = Math.max(paidFromRecords, paidFromInvoices);
-
-  if (explicitPaid > 0) {
-    return explicitPaid;
-  }
-
-  return String(registration.paymentStatus ?? "").toUpperCase() === "PAID" ? moneyNumber(registration.totalAmount) : 0;
 }
 
 function isWithdrawnFinancialRegistration(registration: AdminRow) {
@@ -757,16 +734,13 @@ function RegistrationEvolutionChart({
 }
 
 function FinanceSnapshotCard({
-  totalAmount,
-  paidAmount,
+  finance,
   projectReturn
 }: {
-  totalAmount: number;
-  paidAmount: number;
+  finance: CohortFinanceSummary;
   projectReturn?: number;
 }) {
-  const invoicedAmount = Math.max(totalAmount - paidAmount, 0);
-  const collectedPercent = totalAmount > 0 ? Math.min(100, Math.round((paidAmount / totalAmount) * 100)) : 0;
+  const { totalSales: totalAmount, paidAmount, outstandingAmount: invoicedAmount, paidPercent: collectedPercent, uncollectibleAmount } = finance;
 
   return (
     <article
@@ -781,6 +755,7 @@ function FinanceSnapshotCard({
         <strong>{money(totalAmount)}</strong>
         <p>
           {collectedPercent}% paid · {money(invoicedAmount)} invoiced
+          {uncollectibleAmount > 0 ? ` · ${money(uncollectibleAmount)} uncollectible` : ""}
           {typeof projectReturn === "number" ? ` · ${money(projectReturn)} project return` : ""}
         </p>
       </div>
@@ -2019,10 +1994,8 @@ export function CohortDetailClient({ id }: { id: string }) {
   }, []);
 
   const totals = useMemo(() => {
-    const financialRegistrations = registrations.filter((registration) => !isWithdrawnFinancialRegistration(registration));
-    const totalAmount = financialRegistrations.reduce((sum, registration) => sum + registrationRevenueAmount(registration), 0);
-    const paidAmount = financialRegistrations.reduce((sum, registration) => sum + registrationCollectedAmount(registration, payments, invoiceDrafts), 0);
-    const invoicedAmount = Math.max(totalAmount - paidAmount, 0);
+    const finance = calculateCohortFinance({ registrations, payments, invoices: invoiceDrafts });
+    const { totalSales: totalAmount, paidAmount, outstandingAmount: invoicedAmount } = finance;
     const activeRegistrations = registrations.filter((registration) => !registration.archivedAt && registration.status !== "CANCELLED");
     const participantSeats = activeRegistrations.reduce((sum, registration) => sum + Number(registration.participantCount ?? 0), 0);
     const uniqueParticipants = uniqueActiveParticipantCount(participants);
@@ -2030,7 +2003,7 @@ export function CohortDetailClient({ id }: { id: string }) {
     const openPaymentFollowUps = tasks.filter((task) => task.status !== "COMPLETED" && task.category === "PAYMENT_FOLLOW_UP").length;
     const upcomingSessions = sessions.filter((session) => new Date(session.startTime).getTime() >= Date.now()).length;
 
-    return { totalAmount, paidAmount, invoicedAmount, participantSeats, uniqueParticipants, rosterComplete, openPaymentFollowUps, upcomingSessions };
+    return { totalAmount, paidAmount, invoicedAmount, finance, participantSeats, uniqueParticipants, rosterComplete, openPaymentFollowUps, upcomingSessions };
   }, [invoiceDrafts, participants, payments, registrations, sessions, tasks]);
 
   const duplicateParticipantGroups = useMemo(() => findDuplicateParticipantGroups(participants), [participants]);
@@ -3342,8 +3315,7 @@ export function CohortDetailClient({ id }: { id: string }) {
               </article>
             ))}
             <FinanceSnapshotCard
-              totalAmount={totals.totalAmount}
-              paidAmount={totals.paidAmount}
+              finance={totals.finance}
               projectReturn={distribution?.totals?.projectReturn}
             />
           </div>

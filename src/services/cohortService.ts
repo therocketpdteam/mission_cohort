@@ -332,10 +332,14 @@ export async function listCohorts() {
         }
       },
       operationsTasks: { select: { category: true, registrationId: true, sessionId: true, status: true } },
-      registrations: { where: { archivedAt: null }, select: { totalAmount: true, status: true, paymentStatus: true, participantListStatus: true } },
+      registrations: { where: { archivedAt: null }, select: { id: true, totalAmount: true, status: true, paymentStatus: true, paymentMethod: true, participantCount: true, participantListStatus: true } },
       paymentRecords: {
         where: { registration: { is: { archivedAt: null } } },
-        select: { amount: true, status: true }
+        select: { registrationId: true, amount: true, status: true }
+      },
+      invoiceDrafts: {
+        where: { registration: { is: { archivedAt: null } } },
+        select: { registrationId: true, paidAmount: true, status: true }
       },
       distribution: {
         include: {

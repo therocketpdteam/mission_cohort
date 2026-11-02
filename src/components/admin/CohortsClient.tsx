@@ -32,6 +32,7 @@ import type { CSSProperties } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { adminApi, uploadAdminFile } from "@/lib/adminApi";
+import { calculateCohortFinance } from "@/lib/cohortFinance";
 import { formatProperDisplay, formatStatusLabel } from "@/lib/formatting";
 import { dateTimeInputInZoneToIso, formatDateInZone } from "@/lib/timezones";
 import {
@@ -185,22 +186,11 @@ function formatCohortDateRange(row: AdminRow) {
 }
 
 function cohortFinanceSummary(row: AdminRow) {
-  const billableRegistrations = (row.registrations ?? []).filter((registration: AdminRow) => {
-    const registrationStatus = String(registration.status ?? "").toUpperCase();
-    const paymentStatus = String(registration.paymentStatus ?? "").toUpperCase();
-    return registrationStatus !== "CANCELLED" && !["CANCELLED", "REFUNDED"].includes(paymentStatus);
+  return calculateCohortFinance({
+    registrations: row.registrations ?? [],
+    payments: row.paymentRecords,
+    invoices: row.invoiceDrafts
   });
-  const totalSales = billableRegistrations.reduce((sum: number, registration: AdminRow) => sum + Number(registration.totalAmount ?? 0), 0);
-  const collectibleSales = billableRegistrations
-    .filter((registration: AdminRow) => String(registration.paymentStatus ?? "").toUpperCase() !== "UNCOLLECTIBLE")
-    .reduce((sum: number, registration: AdminRow) => sum + Number(registration.totalAmount ?? 0), 0);
-  const paidAmount = (row.paymentRecords ?? [])
-    .filter((payment: AdminRow) => payment.status === "PAID")
-    .reduce((sum: number, payment: AdminRow) => sum + Number(payment.amount ?? 0), 0);
-  const paidPercent = collectibleSales > 0 ? Math.min(100, Math.round((paidAmount / collectibleSales) * 100)) : 100;
-  const outstandingAmount = Math.max(0, collectibleSales - paidAmount);
-
-  return { totalSales, collectibleSales, paidAmount, paidPercent, outstandingAmount };
 }
 
 function isEndedCohort(row: AdminRow) {
