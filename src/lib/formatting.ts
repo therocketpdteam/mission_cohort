@@ -92,6 +92,23 @@ export function formatRegistrationPaymentStatus(input?: {
   return isCompedRegistration(input) ? "Free" : formatStatusLabel(input?.paymentStatus);
 }
 
+export function matchesRegistrationPaymentFilter(
+  registration: Parameters<typeof formatRegistrationPaymentStatus>[0],
+  filter: string
+) {
+  const selected = filter.trim().toUpperCase();
+  if (!selected) {
+    return true;
+  }
+
+  const displayStatus = formatRegistrationPaymentStatus(registration);
+  if (displayStatus === "Withdrawn" || displayStatus === "Free") {
+    return selected === displayStatus.toUpperCase();
+  }
+
+  return String(registration?.paymentStatus ?? "").toUpperCase() === selected;
+}
+
 export function formatHumanLabel(value: string) {
   return value
     .replace(/([a-z])([A-Z])/g, "$1 $2")

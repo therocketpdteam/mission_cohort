@@ -38,7 +38,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
 import { activeEmailIssues } from "@/lib/emailIssueState";
 import { pricePerParticipantForCohort, registrationTotalAfterSeatChange, registrationTotalForCohort, sessionCountForPricing } from "@/config/cohortPricing";
-import { formatProperDisplay, formatRegistrationPaymentStatus, formatRegistrationSource, formatStatusLabel } from "@/lib/formatting";
+import { formatProperDisplay, formatRegistrationPaymentStatus, formatRegistrationSource, formatStatusLabel, matchesRegistrationPaymentFilter } from "@/lib/formatting";
 import { RosterWorkbench } from "./RosterWorkbench";
 import { RegistrationPendingChangesPanel } from "./RegistrationPendingChangesPanel";
 import { RegistrationDeliveryPreflight } from "./RegistrationDeliveryPreflight";
@@ -2305,7 +2305,7 @@ export function RegistrationsClient({ requestedRegistrationId }: { requestedRegi
           .join(" ")
           .toLowerCase()
           .includes(search.toLowerCase());
-        const matchPayment = paymentStatus ? row.paymentStatus === paymentStatus : true;
+        const matchPayment = matchesRegistrationPaymentFilter(row, paymentStatus);
         const matchRoster = rosterStatus ? rosterStatusFromCounts(row) === rosterStatus : true;
         const sourceLabel = formatRegistrationSource(row);
         const matchSource = source ? sourceLabel === source : true;
@@ -2500,6 +2500,8 @@ export function RegistrationsClient({ requestedRegistrationId }: { requestedRegi
         <TextField select label="Payment status" value={paymentStatus} onChange={(event) => setPaymentStatus(event.target.value)} sx={{ minWidth: 220 }}>
           <MenuItem value="">All payment statuses</MenuItem>
           {paymentStatuses.map((value) => <MenuItem value={value} key={value}>{formatStatusLabel(value)}</MenuItem>)}
+          <MenuItem value="WITHDRAWN">Withdrawn</MenuItem>
+          <MenuItem value="FREE">Free</MenuItem>
         </TextField>
         <TextField select label="Roster" value={rosterStatus} onChange={(event) => setRosterStatus(event.target.value)} sx={{ minWidth: 180 }}>
           <MenuItem value="">All rosters</MenuItem>

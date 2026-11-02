@@ -37,7 +37,7 @@ import { Fragment } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { adminApi, uploadAdminFile } from "@/lib/adminApi";
 import { activeEmailIssues } from "@/lib/emailIssueState";
-import { formatProperDisplay, formatRegistrationPaymentStatus, formatRegistrationSource, formatStatusLabel, isCompedRegistration } from "@/lib/formatting";
+import { formatProperDisplay, formatRegistrationPaymentStatus, formatRegistrationSource, formatStatusLabel, isCompedRegistration, matchesRegistrationPaymentFilter } from "@/lib/formatting";
 import { formatDateInZone, formatDateTimeInZone, formatTimeInZone } from "@/lib/timezones";
 import { buildSessionCalendarDescription } from "@/modules/calendar/description";
 import { mergeFields, renderMergeFields, sampleMergeContext } from "@/modules/email/mergeFields";
@@ -2053,7 +2053,7 @@ export function CohortDetailClient({ id }: { id: string }) {
   const pendingSessionChanges = (cohort?.readiness?.sessionDetails ?? []).filter((session: AdminRow) => session.calendar?.stale);
 
   const filteredRegistrations = useMemo(() => registrations.filter((registration) => {
-    const paymentMatch = !registrationPaymentFilter || registration.paymentStatus === registrationPaymentFilter;
+    const paymentMatch = matchesRegistrationPaymentFilter(registration, registrationPaymentFilter);
     const rosterMatch = !registrationRosterFilter || registrationRosterStatus(registration) === registrationRosterFilter;
     return paymentMatch && rosterMatch;
   }).sort((a, b) => {
@@ -3672,6 +3672,8 @@ export function CohortDetailClient({ id }: { id: string }) {
             <TextField select label="Payment" value={registrationPaymentFilter} onChange={(event) => setRegistrationPaymentFilter(event.target.value)}>
               <MenuItem value="">All payments</MenuItem>
               {paymentStatuses.map((value) => <MenuItem value={value} key={value}>{formatStatusLabel(value)}</MenuItem>)}
+              <MenuItem value="WITHDRAWN">Withdrawn</MenuItem>
+              <MenuItem value="FREE">Free</MenuItem>
             </TextField>
             <TextField select label="Roster" value={registrationRosterFilter} onChange={(event) => setRegistrationRosterFilter(event.target.value)}>
               <MenuItem value="">All rosters</MenuItem>
