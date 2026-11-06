@@ -566,6 +566,7 @@ export function AppDataGrid<R extends AdminRow = AdminRow>({
   rows,
   columns,
   loading,
+  pagination = true,
   initialState,
   pageSizeOptions = [25, 50, 100],
   onRowClick,
@@ -576,6 +577,7 @@ export function AppDataGrid<R extends AdminRow = AdminRow>({
   rows: R[];
   columns: GridColDef<R>[];
   loading?: boolean;
+  pagination?: boolean;
   initialState?: { pagination?: { paginationModel?: { pageSize?: number } } };
   pageSizeOptions?: number[];
   rowHeight?: number;
@@ -591,7 +593,7 @@ export function AppDataGrid<R extends AdminRow = AdminRow>({
   const [pageSize, setPageSize] = useState(initialState?.pagination?.paginationModel?.pageSize && normalizedOptions.includes(initialState.pagination.paginationModel.pageSize) ? initialState.pagination.paginationModel.pageSize : normalizedOptions[0]);
   const [page, setPage] = useState(0);
   const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
-  const visibleRows = rows.slice(page * pageSize, page * pageSize + pageSize);
+  const visibleRows = pagination ? rows.slice(page * pageSize, page * pageSize + pageSize) : rows;
   const columnWeights = columns.map((column) => column.width ?? column.minWidth ?? (column.flex ?? 1) * 160);
   const totalColumnWeight = columnWeights.reduce((sum, width) => sum + width, 0);
 
@@ -698,7 +700,7 @@ export function AppDataGrid<R extends AdminRow = AdminRow>({
           </tbody>
         </table>
       </div>
-      <div className="table-footer">
+      {pagination && <div className="table-footer">
         <span>
           {rows.length === 0 ? "No rows" : `Showing ${page * pageSize + 1}-${Math.min(rows.length, (page + 1) * pageSize)} of ${rows.length} records`}
         </span>
@@ -710,7 +712,7 @@ export function AppDataGrid<R extends AdminRow = AdminRow>({
           <span>Page {page + 1} of {pageCount}</span>
           <Button type="button" variant="outlined" size="small" disabled={page >= pageCount - 1} onClick={() => setPage((current) => Math.min(pageCount - 1, current + 1))}>Next</Button>
         </div>
-      </div>
+      </div>}
     </div>
   );
 }
