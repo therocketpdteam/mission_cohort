@@ -48,6 +48,7 @@ import { registrationTotalAfterSeatChange } from "@/config/cohortPricing";
 import { findDuplicateParticipantGroups, uniqueActiveParticipantCount } from "@/lib/duplicateParticipants";
 import { RosterWorkbench } from "./RosterWorkbench";
 import { RegistrationPendingChangesPanel } from "./RegistrationPendingChangesPanel";
+import { countPendingRegistrationChanges } from "@/lib/registrationPendingChanges";
 import { RegistrationDeliveryPreflight } from "./RegistrationDeliveryPreflight";
 import { PocCommunicationHistory } from "./PocCommunicationHistory";
 import { RegistrationCommunicationJourney } from "./RegistrationCommunicationJourney";
@@ -4562,11 +4563,14 @@ export function CohortDetailClient({ id }: { id: string }) {
           setRegistrationDialogOpen(false);
           setEditingRegistration(null);
         }}
-        onSaved={async () => {
-          const defer = Boolean(editingRegistration && ["PUBLISHED", "ACTIVE"].includes(String(cohort?.derivedStatus ?? cohort?.status)));
-          notifySuccess(defer ? "Registration saved. Review and apply its delivery changes." : editingRegistration ? "Registration updated" : "Registration created");
+        onSaved={async (saved) => {
+          const pendingCount = countPendingRegistrationChanges(saved.pendingChanges);
+          notifySuccess(pendingCount > 0 ? "Registration saved. Review and apply its delivery changes." : editingRegistration ? "Registration updated" : "Registration created");
+          if (pendingCount > 0) {
+            await openRegistrationDetail(saved);
+          }
           await load();
-          if (registrationDetail?.id) {
+          if (pendingCount === 0 && registrationDetail?.id) {
             try {
               setRegistrationDetail(await adminApi<AdminRow>(`/api/registrations?id=${registrationDetail.id}`));
             } catch {

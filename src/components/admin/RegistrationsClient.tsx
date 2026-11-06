@@ -9,7 +9,7 @@ import { CancelOutlined } from "@/components/ui/icons";
 import { CheckCircleOutline } from "@/components/ui/icons";
 import { DeleteOutline } from "@/components/ui/icons";
 import { EditOutlined } from "@/components/ui/icons";
-import { ExpandMoreOutlined } from "@/components/ui/icons";
+import { ExpandMoreOutlined, VisibilityOutlined } from "@/components/ui/icons";
 import { HelpOutline } from "@/components/ui/icons";
 import { WarningAmberOutlined } from "@/components/ui/icons";
 import {
@@ -42,6 +42,7 @@ import { formatProperDisplay, formatRegistrationPaymentStatus, formatRegistratio
 import type { CancellationNotificationMode } from "@/modules/cohorts/cancellation";
 import { RosterWorkbench } from "./RosterWorkbench";
 import { RegistrationPendingChangesPanel } from "./RegistrationPendingChangesPanel";
+import { countPendingRegistrationChanges } from "@/lib/registrationPendingChanges";
 import { RegistrationDeliveryPreflight } from "./RegistrationDeliveryPreflight";
 import { PocCommunicationHistory } from "./PocCommunicationHistory";
 import { RegistrationCommunicationJourney } from "./RegistrationCommunicationJourney";
@@ -171,14 +172,7 @@ function rosterHealth(registration: AdminRow) {
 }
 
 function pendingApplyCount(registration: AdminRow) {
-  const pending = registration.pendingChanges;
-  if (!pending || typeof pending !== "object" || Array.isArray(pending)) {
-    return 0;
-  }
-  const row = pending as AdminRow;
-  return (Array.isArray(row.participantAdditions) ? row.participantAdditions.length : 0)
-    + (Array.isArray(row.participantRemovals) ? row.participantRemovals.length : 0)
-    + (row.fields && typeof row.fields === "object" && !Array.isArray(row.fields) ? Object.keys(row.fields).length : 0);
+  return countPendingRegistrationChanges(registration.pendingChanges);
 }
 
 function taskTemplateName(task: AdminRow) {
@@ -295,7 +289,7 @@ export function RegistrationEditor({
   defaultCohortId?: string;
   lockCohort?: boolean;
   onClose: () => void;
-  onSaved: () => Promise<void>;
+  onSaved: (saved: AdminRow) => Promise<void>;
 }) {
   const [values, setValues] = useState<AdminRow>(emptyRegistration());
   const [cohort, setCohort] = useState<AdminRow | null>(null);
@@ -551,7 +545,7 @@ export function RegistrationEditor({
           detail: { id: saved.deliveryJob.id, entityId: saved.id, label: `${cohortDropdownLabel(cohort)} · ${manualParticipants.length} participants` }
         }));
       }
-      await onSaved();
+      await onSaved(saved);
     } catch (saveError) {
       if (formVersion.current === version) setError((saveError as Error).message);
     } finally {
@@ -2476,6 +2470,7 @@ export function RegistrationsClient({ requestedRegistrationId }: { requestedRegi
         <Box onClick={(event) => event.stopPropagation()}>
           <RowActionMenu
             actions={[
+              { label: pendingApplyCount(params.row) > 0 ? "Review pending changes" : "Open registration", icon: <VisibilityOutlined fontSize="small" />, onClick: () => void openDetail(String(params.row.id)) },
               { label: "Edit POC & billing", icon: <EditOutlined fontSize="small" />, onClick: () => { setEditing(params.row); setDialogOpen(true); } },
               { label: "Confirm registration", icon: <CheckCircleOutline fontSize="small" />, color: "success", onClick: () => mutate({ id: params.row.id, action: "confirm" }, "Registration confirmed") },
               { label: "Cancel registration", icon: <CancelOutlined fontSize="small" />, color: "warning", onClick: () => setPendingLifecycleAction({ action: "cancel", row: params.row }) },
@@ -2575,10 +2570,13 @@ export function RegistrationsClient({ requestedRegistrationId }: { requestedRegi
         organizations={organizations}
         registrations={rows}
         onClose={() => { setDialogOpen(false); setEditing(null); }}
-        onSaved={async () => {
-          const defer = Boolean(editing && ["PUBLISHED", "ACTIVE"].includes(String(editing.cohort?.derivedStatus ?? editing.cohort?.status)));
-          notifySuccess(defer ? "Registration saved. Review and apply its delivery changes." : editing ? "Registration updated" : "Registration created");
-          if (detail?.id && editing?.id === detail.id) {
+        onSaved={async (saved) => {
+          const pendingCount = pendingApplyCount(saved);
+          notifySuccess(pendingCount > 0 ? "Registration saved. Review and apply its delivery changes." : editing ? "Registration updated" : "Registration created");
+          if (pendingCount > 0) {
+            await openDetail(String(saved.id));
+            await load();
+          } else if (detail?.id && editing?.id === detail.id) {
             await reloadDetail();
           } else {
             await load();

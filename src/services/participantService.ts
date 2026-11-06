@@ -9,7 +9,7 @@ import { queueParticipantCrmSync, queueRegistrationCrmSync } from "./crmSyncServ
 import { syncRegistrationToCrm, syncRemovedParticipantToCrm } from "./crmRegistrationWebhookService";
 import { getRecipientCommunicationSummary } from "./communicationService";
 import { automaticRegistrationJourneyOptions, cancelParticipantJourneys, planRegistrationJourneys } from "./registrationJourneyService";
-import { shouldDeferRegistrationDelivery, stageParticipantAddition, stageParticipantRemoval } from "./registrationChangeService";
+import { registrationPendingDeliveryState, shouldDeferRegistrationDelivery, stageParticipantAddition, stageParticipantRemoval } from "./registrationChangeService";
 import { removeFutureGoogleCalendarAttendees, syncFutureLinkedGoogleCalendarInvitesForCohort } from "./calendarService";
 import { createInvoiceDraft, generateInvoicePdf, updateInvoiceDraft } from "./invoiceService";
 
@@ -299,8 +299,8 @@ export async function addParticipant(input: z.input<typeof participantCreateSche
   });
   const registration = await prisma.registration.findUniqueOrThrow({ where: { id: participant.registrationId }, include: { cohort: true } });
   if (options.deferNotifications && shouldDeferRegistrationDelivery(registration.cohort.status)) {
-    await stageParticipantAddition(participant.registrationId, participantChangeRow(participant));
-    return { ...participant, journey: { status: "pending_apply" as const } };
+    const stagedRegistration = await stageParticipantAddition(participant.registrationId, participantChangeRow(participant));
+    return { ...participant, journey: registrationPendingDeliveryState(stagedRegistration.pendingChanges) };
   }
   const journey = await planRegistrationJourneys(participant.registrationId, automaticRegistrationJourneyOptions(registration.cohort.status));
   return { ...participant, journey };
@@ -333,15 +333,16 @@ export async function updateParticipant(id: string, input: z.input<typeof partic
   }
   const registration = await prisma.registration.findUniqueOrThrow({ where: { id: participant.registrationId }, include: { cohort: true } });
   if (options.deferNotifications && shouldDeferRegistrationDelivery(registration.cohort.status)) {
+    let pendingChanges = registration.pendingChanges;
     if (existing.status === ParticipantStatus.REGISTERED && participant.status !== ParticipantStatus.REGISTERED) {
-      await stageParticipantRemoval(participant.registrationId, participantChangeRow(existing));
+      pendingChanges = (await stageParticipantRemoval(participant.registrationId, participantChangeRow(existing))).pendingChanges;
     } else if (existing.status !== ParticipantStatus.REGISTERED && participant.status === ParticipantStatus.REGISTERED) {
-      await stageParticipantAddition(participant.registrationId, participantChangeRow(participant));
+      pendingChanges = (await stageParticipantAddition(participant.registrationId, participantChangeRow(participant))).pendingChanges;
     } else if (existing.email.toLowerCase() !== participant.email.toLowerCase()) {
       await stageParticipantRemoval(participant.registrationId, participantChangeRow(existing));
-      await stageParticipantAddition(participant.registrationId, participantChangeRow(participant));
+      pendingChanges = (await stageParticipantAddition(participant.registrationId, participantChangeRow(participant))).pendingChanges;
     }
-    return { ...participant, journey: { status: "pending_apply" as const } };
+    return { ...participant, journey: registrationPendingDeliveryState(pendingChanges) };
   }
   const journey = await planRegistrationJourneys(participant.registrationId, automaticRegistrationJourneyOptions(registration.cohort.status));
   return { ...participant, journey };

@@ -1,4 +1,4 @@
-import { beginOperation, describeEntityChange, finishOperation } from "./adminOperations";
+import { beginOperation, describeEntityChange, finishOperation, reconcileRegistrationPendingOperations } from "./adminOperations";
 
 export type ApiEnvelope<T> =
   | {
@@ -64,7 +64,16 @@ const entityQueues = new Map<string, Promise<any>>();
 
 export async function adminApi<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const method = options.method ?? "GET";
-  if (method === "GET" || options.notify === false || typeof window === "undefined") return request<T>(path, options);
+  if (method === "GET") {
+    const requestStartedAt = Date.now();
+    const result = await request<T>(path, options);
+    const url = new URL(path, "https://local.invalid");
+    if (typeof window !== "undefined" && url.pathname === "/api/registrations" && url.searchParams.has("id") && result && typeof result === "object" && "id" in result && result.id === url.searchParams.get("id")) {
+      reconcileRegistrationPendingOperations(result as Record<string, any>, requestStartedAt);
+    }
+    return result;
+  }
+  if (options.notify === false || typeof window === "undefined") return request<T>(path, options);
   const change = describeEntityChange(path, method, options.body);
   const fingerprint = change ? JSON.stringify([path, method, options.body]) : "";
   if (fingerprint && activeRequests.has(fingerprint)) return activeRequests.get(fingerprint)!;

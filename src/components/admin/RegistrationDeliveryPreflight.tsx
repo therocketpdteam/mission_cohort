@@ -2,6 +2,7 @@
 
 import { Button, Typography } from "@/components/ui/primitives";
 import { formatProperDisplay, formatStatusLabel } from "@/lib/formatting";
+import { countPendingRegistrationChanges } from "@/lib/registrationPendingChanges";
 import { AdminRow, StatusChip } from "./common";
 
 function normalizeEmail(value: unknown) {
@@ -71,6 +72,8 @@ export function RegistrationDeliveryPreflight({
   const pending = pendingFrom(registration);
   const additions = Array.isArray(pending?.participantAdditions) ? pending.participantAdditions as AdminRow[] : [];
   const removals = Array.isArray(pending?.participantRemovals) ? pending.participantRemovals as AdminRow[] : [];
+  const pendingCount = countPendingRegistrationChanges(pending);
+  const fieldCount = pendingCount - additions.length - removals.length;
   const blocked = blockedSafetyRecipients(registration);
   const canAddPoc = Boolean(onAddPrimaryContact && pocEmail && !pocOnRoster && missing > 0);
   const rosterTone = rosterStatusFromCounts(expected, actual);
@@ -123,9 +126,9 @@ export function RegistrationDeliveryPreflight({
         <div>
           <strong>Pending Apply</strong>
           <span>
-            {additions.length || removals.length
-              ? `${additions.length ? `${plural(additions.length, "addition")}` : ""}${additions.length && removals.length ? " and " : ""}${removals.length ? `${plural(removals.length, "removal")}` : ""} will be coordinated when applied.`
-              : "No participant add/remove batch is waiting for Apply."}
+            {pendingCount > 0
+              ? `${[additions.length ? plural(additions.length, "participant addition") : "", removals.length ? plural(removals.length, "participant removal") : "", fieldCount ? plural(fieldCount, "registration field change") : ""].filter(Boolean).join(", ")} waiting for Apply. Review the change summary above before sending updates.`
+              : "No saved delivery changes are waiting for Apply."}
           </span>
         </div>
         {missing > 0 ? (

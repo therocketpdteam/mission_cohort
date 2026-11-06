@@ -11,7 +11,7 @@ import { voidRegistrationQuickBooksInvoice } from "./quickBooksService";
 import { automaticRegistrationJourneyOptions, cancelRegistrationJourneys, planRegistrationJourneys } from "./registrationJourneyService";
 import { syncRegistrationParticipantListStatus } from "./participantService";
 import { syncPaymentRecordsToRegistrationStatus } from "./paymentService";
-import { shouldDeferRegistrationDelivery, stageParticipantAddition, stageRegistrationFieldChanges } from "./registrationChangeService";
+import { registrationPendingDeliveryState, shouldDeferRegistrationDelivery, stageParticipantAddition, stageRegistrationFieldChanges } from "./registrationChangeService";
 import { planFutureGoogleCalendarAttendeeRemoval, removeFutureGoogleCalendarAttendees, syncFutureLinkedGoogleCalendarInvitesForCohort } from "./calendarService";
 import { deletePrivateAppFile } from "./storageService";
 import { addCommunicationAttachment, getSystemUserId, sendCommunication } from "./communicationService";
@@ -233,11 +233,11 @@ export async function updateRegistration(
           email: fallback.participant.email.toLowerCase()
         });
       }
-      await stageRegistrationFieldChanges(registration.id, previous, registration);
+      const stagedRegistration = await stageRegistrationFieldChanges(registration.id, previous, registration);
       return {
-        ...registration,
+        ...stagedRegistration,
         participantListStatus: roster?.status ?? registration.participantListStatus,
-        journey: { status: "pending_apply" as const }
+        journey: registrationPendingDeliveryState(stagedRegistration.pendingChanges)
       };
     }
   }
