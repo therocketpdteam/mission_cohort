@@ -22,6 +22,8 @@ import { queueIntegrationJob } from "./integrationService";
 import { ensureRegistrationDeliveryJobType } from "./registrationDeliveryJobService";
 import { cancellationNotificationMode, type CancellationNotificationMode } from "@/modules/cohorts/cancellation";
 import { assertCancellationDeliveryIdle, suppressSilentCancellationDelivery } from "./cancellationDeliveryService";
+import { registrationDocumentSchema } from "@/validators/registrationDocument";
+import { recordCheckPaymentDocument } from "./checkPaymentService";
 
 type BulkMoveRegistrationSummaryInput = Array<{
   id: string;
@@ -1049,20 +1051,9 @@ export async function getRegistrationById(id: string) {
   });
 }
 
-export async function updateRegistrationDocuments(id: string, input: {
-  type: "purchaseOrder" | "checkPayment";
-  fileKey?: string | null;
-  fileName?: string | null;
-  contentType?: string | null;
-  purchaseOrderNumber?: string | null;
-}) {
-  if (!(["purchaseOrder", "checkPayment"] as const).includes(input.type)) {
-    throw Object.assign(new Error("Unsupported registration document type."), { code: "BAD_REQUEST", status: 400 });
-  }
-  const expectedPrefix = input.type === "purchaseOrder" ? "purchase-order/" : "check-payment/";
-  if (input.fileKey && !input.fileKey.startsWith(expectedPrefix)) {
-    throw Object.assign(new Error("Registration document does not match its upload type."), { code: "BAD_REQUEST", status: 400 });
-  }
+export async function updateRegistrationDocuments(id: string, rawInput: z.input<typeof registrationDocumentSchema>) {
+  const input = registrationDocumentSchema.parse(rawInput);
+  if (input.type === "checkPayment" && input.fileKey) return recordCheckPaymentDocument(id, input);
 
   const previous = await prisma.registration.findUniqueOrThrow({ where: { id } });
   const isPurchaseOrder = input.type === "purchaseOrder";
@@ -1087,7 +1078,8 @@ export async function updateRegistrationDocuments(id: string, input: {
     }, { deferNotifications: true });
   }
 
-  if (previousFileKey && previousFileKey !== input.fileKey) {
+  // Removing a proof never reverses a received payment or deletes its evidence.
+  if (isPurchaseOrder && previousFileKey && previousFileKey !== input.fileKey) {
     await deletePrivateAppFile(previousFileKey).catch(() => undefined);
   }
 

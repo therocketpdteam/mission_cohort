@@ -1,6 +1,7 @@
 import { handleApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { createPrivateAppFileUrl } from "@/services/storageService";
+import { readCheckPaymentProof } from "@/lib/checkPayment";
 
 export async function GET(request: Request) {
   try {
@@ -13,7 +14,12 @@ export async function GET(request: Request) {
     }
 
     const registration = await prisma.registration.findUniqueOrThrow({ where: { id: registrationId } });
-    const fileKey = type === "purchaseOrder" ? registration.purchaseOrderFileKey : registration.checkPaymentFileKey;
+    const paymentRecordId = params.get("paymentRecordId");
+    const payment = type === "checkPayment" && paymentRecordId
+      ? await prisma.paymentRecord.findFirst({ where: { id: paymentRecordId, registrationId, method: "CHECK" } })
+      : null;
+    const fileKey = type === "purchaseOrder" ? registration.purchaseOrderFileKey
+      : paymentRecordId ? readCheckPaymentProof(payment?.notes)?.fileKey : registration.checkPaymentFileKey;
 
     if (!fileKey) {
       throw Object.assign(new Error("Document not found."), { code: "NOT_FOUND", status: 404 });
