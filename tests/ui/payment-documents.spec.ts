@@ -10,7 +10,7 @@ const initial = { id: "r1", totalAmount: 300, paymentStatus: "INVOICED", payment
 test.beforeAll(async () => {
   directory = await mkdtemp(path.join(os.tmpdir(), "mission-payment-ui-"));
   const root = process.cwd(), entry = path.join(directory, "entry.tsx");
-  await writeFile(entry, `import React,{useState} from "react";import{createRoot}from"react-dom/client";import{RegistrationDocuments}from ${JSON.stringify(path.join(root, "src/components/admin/RegistrationDocuments"))};import{CollapsibleSectionCard}from ${JSON.stringify(path.join(root, "src/components/admin/CollapsibleSectionCard"))};import{registrationFinanceAlerts}from ${JSON.stringify(path.join(root, "src/lib/registrationFinanceAlerts"))};function Fixture(){const[row,setRow]=useState(${JSON.stringify(initial)});return <main style={{maxWidth:900,margin:"20px auto",padding:12,display:"grid",gap:12}}><RegistrationDocuments registration={row} onChanged={async()=>{const r=await fetch('/api/registrations?id=r1');setRow((await r.json()).data)}} onError={()=>{}}/><CollapsibleSectionCard title="Invoice" compact alertCount={registrationFinanceAlerts(row).invoice}><p>Invoice INV-100</p></CollapsibleSectionCard>{["Open Follow-Ups","Registration Communication Journey","Team Roster","POC Email Summary","Jotform Submission History","CRM Sync History"].map(title=><CollapsibleSectionCard key={title} title={title} action={title==="POC Email Summary"?<button type="button" className="ui-button ui-button-outlined">Open in Communications</button>:undefined}><p>{title} content</p></CollapsibleSectionCard>)}</main>}createRoot(document.getElementById('root')!).render(<Fixture/>);`);
+  await writeFile(entry, `import React,{useState} from "react";import{createRoot}from"react-dom/client";import{RegistrationsClient}from ${JSON.stringify(path.join(root, "src/components/admin/RegistrationsClient"))};import{RegistrationDocuments}from ${JSON.stringify(path.join(root, "src/components/admin/RegistrationDocuments"))};import{CollapsibleSectionCard}from ${JSON.stringify(path.join(root, "src/components/admin/CollapsibleSectionCard"))};import{registrationFinanceAlerts}from ${JSON.stringify(path.join(root, "src/lib/registrationFinanceAlerts"))};function Fixture(){const[row,setRow]=useState(${JSON.stringify(initial)});return <main style={{maxWidth:900,margin:"20px auto",padding:12,display:"grid",gap:12}}><RegistrationDocuments registration={row} onChanged={async()=>{const r=await fetch('/api/registrations?id=r1');setRow((await r.json()).data)}} onError={()=>{}}/><CollapsibleSectionCard title="Invoice" compact alertCount={registrationFinanceAlerts(row).invoice}><p>Invoice INV-100</p></CollapsibleSectionCard>{["Open Follow-Ups","Registration Communication Journey","Team Roster","POC Email Summary","Jotform Submission History","CRM Sync History"].map(title=><CollapsibleSectionCard key={title} title={title} action={title==="POC Email Summary"?<button type="button" className="ui-button ui-button-outlined">Open in Communications</button>:undefined}><p>{title} content</p></CollapsibleSectionCard>)}</main>}createRoot(document.getElementById('root')!).render(location.pathname==="/registrations"?<RegistrationsClient requestedRegistrationId="r1"/>:<Fixture/>);`);
   const taskRequire = createRequire(path.join(root, "package.json")), esbuild = createRequire(taskRequire.resolve("tsx"))("esbuild");
   await esbuild.build({ entryPoints: [entry], outfile: path.join(directory, "app.js"), bundle: true, jsx: "automatic", platform: "browser", format: "iife", nodePaths: [path.join(root, "node_modules")], tsconfig: path.join(root, "tsconfig.json"), define: { "process.env.NODE_ENV": '"test"' } });
   server = createServer(async (request, response) => {
@@ -130,4 +130,37 @@ test("every registration accordion uses identical compact header geometry", asyn
   expect(new Set(sizes.map(size => JSON.stringify(size))).size).toBe(1);
   await expect(cards.filter({ has: page.getByRole("heading", { name: "Jotform Submission History", exact: true }) })).not.toHaveAttribute("open");
   await page.screenshot({path:info.outputPath("consistent-registration-cards.png"),fullPage:true});
+});
+
+
+test("invoice Preview remains open through the registration refresh", async ({page}) => {
+  const row = { ...initial, primaryContactName: "Avery Example", primaryContactEmail: "avery@example.org", status: "CONFIRMED", participantCount: 1, organizationId: "o1", cohortId: "c1", organization: {name:"Example District"}, cohort:{id:"c1",title:"Example Cohort",status:"ACTIVE"}, participants:[{id:"p1",firstName:"Avery",lastName:"Example",email:"avery@example.org",title:"Teacher",status:"REGISTERED"}], operationsTasks:[], communications:[], webhookEvents:[], invoiceDrafts:[{id:"i1",invoiceNumber:"INV-100",totalAmount:300,paidAmount:0,status:"SENT",pdfUrl:"/fixture-invoice.html"}] };
+  let detailReads=0,prepares=0,release!:()=>void;
+  const held=new Promise<void>(resolve=>release=resolve);
+  await page.route("**/api/**", async route=>{
+    const request=route.request(),url=new URL(request.url());let data:any=[];
+    if(request.method()==="PATCH"){
+      const body=request.postDataJSON();expect(body.action).toBe("prepareRegistrationInvoice");prepares++;
+      data=row.invoiceDrafts[0];
+    }else if(url.pathname==="/api/registrations"){
+      if(url.searchParams.has("id")){detailReads++;if(detailReads>1)await held;data=row;}else data=[row];
+    }else if(url.pathname==="/api/cohorts")data=[row.cohort];
+    else if(url.pathname==="/api/organizations")data=[{id:"o1",name:"Example District"}];
+    await route.fulfill({json:{success:true,data}});
+  });
+  await page.route("**/fixture-invoice.html*",route=>route.fulfill({contentType:"text/html",body:"<h1>Invoice INV-100</h1><p>Example District — $300</p>"}));
+  await page.goto(origin+"/registrations?id=r1");
+  const drawer=page.getByRole("dialog",{name:"Avery Example",exact:true});
+  await expect(drawer).toBeVisible();
+  await drawer.getByRole("heading",{name:"Invoice",exact:true}).click();
+  await drawer.getByRole("button",{name:"Preview",exact:true}).click();
+  const modal=page.locator(".invoice-modal-backdrop");
+  await expect(modal).toBeVisible();
+  await expect.poll(()=>detailReads).toBeGreaterThan(1);
+  await expect(modal).toBeVisible();
+  release();
+  await expect(page.frameLocator('iframe[title="Invoice INV-100"]').getByRole("heading",{name:"Invoice INV-100"})).toBeVisible();
+  expect(prepares).toBe(1);
+  const box=await modal.locator(".invoice-preview-modal").boundingBox();expect(box!.width).toBeGreaterThan(700);
+  await modal.getByRole("button",{name:"Close",exact:true}).click();await expect(modal).toHaveCount(0);await expect(drawer).toBeVisible();
 });

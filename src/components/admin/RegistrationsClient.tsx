@@ -1794,7 +1794,7 @@ function RegistrationDetailDialog({
           <Button onClick={sendInvoiceCopy} disabled={sendingInvoice || !invoiceRecipient.trim()}>{sendingInvoice ? "Sending" : "Send invoice"}</Button>
         </DialogActions>
       </Dialog>
-      <Dialog open={Boolean(invoicePreview)} onClose={() => setInvoicePreview(null)} fullWidth maxWidth="xl">
+      <Dialog open={Boolean(invoicePreview)} onClose={() => setInvoicePreview(null)} fullWidth maxWidth="xl" BackdropProps={{ className: "invoice-modal-backdrop" }} PaperProps={{ className: "invoice-preview-modal" }}>
         <DialogTitle>{invoicePreview?.title ?? "Invoice preview"}</DialogTitle>
         <DialogContent className="invoice-preview-body">
           {invoicePreview ? (
@@ -2549,7 +2549,7 @@ export function RegistrationsClient({ requestedRegistrationId }: { requestedRegi
       />
       <RegistrationDetailDialog
         open={detailOpen}
-        registration={detailLoading ? null : detail}
+        registration={detail}
         templates={templates}
         onClose={closeDetail}
         onChanged={reloadDetail}
