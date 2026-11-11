@@ -6,6 +6,7 @@ import { paymentCreateSchema, paymentStatusUpdateSchema, paymentUpdateSchema } f
 import { logAuditEventAsync } from "./auditService";
 import { queueRegistrationCrmSync } from "./crmSyncService";
 import { getRecipientCommunicationSummary } from "./communicationService";
+import { reconcilePaidPaymentFollowUps } from "./paymentFollowUpService";
 
 export async function syncRegistrationPaymentStatusFromPaymentRecords(registrationId: string) {
   const registration = await prisma.registration.findUnique({
@@ -34,6 +35,7 @@ export async function syncRegistrationPaymentStatusFromPaymentRecords(registrati
     });
   }
 
+  if (paymentStatus === PaymentStatus.PAID) await reconcilePaidPaymentFollowUps({ registrationId });
   return paymentStatus;
 }
 

@@ -8,7 +8,8 @@ import { formatCurrency as money } from "@/lib/formatting";
 import { registrationDocumentSchema } from "@/validators/registrationDocument";
 import { useEffect, useState } from "react";
 import type { AdminRow } from "./common";
-import { SectionCard } from "./common";
+import { CollapsibleSectionCard } from "./CollapsibleSectionCard";
+import { registrationFinanceAlerts } from "@/lib/registrationFinanceAlerts";
 
 type DocumentType = "purchaseOrder" | "checkPayment";
 
@@ -109,7 +110,7 @@ export function RegistrationDocuments({ registration, onChanged, onError }: {
   ];
 
   return (
-    <SectionCard title="Payment Documents">
+    <CollapsibleSectionCard title="Payment Documents" compact alertCount={registrationFinanceAlerts(saved).documents}>
       <div className="registration-payment-documents">
         <Stack spacing={1.25}>
           {documents.map(document => (
@@ -149,6 +150,6 @@ export function RegistrationDocuments({ registration, onChanged, onError }: {
           {notice && <div role="status">{notice}</div>}
         </Stack>
       </div>
-    </SectionCard>
+    </CollapsibleSectionCard>
   );
 }

@@ -10,7 +10,7 @@ const initial = { id: "r1", totalAmount: 300, paymentStatus: "INVOICED", payment
 test.beforeAll(async () => {
   directory = await mkdtemp(path.join(os.tmpdir(), "mission-payment-ui-"));
   const root = process.cwd(), entry = path.join(directory, "entry.tsx");
-  await writeFile(entry, `import React,{useState} from "react";import{createRoot}from"react-dom/client";import{RegistrationDocuments}from ${JSON.stringify(path.join(root, "src/components/admin/RegistrationDocuments"))};function Fixture(){const[row,setRow]=useState(${JSON.stringify(initial)});return <main style={{maxWidth:900,margin:"20px auto",padding:12}}><RegistrationDocuments registration={row} onChanged={async()=>{const r=await fetch('/api/registrations?id=r1');setRow((await r.json()).data)}} onError={()=>{}}/></main>}createRoot(document.getElementById('root')!).render(<Fixture/>);`);
+  await writeFile(entry, `import React,{useState} from "react";import{createRoot}from"react-dom/client";import{RegistrationDocuments}from ${JSON.stringify(path.join(root, "src/components/admin/RegistrationDocuments"))};import{CollapsibleSectionCard}from ${JSON.stringify(path.join(root, "src/components/admin/CollapsibleSectionCard"))};import{registrationFinanceAlerts}from ${JSON.stringify(path.join(root, "src/lib/registrationFinanceAlerts"))};function Fixture(){const[row,setRow]=useState(${JSON.stringify(initial)});return <main style={{maxWidth:900,margin:"20px auto",padding:12,display:"grid",gap:12}}><RegistrationDocuments registration={row} onChanged={async()=>{const r=await fetch('/api/registrations?id=r1');setRow((await r.json()).data)}} onError={()=>{}}/><CollapsibleSectionCard title="Invoice" compact alertCount={registrationFinanceAlerts(row).invoice}><p>Invoice INV-100</p></CollapsibleSectionCard></main>}createRoot(document.getElementById('root')!).render(<Fixture/>);`);
   const taskRequire = createRequire(path.join(root, "package.json")), esbuild = createRequire(taskRequire.resolve("tsx"))("esbuild");
   await esbuild.build({ entryPoints: [entry], outfile: path.join(directory, "app.js"), bundle: true, jsx: "automatic", platform: "browser", format: "iife", nodePaths: [path.join(root, "node_modules")], tsconfig: path.join(root, "tsconfig.json"), define: { "process.env.NODE_ENV": '"test"' } });
   server = createServer(async (request, response) => {
@@ -48,7 +48,7 @@ async function api(page: Page) {
 const file = { name: "check.pdf", mimeType: "application/pdf", buffer: Buffer.from("synthetic proof") };
 
 test("purchase order stays on one row in a reconciliation drawer, with its note underneath", async ({ page }, info) => {
-  await api(page); await page.setViewportSize({ width: 510, height: 1000 }); await page.goto(origin);
+  await api(page); await page.setViewportSize({ width: 510, height: 1000 }); await page.goto(origin); await page.getByText("Payment Documents", { exact: true }).click();
   const heading = await page.getByText("Purchase order", { exact: true }).boundingBox();
   const input = await page.getByLabel("PO number", { exact: true }).boundingBox();
   const button = await page.locator(".is-po .registration-payment-document-upload").boundingBox();
@@ -61,7 +61,7 @@ test("purchase order stays on one row in a reconciliation drawer, with its note 
 });
 
 test("check amount and number validate before upload and reflect partial then full reconciliation", async ({ page }, info) => {
-  const observed = await api(page); await page.goto(origin);
+  const observed = await api(page); await page.goto(origin); await page.getByText("Payment Documents", { exact: true }).click();
   await page.getByLabel("Upload check payment proof", { exact: true }).setInputFiles(file);
   await expect(page.getByRole("alert")).toContainText("check amount"); expect(observed.mutations).toHaveLength(0);
   await page.getByLabel("Check amount ($)", { exact: true }).fill("100");
@@ -85,8 +85,35 @@ test("check amount and number validate before upload and reflect partial then fu
 });
 
 test("narrow mobile panels remain usable without horizontal overflow", async ({ page }) => {
-  await api(page); await page.setViewportSize({ width: 360, height: 1000 }); await page.goto(origin);
+  await api(page); await page.setViewportSize({ width: 360, height: 1000 }); await page.goto(origin); await page.getByText("Payment Documents", { exact: true }).click();
   await expect(page.getByLabel("PO number", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Check amount ($)", { exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
+
+test("compact finance cards start closed, retain warning icons and support keyboard opening", async ({ page }, info) => {
+  await api(page); await page.goto(origin);
+  const documents = page.locator("details").filter({ has: page.getByRole("heading", { name: "Payment Documents", exact: true }) });
+  const invoice = page.locator("details").filter({ has: page.getByRole("heading", { name: "Invoice", exact: true }) });
+  await expect(documents).not.toHaveAttribute("open"); await expect(invoice).not.toHaveAttribute("open");
+  await expect(documents.locator(".collapsible-section-alert")).toBeVisible();
+  await expect(invoice.locator(".collapsible-section-alert")).toBeVisible();
+  expect((await documents.boundingBox())!.height).toBeLessThan(60);
+  await invoice.locator("summary").focus(); await page.keyboard.press("Space");
+  await expect(page.getByText("Invoice INV-100", { exact: true })).toBeVisible();
+  await invoice.locator("summary").click();
+  await expect(page.getByText("Invoice INV-100", { exact: true })).not.toBeVisible();
+  await page.screenshot({ path: info.outputPath("compact-finance-cards.png"), fullPage: true });
+});
+
+test("warnings clear when the recorded check pays the full registration", async ({ page }) => {
+  await api(page); await page.goto(origin);
+  const documents = page.locator("details").filter({ has: page.getByRole("heading", { name: "Payment Documents", exact: true }) });
+  await documents.locator("summary").click();
+  await page.getByLabel("Check amount ($)", { exact: true }).fill("300");
+  await page.getByLabel("Check number", { exact: true }).fill("00130");
+  await page.getByLabel("Upload check payment proof", { exact: true }).setInputFiles(file);
+  await expect(page.getByRole("status")).toContainText("fully paid");
+  await expect(page.locator(".collapsible-section-alert")).toHaveCount(0);
 });

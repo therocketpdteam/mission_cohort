@@ -1,5 +1,9 @@
 "use client";
 
+import { CollapsibleSectionCard } from "./CollapsibleSectionCard";
+import { registrationFinanceAlerts } from "@/lib/registrationFinanceAlerts";
+import { isOpenRegistrationFollowUp } from "@/lib/paymentFollowUps";
+
 import { useOptimisticEntityRows, useOptimisticEntityRow, useOptimisticProjection } from "./useOptimisticEntity";
 import { startImmediateSave } from "./common";
 
@@ -102,37 +106,6 @@ const sessionFields: FieldConfig[] = [
   { name: "location", label: "Location (optional)", placeholder: "Online, room name, or physical address" }
 ];
 
-function CollapsibleSectionCard({
-  title,
-  children,
-  action,
-  defaultOpen = false,
-  alertCount = 0
-}: {
-  title: string;
-  children: ReactNode;
-  action?: ReactNode;
-  defaultOpen?: boolean;
-  alertCount?: number;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-
-  return (
-    <details className={`section-card collapsible-section-card ${alertCount ? "has-alert" : ""}`} open={open} onToggle={(event) => setOpen(event.currentTarget.open)}>
-      <summary className="collapsible-section-summary">
-        <div className="collapsible-section-title">
-          <h2 className="section-card-title">{title}</h2>
-          {alertCount ? <span className="collapsible-section-alert"><WarningAmberOutlined fontSize="small" />{alertCount}</span> : null}
-        </div>
-        <div className="collapsible-section-actions" onClick={(event) => event.stopPropagation()}>
-          {action}
-          <span className="collapsible-section-caret" aria-hidden="true"><ExpandMoreOutlined fontSize="small" /></span>
-        </div>
-      </summary>
-      <div className="collapsible-section-content">{children}</div>
-    </details>
-  );
-}
 
 const participantMessageMergeFields = mergeFields.filter((field) => (
   field.startsWith("participant.") ||
@@ -413,12 +386,12 @@ function isSupportingDocumentsTask(task: AdminRow) {
 
 function openRegistrationFollowUpTasks(registration: AdminRow) {
   return (registration.operationsTasks ?? [])
-    .filter((task: AdminRow) => task.status !== "COMPLETED" && !isSupportingDocumentsTask(task));
+    .filter((task: AdminRow) => isOpenRegistrationFollowUp(task, registration) && !isSupportingDocumentsTask(task));
 }
 
 function participantListFollowUpCount(registration: AdminRow) {
   return (registration.operationsTasks ?? [])
-    .filter((task: AdminRow) => task.category === "PARTICIPANT_LIST" && task.status !== "COMPLETED").length;
+    .filter((task: AdminRow) => task.category === "PARTICIPANT_LIST" && isOpenRegistrationFollowUp(task, registration)).length;
 }
 
 function resourceHref(resource: AdminRow) {
@@ -4384,8 +4357,8 @@ export function CohortDetailClient({ id }: { id: string }) {
               }}
               onError={notifyError}
             />
-            <SectionCard
-              title="Invoices And Receipts"
+            <CollapsibleSectionCard
+              title="Invoice" compact alertCount={registrationFinanceAlerts({ ...registrationDetail, invoiceDrafts: registrationDetail.invoiceDrafts ?? invoiceDrafts.filter((invoice) => invoice.registrationId === registrationDetail.id) }).invoice}
               action={<Button variant="outlined" size="small" onClick={() => void prepareAndPreviewRegistrationInvoice(registrationDetail)}>Preview current invoice</Button>}
             >
               {(() => {
@@ -4437,7 +4410,7 @@ export function CohortDetailClient({ id }: { id: string }) {
                   </div>
                 );
               })()}
-            </SectionCard>
+            </CollapsibleSectionCard>
             <CollapsibleSectionCard title="Team Roster" alertCount={participantListFollowUpCount(registrationDetail)} defaultOpen={registrationRosterStatus(registrationDetail) !== "COMPLETE" || participantListFollowUpCount(registrationDetail) > 0}>
               {(registrationDetail.participants ?? []).length > 0 ? (
                 <div className="quick-view-list" style={{ marginBottom: 12 }}>

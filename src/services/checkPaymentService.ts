@@ -2,6 +2,7 @@ import { PaymentMethod, PaymentStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { checkPaymentNotes, checkReconciliationPreview, collectedPaymentCents, moneyCents, readCheckPaymentProof } from "@/lib/checkPayment";
 import { registrationDocumentSchema } from "@/validators/registrationDocument";
+import { reconcilePaidPaymentFollowUps } from "./paymentFollowUpService";
 
 function conflict(message: string) { return Object.assign(new Error(message), { code: "BAD_REQUEST", status: 409 }); }
 
@@ -45,6 +46,7 @@ export async function recordCheckPaymentDocument(id: string, input: unknown) {
       checkPaymentFileKey: fileKey, checkPaymentFileName: data.fileName ?? null, checkPaymentContentType: data.contentType ?? null,
       paymentStatus: reconciliation.status
     }, include: { paymentRecords: true } });
+    if (reconciliation.status === "PAID") await reconcilePaidPaymentFollowUps({ registrationId: id }, tx);
     await tx.auditLog.create({ data: { entityType: "Registration", entityId: id, action: "CHECK_PAYMENT_RECONCILED", description: previous ? "Check payment and proof updated" : "Check payment and proof recorded", metadata: { paymentRecordId: payment.id, checkNumber, amount: checkAmount, previousAmount: previous ? Number(previous.amount) : null, fileName: data.fileName ?? null, paymentStatus: reconciliation.status } } });
     // Retain prior proof files: other recorded checks/audit history may use them.
     // No delivery journey, receipt email, calendar, or external payment is invoked.

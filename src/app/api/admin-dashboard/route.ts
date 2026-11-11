@@ -5,6 +5,7 @@ import { isMissingEmailReviewColumn } from "@/lib/prismaCompatibility";
 import { getDashboardRegistrationActivity } from "@/services/dashboardRegistrationActivityService";
 import { deriveCohortStatus } from "@/services/cohortLifecycle";
 import { unresolvedDeliveryRecipients } from "@/lib/dashboardPresentation";
+import { reconcilePaidPaymentFollowUps } from "@/services/paymentFollowUpService";
 
 function parseDashboardRange(request: Request) {
   const params = new URL(request.url).searchParams;
@@ -131,6 +132,7 @@ async function dashboardCommunicationIssues(where: Record<string, unknown>, filt
 }
 
 export async function GET(request: Request) {
+  await reconcilePaidPaymentFollowUps();
   const now = new Date();
   const range = parseDashboardRange(request);
   const filters = parseDashboardFilters(request);

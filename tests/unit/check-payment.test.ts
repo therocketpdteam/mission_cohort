@@ -13,8 +13,8 @@ const proof = (amount = 100, number = "00123", extra: object = {}) => ({ type: "
 function fixture() {
   return { id: "r1", cohortId: "c1", organizationId: "o1", totalAmount: 300, paymentMethod: "PURCHASE_ORDER", paymentStatus: "INVOICED", status: "CONFIRMED", archivedAt: null, invoiceNumber: "INV-1", checkPaymentFileKey: null, paymentRecords: [] as any[], invoiceDrafts: [] as any[] } as any;
 }
-async function withLedger(run: (registration: any, audit: any[], locks: any[]) => Promise<void>) {
-  const registration = fixture(), audit: any[] = [], locks: any[] = [];
+async function withLedger(run: (registration: any, audit: any[], locks: any[], followUps: any[]) => Promise<void>) {
+  const registration = fixture(), audit: any[] = [], locks: any[] = [], followUps: any[] = [];
   const forbidden = async () => { throw new Error("Unexpected outbound request"); };
   const methods: Array<[any, string, any]> = [
     [globalThis, "fetch", forbidden],
@@ -24,11 +24,12 @@ async function withLedger(run: (registration: any, audit: any[], locks: any[]) =
     [prisma.registration, "update", async ({ data }: any) => { Object.assign(registration, data); return structuredClone(registration); }],
     [prisma.paymentRecord, "create", async ({ data }: any) => { const row = { id: `p${registration.paymentRecords.length + 1}`, ...data }; registration.paymentRecords.push(row); return row; }],
     [prisma.paymentRecord, "update", async ({ where, data }: any) => { const row = registration.paymentRecords.find((r: any) => r.id === where.id); Object.assign(row, data); return row; }],
+    [prisma, "$executeRaw", async (query: any) => { followUps.push(query); return 0; }],
     [prisma.auditLog, "create", async ({ data }: any) => { audit.push(data); return data; }]
   ];
   const originals = methods.map(([object, key]) => object[key]);
   methods.forEach(([object, key, value]) => object[key] = value);
-  try { await run(registration, audit, locks); } finally { methods.forEach(([object, key], index) => object[key] = originals[index]); }
+  try { await run(registration, audit, locks, followUps); } finally { methods.forEach(([object, key], index) => object[key] = originals[index]); }
 }
 
 test("check upload validation requires an amount and number before any file is recorded", () => {
@@ -39,9 +40,10 @@ test("check upload validation requires an amount and number before any file is r
 });
 
 test("uploading partial and subsequent checks reconciles actual amounts and preserves billing method", async () => {
-  await withLedger(async (registration, audit, locks) => {
+  await withLedger(async (registration, audit, locks, followUps) => {
     const partial = await updateRegistrationDocuments("r1", proof(100));
     assert.equal(partial.paymentStatus, "PARTIALLY_PAID");
+    assert.equal(followUps.length, 0);
     assert.equal(registration.paymentRecords[0].amount, 100);
     assert.equal(readCheckPaymentProof(registration.paymentRecords[0].notes)?.checkNumber, "00123");
     const full = await recordCheckPaymentDocument("r1", proof(200, "00124", { fileKey: "check-payment/second.pdf" }));
@@ -50,6 +52,9 @@ test("uploading partial and subsequent checks reconciles actual amounts and pres
     assert.equal(registrationCollectedAmount(registration), 300);
     assert.equal(deriveRegistrationPaymentStatusFromRecords(registration.paymentRecords, undefined, 300), "PAID");
     assert.equal(audit.length, 2);
+    assert.equal(followUps.length, 1);
+    assert.ok(followUps[0].values.includes("r1"));
+    assert.match(followUps[0].sql, /"status" = 'COMPLETED'/);
     assert.match(locks[0].sql, /FOR UPDATE/);
     assert.deepEqual(locks[0].values, ["r1"]);
   });

@@ -13154,3 +13154,10 @@ button.dashboard-activity-item {
   .registration-payment-document.is-check { grid-template-columns: minmax(0, 1fr) minmax(100px, 140px) minmax(100px, 140px) auto; }
   .registration-payment-document.is-check .registration-payment-document-heading { grid-column: auto; }
 }
+
+.collapsible-section-card.is-compact-card > .collapsible-section-summary { padding: 10px 12px; }
+.collapsible-section-card.is-compact-card > .collapsible-section-content { padding: 10px 12px 12px; gap: 10px; }
+.is-compact-card .registration-payment-document { padding: 10px; gap: 8px 10px; }
+.registration-finance-note { margin: 0; color: var(--mc-text-secondary, #5b6778); font-size: 12px; line-height: 1.5; }
+.collapsible-section-card.is-compact-card,
+.app-shell.is-compact .collapsible-section-card.is-compact-card { padding: 0; }

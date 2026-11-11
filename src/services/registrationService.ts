@@ -24,6 +24,7 @@ import { cancellationNotificationMode, type CancellationNotificationMode } from 
 import { assertCancellationDeliveryIdle, suppressSilentCancellationDelivery } from "./cancellationDeliveryService";
 import { registrationDocumentSchema } from "@/validators/registrationDocument";
 import { recordCheckPaymentDocument } from "./checkPaymentService";
+import { reconcilePaidPaymentFollowUps } from "./paymentFollowUpService";
 
 type BulkMoveRegistrationSummaryInput = Array<{
   id: string;
@@ -827,6 +828,7 @@ export async function bulkUpdateRegistrations(input: {
         where: { registrationId: { in: ids } },
         data: { status: input.paymentStatus }
       });
+      if (input.paymentStatus === PaymentStatus.PAID) await reconcilePaidPaymentFollowUps({ registrationIds: ids });
     }
   }
 
@@ -1012,6 +1014,8 @@ export async function listRegistrations(cohortId?: string, options: { includeArc
 }
 
 export async function getRegistrationById(id: string) {
+  // Repair stale intake follow-ups created before automatic resolution existed.
+  await reconcilePaidPaymentFollowUps({ registrationId: id });
   return prisma.registration.findUnique({
     where: { id },
     include: {

@@ -1,5 +1,10 @@
 "use client";
 
+import { CollapsibleSectionCard } from "./CollapsibleSectionCard";
+import { registrationFinanceAlerts } from "@/lib/registrationFinanceAlerts";
+import { isOpenRegistrationFollowUp } from "@/lib/paymentFollowUps";
+import { registrationCollectedAmount } from "@/lib/cohortFinance";
+
 import { useOptimisticEntityRows, useOptimisticProjection } from "./useOptimisticEntity";
 import { startImmediateSave, useFormVersion } from "./common";
 
@@ -33,7 +38,6 @@ import {
   Typography
 } from "@/components/ui/primitives";
 import { GridColDef, GridRowParams, GridRowSelectionModel } from "./common";
-import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
 import { activeEmailIssues } from "@/lib/emailIssueState";
@@ -76,37 +80,6 @@ const visibilityOptions = [
   { value: "all", label: "All registrations" }
 ];
 
-function CollapsibleSectionCard({
-  title,
-  children,
-  action,
-  defaultOpen = false,
-  alertCount = 0
-}: {
-  title: string;
-  children: ReactNode;
-  action?: ReactNode;
-  defaultOpen?: boolean;
-  alertCount?: number;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-
-  return (
-    <details className={`section-card collapsible-section-card ${alertCount ? "has-alert" : ""}`} open={open} onToggle={(event) => setOpen(event.currentTarget.open)}>
-      <summary className="collapsible-section-summary">
-        <div className="collapsible-section-title">
-          <h2 className="section-card-title">{title}</h2>
-          {alertCount ? <span className="collapsible-section-alert"><WarningAmberOutlined fontSize="small" />{alertCount}</span> : null}
-        </div>
-        <div className="collapsible-section-actions" onClick={(event) => event.stopPropagation()}>
-          {action}
-          <span className="collapsible-section-caret" aria-hidden="true"><ExpandMoreOutlined fontSize="small" /></span>
-        </div>
-      </summary>
-      <div className="collapsible-section-content">{children}</div>
-    </details>
-  );
-}
 
 function money(value: unknown) {
   return `$${Number(value ?? 0).toLocaleString()}`;
@@ -194,12 +167,12 @@ function isSupportingDocumentsTask(task: AdminRow) {
 
 function openFollowUpTasks(registration: AdminRow) {
   return (registration.operationsTasks ?? [])
-    .filter((task: AdminRow) => task.status !== "COMPLETED" && !isSupportingDocumentsTask(task));
+    .filter((task: AdminRow) => isOpenRegistrationFollowUp(task, registration) && !isSupportingDocumentsTask(task));
 }
 
 function participantListFollowUpCount(registration: AdminRow) {
   return (registration.operationsTasks ?? [])
-    .filter((task: AdminRow) => task.category === "PARTICIPANT_LIST" && task.status !== "COMPLETED").length;
+    .filter((task: AdminRow) => task.category === "PARTICIPANT_LIST" && isOpenRegistrationFollowUp(task, registration)).length;
 }
 
 function registrationCommunicationIssueCount(registration: AdminRow) {
@@ -1191,17 +1164,13 @@ function RegistrationDetailDialog({
   const activeInvoices = (registration?.invoiceDrafts ?? []).filter((invoice: AdminRow) => !["VOIDED", "CANCELLED"].includes(String(invoice.status)));
   const registrationTotal = Number(registration?.totalAmount ?? 0);
   const invoicedTotal = activeInvoices.reduce((sum: number, invoice: AdminRow) => sum + Number(invoice.totalAmount ?? 0), 0);
-  const recordedPayments = (registration?.paymentRecords ?? [])
-    .filter((payment: AdminRow) => payment.status === "PAID")
-    .reduce((sum: number, payment: AdminRow) => sum + Number(payment.amount ?? 0), 0);
-  const invoicePaidTotal = activeInvoices.reduce((sum: number, invoice: AdminRow) => sum + Number(invoice.paidAmount ?? 0), 0);
-  const receivedTotal = recordedPayments > 0 ? recordedPayments : invoicePaidTotal;
+  const receivedTotal = registrationCollectedAmount(registration ?? {});
   const overpaymentTotal = Math.max(receivedTotal - registrationTotal, 0);
   const paidForInvoice = (invoice: AdminRow) => {
     const allocated = (registration?.paymentRecords ?? [])
-      .filter((payment: AdminRow) => payment.status === "PAID" && payment.invoiceNumber === invoice.invoiceNumber)
+      .filter((payment: AdminRow) => ["PAID", "PARTIALLY_PAID"].includes(payment.status) && payment.invoiceNumber === invoice.invoiceNumber)
       .reduce((sum: number, payment: AdminRow) => sum + Number(payment.amount ?? 0), 0);
-    return allocated > 0 ? allocated : Number(invoice.paidAmount ?? 0);
+    return Math.max(allocated, Number(invoice.paidAmount ?? 0));
   };
 
   async function openInvoicePdf(mode: "preview" | "download", requestedInvoice?: AdminRow | null) {
@@ -1538,13 +1507,8 @@ function RegistrationDetailDialog({
             }}
           />
 
-          <section className="registration-detail-section registration-invoice-section">
-            <div className="registration-section-heading">
-              <div>
-                <h3>Invoice</h3>
-                <p>Paid invoices stay unchanged. Additional charges are issued as separate supplemental invoices.</p>
-              </div>
-            </div>
+          <CollapsibleSectionCard title="Invoice" compact alertCount={registrationFinanceAlerts(registration).invoice}>
+            <p className="registration-finance-note">Paid invoices stay unchanged. Additional charges are issued as separate supplemental invoices.</p>
             {activeInvoices.length > 0 ? (
               <div className="registration-invoice-ledger">
                 <div className="registration-invoice-totals">
@@ -1606,7 +1570,7 @@ function RegistrationDetailDialog({
                 </div>
               </div>
             )}
-          </section>
+          </CollapsibleSectionCard>
 
           <CollapsibleSectionCard title="Open Follow-Ups" alertCount={registrationFollowUpTasks.length} defaultOpen={registrationFollowUpTasks.length > 0}>
             <div className="registration-section-heading">
