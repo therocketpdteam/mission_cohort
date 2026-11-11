@@ -13161,3 +13161,9 @@ button.dashboard-activity-item {
 .registration-finance-note { margin: 0; color: var(--mc-text-secondary, #5b6778); font-size: 12px; line-height: 1.5; }
 .collapsible-section-card.is-compact-card,
 .app-shell.is-compact .collapsible-section-card.is-compact-card { padding: 0; }
+/* All registration detail accordion headers share the same compact geometry. */
+.collapsible-section-card.is-compact-card > .collapsible-section-summary {
+  box-sizing: border-box;
+  min-height: 56px;
+  padding: 8px 12px;
+}

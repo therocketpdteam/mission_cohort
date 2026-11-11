@@ -1700,28 +1700,28 @@ function RegistrationDetailDialog({
               pocEmail={registration.primaryContactEmail}
             />
           </CollapsibleSectionCard>
-          <section className="registration-detail-section">
-            <div className="registration-section-heading">
-              <div>
-                <h3>Jotform Revision Timeline</h3>
-                <p>Imports and resubmissions linked to this registration.</p>
-              </div>
-            </div>
+          <CollapsibleSectionCard
+            title="Jotform Submission History"
+            alertCount={(registration.webhookEvents ?? []).filter((event: AdminRow) => event.status === "FAILED").length}
+          >
+            <p className="registration-finance-note">Original submissions and resubmissions imported from Jotform. Details below are historical snapshots, not the current registration or payment status.</p>
             {(registration.webhookEvents ?? []).length > 0 ? (
               <div className="quick-view-list">
                 {(registration.webhookEvents ?? []).map((event: AdminRow) => (
                   <div className="quick-view-list-row" key={event.id}>
                     <div>
-                      <strong>{`Revision ${event.revisionNumber ?? "-"} · ${formatStatusLabel(event.status)}`}</strong>
-                      <span>{`${event.processedAt || event.createdAt ? new Date(event.processedAt ?? event.createdAt).toLocaleString("en-US") : ""}${revisionSummary(event) ? ` · ${revisionSummary(event)}` : ""}${event.errorMessage ? ` · ${event.errorMessage}` : ""}`}</span>
+                      <strong>{`Submission ${event.revisionNumber ?? "-"} · ${formatStatusLabel(event.status)}`}</strong>
+                      <span>{event.processedAt || event.createdAt ? new Date(event.processedAt ?? event.createdAt).toLocaleString("en-US", { timeZoneName: "short" }) : "Date unavailable"}</span>
+                      {revisionSummary(event) ? <span>Submitted details: {revisionSummary(event)}</span> : null}
+                      {event.errorMessage ? <span>{event.errorMessage}</span> : null}
                     </div>
                   </div>
                 ))}
               </div>
             ) : (
-              <EmptyState title="No Jotform revisions yet" description="Jotform imports and resubmissions linked to this registration will appear here." />
+              <EmptyState title="No Jotform submissions" description="Imported Jotform submissions linked to this registration will appear here." />
             )}
-          </section>
+          </CollapsibleSectionCard>
 
           <CollapsibleSectionCard
             title="CRM Sync History"

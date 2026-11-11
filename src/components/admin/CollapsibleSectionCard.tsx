@@ -3,7 +3,7 @@
 import { useState, type ReactNode } from "react";
 import { ExpandMoreOutlined, WarningAmberOutlined } from "@/components/ui/icons";
 
-export function CollapsibleSectionCard({ title, children, action, defaultOpen = false, alertCount = 0, compact = false }: {
+export function CollapsibleSectionCard({ title, children, action, defaultOpen = false, alertCount = 0, compact = true }: {
   title: string;
   children: ReactNode;
   action?: ReactNode;

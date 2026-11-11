@@ -10,7 +10,7 @@ const initial = { id: "r1", totalAmount: 300, paymentStatus: "INVOICED", payment
 test.beforeAll(async () => {
   directory = await mkdtemp(path.join(os.tmpdir(), "mission-payment-ui-"));
   const root = process.cwd(), entry = path.join(directory, "entry.tsx");
-  await writeFile(entry, `import React,{useState} from "react";import{createRoot}from"react-dom/client";import{RegistrationDocuments}from ${JSON.stringify(path.join(root, "src/components/admin/RegistrationDocuments"))};import{CollapsibleSectionCard}from ${JSON.stringify(path.join(root, "src/components/admin/CollapsibleSectionCard"))};import{registrationFinanceAlerts}from ${JSON.stringify(path.join(root, "src/lib/registrationFinanceAlerts"))};function Fixture(){const[row,setRow]=useState(${JSON.stringify(initial)});return <main style={{maxWidth:900,margin:"20px auto",padding:12,display:"grid",gap:12}}><RegistrationDocuments registration={row} onChanged={async()=>{const r=await fetch('/api/registrations?id=r1');setRow((await r.json()).data)}} onError={()=>{}}/><CollapsibleSectionCard title="Invoice" compact alertCount={registrationFinanceAlerts(row).invoice}><p>Invoice INV-100</p></CollapsibleSectionCard></main>}createRoot(document.getElementById('root')!).render(<Fixture/>);`);
+  await writeFile(entry, `import React,{useState} from "react";import{createRoot}from"react-dom/client";import{RegistrationDocuments}from ${JSON.stringify(path.join(root, "src/components/admin/RegistrationDocuments"))};import{CollapsibleSectionCard}from ${JSON.stringify(path.join(root, "src/components/admin/CollapsibleSectionCard"))};import{registrationFinanceAlerts}from ${JSON.stringify(path.join(root, "src/lib/registrationFinanceAlerts"))};function Fixture(){const[row,setRow]=useState(${JSON.stringify(initial)});return <main style={{maxWidth:900,margin:"20px auto",padding:12,display:"grid",gap:12}}><RegistrationDocuments registration={row} onChanged={async()=>{const r=await fetch('/api/registrations?id=r1');setRow((await r.json()).data)}} onError={()=>{}}/><CollapsibleSectionCard title="Invoice" compact alertCount={registrationFinanceAlerts(row).invoice}><p>Invoice INV-100</p></CollapsibleSectionCard>{["Open Follow-Ups","Registration Communication Journey","Team Roster","POC Email Summary","Jotform Submission History","CRM Sync History"].map(title=><CollapsibleSectionCard key={title} title={title} action={title==="POC Email Summary"?<button type="button" className="ui-button ui-button-outlined">Open in Communications</button>:undefined}><p>{title} content</p></CollapsibleSectionCard>)}</main>}createRoot(document.getElementById('root')!).render(<Fixture/>);`);
   const taskRequire = createRequire(path.join(root, "package.json")), esbuild = createRequire(taskRequire.resolve("tsx"))("esbuild");
   await esbuild.build({ entryPoints: [entry], outfile: path.join(directory, "app.js"), bundle: true, jsx: "automatic", platform: "browser", format: "iife", nodePaths: [path.join(root, "node_modules")], tsconfig: path.join(root, "tsconfig.json"), define: { "process.env.NODE_ENV": '"test"' } });
   server = createServer(async (request, response) => {
@@ -116,4 +116,18 @@ test("warnings clear when the recorded check pays the full registration", async 
   await page.getByLabel("Upload check payment proof", { exact: true }).setInputFiles(file);
   await expect(page.getByRole("status")).toContainText("fully paid");
   await expect(page.locator(".collapsible-section-alert")).toHaveCount(0);
+});
+
+
+test("every registration accordion uses identical compact header geometry", async ({ page }, info) => {
+  await api(page); await page.goto(origin);
+  const cards = page.locator("details.collapsible-section-card");
+  await expect(cards).toHaveCount(8);
+  const sizes = await cards.locator("summary").evaluateAll(nodes => nodes.map(node => {
+    const r = node.getBoundingClientRect(), style = getComputedStyle(node);
+    return { height: r.height, padding: style.padding, font: getComputedStyle(node.querySelector("h2")!).fontSize };
+  }));
+  expect(new Set(sizes.map(size => JSON.stringify(size))).size).toBe(1);
+  await expect(cards.filter({ has: page.getByRole("heading", { name: "Jotform Submission History", exact: true }) })).not.toHaveAttribute("open");
+  await page.screenshot({path:info.outputPath("consistent-registration-cards.png"),fullPage:true});
 });
