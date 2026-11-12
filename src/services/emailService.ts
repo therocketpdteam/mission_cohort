@@ -8,6 +8,7 @@ import {
 import { env, getAppEnvironmentKind } from "@/lib/env";
 import { assertOutboundUnlocked } from "@/lib/outboundLock";
 import { assertOutboundRecipientsAllowed } from "@/services/integrationSetupService";
+import { createPrivateAppFileUrl } from "./storageService";
 
 export async function sendEmail(input: {
   to: string | string[];
@@ -15,7 +16,7 @@ export async function sendEmail(input: {
   bodyHtml: string;
   bodyText?: string;
   context?: MergeFieldContext;
-  attachments?: Array<{ fileName: string; contentType?: string | null; url?: string | null; content?: string | Buffer | null }>;
+  attachments?: Array<{ fileName: string; contentType?: string | null; url?: string | null; content?: string | Buffer | null; provider?: string | null; fileKey?: string | null }>;
   outboundContext?: { communicationId?: string };
   suppressQaBcc?: boolean;
 }) {
@@ -100,7 +101,7 @@ function escapeHtml(value: string) {
   })[character] ?? character);
 }
 
-async function resolveSendGridAttachments(attachments: Array<{ fileName: string; contentType?: string | null; url?: string | null; content?: string | Buffer | null }>) {
+export async function resolveSendGridAttachments(attachments: Array<{ fileName: string; contentType?: string | null; url?: string | null; content?: string | Buffer | null; provider?: string | null; fileKey?: string | null }>, signPrivateFile: typeof createPrivateAppFileUrl = createPrivateAppFileUrl) {
   const resolved = [];
 
   for (const attachment of attachments) {
@@ -121,11 +122,16 @@ async function resolveSendGridAttachments(attachments: Array<{ fileName: string;
       continue;
     }
 
-    if (!attachment.url) {
+    // Stored signed URLs expire. Resolve private files from their permanent
+    // storage key for every send, including retries and older registrations.
+    const url = attachment.provider === "supabase" && attachment.fileKey && !attachment.fileKey.startsWith("resource:")
+      ? await signPrivateFile(attachment.fileKey)
+      : attachment.url;
+    if (!url) {
       continue;
     }
 
-    const response = await fetch(attachment.url);
+    const response = await fetch(url);
     if (!response.ok) {
       throw Object.assign(new Error(`Attachment ${attachment.fileName} could not be downloaded before sending.`), {
         code: "BAD_REQUEST",
