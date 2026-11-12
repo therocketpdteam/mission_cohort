@@ -10,7 +10,7 @@ const initial = { id: "r1", totalAmount: 300, paymentStatus: "INVOICED", payment
 test.beforeAll(async () => {
   directory = await mkdtemp(path.join(os.tmpdir(), "mission-payment-ui-"));
   const root = process.cwd(), entry = path.join(directory, "entry.tsx");
-  await writeFile(entry, `import React,{useState} from "react";import{createRoot}from"react-dom/client";import{RegistrationsClient}from ${JSON.stringify(path.join(root, "src/components/admin/RegistrationsClient"))};import{RegistrationDocuments}from ${JSON.stringify(path.join(root, "src/components/admin/RegistrationDocuments"))};import{CollapsibleSectionCard}from ${JSON.stringify(path.join(root, "src/components/admin/CollapsibleSectionCard"))};import{registrationFinanceAlerts}from ${JSON.stringify(path.join(root, "src/lib/registrationFinanceAlerts"))};function Fixture(){const[row,setRow]=useState(${JSON.stringify(initial)});return <main style={{maxWidth:900,margin:"20px auto",padding:12,display:"grid",gap:12}}><RegistrationDocuments registration={row} onChanged={async()=>{const r=await fetch('/api/registrations?id=r1');setRow((await r.json()).data)}} onError={()=>{}}/><CollapsibleSectionCard title="Invoice" compact alertCount={registrationFinanceAlerts(row).invoice}><p>Invoice INV-100</p></CollapsibleSectionCard>{["Open Follow-Ups","Registration Communication Journey","Team Roster","POC Email Summary","Jotform Submission History","CRM Sync History"].map(title=><CollapsibleSectionCard key={title} title={title} action={title==="POC Email Summary"?<button type="button" className="ui-button ui-button-outlined">Open in Communications</button>:undefined}><p>{title} content</p></CollapsibleSectionCard>)}</main>}createRoot(document.getElementById('root')!).render(location.pathname==="/registrations"?<RegistrationsClient requestedRegistrationId="r1"/>:<Fixture/>);`);
+  await writeFile(entry, `import React,{useState} from "react";import{createRoot}from"react-dom/client";import{RegistrationsClient}from ${JSON.stringify(path.join(root, "src/components/admin/RegistrationsClient"))};import{RegistrationDocuments}from ${JSON.stringify(path.join(root, "src/components/admin/RegistrationDocuments"))};import{CollapsibleSectionCard}from ${JSON.stringify(path.join(root, "src/components/admin/CollapsibleSectionCard"))};import{registrationFinanceAlerts}from ${JSON.stringify(path.join(root, "src/lib/registrationFinanceAlerts"))};function Fixture(){const[row,setRow]=useState(${JSON.stringify(initial)});return <main style={{maxWidth:900,margin:"20px auto",padding:12,display:"grid",gap:12}}><RegistrationDocuments registration={row} onChanged={async()=>{const r=await fetch('/api/registrations?id=r1');setRow((await r.json()).data)}} onError={()=>{}}/><CollapsibleSectionCard title="Invoice" compact alertCount={registrationFinanceAlerts(row).invoice}><p>Invoice INV-100</p></CollapsibleSectionCard>{["Open Follow-Ups","Registration Communication Journey","Team Roster","POC Email Summary","Jotform Submission History","CRM Sync History"].map(title=><CollapsibleSectionCard key={title} title={title} action={title==="POC Email Summary"?<button type="button" className="ui-button ui-button-outlined">Open in Communications</button>:undefined}><p>{title} content</p></CollapsibleSectionCard>)}</main>}createRoot(document.getElementById('root')!).render(location.pathname==="/registrations"?<RegistrationsClient requestedRegistrationId={new URLSearchParams(location.search).get("id")??undefined}/>:<Fixture/>);`);
   const taskRequire = createRequire(path.join(root, "package.json")), esbuild = createRequire(taskRequire.resolve("tsx"))("esbuild");
   await esbuild.build({ entryPoints: [entry], outfile: path.join(directory, "app.js"), bundle: true, jsx: "automatic", platform: "browser", format: "iife", nodePaths: [path.join(root, "node_modules")], tsconfig: path.join(root, "tsconfig.json"), define: { "process.env.NODE_ENV": '"test"' } });
   server = createServer(async (request, response) => {
@@ -163,4 +163,20 @@ test("invoice Preview remains open through the registration refresh", async ({pa
   expect(prepares).toBe(1);
   const box=await modal.locator(".invoice-preview-modal").boundingBox();expect(box!.width).toBeGreaterThan(700);
   await modal.getByRole("button",{name:"Close",exact:true}).click();await expect(modal).toHaveCount(0);await expect(drawer).toBeVisible();
+});
+
+
+test("Value sorts numerically across pages and reverses to lowest first", async ({page}) => {
+  const amounts=[900,1000,75,20,30,40,50,60,70,80,9500];
+  const rows=amounts.map((amount,index)=>({...initial,id:`r${index}`,totalAmount:amount,primaryContactName:`Contact ${index}`,primaryContactEmail:`person${index}@example.org`,status:"CONFIRMED",participantCount:1,participants:[],organization:{name:"District"},cohort:{id:"c1",title:"Cohort"}}));
+  await page.route("**/api/**",route=>route.fulfill({json:{success:true,data:new URL(route.request().url()).pathname==="/api/registrations"?rows:[]}}));
+  await page.goto(origin+"/registrations");
+  await page.getByRole("button",{name:"Sort Value highest first",exact:true}).click();
+  const table=page.locator("table.app-table");
+  await expect(table.locator("tbody tr").first()).toContainText("Contact 10");
+  await expect(table.locator("tbody tr").nth(1)).toContainText("Contact 1");
+  await expect(page.getByRole("columnheader",{name:/Value/})).toHaveAttribute("aria-sort","descending");
+  await page.getByRole("button",{name:"Sort Value lowest first",exact:true}).click();
+  await expect(table.locator("tbody tr").first()).toContainText("Contact 3");
+  await expect(page.getByRole("columnheader",{name:/Value/})).toHaveAttribute("aria-sort","ascending");
 });

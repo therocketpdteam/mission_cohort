@@ -2415,9 +2415,16 @@ export function RegistrationsClient({ requestedRegistrationId }: { requestedRegi
       renderCell: (params) => (
         <div className="app-table-status-stack">
           <StatusChip value={formatRegistrationPaymentStatus(params.row)} />
-          <span className="app-table-sub" title={money(registrationDisplayAmount(params.row))}>{money(registrationDisplayAmount(params.row))}</span>
         </div>
       )
+    },
+    {
+      field: "value",
+      headerName: "Value",
+      width: 120,
+      sortable: true,
+      sortValue: (row) => registrationDisplayAmount(row),
+      renderCell: (params) => money(registrationDisplayAmount(params.row))
     },
     {
       field: "source",

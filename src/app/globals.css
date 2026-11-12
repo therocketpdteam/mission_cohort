@@ -13167,3 +13167,5 @@ button.dashboard-activity-item {
   min-height: 56px;
   padding: 8px 12px;
 }
+.app-table-sort-button { display: inline-flex; align-items: center; gap: 6px; border: 0; padding: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.app-table-sort-button:focus-visible { outline: 2px solid var(--color-primary-600, #7c3aed); outline-offset: 4px; border-radius: 2px; }
