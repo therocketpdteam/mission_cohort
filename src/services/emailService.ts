@@ -18,6 +18,7 @@ export async function sendEmail(input: {
   attachments?: Array<{ fileName: string; contentType?: string | null; url?: string | null; content?: string | Buffer | null }>;
   outboundContext?: { communicationId?: string };
   suppressQaBcc?: boolean;
+  beforeProviderRequest?: () => Promise<void>;
 }) {
   const recipients = Array.isArray(input.to) ? input.to : [input.to];
   const renderedHtml = renderTemplate(input.bodyHtml, input.context ?? {}).output;
@@ -47,7 +48,7 @@ export async function sendEmail(input: {
     text: delivery.text,
     attachments,
     suppressQaBcc: input.suppressQaBcc
-  });
+  }, input.beforeProviderRequest ? { beforeRequest: input.beforeProviderRequest } : undefined);
 
   return {
     ...result,

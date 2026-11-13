@@ -1,3 +1,4 @@
+import { deliverScheduledPostSession, isScheduledPostSession } from "./postSessionDeliveryService";
 import { CohortStatus, CommunicationStatus, EmailEventType, InvoiceDraftStatus, OperationsTaskCategory, OperationsTaskStatus, ParticipantStatus, Prisma, RecipientScope, RegistrationStatus, Role, SupportingDocumentStatus, TemplateType } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
@@ -1981,6 +1982,25 @@ export async function sendCommunication(id: string, options?: { recipients?: str
     }
     return deliverSupportReminder(communication);
   }
+  if (isScheduledPostSession(communication)) {
+    if (communication.recipientScope === RecipientScope.ALL_PARTICIPANTS && communication.sessionId && communication.templateId) {
+      const canonical = await prisma.cohortCommunication.findFirst({ where: { cohortId: communication.cohortId, sessionId: communication.sessionId, templateId: communication.templateId, scheduledFor: communication.scheduledFor, recipientScope: RecipientScope.ALL_PARTICIPANTS, status: { in: [CommunicationStatus.SCHEDULED, CommunicationStatus.SENDING, CommunicationStatus.SENT, CommunicationStatus.FAILED] } }, orderBy: [{ createdAt: "asc" }, { id: "asc" }], select: { id: true } });
+      if (canonical && canonical.id !== communication.id) throw Object.assign(new Error(`This is a duplicate post-session automation. Open the original message (${canonical.id}) to send or retry it.`), { code: "BAD_REQUEST", status: 409 });
+    }
+    if (options?.recipients || options?.context || options?.bypassCohortStatus) throw Object.assign(new Error("Use the scheduled post-session email's configured audience."), { code: "BAD_REQUEST", status: 400 });
+    return deliverScheduledPostSession(communication, {
+      prepare: async () => {
+        const baseContext = { cohort: cohortMergeContext(communication.cohort), session: communication.session ?? undefined, participant: communication.participant ?? undefined, registration: registrationMergeContext(communication.registration ?? undefined), organization: communication.registration?.organization };
+        const targets = communication.recipientScope === RecipientScope.ALL_PARTICIPANTS
+          ? (await resolveParticipantCommunicationTargets(communication.cohortId)).map(target => ({ email: target.recipientEmail, context: { ...baseContext, participant: participantMergeContext(target.participant), registration: registrationMergeContext(target.participant.registration), organization: target.participant.organization ?? target.participant.registration?.organization } }))
+          : (await resolveCommunicationRecipients(communication)).map(email => ({ email, context: baseContext }));
+        return { subject: communication.subject, bodyHtml: communication.bodyHtml, bodyText: communication.bodyText, attachments: communication.attachments, targets };
+      },
+      validate: recipients => assertCohortDeliveryAllowed("SENDGRID", communication.cohort.status, recipients),
+      send: (input, beforeProviderRequest) => sendEmail({ ...input, beforeProviderRequest, suppressQaBcc: input.suppressQaBcc || options?.suppressQaBcc }),
+      snapshot: sentEmailEventPayload
+    });
+  }
   const registrationContext = await preflightPocRegistrationConfirmation(communication);
   const paymentReminderRegistrationContext = registrationContext ?? await preflightPaymentReminder(communication);
   const refreshedAttachments = paymentReminderRegistrationContext
@@ -3436,7 +3456,7 @@ export async function processScheduledCommunications(limit = 25) {
           templateId: communication.templateId,
           scheduledFor: communication.scheduledFor,
           recipientScope: RecipientScope.ALL_PARTICIPANTS,
-          status: { in: [CommunicationStatus.SCHEDULED, CommunicationStatus.SENDING, CommunicationStatus.SENT] }
+          status: { in: [CommunicationStatus.SCHEDULED, CommunicationStatus.SENDING, CommunicationStatus.SENT, ...(isScheduledPostSession(communication) ? [CommunicationStatus.FAILED] : [])] }
         },
         orderBy: [{ createdAt: "asc" }, { id: "asc" }],
         select: { id: true }
@@ -3670,4 +3690,10 @@ export async function createPlannedSessionReminders(sessionId: string, createdBy
   }
 
   return records;
+}
+
+export async function sendScheduledPostSessionNow(id: string) {
+  const message = await prisma.cohortCommunication.findUniqueOrThrow({ where: { id }, include: { template: true } });
+  if (!isScheduledPostSession(message) || !["SCHEDULED", "FAILED", "SENDING", "SENT"].includes(message.status)) throw Object.assign(new Error("Send Now is only available for an existing scheduled post-session email."), { code: "BAD_REQUEST", status: 400 });
+  return sendCommunication(id);
 }

@@ -116,7 +116,7 @@ async function sendGridErrorMessage(response: Response) {
     : fallback;
 }
 
-export async function sendWithSendGrid(input: SendEmailInput) {
+export async function sendWithSendGrid(input: SendEmailInput, hooks?: { beforeRequest: () => Promise<void> }) {
   const config = await getSendGridConfig();
 
   if (!config.apiKey || !config.fromEmail) {
@@ -127,17 +127,20 @@ export async function sendWithSendGrid(input: SendEmailInput) {
   }
 
   const recipients = normalizeRecipients(input.to);
+  const payload = JSON.stringify(buildSendGridMailPayload(input, config));
+  await hooks?.beforeRequest();
   const response = await fetch("https://api.sendgrid.com/v3/mail/send", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${config.apiKey}`,
       "Content-Type": "application/json"
     },
-    body: JSON.stringify(buildSendGridMailPayload(input, config))
-  });
+    body: payload
+  }).catch(error => { if (hooks) Object.assign(error, { deliveryUncertain: true }); throw error; });
 
   if (!response.ok) {
     throw Object.assign(new Error(await sendGridErrorMessage(response)), {
+      ...(hooks ? { deliveryUncertain: response.status >= 500 } : {}),
       code: "BAD_REQUEST",
       status: 400
     });

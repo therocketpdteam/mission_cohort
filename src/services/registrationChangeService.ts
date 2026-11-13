@@ -685,7 +685,7 @@ export async function applyRegistrationChanges(registrationId: string) {
       ? registration.cohort.sessions.filter((row) => row.startTime.getTime() > Date.now() && row.calendarEvents.some((event) => event.providerEventId)).length
       : 0,
     calendarIssues,
-    communicationId: communication.id,
+    communicationId: communication?.id ?? null,
     invoiceId: invoice?.id ?? null
   };
 }

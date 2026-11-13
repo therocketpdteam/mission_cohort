@@ -14,6 +14,7 @@ import {
   removeCommunicationAttachment,
   reviewRecipientIssue,
   processScheduledCommunications,
+  sendScheduledPostSessionNow,
   scheduleCommunicationPlaceholder,
   sendCommunicationToRecipient,
   sendCommunicationPlaceholder,
@@ -226,6 +227,12 @@ export async function PATCH(request: Request) {
         recipientEmail: body.recipientEmail,
         createdById: user.id
       }));
+    }
+
+    if (body.action === "sendPostSessionNow") {
+      await requireRole(ADMIN_ROLES);
+      if (!body.id) return fail("id is required", "BAD_REQUEST", 400);
+      return ok(await sendScheduledPostSessionNow(body.id));
     }
 
     if (body.action === "send" || body.action === "resend") {
