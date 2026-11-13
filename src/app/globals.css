@@ -13132,3 +13132,9 @@ button.dashboard-activity-item {
     flex-direction: column;
   }
 }
+
+/* Contextual post-session controls remain readable inside the session title grid. */
+.session-post-session-email { display: grid; justify-items: start; gap: 4px; margin-top: 8px; }
+.session-post-session-email > .ui-text { margin: 0; white-space: normal; overflow-wrap: anywhere; }
+.session-post-session-email > .ui-button { white-space: normal; text-align: left; }
+.session-post-session-email .ui-modal strong { white-space: normal; }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useOptimisticEntityRows, useOptimisticEntityRow, useOptimisticProjection } from "./useOptimisticEntity";
+import { SessionPostSessionEmail, useSessionPostSessionEmails } from "./SessionPostSessionEmail";
 import { startImmediateSave } from "./common";
 
 import { AddIcon } from "@/components/ui/icons";
@@ -1524,6 +1525,7 @@ export function CohortDetailClient({ id }: { id: string }) {
   const [quickBooksRefs, setQuickBooksRefs] = useState<{ vendors: AdminRow[]; accounts: AdminRow[]; environment?: string; realmId?: string }>({ vendors: [], accounts: [] });
   const [loadingQuickBooksRefs, setLoadingQuickBooksRefs] = useState(false);
   const [financeHealth, setFinanceHealth] = useState<FinanceHealth | null>(null);
+  const postSessionEmails = useSessionPostSessionEmails(id);
   const [creatingSessionEmails, setCreatingSessionEmails] = useState(false);
   const [publishingCohort, setPublishingCohort] = useState(false);
   const [movingCohortToDraft, setMovingCohortToDraft] = useState(false);
@@ -3509,6 +3511,7 @@ export function CohortDetailClient({ id }: { id: string }) {
                 </div>
               </div>
             )}
+            {postSessionEmails.error ? <Alert severity="warning">Post-session email status could not load: {postSessionEmails.error}</Alert> : null}
             <div className="session-checklist" role="table" aria-label="Session checklist">
               <div className="session-check-row session-check-header" role="row">
                 <span>Date</span>
@@ -3528,6 +3531,7 @@ export function CohortDetailClient({ id }: { id: string }) {
                   <DateBadge value={session.startTime} timeZone={session.timezone} />
                   <div className="session-title-cell">
                     <strong title={session.title}>{session.sessionNumber}. {session.title}</strong>
+                    <SessionPostSessionEmail cohortId={id} cohortTitle={cohort?.title ?? ""} session={session as any} message={postSessionEmails.messages.find(message => message.sessionId === session.id)} now={postSessionEmails.now} refresh={postSessionEmails.refresh} />
                     <span title={session.description}>
                       {formatTimeInZone(session.startTime, session.timezone) || "No time"} - {formatTimeInZone(session.endTime, session.timezone) || "No end"}
                     </span>

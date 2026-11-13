@@ -14,3 +14,11 @@ Scope is scheduled FOLLOW_UP templates with a session. Other email workflows ret
 - Browser coverage: confirmation/cancel, same-ID send/status update, visible failure/retry, and unchanged unrelated reminder actions.
 - Staging was based on origin/staging, separately from production main. A narrow preexisting nullable-return type error was corrected, and the removed Next.js lint command was replaced with ESLint using existing dependencies.
 - Staging outbound lock and disabled background jobs are preserved. No customer emails are sent as part of implementation or deployment.
+
+## Session Overview entry point
+
+The action now lives on the matching session in cohort Overview. A cohort-scoped metadata endpoint selects the canonical post-session email for each session and reports recipient counts (the frozen audience on retries), status, schedule, and actual sent timestamp without email bodies. The UI refreshes status every 15 seconds while visible and on focus, and checks time boundaries every second. Communications no longer offers the generic send action for these scheduled post-session messages.
+
+Early sending requires the session end instant to have passed and the existing scheduled delivery instant to remain in the future. Valid HTTP(S) recording URLs are required. These checks run on the manual API path as well as the UI; cohort/session identifiers must match the existing message. Legacy manual-send actions also use this guard. The scheduler retains its original timing and delivery path. Once the early-send window expires, failed emails retain their diagnostics for operational review; early sending cannot be used to bypass the deadline. The delivery checkpoints and partial-recipient retry protection remain unchanged.
+
+Additional validation covers time-window boundaries, offset-equivalent instants, future/ongoing sessions, expired schedules, recording validation, exact cohort/session binding, canonical summary selection and normalized recipient counts. Browser checks cover confirmation details, same-message delivery, failure/retry, unavailable states, and an automatic-scheduler status refresh. All delivery tests use mocked providers.

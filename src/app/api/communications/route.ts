@@ -231,8 +231,8 @@ export async function PATCH(request: Request) {
 
     if (body.action === "sendPostSessionNow") {
       await requireRole(ADMIN_ROLES);
-      if (!body.id) return fail("id is required", "BAD_REQUEST", 400);
-      return ok(await sendScheduledPostSessionNow(body.id));
+      if (!body.id || !body.cohortId || !body.sessionId) return fail("id, cohortId and sessionId are required", "BAD_REQUEST", 400);
+      return ok(await sendScheduledPostSessionNow(body.id, { cohortId: body.cohortId, sessionId: body.sessionId }));
     }
 
     if (body.action === "send" || body.action === "resend") {

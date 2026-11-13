@@ -1,6 +1,6 @@
 "use client";
 
-import { canSendPostSessionNow } from "@/lib/postSessionSendNow";
+import { isScheduledPostSession } from "@/lib/postSessionSendNow";
 
 import {
   CheckCircleOutline,
@@ -969,9 +969,6 @@ export function CommunicationsClient({ requestedTab }: { requestedTab?: string }
   const [mergeFieldsOpen, setMergeFieldsOpen] = useState(false);
   const [editing, setEditing] = useState<AdminRow | null>(null);
   const [previewTemplate, setPreviewTemplate] = useState<AdminRow | null>(null);
-  const [sendNowTarget, setSendNowTarget] = useState<AdminRow | null>(null);
-  const [sendingNow, setSendingNow] = useState(false);
-  const [sendNowError, setSendNowError] = useState("");
   const [messageDetail, setMessageDetail] = useState<AdminRow | null>(null);
   const [messageResources, setMessageResources] = useState<AdminRow[]>([]);
   const [loadingResources, setLoadingResources] = useState(false);
@@ -1119,27 +1116,6 @@ export function CommunicationsClient({ requestedTab }: { requestedTab?: string }
     } catch (error) {
       notifyError((error as Error).message);
     }
-  }
-
-  function confirmSendNow(row: AdminRow) {
-    setSendNowError("");
-    setSendNowTarget(row);
-  }
-
-  async function sendPostSessionNow() {
-    if (!sendNowTarget || sendingNow) return;
-    setSendingNow(true);
-    setSendNowError("");
-    try {
-      await adminApi("/api/communications", { method: "PATCH", body: { action: "sendPostSessionNow", id: sendNowTarget.id } });
-      notifySuccess("Post-session email sent. Its scheduled delivery is complete.");
-      setSendNowTarget(null);
-      setMessageDetail(null);
-      await load(selectedCohortId);
-    } catch (error) {
-      setSendNowError((error as Error).message);
-      await load(selectedCohortId).catch(() => undefined);
-    } finally { setSendingNow(false); }
   }
 
   async function sendToRecipient(communicationId: string, recipientEmail: string) {
@@ -1397,18 +1373,17 @@ export function CommunicationsClient({ requestedTab }: { requestedTab?: string }
     {
       field: "actions",
       headerName: "Actions",
-      width: 175,
+      width: 92,
       sortable: false,
       renderCell: (params) => (
         <Box onClick={(event) => event.stopPropagation()}>
-          {canSendPostSessionNow(params.row) ? <Button size="small" variant="outlined" onClick={() => confirmSendNow(params.row)}>{params.row.status === "FAILED" ? "Retry unsent" : "Send Now"}</Button> : null}
           <RowActionMenu
             actions={[
               ...(params.row.status === "DRAFT" ? [
                 { label: "Edit draft", icon: <EditOutlined fontSize="small" />, onClick: () => openDraftEditor(params.row) },
                 { label: "Delete draft", icon: <DeleteOutline fontSize="small" />, onClick: () => deleteDraftMessage(params.row) }
               ] : []),
-              ...(canSendPostSessionNow(params.row) ? [{ label: params.row.status === "FAILED" ? "Retry unsent post-session email" : "Send Now", icon: <SendOutlined fontSize="small" />, onClick: () => confirmSendNow(params.row) }] : [{
+              ...(isScheduledPostSession(params.row) ? [] : [{
                 label: params.row.sentAt ? "Resend message" : "Send message",
                 icon: <SendOutlined fontSize="small" />,
                 onClick: () => sendCommunication(params.row, params.row.sentAt ? "resend" : "send")
@@ -1664,13 +1639,13 @@ export function CommunicationsClient({ requestedTab }: { requestedTab?: string }
               <input type="file" hidden onChange={attachFile} disabled={uploadingAttachment} />
               <span>{uploadingAttachment ? "Uploading" : "Attach file"}</span>
             </label>
-            <Button
+            {!isScheduledPostSession(messageDetail) ? <Button
               startIcon={<SendOutlined />}
               disabled={messageDetail.status === "SENDING"}
-              onClick={() => canSendPostSessionNow(messageDetail) ? confirmSendNow(messageDetail) : sendCommunication(messageDetail, messageDetail.sentAt ? "resend" : "send")}
+              onClick={() => sendCommunication(messageDetail, messageDetail.sentAt ? "resend" : "send")}
             >
-              {canSendPostSessionNow(messageDetail) ? messageDetail.status === "FAILED" ? "Retry unsent" : "Send Now" : messageDetail.sentAt ? "Resend" : "Send"}
-            </Button>
+              {messageDetail.sentAt ? "Resend" : "Send"}
+            </Button> : <Typography variant="caption">Send early from this session in the cohort Overview.</Typography>}
           </ActionGroup>
         ) : null}
       >
@@ -1855,22 +1830,6 @@ export function CommunicationsClient({ requestedTab }: { requestedTab?: string }
           </Stack>
         ) : null}
       </QuickViewDrawer>
-
-      <Dialog open={Boolean(sendNowTarget)} onClose={sendingNow ? undefined : () => setSendNowTarget(null)} fullWidth maxWidth="sm">
-        <DialogTitle>{sendNowTarget?.status === "FAILED" ? "Retry unsent post-session email?" : "Send post-session email now?"}</DialogTitle>
-        <DialogContent>
-          <Stack spacing={1.5}>
-            <Typography>{sendNowTarget?.subject}</Typography>
-            <Typography>Currently scheduled: {sendNowTarget?.scheduledFor ? new Date(sendNowTarget.scheduledFor).toLocaleString("en-US", { year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short", timeZone: sendNowTarget.session?.timezone ?? "America/New_York" }) : "Not scheduled"}. This sends the existing email immediately to its configured audience, with the same content, recording links, and attachments. Its scheduled delivery will not send another copy.</Typography>
-            <Typography>Confirm that the recording is ready. A retry skips recipients already sent; uncertain provider outcomes require review before another attempt.</Typography>
-            {sendNowError ? <Alert severity="error">{sendNowError}</Alert> : null}
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button variant="outlined" disabled={sendingNow} onClick={() => setSendNowTarget(null)}>Cancel</Button>
-          <Button disabled={sendingNow} onClick={sendPostSessionNow}>{sendingNow ? "Sending…" : "Confirm Send Now"}</Button>
-        </DialogActions>
-      </Dialog>
 
       <Dialog open={mergeFieldsOpen} onClose={() => setMergeFieldsOpen(false)} fullWidth maxWidth="md">
         <DialogTitle>Merge Fields</DialogTitle>

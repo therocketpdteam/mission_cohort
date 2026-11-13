@@ -1,3 +1,4 @@
+import { postSessionWindow } from "@/lib/postSessionSendNow";
 import { deliverScheduledPostSession, isScheduledPostSession } from "./postSessionDeliveryService";
 import { CohortStatus, CommunicationStatus, EmailEventType, InvoiceDraftStatus, OperationsTaskCategory, OperationsTaskStatus, ParticipantStatus, Prisma, RecipientScope, RegistrationStatus, Role, SupportingDocumentStatus, TemplateType } from "@prisma/client";
 import { z } from "zod";
@@ -3603,6 +3604,8 @@ export async function recordSendGridEvents(events: Array<Record<string, unknown>
 }
 
 export async function sendCommunicationPlaceholder(id: string) {
+  const message = await prisma.cohortCommunication.findUniqueOrThrow({ where: { id }, include: { template: true } });
+  if (isScheduledPostSession(message)) return sendScheduledPostSessionNow(id);
   return sendCommunication(id);
 }
 
@@ -3692,8 +3695,38 @@ export async function createPlannedSessionReminders(sessionId: string, createdBy
   return records;
 }
 
-export async function sendScheduledPostSessionNow(id: string) {
-  const message = await prisma.cohortCommunication.findUniqueOrThrow({ where: { id }, include: { template: true } });
-  if (!isScheduledPostSession(message) || !["SCHEDULED", "FAILED", "SENDING", "SENT"].includes(message.status)) throw Object.assign(new Error("Send Now is only available for an existing scheduled post-session email."), { code: "BAD_REQUEST", status: 400 });
+export async function sendScheduledPostSessionNow(id: string, expected?: { cohortId: string; sessionId: string }) {
+  const message = await prisma.cohortCommunication.findUniqueOrThrow({ where: { id }, include: { template: true, session: true } });
+  if (!isScheduledPostSession(message) || !message.session || (expected && (message.cohortId !== expected.cohortId || message.sessionId !== expected.sessionId))) throw Object.assign(new Error("The post-session email does not match this cohort and session."), { code: "BAD_REQUEST", status: 400 });
+  if (message.status === "SENT") return message;
+  const window = postSessionWindow(message, message.session);
+  if (!window.eligible) throw Object.assign(new Error(window.reason!), { code: "BAD_REQUEST", status: 409 });
   return sendCommunication(id);
+}
+
+export async function listSessionPostSessionEmails(cohortId: string) {
+  const messages = await prisma.cohortCommunication.findMany({
+    where: { cohortId, sessionId: { not: null }, scheduledFor: { not: null }, template: { type: TemplateType.FOLLOW_UP }, status: { in: [CommunicationStatus.SCHEDULED, CommunicationStatus.FAILED, CommunicationStatus.SENDING, CommunicationStatus.SENT] } },
+    select: { id: true, cohortId: true, sessionId: true, scheduledFor: true, sentAt: true, status: true, providerError: true, recipientScope: true, recipientEmails: true, template: { select: { type: true } }, session: { select: { endTime: true, recordingUrl: true } } },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }]
+  });
+  const canonical = new Map<string, typeof messages[number]>();
+  for (const message of messages) {
+    const previous = canonical.get(message.sessionId!);
+    if (!previous || (message.status === CommunicationStatus.SENT && previous.status !== CommunicationStatus.SENT)) canonical.set(message.sessionId!, message);
+  }
+  const envelopes = await prisma.auditLog.findMany({ where: { id: { in: [...canonical.values()].map(row => `post-session:${row.id}:envelope`) } }, select: { entityId: true, metadata: true } });
+  const participantEmails = [...canonical.values()].some(row => row.recipientScope === RecipientScope.ALL_PARTICIPANTS)
+    ? await prisma.participant.findMany({ where: { cohortId, status: ParticipantStatus.REGISTERED, registration: { archivedAt: null, status: { not: RegistrationStatus.CANCELLED } } }, select: { email: true } }) : [];
+  const participantCount = new Set(participantEmails.map(row => row.email.trim().toLowerCase()).filter(Boolean)).size;
+  return Promise.all([...canonical.values()].map(async message => {
+    const envelope = envelopes.find(row => row.entityId === message.id)?.metadata as { targets?: unknown[] } | undefined;
+    let recipientCount = envelope?.targets?.length;
+    if (recipientCount === undefined) {
+      if (message.recipientScope === RecipientScope.ALL_PARTICIPANTS) {
+        recipientCount = participantCount;
+      } else recipientCount = (await resolveCommunicationRecipients(message)).length;
+    }
+    return { id: message.id, sessionId: message.sessionId, status: message.status, sentAt: message.sentAt, scheduledFor: message.scheduledFor, providerError: message.providerError, recipientCount, ...postSessionWindow(message, message.session!) };
+  }));
 }

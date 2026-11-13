@@ -85,7 +85,7 @@ import { processScheduledCommunications, sendScheduledPostSessionNow } from "../
 import { env } from "../../src/lib/env";
 
 test("real manual and automatic entry points reuse the same scheduled row and delivery infrastructure",async()=>{
- const f=fixture();Object.assign(f.row,{scheduledFor:new Date("2020-01-01T12:00:00Z"),cohortId:"c1",subject:"Session recording",bodyHtml:"<a href='{{session.recordingUrl}}'>Recording</a>",bodyText:"Recording",cohort:{id:"c1",title:"Example",status:"PUBLISHED"},session:{id:"s1",title:"Session",recordingUrl:"https://example.org/recording"},registration:null,participant:null,templateId:"t1",recipientScope:"CUSTOM",recipientEmails:["a@example.org"],attachments:[],journeyKey:null});
+ const f=fixture();Object.assign(f.row,{scheduledFor:new Date(Date.now()+3600000),cohortId:"c1",subject:"Session recording",bodyHtml:"<a href='{{session.recordingUrl}}'>Recording</a>",bodyText:"Recording",cohort:{id:"c1",title:"Example",status:"PUBLISHED"},session:{id:"s1",title:"Session",endTime:new Date(Date.now()-3600000),recordingUrl:"https://example.org/recording"},registration:null,participant:null,templateId:"t1",recipientScope:"CUSTOM",recipientEmails:["a@example.org"],attachments:[],journeyKey:null});
  const methods:Array<[any,string,any]>=[
   [prisma.cohortCommunication,"findUnique",async()=>({...f.row})],
   [prisma.cohortCommunication,"findUniqueOrThrow",f.deps.client.cohortCommunication.findUniqueOrThrow],
@@ -104,10 +104,20 @@ test("real manual and automatic entry points reuse the same scheduled row and de
  globalThis.fetch=(async(url:any,options:any)=>{assert.equal(String(url),"https://api.sendgrid.com/v3/mail/send");assert.equal(options.method,"POST");const payload=JSON.parse(options.body);assert.ok(payload.content.some((part:any)=>part.value.includes("https://example.org/recording")));posts++;return new Response(null,{status:202,headers:{"x-message-id":"provider-accepted"}});}) as typeof fetch;
  try {
   const originalSchedule=f.row.scheduledFor;
+  f.row.session.endTime=new Date(Date.now()+3600000);
+  await assert.rejects(sendScheduledPostSessionNow(f.row.id), /after the session ends/);assert.equal(posts,0);
+  f.row.session.endTime=new Date(Date.now()-3600000);
+  const recording=f.row.session.recordingUrl;f.row.session.recordingUrl="javascript:alert(1)";
+  await assert.rejects(sendScheduledPostSessionNow(f.row.id), /valid recording link/);assert.equal(posts,0);
+  f.row.session.recordingUrl=recording;
+  await assert.rejects(sendScheduledPostSessionNow(f.row.id,{cohortId:"wrong",sessionId:"s1"}), /does not match/);
+  f.row.scheduledFor=new Date(Date.now()-1);
+  await assert.rejects(sendScheduledPostSessionNow(f.row.id), /scheduled delivery time has arrived/);assert.equal(posts,0);
+  f.row.scheduledFor=originalSchedule;
   await sendScheduledPostSessionNow(f.row.id);assert.equal(f.row.status,"SENT");assert.equal(posts,1);assert.equal(f.row.scheduledFor,originalSchedule);
   await processScheduledCommunications();assert.equal(posts,1);
   await sendScheduledPostSessionNow(f.row.id);assert.equal(posts,1);
   // A separate untouched scheduled record still uses the automatic path.
-  f.row.id="post2";f.row.status="SCHEDULED";f.row.sentAt=null;await processScheduledCommunications();assert.equal(posts,2);assert.equal(f.row.status,"SENT");
+  f.row.id="post2";f.row.scheduledFor=new Date("2020-01-01T12:00:00Z");f.row.status="SCHEDULED";f.row.sentAt=null;await processScheduledCommunications();assert.equal(posts,2);assert.equal(f.row.status,"SENT");
  }finally{methods.forEach(([object,key],index)=>object[key]=originals[index]);env.OUTBOUND_RELEASE_LOCK=oldLock;globalThis.fetch=oldFetch;}
 });
