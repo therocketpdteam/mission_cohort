@@ -4330,7 +4330,7 @@ export function CohortDetailClient({ id }: { id: string }) {
               }}
               onError={notifyError}
             />
-            <RegistrationDeliveryPreflight registration={registrationDetail} onAddPrimaryContact={addRegistrationPocToRoster} />
+            <RegistrationDeliveryPreflight registration={registrationDetail} onAddPrimaryContact={addRegistrationPocToRoster} onFinancialReview={async () => { await openRegistrationDetail(registrationDetail); await load(); }} />
             <div className="quick-view-grid">
               <DetailField label="Contact" value={registrationDetail.primaryContactName} proper />
               <DetailField label="Email" value={registrationDetail.primaryContactEmail} />

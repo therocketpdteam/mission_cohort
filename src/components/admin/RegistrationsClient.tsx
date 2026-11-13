@@ -1,5 +1,7 @@
 "use client";
 
+import { reconcileFinancialRoster, reconciliationStatuses } from "@/lib/financialRosterReconciliation";
+
 import { CollapsibleSectionCard } from "./CollapsibleSectionCard";
 import { registrationFinanceAlerts } from "@/lib/registrationFinanceAlerts";
 import { isOpenRegistrationFollowUp } from "@/lib/paymentFollowUps";
@@ -106,7 +108,7 @@ function splitName(name?: string | null) {
 
 function rosterStatusFromCounts(registration: AdminRow) {
   const expected = Number(registration.participantCount ?? 0);
-  const actual = Number(registration.participants?.length ?? registration._count?.participants ?? 0);
+  const actual = reconcileFinancialRoster(registration).savedParticipants;
 
   if (expected === 0 && actual === 0) {
     return "NOT_REQUESTED";
@@ -121,8 +123,10 @@ function rosterStatusFromCounts(registration: AdminRow) {
 }
 
 function rosterHealth(registration: AdminRow) {
+  const financial = reconcileFinancialRoster(registration);
+  if (financial.blocksCompletion) return { tone: "warning", label: formatStatusLabel(financial.status), helper: financial.missingParticipants != null ? `${financial.missingParticipants} missing / ${financial.excessParticipants} excess` : financial.potentialMissingParticipants != null ? `${financial.potentialMissingParticipants} potentially missing · unverified` : "Financial evidence needs review" };
   const expected = Number(registration.participantCount ?? 0);
-  const actual = Number(registration.participants?.length ?? registration._count?.participants ?? 0);
+  const actual = reconcileFinancialRoster(registration).savedParticipants;
   const status = rosterStatusFromCounts(registration);
 
   if (status === "COMPLETE") {
@@ -780,7 +784,7 @@ export function RegistrationEditor({
             <span>Track how this registration will be collected and its current billing state.</span>
           </div>
           <Grid size={{ xs: 12, md: 3 }} className="registration-roster-status">
-            <TextField fullWidth label="Roster status" value={formatStatusLabel(values.participantListStatus ?? "NEEDED")} disabled helperText="Calculated from saved participants" />
+            <TextField fullWidth label="Stored roster status" value={formatStatusLabel(values.participantListStatus ?? "NEEDED")} disabled helperText="Calculated from saved participants" />
           </Grid>
           <Grid size={{ xs: 12, md: 3 }} className="registration-payment-method">
             <TextField
@@ -1341,7 +1345,7 @@ function RegistrationDetailDialog({
   const rosterAlertCount = registration ? participantListFollowUpCount(registration) : 0;
   const communicationIssueCount = registration ? registrationCommunicationIssueCount(registration) : 0;
   const pocIssueCount = thread.reduce((total, communication: AdminRow) => total + Number(communication.emailSummary?.unreviewedIssueCount ?? 0), 0);
-  const rosterComplete = registration ? rosterStatusFromCounts(registration) === "COMPLETE" : false;
+  const rosterComplete = registration ? rosterStatusFromCounts(registration) === "COMPLETE" && !reconcileFinancialRoster(registration).blocksCompletion : false;
 
   async function addPocAsParticipant() {
     if (!registration?.primaryContactEmail) {
@@ -1483,7 +1487,7 @@ function RegistrationDetailDialog({
             }}
           />
 
-          <RegistrationDeliveryPreflight registration={registration} onAddPrimaryContact={addPocAsParticipant} />
+          <RegistrationDeliveryPreflight registration={registration} onAddPrimaryContact={addPocAsParticipant} onFinancialReview={onChanged} />
 
           <div className="quick-view-grid">
             <DetailTile label="POC email" value={registration.primaryContactEmail} />
@@ -2130,6 +2134,9 @@ export function RegistrationsClient({ requestedRegistrationId }: { requestedRegi
   const [search, setSearch] = useState("");
   const [paymentStatus, setPaymentStatus] = useState("");
   const [rosterStatus, setRosterStatus] = useState("");
+  const [financialStatus, setFinancialStatus] = useState("");
+  const financialResults = useMemo(() => new Map(rows.map(row=>[row.id,reconcileFinancialRoster(row)])), [rows]);
+  const financialCounts = useMemo(() => rows.filter(row=>!row.archivedAt && row.status!=="CANCELLED").reduce<Record<string,number>>((counts,row)=>{ const status=financialResults.get(row.id)!.status; counts[status]=(counts[status]??0)+1; return counts; },{}), [rows,financialResults]);
   const [source, setSource] = useState("");
   const [cohortId, setCohortId] = useState("");
   const [organizationId, setOrganizationId] = useState("");
@@ -2294,9 +2301,9 @@ export function RegistrationsClient({ requestedRegistrationId }: { requestedRegi
           : visibility === "active"
             ? !row.archivedAt
             : true;
-        return matchSearch && matchPayment && matchRoster && matchSource && matchCohort && matchOrganization && matchVisibility;
+        return (!financialStatus || (!row.archivedAt && row.status !== "CANCELLED" && financialResults.get(row.id)?.status === financialStatus)) && matchSearch && matchPayment && matchRoster && matchSource && matchCohort && matchOrganization && matchVisibility;
       }),
-    [rows, search, paymentStatus, rosterStatus, source, cohortId, organizationId, visibility]
+    [rows, financialResults, search, paymentStatus, rosterStatus, financialStatus, source, cohortId, organizationId, visibility]
   );
 
   const sourceOptions = useMemo(
@@ -2489,7 +2496,11 @@ export function RegistrationsClient({ requestedRegistrationId }: { requestedRegi
           <MenuItem value="WITHDRAWN">Withdrawn</MenuItem>
           <MenuItem value="FREE">Free</MenuItem>
         </TextField>
-        <TextField select label="Roster" value={rosterStatus} onChange={(event) => setRosterStatus(event.target.value)} sx={{ minWidth: 180 }}>
+        <TextField select label="Financial / roster" value={financialStatus} onChange={event=>setFinancialStatus(event.target.value)} sx={{ minWidth: 220 }}>
+          <MenuItem value="">All reconciliation statuses</MenuItem>
+          {reconciliationStatuses.map(status=><MenuItem key={status} value={status}>{formatStatusLabel(status)} ({financialCounts[status] ?? 0})</MenuItem>)}
+        </TextField>
+        <TextField select label="Stored roster" value={rosterStatus} onChange={(event) => setRosterStatus(event.target.value)} sx={{ minWidth: 180 }}>
           <MenuItem value="">All rosters</MenuItem>
           {rosterStatuses.map((value) => <MenuItem value={value} key={value}>{formatStatusLabel(value)}</MenuItem>)}
         </TextField>

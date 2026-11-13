@@ -93,6 +93,7 @@ test("registration detail, cohort tasks and open-task reads repair legacy paid f
     [prisma, "$executeRaw", client.$executeRaw],
     [prisma.operationsTask, "findMany", async ({ where }: any) => rows.filter(row => (!where.cohortId || row.cohortId === where.cohortId) && (!where.status || where.status.in.includes(row.status)))],
     [prisma.registration, "findUnique", async () => ({ id: "r-paid", paymentStatus: "PAID", operationsTasks: rows.filter(row => row.registrationId === "r-paid") })],
+    [prisma.auditLog, "findMany", async () => []],
     [globalThis, "fetch", async () => { throw new Error("No delivery should occur"); }]
   ]);
   try {

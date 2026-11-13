@@ -1,3 +1,4 @@
+import { attachFinancialReconciliation } from "./financialRosterReconciliationService";
 import { randomUUID } from "node:crypto";
 import { CommunicationStatus, IntegrationJobType, IntegrationProvider, InvoiceDraftStatus, OperationsTaskCategory, OperationsTaskPriority, OperationsTaskStatus, ParticipantListStatus, ParticipantStatus, PaymentStatus, Prisma, RecipientScope, RegistrationStatus, SupportingDocumentStatus, TemplateType } from "@prisma/client";
 import { z } from "zod";
@@ -988,7 +989,7 @@ export async function bulkMoveRegistrationsToCohort(input: { ids: string[]; targ
 }
 
 export async function listRegistrations(cohortId?: string, options: { includeArchived?: boolean } = {}) {
-  return prisma.registration.findMany({
+  const rows = await prisma.registration.findMany({
     where: {
       ...(cohortId ? { cohortId } : {}),
       ...(options.includeArchived ? {} : { archivedAt: null }),
@@ -999,8 +1000,10 @@ export async function listRegistrations(cohortId?: string, options: { includeArc
     },
     orderBy: { createdAt: "desc" },
     include: {
-      cohort: true,
+      cohort: { include: { _count: { select: { sessions: true } } } },
       organization: true,
+      invoiceDrafts: { select: { id: true, status: true, subtotalAmount: true, taxAmount: true, totalAmount: true, lineItems: { select: { id: true, quantity: true, unitAmount: true, totalAmount: true } } } },
+      paymentRecords: { select: { id: true, amount: true, status: true } },
       participants: { select: { firstName: true, lastName: true, email: true, status: true } },
       communications: {
         where: { status: CommunicationStatus.SENT, template: { type: TemplateType.PAYMENT_REMINDER } },
@@ -1011,15 +1014,16 @@ export async function listRegistrations(cohortId?: string, options: { includeArc
       _count: { select: { participants: true } }
     }
   });
+  return attachFinancialReconciliation(rows);
 }
 
 export async function getRegistrationById(id: string) {
   // Repair stale intake follow-ups created before automatic resolution existed.
   await reconcilePaidPaymentFollowUps({ registrationId: id });
-  return prisma.registration.findUnique({
+  const row = await prisma.registration.findUnique({
     where: { id },
     include: {
-      cohort: true,
+      cohort: { include: { _count: { select: { sessions: true } } } },
       organization: true,
       participants: true,
       paymentRecords: true,
@@ -1053,6 +1057,7 @@ export async function getRegistrationById(id: string) {
       }
     }
   });
+  return row ? (await attachFinancialReconciliation([row]))[0] : null;
 }
 
 export async function updateRegistrationDocuments(id: string, rawInput: z.input<typeof registrationDocumentSchema>) {
