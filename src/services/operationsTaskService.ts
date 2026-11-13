@@ -3,6 +3,8 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { operationsTaskCreateSchema, operationsTaskUpdateSchema } from "@/validators/operationsTask";
 import { logAuditEventAsync } from "./auditService";
+import { reconcilePaidPaymentFollowUps } from "./paymentFollowUpService";
+import { PAYMENT_STATUS_FOLLOW_UP_TITLE } from "@/lib/paymentFollowUps";
 
 export async function createOperationsTask(input: z.input<typeof operationsTaskCreateSchema>) {
   const data = operationsTaskCreateSchema.parse(input);
@@ -50,6 +52,7 @@ export async function completeOperationsTask(id: string) {
 }
 
 export async function listTasksForCohort(cohortId: string) {
+  await reconcilePaidPaymentFollowUps({ cohortId });
   return prisma.operationsTask.findMany({
     where: { cohortId },
     orderBy: [{ status: "asc" }, { dueDate: "asc" }, { createdAt: "desc" }],
@@ -58,6 +61,7 @@ export async function listTasksForCohort(cohortId: string) {
 }
 
 export async function listOpenOperationsTasks(limit = 20) {
+  await reconcilePaidPaymentFollowUps();
   return prisma.operationsTask.findMany({
     where: { status: { in: [OperationsTaskStatus.OPEN, OperationsTaskStatus.IN_PROGRESS] } },
     orderBy: [{ priority: "desc" }, { dueDate: "asc" }, { createdAt: "desc" }],
@@ -96,7 +100,7 @@ export async function createDefaultRegistrationOperationsTasks(input: {
     tasks.push({
       cohortId: input.cohortId,
       registrationId: input.registrationId,
-      title: "Follow up on payment status",
+      title: PAYMENT_STATUS_FOLLOW_UP_TITLE,
       description: "Review invoice, purchase order, or QuickBooks reference for this registration.",
       category: OperationsTaskCategory.PAYMENT_FOLLOW_UP,
       priority: OperationsTaskPriority.MEDIUM

@@ -15,6 +15,7 @@ import { Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogT
 import { GridColDef } from "./common";
 import type { ChangeEvent, SyntheticEvent } from "react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { emailSearchRecipient, historyTiming, isolatedEmailDocument } from "@/lib/communicationHistory";
 import { adminApi, uploadAdminFile } from "@/lib/adminApi";
 import { formatProperDisplay, formatStatusLabel } from "@/lib/formatting";
 import { mergeFields, renderMergeFields, sampleMergeContext } from "@/modules/email/mergeFields";
@@ -191,20 +192,6 @@ function bodySnippet(value: string, fallback = "No email body yet") {
   return value.replace(/\s+/g, " ").trim() || fallback;
 }
 
-function messageBodyPreview(message?: AdminRow | null) {
-  const text = templateText(message);
-  if (text) {
-    return {
-      text: renderMergeFields(text, sampleMergeContext, true),
-      html: ""
-    };
-  }
-
-  return {
-    text: { output: "", warnings: [] as string[] },
-    html: String(message?.bodyHtml ?? "")
-  };
-}
 
 function parseRecipientEmails(value: string) {
   return Array.from(new Set(
@@ -262,26 +249,17 @@ function formatDateTime(value?: string | Date | null, empty = "No timestamp") {
     return empty;
   }
   const date = new Date(value);
-  return Number.isFinite(date.getTime()) ? date.toLocaleString("en-US") : empty;
+  return Number.isFinite(date.getTime()) ? new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }).format(date) + ` (${Intl.DateTimeFormat().resolvedOptions().timeZone})` : empty;
+}
+
+function formatClock(value?: string | Date | null) {
+  if (!value || !Number.isFinite(new Date(value).getTime())) return "";
+  return new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZoneName: "short" }).format(new Date(value));
 }
 
 function DeliverySummary({ row }: { row: AdminRow }) {
-  const summary = row.emailSummary ?? {};
-  const delivered = Number(summary.deliveredCount ?? 0);
-  const opened = Number(summary.openedCount ?? 0);
-  const clicked = Number(summary.clickedCount ?? 0);
-  const bounced = Number(summary.bouncedCount ?? 0);
-  const failed = Number(summary.failedCount ?? 0);
-
-  return (
-    <div className="comms-delivery-strip" title={`Delivered ${delivered}, opened ${opened}, clicked ${clicked}, bounced ${bounced}, failed ${failed}`}>
-      <span className="is-success">D {delivered}</span>
-      <span>O {opened}</span>
-      <span>C {clicked}</span>
-      <span className={bounced ? "is-warning" : undefined}>B {bounced}</span>
-      <span className={failed ? "is-error" : undefined}>F {failed}</span>
-    </div>
-  );
+  const issues = Number(row.issueCount ?? row.emailSummary?.unreviewedIssueCount ?? 0);
+  return <span>{issues ? `${issues} issue${issues === 1 ? "" : "s"}` : row.emailSummary?.sentCount ? "Sent" : "No delivery issue recorded"}</span>;
 }
 
 function CommunicationsStat({ label, value, helper, tone }: { label: string; value: number | string; helper: string; tone?: "success" | "warning" | "error" | "primary" }) {
@@ -956,6 +934,7 @@ function ComposeMessageDialog({
 export function CommunicationsClient({ requestedTab }: { requestedTab?: string } = {}) {
   const [templates, setTemplates] = useState<AdminRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [supportingLoading, setSupportingLoading] = useState(true);
   const [cohorts, setCohorts] = useState<AdminRow[]>([]);
   const [communications, setCommunications] = useState<AdminRow[]>([]);
   const [selectedCohortId, setSelectedCohortId] = useState("");
@@ -963,6 +942,17 @@ export function CommunicationsClient({ requestedTab }: { requestedTab?: string }
   const [activeTab, setActiveTab] = useState(requestedTab === "issues" ? 1 : 0);
   useEffect(() => { setActiveTab(requestedTab === "issues" ? 1 : 0); }, [requestedTab]);
   const [messageSearch, setMessageSearch] = useState("");
+  const [queryReady, setQueryReady] = useState(false);
+  const [historyTotal, setHistoryTotal] = useState(0);
+  const [historySummary, setHistorySummary] = useState({ sent: 0, scheduled: 0, issues: 0 });
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [cursorStack, setCursorStack] = useState<string[]>([]);
+  const [historyRevision, setHistoryRevision] = useState(0);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const historyRequest = useRef(0);
+  const detailRequest = useRef(0);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [selectedAttemptId, setSelectedAttemptId] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [composeOpen, setComposeOpen] = useState(false);
   const [editingMessage, setEditingMessage] = useState<AdminRow | null>(null);
@@ -980,46 +970,94 @@ export function CommunicationsClient({ requestedTab }: { requestedTab?: string }
   const { notifySuccess, notifyError, snackbar } = useNotifier();
 
   async function load(nextCohortId = selectedCohortId, nextMessageSearch = messageSearch) {
+    setSelectedCohortId(nextCohortId);
+    setMessageSearch(nextMessageSearch);
+    setCursorStack([]);
+    setHistoryRevision(value => value + 1);
     const [templateRows, cohortRows] = await Promise.all([
-      adminApi<AdminRow[]>("/api/communications/templates"),
-      adminApi<AdminRow[]>("/api/cohorts")
+      adminApi<AdminRow[]>("/api/communications/templates"), adminApi<AdminRow[]>("/api/cohorts")
     ]);
     setTemplates(templateRows);
     setCohorts(cohortRows);
-    setSelectedCohortId(nextCohortId);
-
-    const params = new URLSearchParams({ limit: "150" });
-    if (nextCohortId) {
-      params.set("cohortId", nextCohortId);
-    }
-    if (nextMessageSearch.trim()) {
-      params.set("search", nextMessageSearch.trim());
-    }
-    setCommunications(await adminApi<AdminRow[]>(`/api/communications?${params.toString()}`));
-    setLoading(false);
+    setSupportingLoading(false);
   }
 
   useEffect(() => {
-    const search = new URLSearchParams(window.location.search).get("search");
-    const initialSearch = search ?? "";
-    if (search) {
+    const restore = () => {
+      const params = new URLSearchParams(window.location.search);
+      const search = params.get("search") ?? "";
       setMessageSearch(search);
-    }
-    adminApi<AdminRow>("/api/system-health")
-      .then((health) => {
-        const integrationChecks = (health.groups ?? []).find((group: AdminRow) => group.key === "integrations")?.checks ?? [];
-        setCommunicationHealthWarnings(
-          integrationChecks
-            .filter((check: AdminRow) => ["sendgrid", "sendgridWebhook"].includes(String(check.key)) && check.status !== "healthy")
-            .map((check: AdminRow) => `${check.label}: ${check.detail}`)
-        );
-      })
-      .catch(() => setCommunicationHealthWarnings([]));
-    load("", initialSearch).catch((error) => {
-      notifyError(error.message);
-      setLoading(false);
-    });
+      setSelectedCohortId(params.get("cohortId") ?? "");
+      setStatusFilter(params.has("status") ? params.get("status")! : emailSearchRecipient(search) ? "SENT" : "");
+      setActiveTab(params.get("tab") === "issues" ? 1 : 0);
+      setCursorStack([]);
+      setQueryReady(true);
+    };
+    restore();
+    window.addEventListener("popstate", restore);
+    Promise.all([adminApi<AdminRow[]>("/api/communications/templates"), adminApi<AdminRow[]>("/api/cohorts")])
+      .then(([templateRows, cohortRows]) => { setTemplates(templateRows); setCohorts(cohortRows); })
+      .catch(error => notifyError(error.message))
+      .finally(() => setSupportingLoading(false));
+    adminApi<AdminRow>("/api/system-health").then(health => {
+      const checks = (health.groups ?? []).find((group: AdminRow) => group.key === "integrations")?.checks ?? [];
+      setCommunicationHealthWarnings(checks.filter((check: AdminRow) => ["sendgrid", "sendgridWebhook"].includes(String(check.key)) && check.status !== "healthy").map((check: AdminRow) => `${check.label}: ${check.detail}`));
+    }).catch(() => setCommunicationHealthWarnings([]));
+    return () => { window.removeEventListener("popstate", restore); historyRequest.current++; detailRequest.current++; };
   }, [notifyError]);
+
+  useEffect(() => {
+    if (!queryReady || activeTab === 2) return;
+    const requestId = ++historyRequest.current;
+    setLoading(true);
+    setHistoryError(null);
+    setCommunications([]);
+    const url = new URL(window.location.href);
+    url.searchParams.set("search", messageSearch.trim());
+    url.searchParams.set("status", statusFilter);
+    if (selectedCohortId) url.searchParams.set("cohortId", selectedCohortId); else url.searchParams.delete("cohortId");
+    if (activeTab === 1) url.searchParams.set("tab", "issues"); else url.searchParams.delete("tab");
+    window.history.replaceState({}, "", `${url.pathname}${url.search}`);
+    const timer = window.setTimeout(async () => {
+      const params = new URLSearchParams({ history: "1", limit: "25", search: messageSearch.trim(), status: activeTab === 1 ? "" : statusFilter });
+      if (selectedCohortId) params.set("cohortId", selectedCohortId);
+      if (cursorStack.length) params.set("cursor", cursorStack[cursorStack.length - 1]);
+      if (activeTab === 1) params.set("issueOnly", "1");
+      try {
+        const page = await adminApi<AdminRow>(`/api/communications?${params}`);
+        if (historyRequest.current !== requestId) return;
+        setCommunications(page.rows);
+        setHistoryTotal(page.total);
+        setHistorySummary(page.summary);
+        setNextCursor(page.nextCursor);
+      } catch (error) {
+        if (historyRequest.current === requestId) { setHistoryTotal(0); setNextCursor(null); setHistoryError((error as Error).message); notifyError((error as Error).message); }
+      } finally { if (historyRequest.current === requestId) setLoading(false); }
+    }, 250);
+    return () => { window.clearTimeout(timer); if (historyRequest.current === requestId) historyRequest.current++; };
+  }, [queryReady, messageSearch, selectedCohortId, statusFilter, activeTab, cursorStack, historyRevision, notifyError]);
+
+  async function openMessageDetail(row: AdminRow, recipient = emailSearchRecipient(messageSearch)) {
+    const requestId = ++detailRequest.current;
+    setMessageDetail(row);
+    setDetailLoading(true);
+    setSelectedAttemptId("");
+    try {
+      const params = new URLSearchParams({ id: String(row.id) });
+      if (recipient) params.set("recipient", recipient);
+      const detail = await adminApi<AdminRow>(`/api/communications?${params}`);
+      if (detailRequest.current === requestId) setMessageDetail(detail);
+    } catch (error) {
+      if (detailRequest.current === requestId) { setMessageDetail(null); notifyError((error as Error).message); }
+    } finally { if (detailRequest.current === requestId) setDetailLoading(false); }
+  }
+
+  function closeMessageDetail() { detailRequest.current++; setMessageDetail(null); setDetailLoading(false); }
+
+  function changeSearch(value: string) {
+    if (emailSearchRecipient(value) !== emailSearchRecipient(messageSearch)) setStatusFilter(emailSearchRecipient(value) ? "SENT" : "");
+    setMessageSearch(value); setCursorStack([]);
+  }
 
   useEffect(() => {
     if (!messageDetail?.cohortId) {
@@ -1028,10 +1066,13 @@ export function CommunicationsClient({ requestedTab }: { requestedTab?: string }
     }
 
     setLoadingResources(true);
+    setMessageResources([]);
+    let current = true;
     adminApi<AdminRow[]>(`/api/resources?cohortId=${messageDetail.cohortId}`)
-      .then(setMessageResources)
-      .catch((error) => notifyError((error as Error).message))
-      .finally(() => setLoadingResources(false));
+      .then(rows => { if (current) setMessageResources(rows); })
+      .catch((error) => { if (current) notifyError((error as Error).message); })
+      .finally(() => { if (current) setLoadingResources(false); });
+    return () => { current = false; };
   }, [messageDetail?.cohortId, notifyError]);
 
   const preview = useMemo(() => {
@@ -1044,38 +1085,16 @@ export function CommunicationsClient({ requestedTab }: { requestedTab?: string }
       text: renderMergeFields(templateText(previewTemplate), sampleMergeContext, true)
     };
   }, [previewTemplate]);
-  const messagePreview = useMemo(() => messageBodyPreview(messageDetail), [messageDetail]);
+  const selectedAttempt = (messageDetail?.attempts ?? []).find((attempt: AdminRow) => attempt.id === selectedAttemptId) ?? messageDetail?.attempts?.[0];
+  const messageContent = selectedAttempt?.content ?? messageDetail?.content;
+  const detailSubject = messageContent?.subject || messageDetail?.subject || "Message detail";
 
   const selectedCohort = cohorts.find((cohort) => cohort.id === selectedCohortId);
-  const templateUsageCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-    communications.forEach((communication) => {
-      const templateId = communication.templateId ?? communication.template?.id;
-      if (templateId) {
-        counts.set(String(templateId), (counts.get(String(templateId)) ?? 0) + 1);
-      }
-    });
-    return counts;
-  }, [communications]);
   const issueRows = communications.flatMap((communication) => communication.issueRows ?? []);
-  const filteredMessages = communications.filter((row) => {
-    const matchStatus = statusFilter ? row.status === statusFilter : true;
-    const matchSearch = [
-      row.recipientEmail,
-      ...(Array.isArray(row.recipientEmails) ? row.recipientEmails : []),
-      ...(Array.isArray(row.emailEvents) ? row.emailEvents.map((event: AdminRow) => event.recipientEmail) : []),
-      row.subject,
-      row.template?.name,
-      row.recipientScope,
-      row.session?.title,
-      row.cohort?.title,
-      row.status
-    ].join(" ").toLowerCase().includes(messageSearch.toLowerCase());
-    return matchStatus && matchSearch;
-  });
-  const filteredIssues = issueRows.filter((row) => recipientSearchText(row).includes(messageSearch.toLowerCase()));
-  const scheduledMessages = communications.filter((row) => row.scheduledFor && !row.sentAt).length;
-  const sentMessages = communications.filter((row) => row.sentAt).length;
+  const filteredMessages = communications;
+  const filteredIssues = issueRows;
+  const scheduledMessages = historySummary.scheduled;
+  const sentMessages = historySummary.sent;
   async function refreshAfterMutation(nextMessageDetail?: AdminRow | null) {
     await load(selectedCohortId);
     if (nextMessageDetail === null) {
@@ -1207,10 +1226,13 @@ export function CommunicationsClient({ requestedTab }: { requestedTab?: string }
     }
   }
 
-  function openDraftEditor(message: AdminRow) {
-    setEditingMessage(message);
-    setComposeOpen(true);
-    setMessageDetail(null);
+  async function openDraftEditor(message: AdminRow) {
+    try {
+      const full = await adminApi<AdminRow>(`/api/communications?id=${encodeURIComponent(message.id)}`);
+      setEditingMessage({ ...full, subject: full.templateSubject ?? full.subject });
+      setComposeOpen(true);
+      closeMessageDetail();
+    } catch (error) { notifyError((error as Error).message); }
   }
 
   async function deleteDraftMessage(message: AdminRow) {
@@ -1347,7 +1369,7 @@ export function CommunicationsClient({ requestedTab }: { requestedTab?: string }
       flex: 1,
       minWidth: 210,
       renderCell: (params) => {
-        const scope = formatStatusLabel(String(params.row.recipientScope ?? "Recipients"));
+        const scope = params.row.recipientEmail || recipientScopeLabel(params.row.recipientScope);
         const session = params.row.session?.title ?? "All sessions";
         return (
           <div className="app-table-context">
@@ -1358,18 +1380,17 @@ export function CommunicationsClient({ requestedTab }: { requestedTab?: string }
       }
     },
     {
-      field: "timing",
-      headerName: "Timing",
-      width: 138,
-      renderCell: (params) => (
-        <div className="app-table-context">
-          <span className="app-table-main" title={formatDate(params.row.scheduledFor)}>{formatDate(params.row.scheduledFor)}</span>
-          <span className="app-table-sub" title={formatDate(params.row.sentAt, "Not sent")}>{formatDate(params.row.sentAt, "Not sent")}</span>
-        </div>
-      )
+      field: "timing", headerName: "Timing", width: 225,
+      renderCell: (params) => {
+        const timing = historyTiming(params.row);
+        return <div className="app-table-context">
+          <span className="app-table-main" title={formatDateTime(timing.at, "Time unavailable")}>{timing.label} · {formatDate(timing.at, "Time unavailable")}</span>
+          <span className="app-table-sub" title={formatDateTime(timing.at)}>{formatClock(timing.at)}</span>
+          {timing.scheduledFor && <span className="app-table-sub" title={formatDateTime(timing.scheduledFor)}>Scheduled · {formatDate(timing.scheduledFor)} {formatClock(timing.scheduledFor)}</span>}
+        </div>;
+      }
     },
-    { field: "delivery", headerName: "Delivery", width: 164, renderCell: (params) => <DeliverySummary row={params.row} /> },
-    { field: "status", headerName: "Status", width: 116, renderCell: (params) => <StatusChip value={params.value} /> },
+    { field: "status", headerName: "Status", width: 145, renderCell: (params) => <div className="app-table-status-stack"><StatusChip value={params.value} />{Number(params.row.issueCount) > 0 && <Button size="small" variant="text" onClick={(event) => { event.stopPropagation(); setActiveTab(1); setCursorStack([]); }}>{params.row.issueCount} issue{params.row.issueCount === 1 ? "" : "s"}</Button>}</div> },
     {
       field: "actions",
       headerName: "Actions",
@@ -1384,11 +1405,12 @@ export function CommunicationsClient({ requestedTab }: { requestedTab?: string }
                 { label: "Delete draft", icon: <DeleteOutline fontSize="small" />, onClick: () => deleteDraftMessage(params.row) }
               ] : []),
               ...(isScheduledPostSession(params.row) ? [] : [{
-                label: params.row.sentAt ? "Resend message" : "Send message",
+                label: params.row.recipientEmail ? (params.row.sentAt ? "Resend to recipient" : "Send to recipient") : params.row.sentAt ? "Resend message" : "Send message",
                 icon: <SendOutlined fontSize="small" />,
-                onClick: () => sendCommunication(params.row, params.row.sentAt ? "resend" : "send")
+                onClick: () => params.row.recipientEmail ? sendToRecipient(params.row.id, params.row.recipientEmail) : sendCommunication(params.row, params.row.sentAt ? "resend" : "send")
               }]),
-              { label: "View details", icon: <VisibilityOutlined fontSize="small" />, onClick: () => setMessageDetail(params.row) }
+              { label: "View details", icon: <VisibilityOutlined fontSize="small" />, onClick: () => void openMessageDetail(params.row) }
+
             ]}
           />
         </Box>
@@ -1460,7 +1482,7 @@ export function CommunicationsClient({ requestedTab }: { requestedTab?: string }
       minWidth: 260,
       renderCell: (params) => {
         const type = formatStatusLabel(String(params.row.type ?? "Custom"));
-        const usageCount = templateUsageCounts.get(String(params.row.id)) ?? 0;
+        const usageCount = Number(params.row._count?.communications ?? 0);
         const helper = `${type} · ${usageCount} message${usageCount === 1 ? "" : "s"} · Updated ${templateUpdatedLabel(params.row)}`;
         return (
           <div className="app-table-identity">
@@ -1545,15 +1567,15 @@ export function CommunicationsClient({ requestedTab }: { requestedTab?: string }
       )}
 
       <div className="comms-summary-grid">
-        <CommunicationsStat label="Sent" value={sentMessages} helper="Messages already delivered or attempted" tone="success" />
-        <CommunicationsStat label="Scheduled" value={scheduledMessages} helper="Messages queued across the current filter" tone="primary" />
-        <CommunicationsStat label="Needs attention" value={issueRows.length} helper="Unreviewed failed or bounced recipients" tone={issueRows.length ? "error" : "success"} />
+        <CommunicationsStat label="Sent" value={historyError ? "Unavailable" : loading && activeTab < 2 ? "…" : sentMessages} helper="Sent messages matching this search and cohort. Delivery is not confirmed." tone="success" />
+        <CommunicationsStat label="Scheduled" value={historyError ? "Unavailable" : loading && activeTab < 2 ? "…" : scheduledMessages} helper="Scheduled messages matching this search and cohort." tone="primary" />
+        <CommunicationsStat label="Needs attention" value={historyError ? "Unavailable" : loading && activeTab < 2 ? "…" : historySummary.issues} helper="Active recipient issues matching this search and cohort." tone={historySummary.issues ? "error" : "success"} />
       </div>
 
       <SectionCard
         title="Message Workspace"
         action={
-          <TextField select label="Cohort" value={selectedCohortId} onChange={(event) => load(event.target.value)} sx={{ width: 300, maxWidth: "100%" }}>
+          <TextField select label="Cohort" value={selectedCohortId} onChange={(event) => { setSelectedCohortId(event.target.value); setCursorStack([]); }} sx={{ width: 300, maxWidth: "100%" }}>
             <MenuItem value="">All cohorts</MenuItem>
             {cohorts.map((cohort) => (
               <MenuItem value={cohort.id} key={cohort.id}>
@@ -1564,11 +1586,11 @@ export function CommunicationsClient({ requestedTab }: { requestedTab?: string }
         }
       >
         <div className="comms-workspace-head">
-          <Tabs value={activeTab} onChange={(_event, value) => setActiveTab(value)}>
-            {tabs.map((label) => <Tab key={label} label={label === "Issues" && issueRows.length ? `Issues (${issueRows.length})` : label} />)}
+          <Tabs value={activeTab} onChange={(_event, value) => { setActiveTab(value); setCursorStack([]); }}>
+            {tabs.map((label) => <Tab key={label} label={label === "Issues" && historySummary.issues ? `Issues (${historySummary.issues})` : label} />)}
           </Tabs>
           <div className="comms-workspace-tools">
-            <Button size="small" variant="outlined" startIcon={<EmailOutlined />} onClick={() => setMergeFieldsOpen(true)}>Merge Fields</Button>
+            {activeTab === 2 && <Button size="small" variant="outlined" startIcon={<EmailOutlined />} onClick={() => setMergeFieldsOpen(true)}>Merge Fields</Button>}
             <Button size="small" variant="outlined" onClick={() => { setEditing(null); setDialogOpen(true); }}>New Template</Button>
             <span title={selectedCohort?.title ?? "All cohorts"}>{selectedCohort ? cohortDropdownLabel(selectedCohort) : "All cohorts"}</span>
           </div>
@@ -1576,32 +1598,39 @@ export function CommunicationsClient({ requestedTab }: { requestedTab?: string }
 
         {activeTab < 2 ? (
           <>
-            <CompactFilterBar resultCount={activeTab === 1 ? filteredIssues.length : filteredMessages.length}>
-              <TextField label={activeTab === 1 ? "Search issues" : "Search messages"} value={messageSearch} onChange={(event) => setMessageSearch(event.target.value)} sx={{ width: 280, maxWidth: "100%" }} />
+            <CompactFilterBar resultCount={historyTotal}>
+              <TextField label={activeTab === 1 ? "Search issues" : "Search messages"} value={messageSearch} onChange={(event) => changeSearch(event.target.value)} sx={{ width: 280, maxWidth: "100%" }} />
               {activeTab === 0 && (
-                <TextField select label="Status" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} sx={{ width: 190, maxWidth: "100%" }}>
-                  <MenuItem value="">All statuses</MenuItem>
+                <TextField select label="Status" value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value); setCursorStack([]); }} sx={{ width: 190, maxWidth: "100%" }}>
+                  <MenuItem value="">All activity</MenuItem>
                   {communicationStatuses.map((status) => <MenuItem value={status} key={status}>{formatStatusLabel(status)}</MenuItem>)}
                 </TextField>
               )}
             </CompactFilterBar>
+            {historyError && <Alert severity="error">Could not load communication history: {historyError} <Button variant="text" onClick={() => setHistoryRevision(value => value + 1)}>Retry search</Button></Alert>}
             <TableShell>
               <AppDataGrid
                 rows={activeTab === 1 ? filteredIssues : filteredMessages}
                 columns={activeTab === 1 ? issueColumns : outboxColumns}
                 loading={loading}
-                pageSizeOptions={[10, 25]}
-                initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
+                pagination={false}
                 onRowClick={(params) => {
                   const communicationId = activeTab === 1 ? params.row.communicationId : params.row.id;
                   const communication = communications.find((row) => row.id === communicationId);
-                  setMessageDetail(communication ?? null);
+                  if (communication) void openMessageDetail(communication, params.row.recipientEmail || emailSearchRecipient(messageSearch));
                 }}
               />
             </TableShell>
-            {!loading && (activeTab === 1 ? filteredIssues : filteredMessages).length === 0 && (
+            <div className="table-footer" aria-live="polite">
+              <span>{loading ? "Searching communication history…" : `${historyTotal} matching message${historyTotal === 1 ? "" : "s"} · Page ${cursorStack.length + 1}`}</span>
+              <div className="table-pager">
+                <Button variant="outlined" size="small" disabled={loading || !cursorStack.length} onClick={() => setCursorStack(stack => stack.slice(0, -1))}>Previous</Button>
+                <Button variant="outlined" size="small" disabled={loading || !nextCursor} onClick={() => setCursorStack(stack => [...stack, nextCursor!])}>Next</Button>
+              </div>
+            </div>
+            {!loading && !historyError && (activeTab === 1 ? filteredIssues : filteredMessages).length === 0 && (
               <EmptyState
-                title={activeTab === 1 ? "No communication issues" : "No scheduled messages"}
+                title={activeTab === 1 ? "No communication issues" : "No matching messages"}
                 description={activeTab === 1 ? "Unreviewed failed and bounced recipients will appear here." : "Scheduled, sent, and draft cohort messages will appear here."}
               />
             )}
@@ -1612,22 +1641,22 @@ export function CommunicationsClient({ requestedTab }: { requestedTab?: string }
               <AppDataGrid
                 rows={templates}
                 columns={templateColumns}
-                loading={loading}
+                loading={supportingLoading}
                 pageSizeOptions={[10, 25]}
                 initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
                 onRowClick={(params) => setPreviewTemplate(params.row)}
               />
             </TableShell>
-            {!loading && templates.length === 0 && <EmptyState title="No templates found" description="Create templates for registration confirmations, reminders, and follow-up." />}
+            {!supportingLoading && templates.length === 0 && <EmptyState title="No templates found" description="Create templates for registration confirmations, reminders, and follow-up." />}
           </>
         )}
       </SectionCard>
 
       <QuickViewDrawer
-        title={messageDetail?.subject ?? "Message detail"}
+        title={detailSubject}
         open={Boolean(messageDetail)}
-        onClose={() => setMessageDetail(null)}
-        actions={messageDetail ? (
+        onClose={closeMessageDetail}
+        actions={messageDetail && !detailLoading ? (
           <ActionGroup>
             {messageDetail.status === "DRAFT" ? (
               <>
@@ -1642,18 +1671,19 @@ export function CommunicationsClient({ requestedTab }: { requestedTab?: string }
             {!isScheduledPostSession(messageDetail) ? <Button
               startIcon={<SendOutlined />}
               disabled={messageDetail.status === "SENDING"}
-              onClick={() => sendCommunication(messageDetail, messageDetail.sentAt ? "resend" : "send")}
+              onClick={() => messageDetail.recipientEmail ? sendToRecipient(messageDetail.id, messageDetail.recipientEmail) : sendCommunication(messageDetail, messageDetail.sentAt ? "resend" : "send")}
             >
-              {messageDetail.sentAt ? "Resend" : "Send"}
+              {messageDetail.recipientEmail ? (messageDetail.sentAt ? "Resend current version" : "Send to recipient") : messageDetail.sentAt ? "Resend message" : "Send message"}
             </Button> : <Typography variant="caption">Send early from this session in the cohort Overview.</Typography>}
+
           </ActionGroup>
         ) : null}
       >
-        {messageDetail ? (
+        {detailLoading ? <Typography aria-live="polite">Loading recipient history…</Typography> : messageDetail ? (
           <Stack spacing={1.5}>
             <div className="comms-message-hero">
               <span>Message</span>
-              <strong title={messageDetail.subject}>{messageDetail.subject || "Untitled message"}</strong>
+              <strong title={detailSubject}>{detailSubject}</strong>
               <p title={[messageDetail.cohort?.title, messageDetail.session?.title, messageDetail.template?.name].filter(Boolean).join(" · ")}>
                 {[messageDetail.cohort?.title, messageDetail.session?.title, messageDetail.template?.name ?? "Custom"].filter(Boolean).join(" · ")}
               </p>
@@ -1677,43 +1707,40 @@ export function CommunicationsClient({ requestedTab }: { requestedTab?: string }
               </div>
               <div>
                 <span>Scheduled</span>
-                <strong>{formatDate(messageDetail.scheduledFor)}</strong>
+                <strong style={{ whiteSpace:"normal",overflow:"visible",overflowWrap:"anywhere" }}>{formatDateTime(messageDetail.scheduledFor, messageDetail.sentAt ? "Sent immediately" : "No scheduled time")}</strong>
               </div>
               <div>
                 <span>Sent</span>
-                <strong>{formatDate(messageDetail.sentAt, "Not sent")}</strong>
+                <strong style={{ whiteSpace:"normal",overflow:"visible",overflowWrap:"anywhere" }}>{formatDateTime(selectedAttempt?.sentAt ?? messageDetail.sentAt, "Not sent")}</strong>
               </div>
               <div>
                 <span>Status</span>
                 <StatusChip value={messageDetail.status} />
               </div>
               <div>
-                <span>Delivery</span>
+                <span>Issues</span>
                 <DeliverySummary row={messageDetail} />
               </div>
             </div>
 
-            <SectionCard title="Email Body">
-              {messagePreview.text.output ? (
-                <>
-                  <div
-                    className="comms-preview-frame comms-message-body-frame"
-                    dangerouslySetInnerHTML={{ __html: textToEmailHtml(messagePreview.text.output) }}
-                  />
-                  {messagePreview.text.warnings.length > 0 && (
-                    <div className="template-editor-warnings">
-                      {Array.from(new Set(messagePreview.text.warnings)).map((warning) => <span key={warning}>{warning}</span>)}
-                    </div>
-                  )}
-                </>
-              ) : messagePreview.html ? (
-                <div
-                  className="comms-preview-frame comms-message-body-frame"
-                  dangerouslySetInnerHTML={{ __html: messagePreview.html }}
-                />
-              ) : (
-                <Typography color="text.secondary">This message does not have an email body yet.</Typography>
-              )}
+            <SectionCard title="Email content">
+              <TextField select label="Recipient" value={messageDetail.recipientEmail ?? ""} onChange={(event) => void openMessageDetail(messageDetail, event.target.value)} fullWidth>
+                <MenuItem value="">Choose a recipient</MenuItem>
+                {(messageDetail.recipients ?? []).map((email: string) => <MenuItem value={email} key={email}>{email}</MenuItem>)}
+              </TextField>
+              {!messageDetail.recipientEmail ? <Typography>Choose a recipient to view their personalized email. No recipient has been selected automatically.</Typography> : <>
+                {(messageDetail.attempts ?? []).length > 1 && <TextField select label="Send attempt" value={selectedAttempt?.id ?? ""} onChange={(event) => setSelectedAttemptId(event.target.value)} fullWidth>
+                  {messageDetail.attempts.map((attempt: AdminRow) => <MenuItem key={attempt.id} value={attempt.id}>Sent · {formatDateTime(attempt.sentAt)}</MenuItem>)}
+                </TextField>}
+                <Typography>{messageContent?.provenance === "snapshot" ? "Saved sent copy" : messageContent?.provenance === "reconstructed" ? (messageDetail.attempts?.length ? "Reconstructed preview — original sent copy unavailable. Uses currently available recipient details." : "Personalized preview — this recipient has no recorded send. Uses currently available details.") : "Original sent content unavailable"}</Typography>
+                {messageContent?.warnings?.length > 0 && <Alert severity="warning">Some historical values are unavailable: {messageContent.warnings.join(" ")}</Alert>}
+                {(messageContent?.bodyHtml || messageContent?.bodyText) && <iframe
+                  title={`${messageDetail.attempts?.length ? "Email sent" : "Email preview"} to ${messageDetail.recipientEmail}`} sandbox="" referrerPolicy="no-referrer"
+                  srcDoc={isolatedEmailDocument(messageContent.bodyHtml || textToEmailHtml(messageContent.bodyText))}
+                  style={{ width: "100%", minHeight: 420, border: "1px solid #dbe3ee", borderRadius: 8 }}
+                />}
+                {selectedAttempt?.content?.attachments?.length > 0 && <Typography>Attachments recorded for this send: {selectedAttempt.content.attachments.map((attachment: AdminRow) => attachment.fileName).filter(Boolean).join(", ")}</Typography>}
+              </>}
             </SectionCard>
 
             <SectionCard title="Materials">

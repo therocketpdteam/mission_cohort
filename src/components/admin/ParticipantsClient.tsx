@@ -358,17 +358,20 @@ export function ParticipantsClient({ participantId }: { participantId?: string }
   }, [loading, participantId]);
 
   async function load() {
-    const [participantRows, registrationRows, templateRows, cohortRows] = await Promise.all([
-      adminApi<AdminRow[]>("/api/participants"),
+    const participantsRequest = adminApi<AdminRow[]>("/api/participants").then((participantRows) => {
+      setRows(participantRows);
+      setLoading(false);
+    });
+    const supportingRequest = Promise.all([
       adminApi<AdminRow[]>("/api/registrations"),
       adminApi<AdminRow[]>("/api/communications/templates"),
       adminApi<AdminRow[]>("/api/cohorts").catch(() => [])
-    ]);
-    setRows(participantRows);
-    setRegistrations(registrationRows);
-    setTemplates(templateRows);
-    setAllCohorts(cohortRows);
-    setLoading(false);
+    ]).then(([registrationRows, templateRows, cohortRows]) => {
+      setRegistrations(registrationRows);
+      setTemplates(templateRows);
+      setAllCohorts(cohortRows);
+    });
+    await Promise.all([participantsRequest, supportingRequest]);
   }
 
   useEffect(() => {

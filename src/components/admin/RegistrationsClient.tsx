@@ -1,5 +1,12 @@
 "use client";
 
+import { reconcileFinancialRoster, reconciliationStatuses } from "@/lib/financialRosterReconciliation";
+
+import { CollapsibleSectionCard } from "./CollapsibleSectionCard";
+import { registrationFinanceAlerts } from "@/lib/registrationFinanceAlerts";
+import { isOpenRegistrationFollowUp } from "@/lib/paymentFollowUps";
+import { registrationCollectedAmount } from "@/lib/cohortFinance";
+
 import { useOptimisticEntityRows, useOptimisticProjection } from "./useOptimisticEntity";
 import { startImmediateSave, useFormVersion } from "./common";
 
@@ -9,7 +16,7 @@ import { CancelOutlined } from "@/components/ui/icons";
 import { CheckCircleOutline } from "@/components/ui/icons";
 import { DeleteOutline } from "@/components/ui/icons";
 import { EditOutlined } from "@/components/ui/icons";
-import { ExpandMoreOutlined } from "@/components/ui/icons";
+import { ExpandMoreOutlined, VisibilityOutlined } from "@/components/ui/icons";
 import { HelpOutline } from "@/components/ui/icons";
 import { WarningAmberOutlined } from "@/components/ui/icons";
 import {
@@ -33,7 +40,6 @@ import {
   Typography
 } from "@/components/ui/primitives";
 import { GridColDef, GridRowParams, GridRowSelectionModel } from "./common";
-import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
 import { activeEmailIssues } from "@/lib/emailIssueState";
@@ -42,6 +48,7 @@ import { formatProperDisplay, formatRegistrationPaymentStatus, formatRegistratio
 import type { CancellationNotificationMode } from "@/modules/cohorts/cancellation";
 import { RosterWorkbench } from "./RosterWorkbench";
 import { RegistrationPendingChangesPanel } from "./RegistrationPendingChangesPanel";
+import { countPendingRegistrationChanges } from "@/lib/registrationPendingChanges";
 import { RegistrationDeliveryPreflight } from "./RegistrationDeliveryPreflight";
 import { PocCommunicationHistory } from "./PocCommunicationHistory";
 import { RegistrationCommunicationJourney } from "./RegistrationCommunicationJourney";
@@ -75,37 +82,6 @@ const visibilityOptions = [
   { value: "all", label: "All registrations" }
 ];
 
-function CollapsibleSectionCard({
-  title,
-  children,
-  action,
-  defaultOpen = false,
-  alertCount = 0
-}: {
-  title: string;
-  children: ReactNode;
-  action?: ReactNode;
-  defaultOpen?: boolean;
-  alertCount?: number;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-
-  return (
-    <details className={`section-card collapsible-section-card ${alertCount ? "has-alert" : ""}`} open={open} onToggle={(event) => setOpen(event.currentTarget.open)}>
-      <summary className="collapsible-section-summary">
-        <div className="collapsible-section-title">
-          <h2 className="section-card-title">{title}</h2>
-          {alertCount ? <span className="collapsible-section-alert"><WarningAmberOutlined fontSize="small" />{alertCount}</span> : null}
-        </div>
-        <div className="collapsible-section-actions" onClick={(event) => event.stopPropagation()}>
-          {action}
-          <span className="collapsible-section-caret" aria-hidden="true"><ExpandMoreOutlined fontSize="small" /></span>
-        </div>
-      </summary>
-      <div className="collapsible-section-content">{children}</div>
-    </details>
-  );
-}
 
 function money(value: unknown) {
   return `$${Number(value ?? 0).toLocaleString()}`;
@@ -132,7 +108,7 @@ function splitName(name?: string | null) {
 
 function rosterStatusFromCounts(registration: AdminRow) {
   const expected = Number(registration.participantCount ?? 0);
-  const actual = Number(registration.participants?.length ?? registration._count?.participants ?? 0);
+  const actual = reconcileFinancialRoster(registration).savedParticipants;
 
   if (expected === 0 && actual === 0) {
     return "NOT_REQUESTED";
@@ -147,8 +123,10 @@ function rosterStatusFromCounts(registration: AdminRow) {
 }
 
 function rosterHealth(registration: AdminRow) {
+  const financial = reconcileFinancialRoster(registration);
+  if (financial.blocksCompletion) return { tone: "warning", label: formatStatusLabel(financial.status), helper: financial.missingParticipants != null ? `${financial.missingParticipants} missing / ${financial.excessParticipants} excess` : financial.potentialMissingParticipants != null ? `${financial.potentialMissingParticipants} potentially missing · unverified` : "Financial evidence needs review" };
   const expected = Number(registration.participantCount ?? 0);
-  const actual = Number(registration.participants?.length ?? registration._count?.participants ?? 0);
+  const actual = reconcileFinancialRoster(registration).savedParticipants;
   const status = rosterStatusFromCounts(registration);
 
   if (status === "COMPLETE") {
@@ -171,14 +149,7 @@ function rosterHealth(registration: AdminRow) {
 }
 
 function pendingApplyCount(registration: AdminRow) {
-  const pending = registration.pendingChanges;
-  if (!pending || typeof pending !== "object" || Array.isArray(pending)) {
-    return 0;
-  }
-  const row = pending as AdminRow;
-  return (Array.isArray(row.participantAdditions) ? row.participantAdditions.length : 0)
-    + (Array.isArray(row.participantRemovals) ? row.participantRemovals.length : 0)
-    + (row.fields && typeof row.fields === "object" && !Array.isArray(row.fields) ? Object.keys(row.fields).length : 0);
+  return countPendingRegistrationChanges(registration.pendingChanges);
 }
 
 function taskTemplateName(task: AdminRow) {
@@ -200,12 +171,12 @@ function isSupportingDocumentsTask(task: AdminRow) {
 
 function openFollowUpTasks(registration: AdminRow) {
   return (registration.operationsTasks ?? [])
-    .filter((task: AdminRow) => task.status !== "COMPLETED" && !isSupportingDocumentsTask(task));
+    .filter((task: AdminRow) => isOpenRegistrationFollowUp(task, registration) && !isSupportingDocumentsTask(task));
 }
 
 function participantListFollowUpCount(registration: AdminRow) {
   return (registration.operationsTasks ?? [])
-    .filter((task: AdminRow) => task.category === "PARTICIPANT_LIST" && task.status !== "COMPLETED").length;
+    .filter((task: AdminRow) => task.category === "PARTICIPANT_LIST" && isOpenRegistrationFollowUp(task, registration)).length;
 }
 
 function registrationCommunicationIssueCount(registration: AdminRow) {
@@ -295,7 +266,7 @@ export function RegistrationEditor({
   defaultCohortId?: string;
   lockCohort?: boolean;
   onClose: () => void;
-  onSaved: () => Promise<void>;
+  onSaved: (saved: AdminRow) => Promise<void>;
 }) {
   const [values, setValues] = useState<AdminRow>(emptyRegistration());
   const [cohort, setCohort] = useState<AdminRow | null>(null);
@@ -551,7 +522,7 @@ export function RegistrationEditor({
           detail: { id: saved.deliveryJob.id, entityId: saved.id, label: `${cohortDropdownLabel(cohort)} · ${manualParticipants.length} participants` }
         }));
       }
-      await onSaved();
+      await onSaved(saved);
     } catch (saveError) {
       if (formVersion.current === version) setError((saveError as Error).message);
     } finally {
@@ -813,7 +784,7 @@ export function RegistrationEditor({
             <span>Track how this registration will be collected and its current billing state.</span>
           </div>
           <Grid size={{ xs: 12, md: 3 }} className="registration-roster-status">
-            <TextField fullWidth label="Roster status" value={formatStatusLabel(values.participantListStatus ?? "NEEDED")} disabled helperText="Calculated from saved participants" />
+            <TextField fullWidth label="Stored roster status" value={formatStatusLabel(values.participantListStatus ?? "NEEDED")} disabled helperText="Calculated from saved participants" />
           </Grid>
           <Grid size={{ xs: 12, md: 3 }} className="registration-payment-method">
             <TextField
@@ -1197,17 +1168,13 @@ function RegistrationDetailDialog({
   const activeInvoices = (registration?.invoiceDrafts ?? []).filter((invoice: AdminRow) => !["VOIDED", "CANCELLED"].includes(String(invoice.status)));
   const registrationTotal = Number(registration?.totalAmount ?? 0);
   const invoicedTotal = activeInvoices.reduce((sum: number, invoice: AdminRow) => sum + Number(invoice.totalAmount ?? 0), 0);
-  const recordedPayments = (registration?.paymentRecords ?? [])
-    .filter((payment: AdminRow) => payment.status === "PAID")
-    .reduce((sum: number, payment: AdminRow) => sum + Number(payment.amount ?? 0), 0);
-  const invoicePaidTotal = activeInvoices.reduce((sum: number, invoice: AdminRow) => sum + Number(invoice.paidAmount ?? 0), 0);
-  const receivedTotal = recordedPayments > 0 ? recordedPayments : invoicePaidTotal;
+  const receivedTotal = registrationCollectedAmount(registration ?? {});
   const overpaymentTotal = Math.max(receivedTotal - registrationTotal, 0);
   const paidForInvoice = (invoice: AdminRow) => {
     const allocated = (registration?.paymentRecords ?? [])
-      .filter((payment: AdminRow) => payment.status === "PAID" && payment.invoiceNumber === invoice.invoiceNumber)
+      .filter((payment: AdminRow) => ["PAID", "PARTIALLY_PAID"].includes(payment.status) && payment.invoiceNumber === invoice.invoiceNumber)
       .reduce((sum: number, payment: AdminRow) => sum + Number(payment.amount ?? 0), 0);
-    return allocated > 0 ? allocated : Number(invoice.paidAmount ?? 0);
+    return Math.max(allocated, Number(invoice.paidAmount ?? 0));
   };
 
   async function openInvoicePdf(mode: "preview" | "download", requestedInvoice?: AdminRow | null) {
@@ -1378,7 +1345,7 @@ function RegistrationDetailDialog({
   const rosterAlertCount = registration ? participantListFollowUpCount(registration) : 0;
   const communicationIssueCount = registration ? registrationCommunicationIssueCount(registration) : 0;
   const pocIssueCount = thread.reduce((total, communication: AdminRow) => total + Number(communication.emailSummary?.unreviewedIssueCount ?? 0), 0);
-  const rosterComplete = registration ? rosterStatusFromCounts(registration) === "COMPLETE" : false;
+  const rosterComplete = registration ? rosterStatusFromCounts(registration) === "COMPLETE" && !reconcileFinancialRoster(registration).blocksCompletion : false;
 
   async function addPocAsParticipant() {
     if (!registration?.primaryContactEmail) {
@@ -1520,7 +1487,7 @@ function RegistrationDetailDialog({
             }}
           />
 
-          <RegistrationDeliveryPreflight registration={registration} onAddPrimaryContact={addPocAsParticipant} />
+          <RegistrationDeliveryPreflight registration={registration} onAddPrimaryContact={addPocAsParticipant} onFinancialReview={onChanged} />
 
           <div className="quick-view-grid">
             <DetailTile label="POC email" value={registration.primaryContactEmail} />
@@ -1544,13 +1511,8 @@ function RegistrationDetailDialog({
             }}
           />
 
-          <section className="registration-detail-section registration-invoice-section">
-            <div className="registration-section-heading">
-              <div>
-                <h3>Invoice</h3>
-                <p>Paid invoices stay unchanged. Additional charges are issued as separate supplemental invoices.</p>
-              </div>
-            </div>
+          <CollapsibleSectionCard title="Invoice" compact alertCount={registrationFinanceAlerts(registration).invoice}>
+            <p className="registration-finance-note">Paid invoices stay unchanged. Additional charges are issued as separate supplemental invoices.</p>
             {activeInvoices.length > 0 ? (
               <div className="registration-invoice-ledger">
                 <div className="registration-invoice-totals">
@@ -1612,7 +1574,7 @@ function RegistrationDetailDialog({
                 </div>
               </div>
             )}
-          </section>
+          </CollapsibleSectionCard>
 
           <CollapsibleSectionCard title="Open Follow-Ups" alertCount={registrationFollowUpTasks.length} defaultOpen={registrationFollowUpTasks.length > 0}>
             <div className="registration-section-heading">
@@ -1742,28 +1704,28 @@ function RegistrationDetailDialog({
               pocEmail={registration.primaryContactEmail}
             />
           </CollapsibleSectionCard>
-          <section className="registration-detail-section">
-            <div className="registration-section-heading">
-              <div>
-                <h3>Jotform Revision Timeline</h3>
-                <p>Imports and resubmissions linked to this registration.</p>
-              </div>
-            </div>
+          <CollapsibleSectionCard
+            title="Jotform Submission History"
+            alertCount={(registration.webhookEvents ?? []).filter((event: AdminRow) => event.status === "FAILED").length}
+          >
+            <p className="registration-finance-note">Original submissions and resubmissions imported from Jotform. Details below are historical snapshots, not the current registration or payment status.</p>
             {(registration.webhookEvents ?? []).length > 0 ? (
               <div className="quick-view-list">
                 {(registration.webhookEvents ?? []).map((event: AdminRow) => (
                   <div className="quick-view-list-row" key={event.id}>
                     <div>
-                      <strong>{`Revision ${event.revisionNumber ?? "-"} · ${formatStatusLabel(event.status)}`}</strong>
-                      <span>{`${event.processedAt || event.createdAt ? new Date(event.processedAt ?? event.createdAt).toLocaleString("en-US") : ""}${revisionSummary(event) ? ` · ${revisionSummary(event)}` : ""}${event.errorMessage ? ` · ${event.errorMessage}` : ""}`}</span>
+                      <strong>{`Submission ${event.revisionNumber ?? "-"} · ${formatStatusLabel(event.status)}`}</strong>
+                      <span>{event.processedAt || event.createdAt ? new Date(event.processedAt ?? event.createdAt).toLocaleString("en-US", { timeZoneName: "short" }) : "Date unavailable"}</span>
+                      {revisionSummary(event) ? <span>Submitted details: {revisionSummary(event)}</span> : null}
+                      {event.errorMessage ? <span>{event.errorMessage}</span> : null}
                     </div>
                   </div>
                 ))}
               </div>
             ) : (
-              <EmptyState title="No Jotform revisions yet" description="Jotform imports and resubmissions linked to this registration will appear here." />
+              <EmptyState title="No Jotform submissions" description="Imported Jotform submissions linked to this registration will appear here." />
             )}
-          </section>
+          </CollapsibleSectionCard>
 
           <CollapsibleSectionCard
             title="CRM Sync History"
@@ -1836,7 +1798,7 @@ function RegistrationDetailDialog({
           <Button onClick={sendInvoiceCopy} disabled={sendingInvoice || !invoiceRecipient.trim()}>{sendingInvoice ? "Sending" : "Send invoice"}</Button>
         </DialogActions>
       </Dialog>
-      <Dialog open={Boolean(invoicePreview)} onClose={() => setInvoicePreview(null)} fullWidth maxWidth="xl">
+      <Dialog open={Boolean(invoicePreview)} onClose={() => setInvoicePreview(null)} fullWidth maxWidth="xl" BackdropProps={{ className: "invoice-modal-backdrop" }} PaperProps={{ className: "invoice-preview-modal" }}>
         <DialogTitle>{invoicePreview?.title ?? "Invoice preview"}</DialogTitle>
         <DialogContent className="invoice-preview-body">
           {invoicePreview ? (
@@ -2172,6 +2134,9 @@ export function RegistrationsClient({ requestedRegistrationId }: { requestedRegi
   const [search, setSearch] = useState("");
   const [paymentStatus, setPaymentStatus] = useState("");
   const [rosterStatus, setRosterStatus] = useState("");
+  const [financialStatus, setFinancialStatus] = useState("");
+  const financialResults = useMemo(() => new Map(rows.map(row=>[row.id,reconcileFinancialRoster(row)])), [rows]);
+  const financialCounts = useMemo(() => rows.filter(row=>!row.archivedAt && row.status!=="CANCELLED").reduce<Record<string,number>>((counts,row)=>{ const status=financialResults.get(row.id)!.status; counts[status]=(counts[status]??0)+1; return counts; },{}), [rows,financialResults]);
   const [source, setSource] = useState("");
   const [cohortId, setCohortId] = useState("");
   const [organizationId, setOrganizationId] = useState("");
@@ -2336,9 +2301,9 @@ export function RegistrationsClient({ requestedRegistrationId }: { requestedRegi
           : visibility === "active"
             ? !row.archivedAt
             : true;
-        return matchSearch && matchPayment && matchRoster && matchSource && matchCohort && matchOrganization && matchVisibility;
+        return (!financialStatus || (!row.archivedAt && row.status !== "CANCELLED" && financialResults.get(row.id)?.status === financialStatus)) && matchSearch && matchPayment && matchRoster && matchSource && matchCohort && matchOrganization && matchVisibility;
       }),
-    [rows, search, paymentStatus, rosterStatus, source, cohortId, organizationId, visibility]
+    [rows, financialResults, search, paymentStatus, rosterStatus, financialStatus, source, cohortId, organizationId, visibility]
   );
 
   const sourceOptions = useMemo(
@@ -2457,9 +2422,16 @@ export function RegistrationsClient({ requestedRegistrationId }: { requestedRegi
       renderCell: (params) => (
         <div className="app-table-status-stack">
           <StatusChip value={formatRegistrationPaymentStatus(params.row)} />
-          <span className="app-table-sub" title={money(registrationDisplayAmount(params.row))}>{money(registrationDisplayAmount(params.row))}</span>
         </div>
       )
+    },
+    {
+      field: "value",
+      headerName: "Value",
+      width: 120,
+      sortable: true,
+      sortValue: (row) => registrationDisplayAmount(row),
+      renderCell: (params) => money(registrationDisplayAmount(params.row))
     },
     {
       field: "source",
@@ -2476,6 +2448,7 @@ export function RegistrationsClient({ requestedRegistrationId }: { requestedRegi
         <Box onClick={(event) => event.stopPropagation()}>
           <RowActionMenu
             actions={[
+              { label: pendingApplyCount(params.row) > 0 ? "Review pending changes" : "Open registration", icon: <VisibilityOutlined fontSize="small" />, onClick: () => void openDetail(String(params.row.id)) },
               { label: "Edit POC & billing", icon: <EditOutlined fontSize="small" />, onClick: () => { setEditing(params.row); setDialogOpen(true); } },
               { label: "Confirm registration", icon: <CheckCircleOutline fontSize="small" />, color: "success", onClick: () => mutate({ id: params.row.id, action: "confirm" }, "Registration confirmed") },
               { label: "Cancel registration", icon: <CancelOutlined fontSize="small" />, color: "warning", onClick: () => setPendingLifecycleAction({ action: "cancel", row: params.row }) },
@@ -2523,7 +2496,11 @@ export function RegistrationsClient({ requestedRegistrationId }: { requestedRegi
           <MenuItem value="WITHDRAWN">Withdrawn</MenuItem>
           <MenuItem value="FREE">Free</MenuItem>
         </TextField>
-        <TextField select label="Roster" value={rosterStatus} onChange={(event) => setRosterStatus(event.target.value)} sx={{ minWidth: 180 }}>
+        <TextField select label="Financial / roster" value={financialStatus} onChange={event=>setFinancialStatus(event.target.value)} sx={{ minWidth: 220 }}>
+          <MenuItem value="">All reconciliation statuses</MenuItem>
+          {reconciliationStatuses.map(status=><MenuItem key={status} value={status}>{formatStatusLabel(status)} ({financialCounts[status] ?? 0})</MenuItem>)}
+        </TextField>
+        <TextField select label="Stored roster" value={rosterStatus} onChange={(event) => setRosterStatus(event.target.value)} sx={{ minWidth: 180 }}>
           <MenuItem value="">All rosters</MenuItem>
           {rosterStatuses.map((value) => <MenuItem value={value} key={value}>{formatStatusLabel(value)}</MenuItem>)}
         </TextField>
@@ -2575,10 +2552,13 @@ export function RegistrationsClient({ requestedRegistrationId }: { requestedRegi
         organizations={organizations}
         registrations={rows}
         onClose={() => { setDialogOpen(false); setEditing(null); }}
-        onSaved={async () => {
-          const defer = Boolean(editing && ["PUBLISHED", "ACTIVE"].includes(String(editing.cohort?.derivedStatus ?? editing.cohort?.status)));
-          notifySuccess(defer ? "Registration saved. Review and apply its delivery changes." : editing ? "Registration updated" : "Registration created");
-          if (detail?.id && editing?.id === detail.id) {
+        onSaved={async (saved) => {
+          const pendingCount = pendingApplyCount(saved);
+          notifySuccess(pendingCount > 0 ? "Registration saved. Review and apply its delivery changes." : editing ? "Registration updated" : "Registration created");
+          if (pendingCount > 0) {
+            await openDetail(String(saved.id));
+            await load();
+          } else if (detail?.id && editing?.id === detail.id) {
             await reloadDetail();
           } else {
             await load();
@@ -2587,7 +2567,7 @@ export function RegistrationsClient({ requestedRegistrationId }: { requestedRegi
       />
       <RegistrationDetailDialog
         open={detailOpen}
-        registration={detailLoading ? null : detail}
+        registration={detail}
         templates={templates}
         onClose={closeDetail}
         onChanged={reloadDetail}

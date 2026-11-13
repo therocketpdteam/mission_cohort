@@ -1,9 +1,11 @@
+import { countPendingRegistrationChanges } from "./registrationPendingChanges";
+
 export type OperationState = "pending" | "success" | "warning" | "error";
 export type EntityChange = { entity: string; id?: string; values: Record<string, any>; method: string };
 export type AdminOperation = {
   id: string; state: OperationState; message: string; href: string; origin: string; createdAt: number; finishedAt?: number;
   path?: string; method?: string; change?: EntityChange; result?: Record<string, any>; error?: string; dismissed?: boolean;
-  onDismiss?: () => void; errorConfirmed?: boolean;
+  onDismiss?: () => void; errorConfirmed?: boolean; attentionReason?: "registration_pending_changes";
 };
 
 const fields: Record<string, string[]> = {
@@ -52,6 +54,8 @@ export function operationDestination(path: string, body: any, origin: string, re
   return origin;
 }
 
+const pendingApplyDetail = "Saved. Review and apply the registration’s delivery changes.";
+
 export function mutationOutcome(value: unknown): { state: "success" | "warning"; detail?: string } {
   if (!value || typeof value !== "object") return { state: "success" };
   const row = value as Record<string, any>;
@@ -59,7 +63,7 @@ export function mutationOutcome(value: unknown): { state: "success" | "warning";
   if (row.success === false || ["failed", "needs_attention", "needs_review", "error", "blocked", "partial", "warning"].includes(status) || row.error || row.providerError || (Array.isArray(row.failed) && row.failed.length) || (typeof row.failed === "number" && row.failed > 0)) return { state: "warning", detail: String(row.error ?? row.providerError ?? "Some follow-up work needs review.") };
   if (["confirmationFailures", "emailFailures", "calendarFailures", "failedCount"].some((key) => Number(row[key] ?? 0) > 0) || ["errors", "failures", "blockers"].some((key) => Array.isArray(row[key]) && row[key].length)) return { state: "warning", detail: "Some follow-up work needs review. Open the record for details." };
   if (["pending", "paused", "syncing", "busy", "queued"].includes(status)) return { state: "warning", detail: String(row.error ?? "Saved. Follow-up processing is still pending.") };
-  if (status === "pending_apply") return { state: "warning", detail: "Saved. Review and apply the registration’s delivery changes." };
+  if (status === "pending_apply") return { state: "warning", detail: pendingApplyDetail };
   if (row.deliveryJob?.id && row.deliveryJob.status !== "COMPLETED") return row.deliveryJob.status === "FAILED" ? { state: "warning", detail: "Saved, but registration delivery needs review." } : { state: "warning", detail: "Saved. Registration delivery is continuing in the background." };
   for (const key of ["journey", "calendar", "calendarSync", "communication", "delivery", "cancellationEmail", "calendarCleanup"]) {
     const child = row[key];
@@ -109,8 +113,22 @@ export function finishOperation(id: string, result?: any, error?: unknown) {
   const operation = operations.find((entry) => entry.id === id);
   if (!operation) return;
   const outcome = error ? { state: "error" as const, detail: error instanceof Error ? error.message : String(error) } : mutationOutcome(result);
-  operations = operations.map((entry) => entry.id !== id ? entry : { ...entry, state: outcome.state, result: entry.change ? result : undefined, error: error ? outcome.detail : undefined, errorConfirmed: error ? Boolean((error as { confirmedFailure?: boolean }).confirmedFailure) : undefined, finishedAt: Date.now(), message: error ? `${operationLabel(entry.change)} failed: ${outcome.detail}` : outcome.detail ?? `${operationLabel(entry.change)} confirmed.`, href: operationDestination(entry.path ?? "", { ...entry.change?.values, id: entry.change?.id }, entry.origin, result) });
+  operations = operations.map((entry) => entry.id !== id ? entry : { ...entry, state: outcome.state, attentionReason: outcome.state === "warning" && outcome.detail === pendingApplyDetail ? "registration_pending_changes" : undefined, result: entry.change ? result : undefined, error: error ? outcome.detail : undefined, errorConfirmed: error ? Boolean((error as { confirmedFailure?: boolean }).confirmedFailure) : undefined, finishedAt: Date.now(), message: error ? `${operationLabel(entry.change)} failed: ${outcome.detail}` : outcome.detail ?? `${operationLabel(entry.change)} confirmed.`, href: operationDestination(entry.path ?? "", { ...entry.change?.values, id: entry.change?.id }, entry.origin, result) });
   persist(); changed();
+}
+
+export function reconcileRegistrationPendingOperations(registration: Record<string, any>, requestStartedAt: number) {
+  if (!registration.id || !Object.prototype.hasOwnProperty.call(registration, "pendingChanges") || countPendingRegistrationChanges(registration.pendingChanges) > 0) return;
+  let resolved = false;
+  operations = operations.map((operation) => {
+    if (operation.state !== "warning" || operation.dismissed || operation.attentionReason !== "registration_pending_changes" || !operation.finishedAt || operation.finishedAt > requestStartedAt) return operation;
+    const destination = new URL(operation.href, "https://local.invalid");
+    if (destination.pathname !== "/registrations" || destination.searchParams.get("id") !== registration.id) return operation;
+    if (operation.change?.entity === "registrations" && operation.result?.updatedAt && (!registration.updatedAt || new Date(registration.updatedAt) < new Date(operation.result.updatedAt))) return operation;
+    resolved = true;
+    return { ...operation, state: "success" as const, attentionReason: undefined, message: "Saved. No registration delivery changes are waiting for Apply.", finishedAt: Date.now() };
+  });
+  if (resolved) { persist(); changed(); }
 }
 export function publishOperationNotice(input: Pick<AdminOperation, "message" | "state" | "href"> & { id?: string; onDismiss?: () => void }) {
   const id = input.id ?? `notice-${Date.now()}-${++sequence}`;

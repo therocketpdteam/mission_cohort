@@ -111,7 +111,7 @@ export function buildManualCustomEmailRecipientGroups(
   return Array.from(groups.values());
 }
 
-function cohortMergeContext(cohort: Record<string, any> | undefined) {
+export function cohortMergeContext(cohort: Record<string, any> | undefined) {
   const presenter = cohort?.presenter ?? {};
 
   return {
@@ -162,7 +162,7 @@ function formatMergeMoney(value: unknown) {
   });
 }
 
-function registrationMergeContext(registration: Record<string, any> | undefined) {
+export function registrationMergeContext(registration: Record<string, any> | undefined) {
   if (!registration) {
     return undefined;
   }
@@ -190,7 +190,7 @@ function registrationMergeContext(registration: Record<string, any> | undefined)
   };
 }
 
-function participantMergeContext(participant: Record<string, any> | undefined) {
+export function participantMergeContext(participant: Record<string, any> | undefined) {
   if (!participant) {
     return undefined;
   }
@@ -3322,8 +3322,10 @@ export async function createDefaultCohortSessionCommunications(cohortId: string)
 export async function getRecipientCommunicationSummary(emails: string[]) {
   const normalizedEmails = emails.map((email) => email.toLowerCase()).filter(Boolean);
   const events = await prisma.emailEvent.findMany({
-    where: { recipientEmail: { in: normalizedEmails } },
-    orderBy: { createdAt: "desc" }
+    where: { recipientEmail: { in: [...new Set(normalizedEmails)], mode: "insensitive" } },
+    orderBy: { createdAt: "desc" },
+    // List summaries need event metadata, never the personalized email snapshots.
+    select: { id: true, communicationId: true, recipientEmail: true, eventType: true, createdAt: true, reviewedAt: true }
   });
   const grouped = new Map<string, typeof events>();
 
@@ -3342,6 +3344,8 @@ export async function getRecipientCommunicationThread(email: string) {
     return [];
   }
 
+  const { findRecipientCommunicationIds } = await import("./communicationHistoryService");
+  const historyIds = await findRecipientCommunicationIds(normalized);
   let events: any[];
   let communications: any[];
 
@@ -3353,12 +3357,7 @@ export async function getRecipientCommunicationThread(email: string) {
         include: { reviewedBy: true, communication: { include: { cohort: true, session: true, template: true, attachments: true } } }
       }),
       prisma.cohortCommunication.findMany({
-        where: {
-          OR: [
-            { recipientEmails: { array_contains: [email] } },
-            { recipientEmails: { array_contains: [normalized] } }
-          ]
-        },
+        where: { id: { in: historyIds } },
         orderBy: { createdAt: "desc" },
         include: { cohort: true, session: true, template: true, emailEvents: { include: { reviewedBy: true } }, attachments: true }
       })
@@ -3370,13 +3369,7 @@ export async function getRecipientCommunicationThread(email: string) {
 
     const legacyEvents = await legacyEmailEventsForRecipient(normalized);
     communications = await prisma.cohortCommunication.findMany({
-      where: {
-        OR: [
-          { recipientEmails: { array_contains: [email] } },
-          { recipientEmails: { array_contains: [normalized] } },
-          { id: { in: legacyEvents.map((event) => event.communicationId).filter((id): id is string => Boolean(id)) } }
-        ]
-      },
+      where: { id: { in: historyIds } },
       orderBy: { createdAt: "desc" },
       include: { cohort: true, session: true, template: true, attachments: true }
     });
@@ -3393,21 +3386,27 @@ export async function getRecipientCommunicationThread(email: string) {
   const byCommunication = new Map<string, any>();
 
   for (const communication of communications) {
+    const recipientEvents = communication.emailEvents
+      .filter((event: EventSummaryInput) => normalizeEmail(event.recipientEmail ?? "") === normalized)
+      .sort((a: EventSummaryInput,b: EventSummaryInput) => b.createdAt.getTime()-a.createdAt.getTime());
     byCommunication.set(communication.id, {
       ...communication,
       recipientEmail: normalized,
-      events: communication.emailEvents.filter((event: EventSummaryInput) => normalizeEmail(event.recipientEmail ?? "") === normalized),
-      emailSummary: emailEventSummary(communication.emailEvents.filter((event: EventSummaryInput) => normalizeEmail(event.recipientEmail ?? "") === normalized))
+      emailEvents: recipientEvents,
+      events: recipientEvents,
+      emailSummary: emailEventSummary(recipientEvents)
     });
   }
 
   for (const event of events) {
     if (event.communication) {
       const existing = byCommunication.get(event.communication.id);
-      const nextEvents = [...(existing?.events ?? []), event];
+      const nextEvents = [...(existing?.events ?? []).filter((row: any) => row.id !== event.id), event]
+        .sort((a,b)=>new Date(b.createdAt).getTime()-new Date(a.createdAt).getTime());
       byCommunication.set(event.communication.id, {
         ...event.communication,
         recipientEmail: normalized,
+        emailEvents: nextEvents,
         events: nextEvents,
         emailSummary: emailEventSummary(nextEvents)
       });
@@ -3623,7 +3622,8 @@ export async function listTemplates(options: { includeLegacy?: boolean } = {}) {
   await ensureDefaultCommunicationTemplates();
 
   const templates = await prisma.communicationTemplate.findMany({
-    orderBy: [{ name: "asc" }, { updatedAt: "desc" }]
+    orderBy: [{ name: "asc" }, { updatedAt: "desc" }],
+    include: { _count: { select: { communications: true } } }
   });
 
   if (options.includeLegacy) {

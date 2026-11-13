@@ -36,6 +36,7 @@
     "test:e2e": "playwright test",
     "test:e2e:audit": "playwright test tests/e2e/ui-audit.spec.ts",
     "test:e2e:ui": "playwright test --ui",
+    "test:ui:history": "playwright test --config tests/ui/communication-history.config.ts",
     "test:e2e:report": "playwright show-report",
     "readiness": "node scripts/readiness-check.mjs",
     "deployment:validate-env": "node scripts/validate-deployment-environment.mjs",
@@ -53,6 +54,7 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.3.14",
     "@playwright/test": "^1.60.0",
     "@types/node": "^22.13.10",
     "@types/react": "^19.0.10",

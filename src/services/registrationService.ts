@@ -1,3 +1,4 @@
+import { attachFinancialReconciliation } from "./financialRosterReconciliationService";
 import { randomUUID } from "node:crypto";
 import { CommunicationStatus, IntegrationJobType, IntegrationProvider, InvoiceDraftStatus, OperationsTaskCategory, OperationsTaskPriority, OperationsTaskStatus, ParticipantListStatus, ParticipantStatus, PaymentStatus, Prisma, RecipientScope, RegistrationStatus, SupportingDocumentStatus, TemplateType } from "@prisma/client";
 import { z } from "zod";
@@ -11,7 +12,7 @@ import { voidRegistrationQuickBooksInvoice } from "./quickBooksService";
 import { automaticRegistrationJourneyOptions, cancelRegistrationJourneys, planRegistrationJourneys } from "./registrationJourneyService";
 import { syncRegistrationParticipantListStatus } from "./participantService";
 import { syncPaymentRecordsToRegistrationStatus } from "./paymentService";
-import { shouldDeferRegistrationDelivery, stageParticipantAddition, stageRegistrationFieldChanges } from "./registrationChangeService";
+import { registrationPendingDeliveryState, shouldDeferRegistrationDelivery, stageParticipantAddition, stageRegistrationFieldChanges } from "./registrationChangeService";
 import { planFutureGoogleCalendarAttendeeRemoval, removeFutureGoogleCalendarAttendees, syncFutureLinkedGoogleCalendarInvitesForCohort } from "./calendarService";
 import { deletePrivateAppFile } from "./storageService";
 import { addCommunicationAttachment, getSystemUserId, sendCommunication } from "./communicationService";
@@ -22,6 +23,9 @@ import { queueIntegrationJob } from "./integrationService";
 import { ensureRegistrationDeliveryJobType } from "./registrationDeliveryJobService";
 import { cancellationNotificationMode, type CancellationNotificationMode } from "@/modules/cohorts/cancellation";
 import { assertCancellationDeliveryIdle, suppressSilentCancellationDelivery } from "./cancellationDeliveryService";
+import { registrationDocumentSchema } from "@/validators/registrationDocument";
+import { recordCheckPaymentDocument } from "./checkPaymentService";
+import { reconcilePaidPaymentFollowUps } from "./paymentFollowUpService";
 
 type BulkMoveRegistrationSummaryInput = Array<{
   id: string;
@@ -233,11 +237,11 @@ export async function updateRegistration(
           email: fallback.participant.email.toLowerCase()
         });
       }
-      await stageRegistrationFieldChanges(registration.id, previous, registration);
+      const stagedRegistration = await stageRegistrationFieldChanges(registration.id, previous, registration);
       return {
-        ...registration,
+        ...stagedRegistration,
         participantListStatus: roster?.status ?? registration.participantListStatus,
-        journey: { status: "pending_apply" as const }
+        journey: registrationPendingDeliveryState(stagedRegistration.pendingChanges)
       };
     }
   }
@@ -825,6 +829,7 @@ export async function bulkUpdateRegistrations(input: {
         where: { registrationId: { in: ids } },
         data: { status: input.paymentStatus }
       });
+      if (input.paymentStatus === PaymentStatus.PAID) await reconcilePaidPaymentFollowUps({ registrationIds: ids });
     }
   }
 
@@ -984,7 +989,7 @@ export async function bulkMoveRegistrationsToCohort(input: { ids: string[]; targ
 }
 
 export async function listRegistrations(cohortId?: string, options: { includeArchived?: boolean } = {}) {
-  return prisma.registration.findMany({
+  const rows = await prisma.registration.findMany({
     where: {
       ...(cohortId ? { cohortId } : {}),
       ...(options.includeArchived ? {} : { archivedAt: null }),
@@ -995,8 +1000,10 @@ export async function listRegistrations(cohortId?: string, options: { includeArc
     },
     orderBy: { createdAt: "desc" },
     include: {
-      cohort: true,
+      cohort: { include: { _count: { select: { sessions: true } } } },
       organization: true,
+      invoiceDrafts: { select: { id: true, status: true, subtotalAmount: true, taxAmount: true, totalAmount: true, lineItems: { select: { id: true, quantity: true, unitAmount: true, totalAmount: true } } } },
+      paymentRecords: { select: { id: true, amount: true, status: true } },
       participants: { select: { firstName: true, lastName: true, email: true, status: true } },
       communications: {
         where: { status: CommunicationStatus.SENT, template: { type: TemplateType.PAYMENT_REMINDER } },
@@ -1007,13 +1014,16 @@ export async function listRegistrations(cohortId?: string, options: { includeArc
       _count: { select: { participants: true } }
     }
   });
+  return attachFinancialReconciliation(rows);
 }
 
 export async function getRegistrationById(id: string) {
-  return prisma.registration.findUnique({
+  // Repair stale intake follow-ups created before automatic resolution existed.
+  await reconcilePaidPaymentFollowUps({ registrationId: id });
+  const row = await prisma.registration.findUnique({
     where: { id },
     include: {
-      cohort: true,
+      cohort: { include: { _count: { select: { sessions: true } } } },
       organization: true,
       participants: true,
       paymentRecords: true,
@@ -1047,22 +1057,12 @@ export async function getRegistrationById(id: string) {
       }
     }
   });
+  return row ? (await attachFinancialReconciliation([row]))[0] : null;
 }
 
-export async function updateRegistrationDocuments(id: string, input: {
-  type: "purchaseOrder" | "checkPayment";
-  fileKey?: string | null;
-  fileName?: string | null;
-  contentType?: string | null;
-  purchaseOrderNumber?: string | null;
-}) {
-  if (!(["purchaseOrder", "checkPayment"] as const).includes(input.type)) {
-    throw Object.assign(new Error("Unsupported registration document type."), { code: "BAD_REQUEST", status: 400 });
-  }
-  const expectedPrefix = input.type === "purchaseOrder" ? "purchase-order/" : "check-payment/";
-  if (input.fileKey && !input.fileKey.startsWith(expectedPrefix)) {
-    throw Object.assign(new Error("Registration document does not match its upload type."), { code: "BAD_REQUEST", status: 400 });
-  }
+export async function updateRegistrationDocuments(id: string, rawInput: z.input<typeof registrationDocumentSchema>) {
+  const input = registrationDocumentSchema.parse(rawInput);
+  if (input.type === "checkPayment" && input.fileKey) return recordCheckPaymentDocument(id, input);
 
   const previous = await prisma.registration.findUniqueOrThrow({ where: { id } });
   const isPurchaseOrder = input.type === "purchaseOrder";
@@ -1087,7 +1087,8 @@ export async function updateRegistrationDocuments(id: string, input: {
     }, { deferNotifications: true });
   }
 
-  if (previousFileKey && previousFileKey !== input.fileKey) {
+  // Removing a proof never reverses a received payment or deletes its evidence.
+  if (isPurchaseOrder && previousFileKey && previousFileKey !== input.fileKey) {
     await deletePrivateAppFile(previousFileKey).catch(() => undefined);
   }
 

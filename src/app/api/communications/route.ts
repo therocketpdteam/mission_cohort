@@ -29,11 +29,24 @@ import {
   updateCommunicationDraft
 } from "@/services/communicationService";
 import { reconcileCohortParticipantJourneys, skipPocRegistrationConfirmationsForCohort } from "@/services/registrationJourneyService";
+import { getCommunicationHistoryDetail, listCommunicationHistory } from "@/services/communicationHistoryService";
+import { emailSearchRecipient } from "@/lib/communicationHistory";
 
 export async function GET(request: Request) {
   try {
     const params = new URL(request.url).searchParams;
     const cohortId = params.get("cohortId");
+    if (params.get("id")) {
+      return ok(await getCommunicationHistoryDetail(params.get("id")!, params.get("recipient")));
+    }
+    if (params.get("history") === "1") {
+      const recipient = params.get("recipient") || emailSearchRecipient(params.get("search"));
+      const issueOnly = params.get("issueOnly") === "1";
+      return ok(await listCommunicationHistory({
+        search: params.get("search"), recipient, cohortId, cursor: params.get("cursor"), limit: Number(params.get("limit") ?? 25), issueOnly,
+        status: params.has("status") ? params.get("status") : recipient && !issueOnly ? "SENT" : ""
+      }));
+    }
     if (params.get("action") === "auditParticipantJourneys") {
       await requireRole(ADMIN_ROLES);
       if (!cohortId) {

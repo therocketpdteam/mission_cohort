@@ -138,7 +138,10 @@ export async function PATCH(request: Request) {
         fileKey: body.fileKey,
         fileName: body.fileName,
         contentType: body.contentType,
-        purchaseOrderNumber: body.purchaseOrderNumber
+        purchaseOrderNumber: body.purchaseOrderNumber,
+        checkAmount: body.checkAmount,
+        checkNumber: body.checkNumber,
+        checkPaymentRecordId: body.checkPaymentRecordId
       }));
     }
 

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { adminApi } from "../../src/lib/adminApi";
-import { beginOperation, describeEntityChange, dismissOperation, finishOperation, hydrateOperations, mutationOutcome, operationDestination, operationSnapshot, projectEntityRows, resetOperations } from "../../src/lib/adminOperations";
+import { beginOperation, describeEntityChange, dismissOperation, finishOperation, hydrateOperations, mutationOutcome, operationDestination, operationSnapshot, projectEntityRows, reconcileRegistrationPendingOperations, resetOperations } from "../../src/lib/adminOperations";
 
 function browser() {
   const storage = new Map<string, string>();
@@ -11,6 +11,43 @@ function browser() {
 const originalFetch = globalThis.fetch;
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 test.afterEach(() => { resetOperations(); globalThis.fetch = originalFetch; delete (globalThis as any).window; });
+
+test("opening a registration with no pending changes resolves only its stale Apply notification", async () => {
+  browser();
+  const pending = beginOperation("/api/participants", "PATCH", { id: "p1", title: "Principal" }, "/participants");
+  finishOperation(pending.id, { id: "p1", registrationId: "r1", journey: { status: "pending_apply" } });
+  const delivery = beginOperation("/api/participants", "PATCH", { id: "p2", firstName: "Jo" }, "/participants");
+  finishOperation(delivery.id, { id: "p2", registrationId: "r1", journey: { failed: 1 } });
+  const other = beginOperation("/api/participants", "PATCH", { id: "p3", title: "Principal" }, "/participants");
+  finishOperation(other.id, { id: "p3", registrationId: "r2", journey: { status: "pending_apply" } });
+  const failed = beginOperation("/api/participants", "PATCH", { id: "p4", title: "Teacher" }, "/participants");
+  finishOperation(failed.id, undefined, new Error("Save failed"));
+  globalThis.fetch = (async () => new Response(JSON.stringify({ success: true, data: { id: "r1", pendingChanges: null } }))) as typeof fetch;
+  await adminApi("/api/registrations?id=r1");
+  const states = new Map(operationSnapshot().map((entry) => [entry.id, entry.state]));
+  assert.equal(states.get(pending.id), "success");
+  assert.equal(states.get(delivery.id), "warning");
+  assert.equal(states.get(other.id), "warning");
+  assert.equal(states.get(failed.id), "error");
+});
+
+test("pending Apply notices survive real pending changes and stale or incomplete registration reads", () => {
+  browser();
+  const op = beginOperation("/api/registrations", "PATCH", { id: "r1", participantCount: 2 }, "/registrations");
+  finishOperation(op.id, { id: "r1", updatedAt: "2026-11-06T12:00:00Z", journey: { status: "pending_apply" } });
+  const finishedAt = operationSnapshot()[0].finishedAt!;
+  for (const [snapshot, startedAt] of [
+    [{ id: "r1" }, finishedAt + 1],
+    [{ id: "r1", pendingChanges: null, updatedAt: "2026-11-06T12:01:00Z" }, finishedAt - 1],
+    [{ id: "r1", pendingChanges: null, updatedAt: "2026-11-06T11:59:00Z" }, finishedAt + 1],
+    [{ id: "r1", pendingChanges: { fields: { participantCount: { before: 1, after: 2 } } }, updatedAt: "2026-11-06T12:01:00Z" }, finishedAt + 1]
+  ] as const) {
+    reconcileRegistrationPendingOperations(snapshot, startedAt);
+    assert.equal(operationSnapshot()[0].state, "warning");
+  }
+  reconcileRegistrationPendingOperations({ id: "r1", pendingChanges: null, updatedAt: "2026-11-06T12:01:00Z" }, finishedAt + 1);
+  assert.equal(operationSnapshot()[0].state, "success");
+});
 
 test("only routine fields are retained; credentials and send/cancellation actions are excluded", () => {
   browser();

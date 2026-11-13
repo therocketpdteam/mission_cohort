@@ -1,7 +1,10 @@
 "use client";
 
+import { FinancialRosterReconciliation } from "./FinancialRosterReconciliation";
+import { reconcileFinancialRoster } from "@/lib/financialRosterReconciliation";
 import { Button, Typography } from "@/components/ui/primitives";
 import { formatProperDisplay, formatStatusLabel } from "@/lib/formatting";
+import { countPendingRegistrationChanges } from "@/lib/registrationPendingChanges";
 import { AdminRow, StatusChip } from "./common";
 
 function normalizeEmail(value: unknown) {
@@ -56,21 +59,26 @@ function rosterStatusFromCounts(expected: number, actual: number) {
 
 export function RegistrationDeliveryPreflight({
   registration,
-  onAddPrimaryContact
+  onAddPrimaryContact,
+  onFinancialReview
 }: {
   registration: AdminRow;
   onAddPrimaryContact?: () => Promise<void> | void;
+  onFinancialReview?: () => Promise<void> | void;
 }) {
+  const reconciliation = reconcileFinancialRoster(registration);
   const expected = Number(registration.participantCount ?? 0);
-  const participants = ((registration.participants ?? []) as AdminRow[]).filter((participant) => normalizeEmail(participant.email));
-  const actual = participants.length || Number(registration._count?.participants ?? 0);
+  const participants = ((registration.participants ?? []) as AdminRow[]).filter((participant) => (!participant.status || participant.status === "REGISTERED") && normalizeEmail(participant.email));
+  const actual = reconciliation.savedParticipants;
   const missing = Math.max(expected - actual, 0);
-  const participantEmails = participants.map((participant) => normalizeEmail(participant.email));
+  const participantEmails = [...new Set(participants.map((participant) => normalizeEmail(participant.email)).filter(email=>/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)))];
   const pocEmail = normalizeEmail(registration.primaryContactEmail);
   const pocOnRoster = Boolean(pocEmail && participantEmails.includes(pocEmail));
   const pending = pendingFrom(registration);
   const additions = Array.isArray(pending?.participantAdditions) ? pending.participantAdditions as AdminRow[] : [];
   const removals = Array.isArray(pending?.participantRemovals) ? pending.participantRemovals as AdminRow[] : [];
+  const pendingCount = countPendingRegistrationChanges(pending);
+  const fieldCount = pendingCount - additions.length - removals.length;
   const blocked = blockedSafetyRecipients(registration);
   const canAddPoc = Boolean(onAddPrimaryContact && pocEmail && !pocOnRoster && missing > 0);
   const rosterTone = rosterStatusFromCounts(expected, actual);
@@ -88,14 +96,14 @@ export function RegistrationDeliveryPreflight({
           <h3>Roster & Delivery Preflight</h3>
           <p>Check who is saved, who will receive participant delivery, and what needs attention before Apply.</p>
         </div>
-        <StatusChip value={rosterTone} />
+        <StatusChip value={reconciliation.blocksCompletion ? reconciliation.status : rosterTone} />
       </div>
 
       <div className="registration-preflight-grid">
         <div className={`registration-preflight-tile${rosterTone === "COMPLETE" ? " is-success" : " is-warning"}`}>
           <span>Roster count</span>
           <strong>{actual}/{expected || actual || 0}</strong>
-          <p>{missing > 0 ? `${plural(missing, "seat")} still needs participant details.` : "Saved roster matches expected seats."}</p>
+          <p>{missing > 0 ? `${plural(missing, "seat")} still needs participant details.` : "Saved roster matches stored expected seats; financial verification is separate."}</p>
         </div>
         <div className={`registration-preflight-tile${pocOnRoster ? " is-success" : pocEmail ? " is-warning" : " is-error"}`}>
           <span>POC in roster</span>
@@ -105,7 +113,7 @@ export function RegistrationDeliveryPreflight({
         </div>
         <div className="registration-preflight-tile">
           <span>Participant delivery</span>
-          <strong>{participantEmails.length ? "Ready" : "Needs roster"}</strong>
+          <strong>{participantEmails.length ? "Saved recipients only" : "Needs roster"}</strong>
           <p>{participantDelivery}</p>
         </div>
         <div className={`registration-preflight-tile${blocked.length ? " is-error" : " is-success"}`}>
@@ -115,6 +123,8 @@ export function RegistrationDeliveryPreflight({
         </div>
       </div>
 
+      <FinancialRosterReconciliation key={registration.id} registration={{...registration,id:registration.id}} onReviewed={onFinancialReview} />
+
       <div className="registration-preflight-notes">
         <div>
           <strong>POC delivery</strong>
@@ -123,14 +133,14 @@ export function RegistrationDeliveryPreflight({
         <div>
           <strong>Pending Apply</strong>
           <span>
-            {additions.length || removals.length
-              ? `${additions.length ? `${plural(additions.length, "addition")}` : ""}${additions.length && removals.length ? " and " : ""}${removals.length ? `${plural(removals.length, "removal")}` : ""} will be coordinated when applied.`
-              : "No participant add/remove batch is waiting for Apply."}
+            {pendingCount > 0
+              ? `${[additions.length ? plural(additions.length, "participant addition") : "", removals.length ? plural(removals.length, "participant removal") : "", fieldCount ? plural(fieldCount, "registration field change") : ""].filter(Boolean).join(", ")} waiting for Apply. Review the change summary above before sending updates.`
+              : "No saved delivery changes are waiting for Apply."}
           </span>
         </div>
         {missing > 0 ? (
           <Typography color="text.secondary">
-            Tip: if this is truly a one-person registration, set expected seats to 1 or add the POC to the roster. If it is a team, paste the remaining names in the roster workbench.
+            Verify purchased seats and financial evidence before changing the stored expected count. Add participant details for missing team members; the POC is not automatically an attendee.
           </Typography>
         ) : null}
         {blocked.length ? (

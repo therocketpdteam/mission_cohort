@@ -13138,3 +13138,39 @@ button.dashboard-activity-item {
 .session-post-session-email > .ui-text { margin: 0; white-space: normal; overflow-wrap: anywhere; }
 .session-post-session-email > .ui-button { white-space: normal; text-align: left; }
 .session-post-session-email .ui-modal strong { white-space: normal; }
+/* Payment documents use their actual panel width, including narrow drawers. */
+.registration-payment-documents { container-type: inline-size; }
+.registration-payment-document { display: grid; grid-template-columns: minmax(0, 1fr); align-items: end; gap: 10px 12px; padding: 14px; border: 1px solid var(--mc-border, #dce3eb); border-radius: 8px; }
+.registration-payment-document-heading { display: flex; align-items: center; gap: 10px; min-width: 0; align-self: center; }
+.registration-payment-document-heading > svg { flex-shrink: 0; }
+.registration-payment-document-heading > div { display: grid; gap: 3px; min-width: 0; }
+.registration-payment-document-heading span { overflow-wrap: anywhere; color: var(--mc-text-secondary, #5b6778); font-size: 13px; }
+.registration-payment-document .ui-field { min-width: 0; width: 100%; }
+.registration-payment-document-upload { white-space: nowrap; }
+.registration-payment-document-note { grid-column: 1 / -1; color: var(--mc-text-secondary, #5b6778); font-size: 12px; line-height: 1.5; }
+.registration-payment-document-links { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.registration-payment-error { color: #a22b2b; }
+@container (min-width: 360px) {
+  .registration-payment-document.is-po { grid-template-columns: minmax(0, 1fr) minmax(100px, 140px) auto; }
+  .registration-payment-document.is-check { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; }
+  .registration-payment-document.is-check .registration-payment-document-heading { grid-column: 1 / -1; }
+}
+@container (min-width: 700px) {
+  .registration-payment-document.is-check { grid-template-columns: minmax(0, 1fr) minmax(100px, 140px) minmax(100px, 140px) auto; }
+  .registration-payment-document.is-check .registration-payment-document-heading { grid-column: auto; }
+}
+
+.collapsible-section-card.is-compact-card > .collapsible-section-summary { padding: 10px 12px; }
+.collapsible-section-card.is-compact-card > .collapsible-section-content { padding: 10px 12px 12px; gap: 10px; }
+.is-compact-card .registration-payment-document { padding: 10px; gap: 8px 10px; }
+.registration-finance-note { margin: 0; color: var(--mc-text-secondary, #5b6778); font-size: 12px; line-height: 1.5; }
+.collapsible-section-card.is-compact-card,
+.app-shell.is-compact .collapsible-section-card.is-compact-card { padding: 0; }
+/* All registration detail accordion headers share the same compact geometry. */
+.collapsible-section-card.is-compact-card > .collapsible-section-summary {
+  box-sizing: border-box;
+  min-height: 56px;
+  padding: 8px 12px;
+}
+.app-table-sort-button { display: inline-flex; align-items: center; gap: 6px; border: 0; padding: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.app-table-sort-button:focus-visible { outline: 2px solid var(--color-primary-600, #7c3aed); outline-offset: 4px; border-radius: 2px; }

@@ -108,6 +108,7 @@ export type GridColDef<R extends AdminRow = AdminRow> = {
   minWidth?: number;
   flex?: number;
   sortable?: boolean;
+  sortValue?: (row: R) => string | number;
   valueGetter?: (value: any, row: R) => any;
   valueFormatter?: (value: any, row?: R) => ReactNode;
   renderCell?: (params: GridRenderCellParams<R>) => ReactNode;
@@ -566,6 +567,7 @@ export function AppDataGrid<R extends AdminRow = AdminRow>({
   rows,
   columns,
   loading,
+  pagination = true,
   initialState,
   pageSizeOptions = [25, 50, 100],
   onRowClick,
@@ -576,6 +578,7 @@ export function AppDataGrid<R extends AdminRow = AdminRow>({
   rows: R[];
   columns: GridColDef<R>[];
   loading?: boolean;
+  pagination?: boolean;
   initialState?: { pagination?: { paginationModel?: { pageSize?: number } } };
   pageSizeOptions?: number[];
   rowHeight?: number;
@@ -590,8 +593,19 @@ export function AppDataGrid<R extends AdminRow = AdminRow>({
   const normalizedOptions = Array.from(new Set([25, 50, 100, ...pageSizeOptions])).sort((a, b) => a - b);
   const [pageSize, setPageSize] = useState(initialState?.pagination?.paginationModel?.pageSize && normalizedOptions.includes(initialState.pagination.paginationModel.pageSize) ? initialState.pagination.paginationModel.pageSize : normalizedOptions[0]);
   const [page, setPage] = useState(0);
+  const [sort, setSort] = useState<{ field: string; direction: "asc" | "desc" } | null>(null);
+  const sortedRows = useMemo(() => {
+    const column = columns.find(column => column.field === sort?.field && column.sortable === true);
+    if (!column || !sort) return rows;
+    return [...rows].sort((a, b) => {
+      const left = column.sortValue ? column.sortValue(a) : a[column.field];
+      const right = column.sortValue ? column.sortValue(b) : b[column.field];
+      const order = typeof left === "number" && typeof right === "number" ? left - right : String(left ?? "").localeCompare(String(right ?? ""), undefined, { numeric: true });
+      return sort.direction === "asc" ? order : -order;
+    });
+  }, [rows, columns, sort]);
   const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
-  const visibleRows = rows.slice(page * pageSize, page * pageSize + pageSize);
+  const visibleRows = pagination ? sortedRows.slice(page * pageSize, page * pageSize + pageSize) : sortedRows;
   const columnWeights = columns.map((column) => column.width ?? column.minWidth ?? (column.flex ?? 1) * 160);
   const totalColumnWeight = columnWeights.reduce((sum, width) => sum + width, 0);
 
@@ -661,8 +675,11 @@ export function AppDataGrid<R extends AdminRow = AdminRow>({
                 </th>
               )}
               {columns.map((column) => (
-                <th key={column.field}>
-                  {column.headerName ?? column.field}
+                <th key={column.field} aria-sort={column.sortable === true ? sort?.field === column.field ? sort.direction === "desc" ? "descending" : "ascending" : "none" : undefined}>
+                  {column.sortable === true ? <button type="button" className="app-table-sort-button" aria-label={`Sort ${column.headerName ?? column.field} ${sort?.field === column.field && sort.direction === "desc" ? "lowest" : "highest"} first`} onClick={() => {
+                    setSort({ field: column.field, direction: sort?.field === column.field && sort.direction === "desc" ? "asc" : "desc" });
+                    setPage(0);
+                  }}>{column.headerName ?? column.field} <span aria-hidden="true">{sort?.field === column.field ? sort.direction === "desc" ? "↓" : "↑" : "↕"}</span></button> : column.headerName ?? column.field}
                 </th>
               ))}
             </tr>
@@ -698,7 +715,7 @@ export function AppDataGrid<R extends AdminRow = AdminRow>({
           </tbody>
         </table>
       </div>
-      <div className="table-footer">
+      {pagination && <div className="table-footer">
         <span>
           {rows.length === 0 ? "No rows" : `Showing ${page * pageSize + 1}-${Math.min(rows.length, (page + 1) * pageSize)} of ${rows.length} records`}
         </span>
@@ -710,7 +727,7 @@ export function AppDataGrid<R extends AdminRow = AdminRow>({
           <span>Page {page + 1} of {pageCount}</span>
           <Button type="button" variant="outlined" size="small" disabled={page >= pageCount - 1} onClick={() => setPage((current) => Math.min(pageCount - 1, current + 1))}>Next</Button>
         </div>
-      </div>
+      </div>}
     </div>
   );
 }

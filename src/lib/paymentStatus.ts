@@ -43,7 +43,7 @@ export function deriveRegistrationPaymentStatusFromRecords(
   }, 0);
   const expectedAmount = moneyNumber(totalAmount);
 
-  if ((expectedAmount > 0 && collectedAmount >= expectedAmount) || activeStatuses.includes(PaymentStatus.PAID)) {
+  if (expectedAmount > 0 ? Math.round(collectedAmount * 100) >= Math.round(expectedAmount * 100) : activeStatuses.includes(PaymentStatus.PAID)) {
     return PaymentStatus.PAID;
   }
 

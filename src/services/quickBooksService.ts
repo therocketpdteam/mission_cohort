@@ -11,6 +11,7 @@ import {
 import { Prisma } from "@prisma/client";
 import { assertOutboundUnlocked } from "@/lib/outboundLock";
 import { prisma } from "@/lib/prisma";
+import { reconcilePaidPaymentFollowUps } from "./paymentFollowUpService";
 import {
   createQuickBooksBill,
   createQuickBooksInvoice,
@@ -1176,6 +1177,7 @@ export async function syncQuickBooksPayment(paymentId: string, realmId?: string)
     }
   });
 
+  await reconcilePaidPaymentFollowUps({ registrationIds: linkedPayments.map(payment => payment.registrationId) });
   return { paymentId, paymentStatus: PaymentStatus.PAID, payments: payments.count };
 }
 

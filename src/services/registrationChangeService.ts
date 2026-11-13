@@ -190,7 +190,7 @@ export function mergeRegistrationFieldChanges(
     if (beforeValue === afterValue) {
       continue;
     }
-    const original = next.fields[field]?.before ?? beforeValue;
+    const original = next.fields[field] ? next.fields[field].before : beforeValue;
     if (original === afterValue) {
       delete next.fields[field];
     } else {
@@ -244,6 +244,11 @@ export function registrationPendingChangeCount(pending: RegistrationPendingChang
     return 0;
   }
   return pending.participantAdditions.length + pending.participantRemovals.length + Object.keys(pending.fields).length;
+}
+
+export function registrationPendingDeliveryState(value: Prisma.JsonValue | null | undefined) {
+  const pendingChangeCount = registrationPendingChangeCount(readRegistrationPendingChanges(value));
+  return { status: pendingChangeCount > 0 ? "pending_apply" as const : "no_changes" as const, pendingChangeCount };
 }
 
 export function sentParticipantConfirmationEmails(
