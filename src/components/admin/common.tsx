@@ -354,9 +354,11 @@ export function DateBadge({ value, emptyLabel = "No date", timeZone }: { value?:
 }
 
 export function RowActionMenu({
-  actions
+  actions,
+  fitViewport = false
 }: {
   actions: Array<{ label: string; icon?: ReactNode; onClick: () => void; color?: "primary" | "success" | "warning" | "error"; disabled?: boolean }>;
+  fitViewport?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
@@ -389,6 +391,13 @@ export function RowActionMenu({
       document.removeEventListener("keydown", closeOnEscape);
     };
   }, [open]);
+
+  useEffect(() => {
+    if (!fitViewport || !open || !position || !menuRef.current) return;
+    const height = menuRef.current.getBoundingClientRect().height;
+    const top = Math.max(12, Math.min(position.top, window.innerHeight - height - 12));
+    if (top !== position.top) setPosition({ ...position, top });
+  }, [fitViewport, open, position]);
 
   function toggleMenu() {
     const rect = buttonRef.current?.getBoundingClientRect();

@@ -49,7 +49,7 @@ test('session action confirms cohort, date, type and recipients; sends exact exi
 test('failure preserves visible safe retry and provider error',async({page})=>{
  const f=await setup(page,{fail:true});await page.goto(origin);await page.getByRole('button',{name:'Send Post-Session Email Now',exact:true}).click();await page.getByRole('button',{name:'Confirm Send Now',exact:true}).click();
  await expect(page.getByRole('alert')).toContainText('Retry skips confirmed');
- await page.getByRole('button',{name:'Cancel',exact:true}).click();await expect(page.getByRole('button',{name:'Retry Unsent Post-Session Email',exact:true})).toBeVisible();expect(f.mutations).toHaveLength(1);
+ await page.getByRole('button',{name:'Cancel',exact:true}).click();await page.getByRole('button',{name:'Review Email',exact:true}).click();await expect(page.getByRole('button',{name:'Retry Unsent Post-Session Email',exact:true})).toBeVisible();expect(f.mutations).toHaveLength(1);
 });
 for(const [name,sessionChange,messageChange] of [
  ['future',{startTime:new Date(Date.now()+3600000).toISOString(),endTime:new Date(Date.now()+7200000).toISOString()},{}],
@@ -58,10 +58,10 @@ for(const [name,sessionChange,messageChange] of [
  ['missing recording',{recordingUrl:null},{}]
 ] as const)test(`${name} session has no send action`,async({page})=>{
  await setup(page,{session:sessionChange,message:messageChange});await page.goto(origin);await expect(page.getByText('Session one',{exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'Send Post-Session Email Now',exact:true})).toHaveCount(0);
- if(name==='missing recording')await expect(page.getByText(/Add a valid recording link/)).toBeVisible();
+ if(name==='missing recording'){await page.getByRole('button',{name:'Review Email',exact:true}).click();await expect(page.getByText(/Add a valid recording link/)).toBeVisible();}
 });
 test('scheduler completion refresh replaces action with actual Sent timestamp',async({page})=>{
  const f=await setup(page);await page.goto(origin);await expect(page.getByRole('button',{name:'Send Post-Session Email Now',exact:true})).toBeVisible();
  f.set({status:'SENT',sentAt:new Date().toISOString(),eligible:false});await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
- await expect(page.getByRole('button',{name:'Send Post-Session Email Now',exact:true})).toHaveCount(0);await expect(page.getByText(/Post-session email · Sent.*America\/New_York/)).toBeVisible();expect(f.mutations).toHaveLength(0);
+ await expect(page.getByRole('button',{name:'Send Post-Session Email Now',exact:true})).toHaveCount(0);await expect(page.locator('.session-email-status-line')).toContainText('Post-session email · Sent');await expect(page.locator('.session-email-status-line')).toContainText('America/New_York');expect(f.mutations).toHaveLength(0);
 });

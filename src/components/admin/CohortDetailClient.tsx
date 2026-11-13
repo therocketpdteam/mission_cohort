@@ -1,5 +1,6 @@
 "use client";
 
+import { sessionPhase } from "./cohortOverviewPresentation";
 import { CollapsibleSectionCard } from "./CollapsibleSectionCard";
 import { registrationFinanceAlerts } from "@/lib/registrationFinanceAlerts";
 import { isOpenRegistrationFollowUp } from "@/lib/paymentFollowUps";
@@ -1990,6 +1991,7 @@ export function CohortDetailClient({ id }: { id: string }) {
   const compareCohort = allCohorts.find((item) => item.id === compareCohortId);
   const detailTabs = ["Overview", "Registrations", "Participants", "Communications", "Distribution"];
   const readinessItems = cohort?.readiness?.items ?? [];
+  const outstandingReadiness = readinessItems.filter((item: AdminRow) => !item.ready).length;
   const sessionEmailReadiness = readinessItems.find((item: AdminRow) => item.key === "communications");
   const cohortStatus = String(cohort?.status ?? cohort?.derivedStatus ?? "");
   const showPublishAction = cohortStatus === "DRAFT";
@@ -2826,7 +2828,7 @@ export function CohortDetailClient({ id }: { id: string }) {
     return (
       <button
         type="button"
-        className={`session-check session-check-icon ${ready ? "is-done" : "is-missing"}`}
+        className={`session-check session-check-icon ${ready ? "is-done" : "is-optional"}`}
         title={title}
         onClick={(event) => {
           event.stopPropagation();
@@ -3239,11 +3241,12 @@ export function CohortDetailClient({ id }: { id: string }) {
     <PageStack>
       <PageHeader
         title={cohort?.title ?? "Cohort Detail"}
-        description="Cohort command center for readiness, delivery, registration, communication, and distribution."
+        description="Manage sessions, readiness, and cohort details."
         action={cohort ? (
-          <Button variant="outlined" startIcon={<EditOutlined />} onClick={() => setCohortEditOpen(true)}>
-            Edit cohort
-          </Button>
+          <div className="action-group">
+            <span className={`overview-status is-${cohort.status === "COMPLETED" ? "success" : "neutral"}`}>{formatStatusLabel(cohort.status)}</span>
+            <Button variant="outlined" startIcon={<EditOutlined />} onClick={() => setCohortEditOpen(true)}>Edit cohort</Button>
+          </div>
         ) : null}
       />
       {cohortCancellationOpen && cohort ? (
@@ -3292,13 +3295,259 @@ export function CohortDetailClient({ id }: { id: string }) {
                 <span className="cohort-metric-helper">{metric.helper}</span>
               </article>
             ))}
-            <FinanceSnapshotCard
-              finance={totals.finance}
-              projectReturn={distribution?.totals?.projectReturn}
-            />
+
           </div>
-          <div className="cohort-basics-grid">
-            <SectionCard title="Overview">
+          <SectionCard
+            title="Sessions"
+            action={
+              <div className="action-group">
+                {pendingSessionChanges.length > 0 && (
+                  <Button
+                    startIcon={<SendOutlined />}
+                    disabled={applyingSessionChanges}
+                    onClick={applyPendingSessionChanges}
+                  >
+                    {applyingSessionChanges ? "Applying" : `Apply Changes (${pendingSessionChanges.length})`}
+                  </Button>
+                )}
+                {sessions.some((session) => (session.calendarEvents ?? []).some((event: AdminRow) => event.provider === "google")) && (
+                  <details className="cohort-session-admin"><summary>Calendar actions</summary><div className="action-group"><Button variant="outlined" color="error" onClick={() => setCalendarCancelTarget({ scope: "cohort" })}>
+                    Cancel All Invites
+                  </Button></div></details>
+                )}
+                <Button variant="outlined" startIcon={<AddIcon />} onClick={() => openMaterialDialog()}>Add Material</Button>
+                <Button startIcon={<AddIcon />} onClick={() => setSessionDialogOpen(true)}>Add Session</Button>
+              </div>
+            }
+          >
+            {cohortLevelMaterials.length > 0 && (
+              <div className="cohort-material-bank" aria-label="Cohort-level materials">
+                <span>Cohort materials</span>
+                <div>
+                  {cohortLevelMaterials.map((resource) => {
+                    const href = resourceHref(resource);
+                    return href ? (
+                      <a href={href} target="_blank" rel="noreferrer" key={resource.id} title={resource.title}>
+                        {resource.title}
+                      </a>
+                    ) : (
+                      <span key={resource.id} title={resource.title}>{resource.title}</span>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+            {postSessionEmails.error ? <details className="cohort-session-details"><summary>Email status needs attention</summary><p>{postSessionEmails.error}</p></details> : null}
+            <div className="cohort-session-list" role="list" aria-label="Cohort sessions">
+              {sessions.map((session) => {
+                const sessionMaterials = resources.filter((resource) => resource.sessionId === session.id);
+                const sessionReadiness = (cohort?.readiness?.sessionDetails ?? []).find((item: AdminRow) => item.id === session.id);
+                const emailSummary = sessionEmailSummary(session, sessionReadiness);
+                const phase = sessionPhase(session, postSessionEmails.now);
+
+                return (
+                <article className="cohort-session-card" role="listitem" key={session.id}>
+                  <div className="cohort-session-heading">
+                  <div className="cohort-session-identity">
+                    <strong title={session.title}>{session.sessionNumber}. {session.title}</strong>
+                    <span title={session.description}>
+                      {formatDateTimeInZone(session.startTime, session.timezone) || "No date"} – {formatTimeInZone(session.endTime, session.timezone) || "No end"} ({session.timezone})
+                    </span>
+
+                  </div>
+                  <div className="cohort-session-context-actions">
+                    <span className={`overview-status is-${phase.tone}`}>{phase.label}</span>
+                  <RowActionMenu
+                    fitViewport
+                    actions={[
+                      { label: "Edit session", icon: <EditOutlined fontSize="small" />, onClick: () => { setEditingSession(session); setSessionDialogOpen(true); } },
+                      { label: "Preview Google invite", icon: <VisibilityOutlined fontSize="small" />, onClick: () => setCalendarPreviewSession(session) },
+                      { label: "Add material", icon: <AddIcon fontSize="small" />, onClick: () => openMaterialDialog(session) },
+                      {
+                        label: "Generate ICS",
+                        icon: <CalendarMonthOutlined fontSize="small" />,
+                        onClick: async () => {
+                          try {
+                            await adminApi("/api/calendar", { method: "POST", body: { sessionId: session.id, mode: "ics" } });
+                            notifySuccess("ICS invite generated");
+                          } catch (error) {
+                            notifyError((error as Error).message);
+                          }
+                        }
+                      },
+                      {
+                        label: "Sync Google Calendar",
+                        icon: <CalendarMonthOutlined fontSize="small" />,
+                        onClick: () => void syncGoogleCalendarSession(session.id)
+                      },
+                      ...((session.calendarEvents ?? []).some((event: AdminRow) => event.provider === "google") ? [{
+                        label: "Cancel Google invite",
+                        icon: <CancelOutlined fontSize="small" />,
+                        onClick: () => setCalendarCancelTarget({ scope: "session", session })
+                      }] : [])
+                    ]}
+                  />
+                  </div>
+                  </div>
+                  <SessionPostSessionEmail cohortId={id} cohortTitle={cohort?.title ?? ""} session={session as any} message={postSessionEmails.messages.find(message => message.sessionId === session.id)} now={postSessionEmails.now} refresh={postSessionEmails.refresh} onEditSession={() => { setEditingSession(session); setSessionDialogOpen(true); }} />
+                  <details className="cohort-session-details">
+                    <summary>Calendar, emails &amp; materials</summary>
+                    <div className="cohort-session-tools">
+                    <div className="cohort-session-tool"><span>Calendar invitation</span>
+                  {renderReadinessIcon(Boolean(sessionReadiness?.calendar?.ready), sessionReadiness?.calendar?.detail ?? formatStatusLabel(session.calendarInviteStatus), async () => {
+                    if (sessionReadiness?.calendar?.stale) {
+                      await applyPendingSessionChanges();
+                      return;
+                    }
+                    try {
+                      await adminApi("/api/calendar", { method: "POST", body: { sessionId: session.id, mode: "ics" } });
+                      notifySuccess("ICS invite generated");
+                      await load();
+                    } catch (error) {
+                      notifyError((error as Error).message);
+                    }
+                  })}
+                  </div>
+                  <div className="cohort-session-tool"><span>Session email setup</span>
+                  <button
+                    type="button"
+                    className={`session-check session-email-summary ${emailSummary.ready ? "is-done" : "is-optional"}`}
+                    title={emailSummary.ready ? "All default session emails exist" : "Create default session emails"}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      if (!emailSummary.ready) void createSessionEmailSchedule(session.id);
+                    }}
+                  >
+                    {emailSummary.ready ? <CheckCircleOutline /> : <CancelOutlined />}
+                    <span>{emailSummary.label}</span>
+                  </button>
+                  </div>
+                  <div className="session-material-cell cohort-session-tool"><span>Materials</span>
+                    <button
+                      type="button"
+                      className={`session-check session-material-summary ${sessionMaterials.length > 0 ? "is-done" : "is-optional"}`}
+                      title={sessionMaterials.length > 0 ? `${sessionMaterials.length} material${sessionMaterials.length === 1 ? "" : "s"}` : "Add session material"}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        openMaterialDialog(session);
+                      }}
+                    >
+                      {sessionMaterials.length > 0 ? <CheckCircleOutline /> : <AddIcon />}
+                      <span>{sessionMaterials.length || "Optional"}</span>
+                    </button>
+                  </div>
+
+                    </div>
+                    {sessionMaterials.length > 0 && (
+                      <div className="session-material-links">
+                        {sessionMaterials.slice(0, 3).map((resource: AdminRow) => {
+                          const href = resourceHref(resource);
+                          return href ? (
+                            <a href={href} target="_blank" rel="noreferrer" key={resource.id} title={resource.title}>
+                              {resource.title}
+                            </a>
+                          ) : (
+                            <span key={resource.id} title={resource.title}>{resource.title}</span>
+                          );
+                        })}
+                        {sessionMaterials.length > 3 && <span>+{sessionMaterials.length - 3}</span>}
+                      </div>
+                    )}
+                  </details>
+                </article>
+                );
+              })}
+            </div>
+            {!loading && sessions.length === 0 && <EmptyState title="No sessions yet" description="Add sessions to build the cohort schedule." />}
+          </SectionCard>
+          <div className="cohort-readiness-panel">
+          <CollapsibleSectionCard
+            title="Publish Readiness"
+            action={<span className={`cohort-readiness-counts overview-status is-${cohort?.readiness?.ready ? "success" : "attention"}`}>
+              {cohort?.readiness?.ready ? "Ready" : cohortStatus === "DRAFT" ? "Setup needed" : "Needs attention"} · {outstandingReadiness} outstanding requirements · {outstandingReadiness} publish blockers
+            </span>}
+          >
+<div className="action-group">
+                  {showPublishAction ? (
+                    <Button
+                      disabled={!cohort?.readiness?.ready || publishingCohort}
+                      onClick={publishReadyCohort}
+                      startIcon={<SendOutlined />}
+                    >
+                      {publishingCohort ? "Publishing" : "Publish Cohort"}
+                    </Button>
+                  ) : canMoveBackToDraft ? (
+                    <Button
+                      variant="outlined"
+                      color="warning"
+                      disabled={movingCohortToDraft}
+                      onClick={moveBackToDraft}
+                    >
+                      {movingCohortToDraft ? "Moving" : "Move back to Draft"}
+                    </Button>
+                  ) : null}
+                  {cohort && cohortStatus !== "CANCELLED" ? (
+                    <Button
+                      variant="outlined"
+                      color="error"
+                      startIcon={<CancelOutlined />}
+                      disabled={publishingCohort || movingCohortToDraft}
+                      onClick={() => setCohortCancellationOpen(true)}
+                    >
+                      Cancel Cohort
+                    </Button>
+                  ) : null}
+                </div>
+              <div className="readiness-command">
+                <div className="readiness-summary">
+                  <StatusChip value={cohort?.status} />
+                  <span>{readinessSummaryText}</span>
+                </div>
+                <div className="readiness-list readiness-metric-grid">
+                  {readinessItems.map((item: AdminRow) => {
+                    const itemReady = Boolean(item.ready);
+                    const icon =
+                      item.key === "calendar" ? <CalendarMonthOutlined /> :
+                          item.key === "communications" ? <EmailOutlined /> :
+                          item.key === "prep-resources" ? <ArticleOutlined /> :
+                          item.key === "meeting-links" ? <CalendarMonthOutlined /> :
+                          item.key === "manual-tasks" ? <CheckCircleOutline /> :
+                            <CheckCircleOutline />;
+
+                    return (
+                      <div className={`readiness-row readiness-metric-card ${itemReady ? "is-ready" : "needs-work"}`} key={item.key}>
+                        <span className={`readiness-metric-icon ${itemReady ? "is-done" : "is-pending"}`}>
+                          {itemReady ? <CheckCircleOutline /> : icon}
+                        </span>
+                        <div>
+                          <strong>{item.label}</strong>
+                          <span>{item.detail}</span>
+                          {item.key === "communications" && !item.ready ? (
+                            <Button
+                              variant="outlined"
+                              size="small"
+                              startIcon={<SendOutlined />}
+                              disabled={creatingSessionEmails || sessions.length === 0}
+                              onClick={createAllMissingSessionEmailSchedules}
+                            >
+                              {creatingSessionEmails ? "Creating emails" : "Create missing emails"}
+                            </Button>
+                          ) : null}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                {sessionEmailReadiness && !sessionEmailReadiness.ready ? (
+                  <Alert severity="warning">
+                    {sessionEmailReadiness.detail}. Use Create missing emails to generate the required 24-hour and 1-hour session messages before publishing.
+                  </Alert>
+                ) : null}
+              </div>
+          </CollapsibleSectionCard>
+          </div>
+          <div className="cohort-overview-information">
+            <SectionCard title="Cohort Information">
               <div className="cohort-thumbnail-editor">
                 <div className="cohort-thumbnail-preview">
                   {cohort?.thumbnailUrl ? <img src={cohort.thumbnailUrl} alt="" /> : <span>No thumbnail</span>}
@@ -3341,91 +3590,15 @@ export function CohortDetailClient({ id }: { id: string }) {
                 </div>
               </div>
             </SectionCard>
-            <SectionCard
-              title="Publish Readiness"
-              action={
-                <div className="action-group">
-                  {showPublishAction ? (
-                    <Button
-                      disabled={!cohort?.readiness?.ready || publishingCohort}
-                      onClick={publishReadyCohort}
-                      startIcon={<SendOutlined />}
-                    >
-                      {publishingCohort ? "Publishing" : "Publish Cohort"}
-                    </Button>
-                  ) : canMoveBackToDraft ? (
-                    <Button
-                      variant="outlined"
-                      color="warning"
-                      disabled={movingCohortToDraft}
-                      onClick={moveBackToDraft}
-                    >
-                      {movingCohortToDraft ? "Moving" : "Move back to Draft"}
-                    </Button>
-                  ) : null}
-                  {cohort && cohortStatus !== "CANCELLED" ? (
-                    <Button
-                      variant="outlined"
-                      color="error"
-                      startIcon={<CancelOutlined />}
-                      disabled={publishingCohort || movingCohortToDraft}
-                      onClick={() => setCohortCancellationOpen(true)}
-                    >
-                      Cancel Cohort
-                    </Button>
-                  ) : null}
-                </div>
-              }
-            >
-              <div className="readiness-command">
-                <div className="readiness-summary">
-                  <StatusChip value={cohort?.status} />
-                  <span>{readinessSummaryText}</span>
-                </div>
-                <div className="readiness-list readiness-metric-grid">
-                  {readinessItems.map((item: AdminRow) => {
-                    const itemReady = Boolean(item.ready);
-                    const icon =
-                      item.key === "calendar" ? <CalendarMonthOutlined /> :
-                          item.key === "communications" ? <EmailOutlined /> :
-                          item.key === "prep-resources" ? <ArticleOutlined /> :
-                          item.key === "meeting-links" ? <CalendarMonthOutlined /> :
-                          item.key === "manual-tasks" ? <CheckCircleOutline /> :
-                            <CheckCircleOutline />;
 
-                    return (
-                      <div className={`readiness-row readiness-metric-card ${itemReady ? "is-ready" : "needs-work"}`} key={item.key}>
-                        <span className={`readiness-metric-icon ${itemReady ? "is-done" : "is-missing"}`}>
-                          {itemReady ? <CheckCircleOutline /> : icon}
-                        </span>
-                        <div>
-                          <strong>{item.label}</strong>
-                          <span>{item.detail}</span>
-                          {item.key === "communications" && !item.ready ? (
-                            <Button
-                              variant="outlined"
-                              size="small"
-                              startIcon={<SendOutlined />}
-                              disabled={creatingSessionEmails || sessions.length === 0}
-                              onClick={createAllMissingSessionEmailSchedules}
-                            >
-                              {creatingSessionEmails ? "Creating emails" : "Create missing emails"}
-                            </Button>
-                          ) : null}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-                {sessionEmailReadiness && !sessionEmailReadiness.ready ? (
-                  <Alert severity="warning">
-                    {sessionEmailReadiness.detail}. Use Create missing emails to generate the required 24-hour and 1-hour session messages before publishing.
-                  </Alert>
-                ) : null}
-              </div>
-            </SectionCard>
           </div>
           {cohort && <CohortSupportTeam cohort={cohort} sessions={sessions} />}
+          <div className="cohort-overview-analytics">
+            <FinanceSnapshotCard
+              finance={totals.finance}
+              projectReturn={distribution?.totals?.projectReturn}
+            />
+          </div>
           <SectionCard
             title="Registration Evolution"
             action={
@@ -3445,160 +3618,7 @@ export function CohortDetailClient({ id }: { id: string }) {
           >
             <RegistrationEvolutionChart rows={registrations} compareRows={compareRegistrations} compareLabel={compareCohort?.title} mode={chartMode} />
           </SectionCard>
-          <SectionCard
-            title="Sessions"
-            action={
-              <div className="action-group">
-                {pendingSessionChanges.length > 0 && (
-                  <Button
-                    startIcon={<SendOutlined />}
-                    disabled={applyingSessionChanges}
-                    onClick={applyPendingSessionChanges}
-                  >
-                    {applyingSessionChanges ? "Applying" : `Apply Changes (${pendingSessionChanges.length})`}
-                  </Button>
-                )}
-                {sessions.some((session) => (session.calendarEvents ?? []).some((event: AdminRow) => event.provider === "google")) && (
-                  <Button variant="outlined" color="error" onClick={() => setCalendarCancelTarget({ scope: "cohort" })}>
-                    Cancel All Invites
-                  </Button>
-                )}
-                <Button variant="outlined" startIcon={<AddIcon />} onClick={() => openMaterialDialog()}>Add Material</Button>
-                <Button startIcon={<AddIcon />} onClick={() => setSessionDialogOpen(true)}>Add Session</Button>
-              </div>
-            }
-          >
-            {cohortLevelMaterials.length > 0 && (
-              <div className="cohort-material-bank" aria-label="Cohort-level materials">
-                <span>Cohort materials</span>
-                <div>
-                  {cohortLevelMaterials.map((resource) => {
-                    const href = resourceHref(resource);
-                    return href ? (
-                      <a href={href} target="_blank" rel="noreferrer" key={resource.id} title={resource.title}>
-                        {resource.title}
-                      </a>
-                    ) : (
-                      <span key={resource.id} title={resource.title}>{resource.title}</span>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-            {postSessionEmails.error ? <Alert severity="warning">Post-session email status could not load: {postSessionEmails.error}</Alert> : null}
-            <div className="session-checklist" role="table" aria-label="Session checklist">
-              <div className="session-check-row session-check-header" role="row">
-                <span>Date</span>
-                <span>Session</span>
-                <span>Calendar</span>
-                <span>Emails</span>
-                <span>Materials</span>
-                <span>Actions</span>
-              </div>
-              {sessions.map((session) => {
-                const sessionMaterials = resources.filter((resource) => resource.sessionId === session.id);
-                const sessionReadiness = (cohort?.readiness?.sessionDetails ?? []).find((item: AdminRow) => item.id === session.id);
-                const emailSummary = sessionEmailSummary(session, sessionReadiness);
 
-                return (
-                <div className="session-check-row" role="row" key={session.id}>
-                  <DateBadge value={session.startTime} timeZone={session.timezone} />
-                  <div className="session-title-cell">
-                    <strong title={session.title}>{session.sessionNumber}. {session.title}</strong>
-                    <SessionPostSessionEmail cohortId={id} cohortTitle={cohort?.title ?? ""} session={session as any} message={postSessionEmails.messages.find(message => message.sessionId === session.id)} now={postSessionEmails.now} refresh={postSessionEmails.refresh} />
-                    <span title={session.description}>
-                      {formatTimeInZone(session.startTime, session.timezone) || "No time"} - {formatTimeInZone(session.endTime, session.timezone) || "No end"}
-                    </span>
-                    {sessionMaterials.length > 0 && (
-                      <div className="session-material-links">
-                        {sessionMaterials.slice(0, 3).map((resource: AdminRow) => {
-                          const href = resourceHref(resource);
-                          return href ? (
-                            <a href={href} target="_blank" rel="noreferrer" key={resource.id} title={resource.title}>
-                              {resource.title}
-                            </a>
-                          ) : (
-                            <span key={resource.id} title={resource.title}>{resource.title}</span>
-                          );
-                        })}
-                        {sessionMaterials.length > 3 && <span>+{sessionMaterials.length - 3}</span>}
-                      </div>
-                    )}
-                  </div>
-                  {renderReadinessIcon(Boolean(sessionReadiness?.calendar?.ready), sessionReadiness?.calendar?.detail ?? formatStatusLabel(session.calendarInviteStatus), async () => {
-                    if (sessionReadiness?.calendar?.stale) {
-                      await applyPendingSessionChanges();
-                      return;
-                    }
-                    try {
-                      await adminApi("/api/calendar", { method: "POST", body: { sessionId: session.id, mode: "ics" } });
-                      notifySuccess("ICS invite generated");
-                      await load();
-                    } catch (error) {
-                      notifyError((error as Error).message);
-                    }
-                  })}
-                  <button
-                    type="button"
-                    className={`session-check session-email-summary ${emailSummary.ready ? "is-done" : "is-missing"}`}
-                    title={emailSummary.ready ? "All default session emails exist" : "Create default session emails"}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      if (!emailSummary.ready) void createSessionEmailSchedule(session.id);
-                    }}
-                  >
-                    {emailSummary.ready ? <CheckCircleOutline /> : <CancelOutlined />}
-                    <span>{emailSummary.label}</span>
-                  </button>
-                  <div className="session-material-cell">
-                    <button
-                      type="button"
-                      className={`session-check session-material-summary ${sessionMaterials.length > 0 ? "is-done" : "is-optional"}`}
-                      title={sessionMaterials.length > 0 ? `${sessionMaterials.length} material${sessionMaterials.length === 1 ? "" : "s"}` : "Add session material"}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        openMaterialDialog(session);
-                      }}
-                    >
-                      {sessionMaterials.length > 0 ? <CheckCircleOutline /> : <AddIcon />}
-                      <span>{sessionMaterials.length || "Optional"}</span>
-                    </button>
-                  </div>
-                  <RowActionMenu
-                    actions={[
-                      { label: "Edit session", icon: <EditOutlined fontSize="small" />, onClick: () => { setEditingSession(session); setSessionDialogOpen(true); } },
-                      { label: "Preview Google invite", icon: <VisibilityOutlined fontSize="small" />, onClick: () => setCalendarPreviewSession(session) },
-                      { label: "Add material", icon: <AddIcon fontSize="small" />, onClick: () => openMaterialDialog(session) },
-                      {
-                        label: "Generate ICS",
-                        icon: <CalendarMonthOutlined fontSize="small" />,
-                        onClick: async () => {
-                          try {
-                            await adminApi("/api/calendar", { method: "POST", body: { sessionId: session.id, mode: "ics" } });
-                            notifySuccess("ICS invite generated");
-                          } catch (error) {
-                            notifyError((error as Error).message);
-                          }
-                        }
-                      },
-                      {
-                        label: "Sync Google Calendar",
-                        icon: <CalendarMonthOutlined fontSize="small" />,
-                        onClick: () => void syncGoogleCalendarSession(session.id)
-                      },
-                      ...((session.calendarEvents ?? []).some((event: AdminRow) => event.provider === "google") ? [{
-                        label: "Cancel Google invite",
-                        icon: <CancelOutlined fontSize="small" />,
-                        onClick: () => setCalendarCancelTarget({ scope: "session", session })
-                      }] : [])
-                    ]}
-                  />
-                </div>
-                );
-              })}
-            </div>
-            {!loading && sessions.length === 0 && <EmptyState title="No sessions yet" description="Add sessions to build the cohort schedule." />}
-          </SectionCard>
         </Stack>
       )}
 

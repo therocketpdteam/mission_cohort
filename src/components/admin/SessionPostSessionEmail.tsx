@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { postSessionPresentation } from "./cohortOverviewPresentation";
 import { adminApi } from "@/lib/adminApi";
 import { postSessionWindow } from "@/lib/postSessionSendNow";
 import { formatDateTimeInZone } from "@/lib/timezones";
@@ -30,16 +31,18 @@ export function useSessionPostSessionEmails(cohortId: string) {
   return { messages, refresh, now, error };
 }
 
-export function SessionPostSessionEmail({ cohortId, cohortTitle, session, message, now, refresh }: {
+export function SessionPostSessionEmail({ cohortId, cohortTitle, session, message, now, refresh, onEditSession }: {
   cohortId: string; cohortTitle: string; session: { id: string; title: string; startTime: string; endTime: string; timezone: string; recordingUrl?: string | null };
-  message?: PostSessionSummary; now: number; refresh: () => Promise<void>;
+  message?: PostSessionSummary; now: number; refresh: () => Promise<void>; onEditSession?: () => void;
 }) {
   const [open, setOpen] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState("");
-  if (!message) return null;
+  const [reviewOpen, setReviewOpen] = useState(false);
+  if (!message) return <div className="session-post-session-email"><span className="overview-status is-neutral">Post-session email · Status unavailable</span></div>;
   const stamp = (value: string) => `${formatDateTimeInZone(value, session.timezone)} (${session.timezone})`;
   const window = postSessionWindow({ ...message, template: { type: "FOLLOW_UP" } }, session, now);
   const eligible = message.eligible && window.eligible && message.recipientCount > 0;
   const ended = now >= new Date(session.endTime).getTime();
+  const presentation = postSessionPresentation(message, eligible, ended, now);
   async function send() {
     if (!message || !eligible || busy) return;
     setBusy(true); setError("");
@@ -50,11 +53,35 @@ export function SessionPostSessionEmail({ cohortId, cohortTitle, session, messag
     finally { setBusy(false); }
   }
   return <div className="session-post-session-email">
-    {message.status === "SENT" ? <Typography variant="caption">Post-session email · Sent{message.sentAt ? ` ${stamp(message.sentAt)}` : ""}</Typography> : message.status === "SENDING" ? <Typography variant="caption">Post-session email · Sending — refreshes automatically</Typography> : <>
-      {eligible ? <Button size="small" variant="outlined" onClick={() => { setError(""); setOpen(true); }}>{message.status === "FAILED" ? "Retry Unsent Post-Session Email" : "Send Post-Session Email Now"}</Button> : null}
-      {ended && !eligible ? <Typography variant="caption">Post-session email · {message.recipientCount === 0 ? "No recipients configured." : window.reason ?? message.reason}</Typography> : null}
-      {message.status === "FAILED" ? <Typography variant="caption" color="error">Delivery needs attention: {message.providerError ?? "Delivery failed. Retry skips confirmed recipients."}</Typography> : null}
-    </>}
+    <div className="session-email-status-line">
+      <span className={`overview-status is-${presentation.tone}`}>Post-session email · {presentation.label}</span>
+      {message.status === "SENT" && message.sentAt ? <Typography variant="caption">{stamp(message.sentAt)}</Typography> : null}
+      {message.status === "SCHEDULED" && !presentation.review ? <Typography variant="caption">Scheduled for {stamp(message.scheduledFor)}</Typography> : null}
+    </div>
+    <div className="session-email-actions">
+      {eligible && !presentation.review ? <Button size="small" variant="outlined" onClick={() => { setError(""); setOpen(true); }}>Send Post-Session Email Now</Button> : null}
+      {presentation.review ? <Button size="small" variant="outlined" onClick={() => setReviewOpen(true)}>Review Email</Button> : null}
+    </div>
+    <Dialog open={reviewOpen} onClose={() => setReviewOpen(false)} fullWidth maxWidth="sm">
+      <div role="dialog" aria-modal="true" aria-label="Review post-session email">
+        <DialogTitle>Review post-session email</DialogTitle>
+        <DialogContent><Stack spacing={1.5}>
+          <Typography><strong>{cohortTitle}</strong></Typography>
+          <Typography>{session.title} · {stamp(session.startTime)}</Typography>
+          <Typography>Email type: 24 Hours Post Session · Recipients: {message.recipientCount}</Typography>
+          <Typography>Scheduled delivery: {stamp(message.scheduledFor)}</Typography>
+          <Alert severity={presentation.tone === "failure" ? "error" : "warning"}>{presentation.configuration ? "Sending is blocked by configuration. This does not confirm a delivery attempt." : presentation.label}</Alert>
+          <Typography>{message.providerError || (message.recipientCount === 0 ? "No recipients configured." : window.reason ?? message.reason)}</Typography>
+          <Typography>Retries use the existing email and skip confirmed recipients. Uncertain provider outcomes require review. The existing early-send window still applies.</Typography>
+        </Stack></DialogContent>
+        <DialogActions>
+          <Button variant="outlined" onClick={() => setReviewOpen(false)}>Close</Button>
+          {presentation.configuration ? <Button component="a" href="/settings" variant="outlined">Review Settings</Button> : null}
+          {onEditSession && /recording/i.test(window.reason ?? "") ? <Button onClick={() => { setReviewOpen(false); onEditSession(); }}>Edit session</Button> : null}
+          {eligible ? <Button onClick={() => { setReviewOpen(false); setError(""); setOpen(true); }}>{message.status === "FAILED" ? "Retry Unsent Post-Session Email" : "Send Post-Session Email Now"}</Button> : null}
+        </DialogActions>
+      </div>
+    </Dialog>
     <Dialog open={open} onClose={busy ? undefined : () => setOpen(false)} fullWidth maxWidth="sm">
       <div role="dialog" aria-modal="true" aria-label="Send post-session email now">
       <DialogTitle>Send post-session email now?</DialogTitle>

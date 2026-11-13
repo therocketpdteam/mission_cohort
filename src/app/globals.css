@@ -13174,3 +13174,52 @@ button.dashboard-activity-item {
 }
 .app-table-sort-button { display: inline-flex; align-items: center; gap: 6px; border: 0; padding: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; }
 .app-table-sort-button:focus-visible { outline: 2px solid var(--color-primary-600, #7c3aed); outline-offset: 4px; border-radius: 2px; }
+
+/* Cohort overview: daily session operations precede setup and analytics. */
+.cohort-session-list { display: grid; gap: 12px; }
+.cohort-session-card { min-width: 0; padding: 16px; border: 1px solid var(--color-slate-200); border-radius: 10px; background: var(--color-white, #fff); display: grid; gap: 12px; }
+.cohort-session-heading { display: flex; align-items: start; justify-content: space-between; gap: 16px; }
+.cohort-session-identity { min-width: 0; display: grid; gap: 5px; }
+.cohort-session-identity strong { font-size: 15px; overflow-wrap: anywhere; }
+.cohort-session-identity > span { color: var(--color-slate-500); font-size: 13px; overflow-wrap: anywhere; }
+.cohort-session-context-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.overview-status { display: inline-flex; align-items: center; width: fit-content; padding: 4px 8px; border-radius: 6px; font-size: 12px; font-weight: 600; line-height: 1.5; white-space: normal; }
+.overview-status.is-neutral { color: #475569; background: #f1f5f9; }
+.overview-status.is-success { color: #166534; background: #edf8f0; }
+.overview-status.is-attention { color: #92400e; background: #fff6df; }
+.overview-status.is-failure { color: #b42318; background: #fff0ee; }
+.session-email-status-line, .session-email-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-width: 0; }
+.session-email-status-line .ui-text { margin: 0; color: var(--color-slate-500); overflow-wrap: anywhere; }
+.session-email-actions:empty { display: none; }
+.cohort-session-card .session-post-session-email { margin: 0; gap: 8px; }
+.cohort-session-details { border-top: 1px solid var(--color-slate-200); padding-top: 10px; min-width: 0; }
+.cohort-session-details > summary, .cohort-session-admin > summary { cursor: pointer; color: var(--color-slate-600); font-size: 12px; font-weight: 600; }
+.cohort-session-tools { display: flex; flex-wrap: wrap; align-items: start; gap: 14px 24px; margin-top: 12px; }
+.cohort-session-tool { display: grid; align-content: start; gap: 6px; min-width: 0; max-width: 100%; }
+.cohort-session-tool > span { font-size: 12px; color: var(--color-slate-500); }
+.cohort-session-tool .session-check { width: fit-content; max-width: 100%; }
+.cohort-session-tool .session-check span { white-space: normal; }
+.cohort-session-details .session-material-links { margin-top: 12px; }
+.cohort-readiness-counts { text-align: left; max-width: 100%; }
+.cohort-overview-information { min-width: 0; }
+.cohort-readiness-panel .collapsible-section-summary { align-items: center; flex-wrap: wrap; gap: 8px; }
+.cohort-readiness-panel .collapsible-section-actions { max-width: 100%; }
+.cohort-readiness-panel .readiness-metric-icon.is-pending { color: #92400e; background: #fff6df; }
+.cohort-readiness-panel .readiness-metric-card.needs-work { border-color: #f0d9a4; background: #fffcf4; }
+.cohort-session-admin { position: relative; align-self: center; }
+.cohort-session-admin[open] > .action-group { display: grid; margin-top: 8px; }
+@media (max-width: 640px) {
+  .cohort-session-card { padding: 12px; }
+  .cohort-session-heading { flex-wrap: wrap; gap: 10px; }
+  .cohort-session-identity { width: 100%; }
+  .cohort-session-context-actions { width: 100%; justify-content: space-between; }
+  .cohort-session-tools { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .cohort-readiness-panel .collapsible-section-summary { align-items: start; }
+}
+.cohort-overview-analytics { display: grid; min-width: 0; }
+@media (max-width: 640px) {
+  .cohort-overview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cohort-overview-grid .cohort-metric-card { padding: 12px; gap: 5px; }
+  .cohort-overview-grid .cohort-metric-label { white-space: normal; font-size: 12px; }
+  .cohort-overview-grid .cohort-metric-helper { font-size: 11px; }
+}
